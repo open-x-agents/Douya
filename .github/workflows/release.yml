@@ -1,0 +1,42 @@
+name: release
+
+# 每天一个版本，由机器发，不由人点。
+# 02:00 Asia/Shanghai（UTC 前一天 18:00）。GitHub 的定时任务会迟到，迟到只影响 tag
+# 打出来的时刻，不影响内容：它发的还是当天 main 上的东西。
+on:
+  schedule:
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # 第一道闸：版本里装的是测试过的东西，不是一句承诺。跟 tests.yml 同一条命令。
+      - name: Tests
+        run: node --test test/*.test.js
+
+      # 第二道闸：没有新提交就不发版本。空版本会让“每天有进展”变成一句假话。
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: node .github/scripts/release.mjs

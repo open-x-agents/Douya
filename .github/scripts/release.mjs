@@ -5,10 +5,14 @@
 // 人在 Actions 页面上要能直接看到为什么没发，而不是去读一份堆栈。
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const REPO = process.env.GITHUB_REPOSITORY || '';
 const ACTOR = process.env.RELEASE_ACTOR || 'release';
 const SUMMARY = process.env.GITHUB_STEP_SUMMARY;
+// 发布说明写在仓库外：它是工作流的中间产物，不该被 git add 卷进版本提交。
+const NOTES_FILE = join(process.env.RUNNER_TEMP || tmpdir(), 'opendigitalmate-release-notes.md');
 
 function run(cmd, args, opts = {}) {
   return execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...opts }).trim();
@@ -102,7 +106,7 @@ function main() {
 
   // 上一轮把 tag 推出去了、gh release 没成：这一轮只补 release，不再升版本。
   if (lastTag && compareVersions(lastTag, current) === 0 && !releaseExists(lastTag)) {
-    const notesFile = '.release-notes.md';
+    const notesFile = NOTES_FILE;
     writeFileSync(notesFile, changelogHeading(lastTag) + '\n补发：上一轮 tag 已存在但 release 没有发出来。\n');
     createRelease(lastTag, notesFile);
     summary([`补发 release ${lastTag}（tag 早已存在）。`]);
@@ -142,12 +146,12 @@ function main() {
   prependChangelog(section);
   writeFileSync('package.json', readFileSync('package.json', 'utf8').replace(/"version":\s*"[^"]+"/, `"version": "${next}"`));
 
-  const notesFile = '.release-notes.md';
+  const notesFile = NOTES_FILE;
   writeFileSync(notesFile, `${section}
 自动发布 by \`.github/workflows/release.yml\`：先把 \`node --test test/*.test.js\` 跑绿，再升版本、写 CHANGELOG、打 tag、发这一页。
 `);
 
-  run('git', ['add', '-A']);
+  run('git', ['add', 'CHANGELOG.md', 'package.json']);
   run('git', ['commit', '-m', `release: v${next}`]);
   run('git', ['tag', '-a', `v${next}`, '-m', `v${next}`]);
   run('git', ['push', 'origin', 'HEAD:main']);

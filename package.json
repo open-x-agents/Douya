@@ -1,0 +1,39 @@
+{
+  "name": "opendigitalmate",
+  "version": "0.1.0",
+  "description": "Open Digital Mate: a Feishu-native teammate on top of ds-bot — daily reports, calendar reminders, interactive cards and one panel",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./panel": "./src/host/panel.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "src/",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "feishu",
+    "daily-report",
+    "reminder"
+  ],
+  "peerDependencies": {
+    "ds-bot": ">=0.1.5"
+  },
+  "peerDependenciesMeta": {
+    "ds-bot": {
+      "optional": true
+    }
+  },
+  "optionalDependencies": {
+    "@larksuiteoapi/node-sdk": "^1.40.0"
+  },
+  "license": "Apache-2.0"
+}

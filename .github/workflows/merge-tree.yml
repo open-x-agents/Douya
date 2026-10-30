@@ -1,0 +1,57 @@
+name: merge-tree
+
+# L6：不看「这个提交自己绿」，看「它合到当前 main 上还绿不绿」。
+# 每个 PR 上真的做一次合并，在合并结果上跑 L0。这正是 merge queue 会做的事，
+# 只是不串行、不自动合 —— 开队列要保护 + PAT，那是以后的事（#23）。
+#
+# head 用 `refs/pull/<n>/head` 取：fork 的 PR 在 base 仓库里也有这个 ref，
+# 不需要任何额外权限，也不用假设作者的分支我们能碰。
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: merge-tree-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # job 名就是 PR 上的 check 上下文：准入守卫要求的正是 `merge-tree`。
+  merge-tree:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # 冲突在这里就该红：PR 页面会说「有冲突」，但那不是 check，进不了守卫的判断。
+      - name: 把 PR head 合到 main 上
+        env:
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -eu
+          git config user.name "merge-tree"
+          git config user.email "merge-tree@users.noreply.github.com"
+          git fetch --no-tags origin "+refs/pull/$PR/head:refs/remotes/pr-head"
+          echo "base: $(git rev-parse HEAD)"
+          echo "head: $(git rev-parse refs/remotes/pr-head)"
+          if ! git merge --no-ff --no-edit refs/remotes/pr-head; then
+            echo "::error::合并冲突：这个 PR 合不到当前 main 上，先在分支上 rebase"
+            git diff --name-only --diff-filter=U | sed 's/^/冲突文件: /'
+            git merge --abort || true
+            exit 1
+          fi
+          echo "merged: $(git rev-parse HEAD)"
+
+      # 和 tests.yml 同一条命令：这一层要证明的是「合起来也绿」，
+      # 不是另起一套测试 —— 换一套就等于没测同一个东西。
+      - name: 在合并结果上跑单元测试
+        run: node --test test/*.test.js

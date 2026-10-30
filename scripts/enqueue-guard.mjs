@@ -8,7 +8,10 @@
 
 import { api } from './gh-api.mjs';
 
-export const REQUIRED_CHECK = 'tests';
+// 一个 PR 要在两个地方绿：自己的 head（`tests.yml`），和「合到 main 之后」
+// （`merge-tree.yml`）。只有前者绿过、合起来破掉的 PR，正是这一层要拦的东西。
+export const REQUIRED_CHECKS = ['tests', 'merge-tree'];
+export const REQUIRED_CHECK = REQUIRED_CHECKS[0];
 
 const ISSUE_REF = /\b(?:fixes|closes|resolves)\s+#(\d+)\b/i;
 const RAN_LINE = /^\s*Ran\s*:/im;
@@ -72,16 +75,19 @@ export function judge(pr) {
   }
 
   const atHead = checks.filter((c) => !pr.headSha || !c.head_sha || c.head_sha === pr.headSha);
-  const tests = atHead.filter((c) => c.name === REQUIRED_CHECK);
-  if (tests.length === 0) {
-    // 把看到的 check 名字带上：check 的上下文是 job 名，不是 workflow 名，这条坑过一次。
-    const seen = atHead.map((c) => c.name).join(', ') || '（一个都没有）';
-    reasons.push({ code: 'tests-not-green', message: `head 上没有 \`${REQUIRED_CHECK}\` 的 check；看到的 check：${seen}` });
-  } else {
-    const green = tests.some((c) => c.conclusion === 'success');
+  for (const name of REQUIRED_CHECKS) {
+    const runs = atHead.filter((c) => c.name === name);
+    if (runs.length === 0) {
+      // 把看到的 check 名字带上：check 的上下文是 job 名，不是 workflow 名，这条坑过一次。
+      const seen = atHead.map((c) => c.name).join(', ') || '（一个都没有）';
+      const why = name === 'merge-tree' ? '：它证明的是合到 main 上还绿' : '';
+      reasons.push({ code: `${name}-not-green`, message: `head 上没有 \`${name}\` 的 check${why}；看到的 check：${seen}` });
+      continue;
+    }
+    const green = runs.some((c) => c.conclusion === 'success');
     if (!green) {
-      const detail = tests.map((c) => `${c.status || 'unknown'}/${c.conclusion || 'pending'}`).join(', ');
-      reasons.push({ code: 'tests-not-green', message: `head 上 \`${REQUIRED_CHECK}\` 不是绿：${detail}` });
+      const detail = runs.map((c) => `${c.status || 'unknown'}/${c.conclusion || 'pending'}`).join(', ');
+      reasons.push({ code: `${name}-not-green`, message: `head 上 \`${name}\` 不是绿：${detail}` });
     }
   }
 

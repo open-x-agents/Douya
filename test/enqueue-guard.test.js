@@ -13,7 +13,10 @@ function pull(overrides = {}) {
     labels: [],
     headSha: SHA,
     files: ['src/client/panel.html'],
-    checks: [{ name: 'tests', status: 'completed', conclusion: 'success', head_sha: SHA }],
+    checks: [
+      { name: 'tests', status: 'completed', conclusion: 'success', head_sha: SHA },
+      { name: 'merge-tree', status: 'completed', conclusion: 'success', head_sha: SHA },
+    ],
     issueStates: { 12: 'open' },
     ...overrides,
   };
@@ -60,9 +63,12 @@ test('写的 sha 不是当前 head', () => {
   assert.ok(codes(verdict).includes('tip-sha-mismatch'));
 });
 
+const GREEN_MERGE_TREE = { name: 'merge-tree', status: 'completed', conclusion: 'success', head_sha: SHA };
+
 test('head 上的 tests 是红的', () => {
-  const verdict = judge(pull({ checks: [{ name: 'tests', status: 'completed', conclusion: 'failure', head_sha: SHA }] }));
+  const verdict = judge(pull({ checks: [{ name: 'tests', status: 'completed', conclusion: 'failure', head_sha: SHA }, GREEN_MERGE_TREE] }));
   assert.ok(codes(verdict).includes('tests-not-green'));
+  assert.equal(verdict.ok, false);
 });
 
 test('head 上根本没有 tests 这个 check', () => {
@@ -71,8 +77,50 @@ test('head 上根本没有 tests 这个 check', () => {
 });
 
 test('tests 还是 pending 不算绿', () => {
-  const verdict = judge(pull({ checks: [{ name: 'tests', status: 'in_progress', conclusion: null, head_sha: SHA }] }));
+  const verdict = judge(pull({ checks: [{ name: 'tests', status: 'in_progress', conclusion: null, head_sha: SHA }, GREEN_MERGE_TREE] }));
   assert.ok(codes(verdict).includes('tests-not-green'));
+});
+
+test('自己绿、但 head 上没有 merge-tree：只证明了「这个提交自己绿」', () => {
+  const verdict = judge(pull({ checks: [{ name: 'tests', status: 'completed', conclusion: 'success', head_sha: SHA }] }));
+  assert.ok(codes(verdict).includes('merge-tree-not-green'));
+  assert.equal(verdict.ok, false);
+});
+
+test('tests 绿、merge-tree 红：合到 main 上破了', () => {
+  const verdict = judge(
+    pull({
+      checks: [
+        { name: 'tests', status: 'completed', conclusion: 'success', head_sha: SHA },
+        { name: 'merge-tree', status: 'completed', conclusion: 'failure', head_sha: SHA },
+      ],
+    }),
+  );
+  assert.deepEqual(codes(verdict), ['merge-tree-not-green']);
+});
+
+test('merge-tree 还在跑不算绿', () => {
+  const verdict = judge(
+    pull({
+      checks: [
+        { name: 'tests', status: 'completed', conclusion: 'success', head_sha: SHA },
+        { name: 'merge-tree', status: 'in_progress', conclusion: null, head_sha: SHA },
+      ],
+    }),
+  );
+  assert.ok(codes(verdict).includes('merge-tree-not-green'));
+});
+
+test('merge-tree 是别的 tip 上的绿，不算', () => {
+  const verdict = judge(
+    pull({
+      checks: [
+        { name: 'tests', status: 'completed', conclusion: 'success', head_sha: SHA },
+        { name: 'merge-tree', status: 'completed', conclusion: 'success', head_sha: 'c'.repeat(40) },
+      ],
+    }),
+  );
+  assert.ok(codes(verdict).includes('merge-tree-not-green'));
 });
 
 test('带 hold 标签', () => {

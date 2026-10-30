@@ -8576,20 +8576,28 @@ function scanReplies(text, start, replies) {
 }
 function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi, useWork }) {
   const [live, setLive] = (0, import_react16.useState)({ replies: [], speaking: null, draft: null });
+  const tailRef = (0, import_react16.useRef)(null);
+  const roomBusy = useWork?.((work) => (work.rooms?.[sessionId]?.length ?? 0) > 0) ?? false;
   (0, import_react16.useEffect)(() => {
-    if (done) return void 0;
+    if (done && !roomBusy && !tailRef.current?.live) return void 0;
     let stop = false;
     let timer;
     let seen = "";
     const tick = async () => {
       const result = await actions.roomProgress(sessionId);
       if (stop) return;
-      const entry = (result ?? []).find((item) => item.callId === callId) ?? (result ?? [])[0];
-      const key = entry ? JSON.stringify([entry.replies, entry.speaking, entry.draft]) : "";
+      const matched = (result ?? []).find((item) => item.callId === callId);
+      const entry = matched ?? (tailRef.current ? void 0 : (result ?? [])[0]);
+      const key = entry ? JSON.stringify([entry.replies, entry.speaking, entry.draft, entry.live]) : "";
       if (entry && key !== seen) {
         seen = key;
-        setLive({ replies: entry.replies ?? [], speaking: entry.speaking ?? null, draft: entry.draft ?? null });
+        const next = { replies: entry.replies ?? [], speaking: entry.speaking ?? null, draft: entry.draft ?? null };
+        if (entry.live) next.live = true;
+        setLive(next);
+        if (entry.live) tailRef.current = next;
       }
+      const keep = !done || roomBusy || Boolean(entry?.draft?.text);
+      if (!keep) return;
       timer = setTimeout(tick, document.hidden ? 5e3 : entry?.draft?.text ? 250 : 1e3);
     };
     void tick();
@@ -8597,15 +8605,17 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
       stop = true;
       clearTimeout(timer);
     };
-  }, [done, sessionId, callId]);
+  }, [done, sessionId, callId, roomBusy]);
+  const tail = tailRef.current;
+  const follow = live.live === true || tail?.live === true;
   let replies = live.replies;
   let broken = false;
-  if (done) {
+  if (done && !(follow && replies.length > 0)) {
     const parsed = parseReplies(contentText(content));
-    replies = parsed.replies.length ? parsed.replies : live.replies;
+    replies = parsed.replies.length ? parsed.replies : replies;
     broken = parsed.broken;
   }
-  const draft = done ? void 0 : draftForDisplay(live.draft, replies);
+  const draft = !done || follow ? draftForDisplay(live.draft, replies) : void 0;
   const pending = done || !live.speaking || draft?.text && draft.botId === live.speaking ? [] : [live.speaking];
   const speakerTool = useWork?.((work) => work.bots?.[live.speaking]?.tool) ?? void 0;
   const speakerDoing = useWork?.((work) => work.bots?.[live.speaking]?.tool ? workPhrase(work.bots[live.speaking]) : void 0) ?? void 0;
@@ -8618,8 +8628,8 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
     { className: "bt-group-replies" },
     stackReplies(replies).map(({ reply, index, texts: texts2, time, duration }) => {
       const bot = roster.byId[reply.botId] ?? { id: reply.botId, name: reply.name, color: reply.color ?? "gray" };
-      if (reply.kind === "user") {
-        return (0, import_react16.createElement)("div", { key: `user-${index}`, className: "bt-urow" }, (0, import_react16.createElement)(
+      if (reply.kind === "user" || reply.kind === "steering") {
+        return (0, import_react16.createElement)("div", { key: `user-${index}`, className: "bt-urow", ...reply.kind === "steering" ? { "data-steering": true } : {} }, (0, import_react16.createElement)(
           "div",
           { className: "bt-ububble" },
           (0, import_react16.createElement)(import_dsh_client_ui_primitives.MarkdownText, { text: reply.text, labels: mdLabels3(), variant: "compact" }),

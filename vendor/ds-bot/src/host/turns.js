@@ -3,6 +3,7 @@
 //
 // Turn tracking: which turns were triggered by another Bot, and what they said.
 import { HANDOFF_ACK, MESSAGE_INLINE_MAX, REFERENCE_KIND, REPLY_KIND, SOURCE_KIND } from './constants.js'
+import { decideRoomSteer, explicitSendFlags, isJoinedFollowUp, roomMembers, textNamesMember } from './group-steer.js'
 import { absoluteLinks } from './links.js'
 import { textOf } from './text.js'
 import { reminderText } from './schedules.js'
@@ -475,6 +476,7 @@ export function install(rt) {
             // turn of its own once this one ends, which goes on with that work.
             entry.later = [...(entry.later ?? []), { info: source, text: textOf(event.data.content).replace(/^\[(?:[^\r\n]*\]\r?\n|[^\]\r\n]*\])/, '') }]
           } else if ((expectsReply(source) || source.role === 'room') && !answersUser(source)
+            && isJoinedFollowUp(source)
             && source.exchangeId !== entry.info?.exchangeId
             && !(entry.joined ?? []).some(joined => joined.info.exchangeId === source.exchangeId)) {
             // A request that lands inside a running turn steers that work but is
@@ -496,7 +498,42 @@ export function install(rt) {
             const content = Array.isArray(event.data.content) ? event.data.content : []
             const images = content.filter(block => block?.type === 'image' && !block.offloaded).map(block => block.attachment)
             const files = content.filter(block => block?.type === 'file' && block.attachment !== undefined).map(block => block.attachment)
-            queueRoomMessage(id, { text: textOf(event.data.content), ...(images.length > 0 ? { images } : {}), ...(files.length > 0 ? { files } : {}) })
+            const text = textOf(event.data.content)
+            const room = rt.roomOf(id)
+            const members = roomMembers(room, sessionId => live.get(sessionId), botId => rt.botOf(botId))
+            const flags = explicitSendFlags(source, event.data)
+            // Composer queue is visible here only when the source carries it, or
+            // when channel.send noted a relay intent before prompting the room.
+            const explicitQueue = flags.explicitQueue || rt.takeRelayIntent?.(id, text) === true
+            const plain = images.length === 0 && files.length === 0 && !text.includes('dsh-session:')
+            const decision = decideRoomSteer({
+              members,
+              explicitQueue,
+              explicitNew: flags.explicitNew,
+              named: textNamesMember(text, members),
+              plain,
+            })
+            const queued = { text, ...(images.length > 0 ? { images } : {}), ...(files.length > 0 ? { files } : {}) }
+            switch (decision.action) {
+              case 'steer':
+                if (decision.member !== undefined && typeof rt.acceptRoomSteer === 'function') {
+                  rt.noteSteeredRoomLine?.(id, text)
+                  void rt.acceptRoomSteer(room, decision.member, { text, files }).catch(error => rt.warn('ds-bot: group steer failed: %s', error))
+                  break
+                }
+                rt.allowRelayText?.(id, text)
+                queueRoomMessage(id, queued)
+                break
+              case 'relay':
+                rt.allowRelayText?.(id, text)
+                queueRoomMessage(id, queued)
+                break
+              default: {
+                /** @type {never} */
+                const unexpected = decision.action
+                throw new Error(`Unknown room steer action ${String(unexpected)}`)
+              }
+            }
           }
           const own = rt.chatOwners.get(id)
           if (own !== undefined) rt.dropKickoff(own)

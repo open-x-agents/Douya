@@ -20,6 +20,7 @@ import { BtwCardView } from './btw.js'
 import { partIndexOf, withBtwRows } from './btw-model.js'
 import { layoutOf, thinkingShown } from './themes.js'
 import { draftForDisplay } from '../shared/room-draft.js'
+import { groupUserBubble } from '../host/group-steer.js'
 
 export { clockLabel }
 
@@ -872,35 +873,47 @@ function scanReplies(text, start, replies) {
 
 function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi, useWork }) {
   const [live, setLive] = useState({ replies: [], speaking: null, draft: null })
+  const tailRef = useRef(null)
+  const roomBusy = useWork?.(work => (work.rooms?.[sessionId]?.length ?? 0) > 0) ?? false
   useEffect(() => {
-    if (done) return undefined
+    // A finished relay with nobody still working paints from the tool result.
+    // A kept tail (the probe landed after the slot yielded) keeps polling.
+    if (done && !roomBusy && !tailRef.current?.live) return undefined
     let stop = false
     let timer
     let seen = ''
     const tick = async () => {
       const result = await actions.roomProgress(sessionId)
       if (stop) return
-      const entry = (result ?? []).find(item => item.callId === callId) ?? (result ?? [])[0]
+      const matched = (result ?? []).find(item => item.callId === callId)
+      const entry = matched ?? (tailRef.current ? undefined : (result ?? [])[0])
       // Include draft text so text-delta growth re-renders without waiting for a post.
-      const key = entry ? JSON.stringify([entry.replies, entry.speaking, entry.draft]) : ''
+      const key = entry ? JSON.stringify([entry.replies, entry.speaking, entry.draft, entry.live]) : ''
       if (entry && key !== seen) {
         seen = key
-        setLive({ replies: entry.replies ?? [], speaking: entry.speaking ?? null, draft: entry.draft ?? null })
+        const next = { replies: entry.replies ?? [], speaking: entry.speaking ?? null, draft: entry.draft ?? null }
+        if (entry.live) next.live = true
+        setLive(next)
+        if (entry.live) tailRef.current = next
       }
+      const keep = !done || roomBusy || Boolean(entry?.draft?.text)
+      if (!keep) return
       // Poll faster while a draft is growing so the bubble tracks tokens.
       timer = setTimeout(tick, document.hidden ? 5000 : (entry?.draft?.text ? 250 : 1000))
     }
     void tick()
     return () => { stop = true; clearTimeout(timer) }
-  }, [done, sessionId, callId])
+  }, [done, sessionId, callId, roomBusy])
+  const tail = tailRef.current
+  const follow = live.live === true || tail?.live === true
   let replies = live.replies
   let broken = false
-  if (done) {
+  if (done && !(follow && replies.length > 0)) {
     const parsed = parseReplies(contentText(content))
-    replies = parsed.replies.length ? parsed.replies : live.replies
+    replies = parsed.replies.length ? parsed.replies : replies
     broken = parsed.broken
   }
-  const draft = done ? undefined : draftForDisplay(live.draft, replies)
+  const draft = !done || follow ? draftForDisplay(live.draft, replies) : undefined
   // Members speak one at a time. A live draft replaces the bare typing row.
   const pending = done || !live.speaking || (draft?.text && draft.botId === live.speaking) ? [] : [live.speaking]
   const speakerTool = useWork?.(work => work.bots?.[live.speaking]?.tool) ?? undefined
@@ -914,8 +927,9 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
   return h('div', { className: 'bt-group-replies' },
     stackReplies(replies).map(({ reply, index, texts, time, duration }) => {
       const bot = roster.byId[reply.botId] ?? { id: reply.botId, name: reply.name, color: reply.color ?? 'gray' }
-      if (reply.kind === 'user') {
-        return h('div', { key: `user-${index}`, className: 'bt-urow' }, h('div', { className: 'bt-ububble' },
+      const userBubble = groupUserBubble(reply)
+      if (userBubble) {
+        return h('div', { key: `user-${index}`, className: 'bt-urow', ...(userBubble.steering ? { 'data-steering': true } : {}) }, h('div', { className: 'bt-ububble' },
           h(MarkdownText, { text: reply.text, labels: mdLabels(), variant: 'compact' }),
           Number.isFinite(time) ? h('div', { className: 'bt-utime', title: clockLabel(time) }, messageClock(time)) : null))
       }

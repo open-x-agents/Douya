@@ -156,3 +156,34 @@ test('空的 Docs-not-needed: 不算豁免', () => {
   );
   assert.ok(codes(verdict).includes('docs-not-needed-missing'));
 });
+
+test('绿比 main 的 tip 早：这个绿说的不是现在的 main', () => {
+  const verdict = judge(
+    pull({
+      mainPushedAt: '2026-10-30T12:00:00Z',
+      checks: [
+        { name: 'tests', status: 'completed', conclusion: 'success', head_sha: SHA, completed_at: '2026-10-30T11:00:00Z' },
+        { name: 'merge-tree', status: 'completed', conclusion: 'success', head_sha: SHA, completed_at: '2026-10-30T12:30:00Z' },
+      ],
+    }),
+  );
+  assert.deepEqual(codes(verdict), ['tests-stale']);
+});
+
+test('重跑过之后绿就新鲜了：合格', () => {
+  const verdict = judge(
+    pull({
+      mainPushedAt: '2026-10-30T12:00:00Z',
+      checks: [
+        { name: 'tests', status: 'completed', conclusion: 'success', head_sha: SHA, completed_at: '2026-10-30T12:05:00Z' },
+        { name: 'merge-tree', status: 'completed', conclusion: 'success', head_sha: SHA, completed_at: '2026-10-30T12:06:00Z' },
+      ],
+    }),
+  );
+  assert.equal(verdict.ok, true);
+});
+
+test('不知道 main 的 tip（没取到）：不因此拒绝', () => {
+  const verdict = judge(pull({ mainPushedAt: null }));
+  assert.equal(verdict.ok, true);
+});

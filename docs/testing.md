@@ -31,7 +31,7 @@ node scripts/enqueue-guard.mjs --pr 12        # L5：对一个真 PR 跑准入�
 2. **测试要能证明它会红。** 每加一条规则，我会真的把实现改坏一次，确认对应测试变红，再改回来。只有见过它红的测试才算测试。
 3. **跑在合并结果上。** PR 页面的绿是「这个提交自己绿」，不是「它合进 main 之后绿」。两者不一致时，后者算数（这是 L6 存在的理由）。
 
-## L5 准入的八条规则
+## L5 准入的九条规则
 
 写在 `scripts/enqueue-guard.mjs`，样例集在 `test/enqueue-guard.test.js`：
 
@@ -42,13 +42,18 @@ node scripts/enqueue-guard.mjs --pr 12        # L5：对一个真 PR 跑准入�
 5. 没有 `hold`；
 6. 改动文件清单非空；
 7. 改到 `index.js` 或 `src/host/**`：要么同 PR 改 `docs/architecture.md`，要么写 `Docs-not-needed: <理由>`；
-8. `merge-tree` 在这个 head 上绿：自己绿、合到 main 上破的不算（没有这个 check 也算没有）。
+8. `merge-tree` 在这个 head 上绿：自己绿、合到 main 上破的不算（没有这个 check 也算没有）；
+9. 这两个绿都要比 **main 现在的 tip 新**：main 在你跑完之后又动过，绿就是陈的，重跑一次再排队（不用新提交）。
 
 `pr-guard.yml` 从 **base 分支** 取脚本，不在 PR head 上跑 —— 否则 PR 改掉守卫就能给自己放行。
 
 ## 已知的缺口
 
 - **L5 现在只报告、不阻断**：`main` 没有保护，也没有 merge queue，没法在 GitHub 层挂成必需 check。等 owner 决定开不开保护（#22）。
+
+> 实测纠正一条：GitHub 在 `pull_request` 上默认 checkout 的是 `refs/pull/<n>/merge`（PR 合到 base 的合成提交），
+> 所以同仓 PR 的 `tests` 其实已经跑在合并结果上，不是「只跑 head」。真正漏的是两件事：main 在该次 run 之后又往前走了（绿变陈），
+> 以及冲突的 PR 起不了这次 run。第 9 条管前者，`merge-tree` 用 `base.sha` 在跑的时候重新合一次、并且是一个能被守卫要求的名字。
 - **L6 不串行、不自动合**：`merge-tree` 每个 PR 上真合并一次再跑 L0，拦的东西和 merge queue 一样，
   差的是两点 —— 两个 PR 同时绿地合进来仍可能互相踩，合入还得有人（或 Bot）按一下。仓库是 internal，
   merge queue 实测可用（规则集 201），但开它意味着没人能直接推 main 且发版流程要改走 PR，所以 #23 先做这一层。

@@ -91,6 +91,23 @@ export function judge(pr) {
     }
   }
 
+  // 绿是有时效的：main 在这个绿之后又动过，这个绿说的就不是现在的 main。
+  // 不需要新提交 —— 重跑（Re-run）就会产生一个更新的 check run。
+  const mainAt = pr.mainPushedAt ? Date.parse(pr.mainPushedAt) : NaN;
+  if (Number.isFinite(mainAt)) {
+    for (const name of REQUIRED_CHECKS) {
+      const greens = atHead.filter((c) => c.name === name && c.conclusion === 'success' && c.completed_at);
+      if (greens.length === 0) continue; // 没绿的话上面已经拒绝过，这里不重复说一遍
+      const newest = Math.max(...greens.map((c) => Date.parse(c.completed_at)));
+      if (Number.isFinite(newest) && newest < mainAt) {
+        reasons.push({
+          code: `${name}-stale`,
+          message: `\`${name}\` 的绿比 main 现在的 tip 早（main ${pr.mainPushedAt}）：重跑这个 check 再排队，不用新提交`,
+        });
+      }
+    }
+  }
+
   if (labels.includes('hold')) {
     reasons.push({ code: 'held', message: 'PR 带 `hold` 标签：只有人能摘，automation 不排队' });
   }
@@ -133,6 +150,14 @@ async function snapshot(number) {
   }
   const headSha = pull.head.sha;
   const checkRuns = await api('GET', `/commits/${headSha}/check-runs?per_page=100`);
+  // main 的状态不算快照的必需项：取不到就当没有，不让一次 API 抖动变成一次放行。
+  let mainPushedAt = null;
+  try {
+    const mainTip = await api('GET', '/commits/main');
+    mainPushedAt = mainTip?.commit?.committer?.date || null;
+  } catch {
+    mainPushedAt = null;
+  }
   const refs = issuesReferenced(String(pull.body || ''));
   const issueStates = {};
   for (const n of refs) {
@@ -148,8 +173,15 @@ async function snapshot(number) {
     body: String(pull.body || ''),
     labels: (pull.labels || []).map((l) => l.name),
     headSha,
+    mainPushedAt,
     files,
-    checks: checkRuns.check_runs.map((c) => ({ name: c.name, status: c.status, conclusion: c.conclusion, head_sha: headSha })),
+    checks: checkRuns.check_runs.map((c) => ({
+      name: c.name,
+      status: c.status,
+      conclusion: c.conclusion,
+      head_sha: headSha,
+      completed_at: c.completed_at,
+    })),
     issueStates,
   };
 }

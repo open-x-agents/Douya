@@ -23,15 +23,16 @@
     font:15px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
     -webkit-font-smoothing:antialiased;
     display:flex;flex-direction:column;align-items:center;
-    padding:24px 18px 28px;min-height:100%;
+    padding:16px 18px 12px;min-height:100%;overflow:hidden;
   }
-  header.top{width:100%;max-width:1100px;display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:14px;flex-wrap:wrap}
+  header.top{width:100%;max-width:1100px;display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:10px;flex-wrap:wrap}
   .top h1{margin:0;font-size:17px;letter-spacing:-.01em}
   .top .hint{font-size:12.5px;color:var(--ink3)}
 
-  .stage{width:100%;max-width:1100px;display:flex;flex-direction:column;gap:12px}
+  .stage{width:100%;max-width:1100px;display:flex;flex-direction:column;gap:12px;flex:1 1 auto;min-height:0}
   .device{
     position:relative;background:#f7f6f3;border:1px solid #e2e0da;border-radius:16px;overflow:hidden;
+    display:flex;flex-direction:column;height:calc(100vh - 228px);min-height:430px;
     box-shadow:0 26px 60px -34px rgba(21,23,28,.45),0 2px 0 rgba(255,255,255,.6) inset;
   }
   .chrome{display:flex;align-items:center;gap:10px;background:#f6f5f2;border-bottom:1px solid var(--line);padding:9px 14px}
@@ -41,7 +42,7 @@
   .chrome .when{margin-left:auto;font:12px/1 ui-monospace,Menlo,monospace;color:var(--ink3);font-variant-numeric:tabular-nums}
 
   /* ——— 整个页面 = 一条对话 ——— */
-  .thread{position:relative;height:640px;overflow-y:auto;scroll-behavior:smooth}
+  .thread{position:relative;flex:1 1 auto;min-height:0;overflow-y:auto;scroll-behavior:smooth}
   .stickybar{
     position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:10px;
     padding:9px 22px;background:rgba(247,246,243,.94);border-bottom:1px solid var(--line);
@@ -176,16 +177,20 @@
   .mini-notice .row{display:flex;gap:6px;margin-top:8px}
   .mini-notice .row span{font-size:11px;border:1px solid var(--line);border-radius:6px;padding:2px 8px;color:var(--ink2)}
 
-  /* 输入条 */
-  .composer{position:sticky;bottom:0;z-index:6;background:linear-gradient(180deg,rgba(247,246,243,0),#f7f6f3 26%);padding:14px 22px 12px}
+  /* 输入条：常驻在窗口底部，不随流滚动 */
+  .composer{position:relative;z-index:6;flex:none;border-top:1px solid var(--line);background:#f7f6f3;padding:11px 22px 9px}
   .composer .box{max-width:720px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 24px -18px rgba(21,23,28,.5)}
   .composer .row{display:flex;align-items:center;gap:8px;padding:8px 10px 8px 13px}
-  .composer input{flex:1;border:0;outline:none;font:inherit;font-size:13px;padding:5px 0;background:none;min-width:0}
+  .composer input{flex:1;border:0;outline:none;font:inherit;font-size:13px;padding:5px 0;background:none;min-width:0;color:var(--ink)}
+  .composer input::placeholder{color:#a8acb6}
   .composer .send{width:28px;height:28px;border-radius:8px;background:var(--blue);color:#fff;border:0;font-size:13px;cursor:pointer;flex:none}
+  .composer .send:disabled{background:#c9cfdd;cursor:default}
   .composer .fine{max-width:720px;margin:6px auto 0;font-size:10px;color:var(--ink3);text-align:center}
 
   /* 出现动画 */
   .fi{display:none}
+  .msg.said{animation:rise .45s var(--ease) both}
+  .msg .av.user{background:#e9eeff;border-radius:50%;display:grid;place-items:center;font-size:10.5px;color:#2b4ecf}
   .fi.on{display:block;animation:rise .5s var(--ease) both}
   .msg.on{display:grid}
   .day.on{display:flex}
@@ -207,10 +212,10 @@
   .bar i{display:block;height:100%;width:0;background:var(--blue);transition:width .1s linear}
 
   @media (max-width:760px){
-    .thread{height:600px}
+    .device{height:calc(100vh - 200px);min-height:360px}
     .flow{padding:14px 14px 20px}
     .card.wide{margin-left:-14px;margin-right:-14px;padding:16px 14px}
-    .composer{padding:12px 14px 10px}
+    .composer{padding:11px 14px 9px}
     .stickybar{padding:8px 14px}
   }
   @media (prefers-reduced-motion:reduce){
@@ -578,8 +583,8 @@
     <div class="composer">
       <div class="box">
         <div class="row">
-          <input id="ask" placeholder="问一句，比如「这条依据哪来的」" readonly>
-          <button class="send" title="发送">↑</button>
+          <input id="ask" placeholder="问一句，比如「这条依据哪来的」" autocomplete="off">
+          <button class="send" id="sendBtn" title="发送">↑</button>
         </div>
       </div>
       <div class="fine">只读你的信源 · 不代发 · 改不了日历 · 一天两条，其余时间闭嘴</div>
@@ -895,6 +900,36 @@
     });
   });
   $('closeSheet').addEventListener('click', function(){ on('p1', false); });
+
+  /* 输入条能真的打字：演示页没有接真实信源，所以它只承认这一点 */
+  var AVATAR = '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#eef2ff"/><ellipse cx="16" cy="18" rx="10.5" ry="9.5" fill="#4a6cf7"/><path d="M16 4.6c0-1.6 1.2-2.6 2.9-2.6-.2 1.7-1.2 2.9-2.9 3.1z" fill="#2f9e6b"/><circle cx="12.4" cy="16.6" r="1.6" fill="#fff"/><circle cx="19.6" cy="16.6" r="1.6" fill="#fff"/><path d="M13.4 20.4q2.6 2.4 5.2 0" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>';
+
+  function say(text, mine){
+    var t = $('clock') ? $('clock').textContent : '';
+    var el = document.createElement('div');
+    el.className = 'msg said' + (mine ? ' mine' : '');
+    el.innerHTML = mine
+      ? '<div class="av user">你</div><div class="body"><div class="bubble me"></div><div class="when"></div></div>'
+      : '<div class="av">' + AVATAR + '</div><div class="body"><div class="bubble" style="max-width:600px"></div><div class="when"></div></div>';
+    el.querySelector('.bubble').textContent = text;
+    el.querySelector('.when').textContent = t;
+    $('flow').appendChild(el);
+    setTimeout(toBottom, 60);
+  }
+
+  function submitAsk(){
+    var v = $('ask').value.trim();
+    if(!v) return;
+    $('ask').value = '';
+    say(v, true);
+    setTimeout(function(){
+      say('这一页是演示，我没有接你的日历和邮箱，所以不编一个答案给它。真身回答之前会先去找依据：日程、文件原件、邮件的主题与收发关系；找不到就直说「这条我答不了」，并告诉你缺的是哪个信源。', false);
+    }, 420);
+  }
+  $('sendBtn').addEventListener('click', submitAsk);
+  $('ask').addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ e.preventDefault(); submitAsk(); }
+  });
 
   go('brief');
 })();

@@ -685,7 +685,11 @@ export function install(rt) {
         round.replies.push({ kind: 'approval', botId: member.id, name: member.name, color: member.color, time: Date.now() })
       } else if (reply?.working) {
         slot.status = 'working'
-        round.replies.push({ kind: 'working', botId: member.id, name: member.name, color: member.color, time: Date.now() })
+        const workLineId = rt.groupOwners.get(session?.id)?.workLineId
+        round.replies.push({
+          kind: 'working', botId: member.id, name: member.name, color: member.color, time: Date.now(),
+          ...(typeof workLineId === 'string' && workLineId !== '' ? { workLineId } : {}),
+        })
       } else if (final !== undefined || (typeof reply === 'string' && said.length > 0)) {
         slot.status = 'posted'
         if (final !== undefined) postInRound(room, round, member, final, Date.now() - startedAt)

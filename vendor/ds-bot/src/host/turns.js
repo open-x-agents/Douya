@@ -672,6 +672,9 @@ export function install(rt) {
         const { lastText, lastCalled } = entry
         // A turn stopped for a switch goes on in the next part, which answers instead.
         const switched = entry.switched === true
+        // The unshown remainder is what the group still posts. It rides on the
+        // in-memory completion only; the work line itself stays metadata.
+        const reply = texts.join('\n\n').trim()
         // Idle is the absence of this turn. A resume replay or a part switch does
         // not emit a second completion for the same exchange.
         rt.noteWorkTurnEnd?.({
@@ -681,6 +684,7 @@ export function install(rt) {
           reason: event.data?.reason,
           switched,
           now: event.time ?? Date.now(),
+          ...(reply !== '' ? { reply } : {}),
         })
         entry.turn = undefined
         entry.info = undefined

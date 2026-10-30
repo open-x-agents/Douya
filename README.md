@@ -12,7 +12,7 @@
 | 可交互 | 卡片按钮回调：推迟 10 分钟 / 已完成 / 改时间 / 补充日报 | `src/host/cards.js`、`index.js` 的 `onCardAction()` |
 | 面板 | 单页：提交率、还没交的人、近期日程、投递记录 | `src/client/panel.html`、`src/host/panel.js` |
 
-单元测试全绿（`node --test test/*.test.js 'acceptance-cases/**/*.test.js'`），覆盖日报组装、提醒规划、卡片结构、按钮解析、面板快照、存储、插件接线、群聊忙时 steer 验收（G1–G6）、工作线索引验收（W1–W8）、入站路由验收（R1–R16），以及同 bot 跨房间投递验收（C1–C5）。
+单元测试全绿（`node --test test/*.test.js 'acceptance-cases/**/*.test.js'`），覆盖日报组装、提醒规划、卡片结构、按钮解析、面板快照、存储、插件接线、群聊忙时 steer 验收（G1–G6）、工作线索引验收（W1–W8）、入站路由验收（R1–R16）、同 bot 跨房间投递验收（C1–C5），以及同房间多条工作线完成投影验收（D1–D8）。
 
 ## 跑起来
 

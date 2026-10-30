@@ -2,6 +2,7 @@
 // The index holds metadata only. Message text stays in the session log, and a
 // Bot's MEMORY.md stays one file per bot. Busy is live.turn, not a stored status.
 import { randomUUID } from 'node:crypto'
+import { orderedCompletions } from '../shared/work-line-complete.js'
 import { HISTORY_TIMEOUT_MS } from './constants.js'
 import { splitRef, textOf } from './text.js'
 
@@ -418,8 +419,43 @@ export function install(rt) {
   rt.workCompletions = []
   rt.noteWorkTurnEnd = (input) => {
     const result = noteTurnEnd(state, input)
-    if (result.event !== undefined) rt.workCompletions = [...rt.workCompletions, result.event].slice(-100)
+    if (result.event !== undefined) {
+      const line = result.line
+      const reply = typeof input?.reply === 'string' && input.reply !== '' ? input.reply : undefined
+      const stored = {
+        ...result.event,
+        ...(typeof line?.lastRoomId === 'string' ? { roomId: line.lastRoomId } : {}),
+        ...(typeof line?.botId === 'string' ? { botId: line.botId } : {}),
+        ...(reply !== undefined ? { reply } : {}),
+      }
+      rt.workCompletions = [...rt.workCompletions, stored].slice(-100)
+    }
     return result
+  }
+
+  // In-memory projection for the open room. Reply text stays off the line and
+  // out of state.json; the room log is only read.
+  rt.completionView = () => {
+    const logs = {}
+    const rooms = state.rooms
+    if (rooms != null && typeof rooms === 'object') {
+      for (const [id, room] of Object.entries(rooms)) {
+        if (Array.isArray(room?.log)) logs[id] = room.log
+      }
+    }
+    const grouped = new Map()
+    for (const event of rt.workCompletions) {
+      const roomId = typeof event?.roomId === 'string' && event.roomId !== ''
+        ? event.roomId
+        : (typeof event?.quote?.roomId === 'string' ? event.quote.roomId : undefined)
+      if (typeof roomId !== 'string' || roomId === '') continue
+      const list = grouped.get(roomId)
+      if (list === undefined) grouped.set(roomId, [event])
+      else list.push(event)
+    }
+    const view = {}
+    for (const [roomId, events] of grouped) view[roomId] = orderedCompletions(events, { roomId, logs })
+    return view
   }
 
   const legacyParts = (line) => {

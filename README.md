@@ -73,3 +73,17 @@ docs/architecture.md 架构、数据形状、与 ds-bot 的边界
 | 话题维护 | 同上 | `touchThread` 加词、更新时间；`pruneThreads` 只留最近 50 个、30 天没动的丢掉 |
 
 这两个模块都是纯函数 + 注入时钟，测试里有假定时器，所以「等到 3 秒」和「隔一周」都不用真的等。
+
+
+## Vendored ds-bot (issue #3)
+
+This repo vendors a full `ds-bot` package at `vendor/ds-bot` (from `f823773`) and applies
+the group-chat streaming + send-mode (`queue|steer`) fixes there. See
+[`docs/vendor-ds-bot.md`](docs/vendor-ds-bot.md).
+
+```sh
+# Link DSH at the vendored package, e.g.
+# "ds-bot": "link:/path/to/openDigitalMate/vendor/ds-bot"
+npm test                 # openDigitalMate tests (includes vendor contract checks)
+npm run test:vendor-ds-bot
+```

@@ -1,7 +1,7 @@
 {
   "name": "opendigitalmate",
-  "version": "0.1.0",
-  "description": "Open Digital Mate: a Feishu-native teammate on top of ds-bot — daily reports, calendar reminders, interactive cards and one panel",
+  "version": "0.1.1",
+  "description": "Open Digital Mate: Feishu-native teammate on ds-bot \u2014 vendors ds-bot with group streaming + steer send fixes (issue #3)",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -12,10 +12,14 @@
   "files": [
     "index.js",
     "src/",
-    "README.md"
+    "vendor/ds-bot/",
+    "README.md",
+    "docs/"
   ],
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "test:vendor-ds-bot": "npm --prefix vendor/ds-bot test",
+    "build:vendor-ds-bot": "npm --prefix vendor/ds-bot run build"
   },
   "keywords": [
     "dsh-plugin",
@@ -25,7 +29,7 @@
     "reminder"
   ],
   "peerDependencies": {
-    "ds-bot": ">=0.1.5"
+    "ds-bot": ">=0.2.5"
   },
   "peerDependenciesMeta": {
     "ds-bot": {
@@ -35,5 +39,10 @@
   "optionalDependencies": {
     "@larksuiteoapi/node-sdk": "^1.40.0"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "dsBotVendor": {
+    "path": "vendor/ds-bot",
+    "version": "0.2.5",
+    "from": "f823773"
+  }
 }

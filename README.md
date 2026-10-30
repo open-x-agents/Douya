@@ -10,7 +10,7 @@
 | 日报 | 按成员汇总当天日程、已完成、明天计划，组装成飞书交互卡片 | `src/host/report.js`、`src/host/cards.js` |
 | 日程提醒 | 从日历事件算出「会议前 N 分钟」，到点推送，失败重试 | `src/host/reminders.js`、`index.js` 的 `tick()` |
 | 可交互 | 卡片按钮回调：推迟 10 分钟 / 已完成 / 改时间 / 补充日报 | `src/host/cards.js`、`index.js` 的 `onCardAction()` |
-| 面板 | 单页：提交率、还没交的人、近期日程、投递记录 | `src/client/panel.html`、`src/host/panel.js` |
+| 面板 | 单页：提交率、还没交的人、近期日程、投递记录；页路由 `/api/opendigitalmate/page` | `src/client/panel.html`、`src/host/panel.js` |
 
 36 个单元测试全绿（`node --test test/*.test.js`），覆盖日报组装、提醒规划、卡片结构、按钮解析、面板快照、存储和插件接线。
 

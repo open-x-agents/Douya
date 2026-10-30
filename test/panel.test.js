@@ -47,3 +47,12 @@ test('only reminders still ahead show up, oldest delivery first', () => {
 test('a missing store still produces a page instead of a crash', () => {
   assert.deepEqual(panelSnapshot({}), { today: undefined, members: [], total: 0, submitted: 0, missing: [], upcoming: [], deliveries: [] })
 })
+
+import { PANEL_PAGE_ROUTE, PANEL_ROUTE } from '../src/host/constants.js'
+
+test('PANEL_PAGE_ROUTE and PANEL_ROUTE both live under /api/', () => {
+  assert.equal(PANEL_ROUTE.startsWith('/api/'), true)
+  assert.equal(PANEL_PAGE_ROUTE.startsWith('/api/'), true)
+  assert.equal(PANEL_ROUTE, '/api/opendigitalmate')
+  assert.equal(PANEL_PAGE_ROUTE, '/api/opendigitalmate/page')
+})

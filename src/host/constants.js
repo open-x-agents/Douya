@@ -4,5 +4,5 @@
 export const SNOOZE_MINUTES = 10
 export const TICK_SECONDS = 60
 export const PANEL_ROUTE = '/api/opendigitalmate'
-export const PANEL_PAGE_ROUTE = '/opendigitalmate'
+export const PANEL_PAGE_ROUTE = '/api/opendigitalmate/page'
 export const REPORT_HOUR = 18

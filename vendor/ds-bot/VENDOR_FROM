@@ -1,0 +1,5 @@
+source: /home/box/DS-Bot/ds-bot (clone of niuypei/DS-Bot, upstream Fei2411/DS-Bot)
+commit: f823773b07ec6ca29d60b31c31af30218a68000d
+note: Full ds-bot package vendored into openDigitalMate for in-repo development.
+      No functional patches in this commit — source tree as at the commit above
+      (node_modules omitted; install deps in the consuming DSH profile).

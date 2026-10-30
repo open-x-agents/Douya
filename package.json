@@ -1,7 +1,7 @@
 {
   "name": "opendigitalmate",
   "version": "0.1.0",
-  "description": "Open Digital Mate: a Feishu-native teammate on top of ds-bot — daily reports, calendar reminders, interactive cards and one panel",
+  "description": "Open Digital Mate: a Feishu-native teammate on top of ds-bot \u2014 daily reports, calendar reminders, interactive cards and one panel",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -12,7 +12,9 @@
   "files": [
     "index.js",
     "src/",
-    "README.md"
+    "README.md",
+    "vendor/ds-bot/",
+    "docs/"
   ],
   "scripts": {
     "test": "node --test test/*.test.js"
@@ -25,7 +27,7 @@
     "reminder"
   ],
   "peerDependencies": {
-    "ds-bot": ">=0.1.5"
+    "ds-bot": ">=0.2.4"
   },
   "peerDependenciesMeta": {
     "ds-bot": {

@@ -521,17 +521,19 @@ test('R14 a strong match in another room continues that line and does not copy i
       r2: [{ seq: 1, who: 'User', text: OLD }],
     },
   })
-  const before = JSON.stringify(host.rooms.r1.log)
   const other = JSON.stringify(host.rooms.r2.log)
   host.emit('r1', userMessage('周报进度'))
   assert.equal(host.steered.length, 0)
   assert.equal(host.delivered.length, 1)
   assert.equal(host.delivered[0].sessionId, 'remote')
+  assert.equal(host.delivered[0].roomId, 'r1')
   assert.equal(host.delivered[0].steer, false)
   assert.equal(host.delivered[0].text, '周报进度')
-  assert.equal(JSON.stringify(host.rooms.r1.log), before)
   assert.equal(JSON.stringify(host.rooms.r2.log), other)
-  assert.equal(JSON.stringify(host.rooms.r1.log).includes(OLD), false)
+  assert.equal(host.rooms.r1.log.some(line => line.text === OLD), false)
+  assert.equal(host.rooms.r1.log.filter(line => line.who === 'User' && line.text === '周报进度').length, 1)
+  assert.equal(host.rt.state.workLines.far.lastRoomId, 'r1')
+  assert.equal(host.rt.state.workLines.far.messages, undefined)
 })
 
 test('R15 the composer, drainRoomInbox, and channel.send share one decision', () => {

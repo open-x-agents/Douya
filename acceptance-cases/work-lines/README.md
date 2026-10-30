@@ -15,4 +15,4 @@
 
 `node --test acceptance-cases/work-lines/work-lines.test.js`
 
-本目录只验收索引。入站路由在 `acceptance-cases/work-line-routing/`。跨房间投影和完成重排不在这里。
+本目录只验收索引。入站路由在 `acceptance-cases/work-line-routing/`。跨房间投递在 `acceptance-cases/work-line-cross-room/`。完成重排不在这里。

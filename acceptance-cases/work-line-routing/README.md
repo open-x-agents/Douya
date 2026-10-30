@@ -25,7 +25,7 @@
 | R11 | 卡片默认高亮 | 最近更新的忙线，否则最近的一条 |
 | R12 | 正文有 `@Name`；另有 `message_bot` | `@` 只选定 bot；`message_bot` 不经过路由器 |
 | R13 | 一条本地忙线；「继续」或「这段改短」 | steer |
-| R14 | 强匹配线的 `lastRoomId` 是另一间房 | continue 那个 id；当前 `room.log` 不出现它的旧消息 |
+| R14 | 强匹配线的 `lastRoomId` 是另一间房 | continue 那个 id；当前 `room.log` 只多这一句，不出现它的旧消息 |
 | R15 | 桌面 composer 进房间会话 | 判定在用户消息和 `drainRoomInbox`，不只在 `channel.send` |
 | R16 | 忙线只在另一间房 | 不因为那边在忙就 steer；命中、询问或新建 |
 

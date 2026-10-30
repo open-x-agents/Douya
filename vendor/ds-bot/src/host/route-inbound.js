@@ -1,9 +1,10 @@
 // Which work line an inbound room message belongs to.
 // One decision for the composer, drainRoomInbox, and channel.send.
 // Bigrams are copied here so a title match from another module cannot decide.
+import { randomUUID } from 'node:crypto'
 import { mentionSpans } from '../shared/mentions.js'
 import { roomMembers } from './group-steer.js'
-import { implicitLine, isBusy, listByBot } from './work-lines.js'
+import { implicitLine, isBusy, listByBot, noteLineRoom, projectExchange } from './work-lines.js'
 
 const HIT = 0.45
 const MISS = 0.15
@@ -528,6 +529,91 @@ async function persistRoute(rt) {
   await rt.save()
 }
 
+function appendPlain(room, line) {
+  if (room == null || line == null || typeof line.text !== 'string' || line.text === '') return
+  const seq = (typeof room.seq === 'number' ? room.seq : (Array.isArray(room.log) ? room.log.length : 0)) + 1
+  room.seq = seq
+  room.log = [...(Array.isArray(room.log) ? room.log : []), { ...line, seq }]
+}
+
+function writeProjected(rt, room, lines) {
+  for (const line of lines) {
+    if (typeof rt.appendRoomLine === 'function') rt.appendRoomLine(room, line)
+    else appendPlain(room, line)
+  }
+}
+
+// A primary member session keeps posting in its home room. Any other session
+// follows the line into the room that just received it.
+function retargetWorkOwner(rt, sessionId, roomId) {
+  const owners = rt.groupOwners
+  if (owners == null || typeof owners.get !== 'function') return
+  const owner = owners.get(sessionId)
+  if (owner == null || owner.roomId === roomId) return
+  const home = rt.roomOf?.(owner.roomId)
+  if (home?.sessions?.[owner.botId] === sessionId) return
+  owner.roomId = roomId
+}
+
+function postArrivalReply(rt, room, botId, raw) {
+  const body = typeof raw === 'string' ? raw.trim() : ''
+  if (body === '') return
+  const bot = rt.botOf?.(botId)
+  writeProjected(rt, room, projectExchange({
+    replyText: body,
+    replyWho: bot?.name,
+    replyBotId: botId,
+  }))
+  // The user line was saved before the model ran. The reply lands later.
+  if (typeof rt.save === 'function') void rt.save()
+}
+
+function armArrivalReply(rt, room, decision, exchangeId) {
+  if (rt.roomWaiters == null || typeof rt.roomWaiters.set !== 'function') return
+  const botId = decision.botId
+  rt.roomWaiters.set(exchangeId, {
+    sessionId: decision.sessionId,
+    botId,
+    roomId: room.id,
+    resolve(reply) {
+      postArrivalReply(rt, room, botId, reply)
+    },
+    fail() {},
+    // A step already shown is omitted from the turn's final text, so it has to land here.
+    say(raw) {
+      postArrivalReply(rt, room, botId, raw)
+    },
+    touch() {},
+    work() {},
+    approval() {},
+  })
+}
+
+// The model turn stays on the line's session. The arrival room records only this exchange.
+async function deliverAcrossRooms(rt, room, decision, text, files) {
+  noteLineRoom(rt.state, { workLineId: decision.workLineId, sessionId: decision.sessionId, roomId: room.id })
+  retargetWorkOwner(rt, decision.sessionId, room.id)
+  writeProjected(rt, room, projectExchange({ userText: text }))
+  if (typeof rt.save === 'function') void rt.save()
+  const exchangeId = randomUUID()
+  armArrivalReply(rt, room, decision, exchangeId)
+  const steer = decision.action === 'steer'
+  if (steer && typeof rt.suppressRelayText === 'function') rt.suppressRelayText(room.id, text)
+  if (decision.sessionId == null || typeof rt.deliver !== 'function') return
+  await rt.deliver({
+    toId: decision.botId,
+    sessionId: decision.sessionId,
+    role: 'room',
+    roomId: room.id,
+    note: 'the user said',
+    text,
+    files,
+    exchangeId,
+    steer,
+    ...(steer ? { userSteer: true } : {}),
+  })
+}
+
 export async function applyRouteDecision(rt, room, decision, message = {}) {
   const text = typeof decision?.text === 'string' ? decision.text : String(message.text ?? '')
   const files = message.files ?? []
@@ -555,6 +641,10 @@ export async function applyRouteDecision(rt, room, decision, message = {}) {
       return decision
     }
     case 'steer': {
+      if (decision.crossRoom === true) {
+        await deliverAcrossRooms(rt, room, decision, text, files)
+        return decision
+      }
       const member = memberFrom(room, decision)
       if (member != null && typeof rt.acceptRoomSteer === 'function') {
         await rt.acceptRoomSteer(room, member, { text, files })
@@ -565,7 +655,7 @@ export async function applyRouteDecision(rt, room, decision, message = {}) {
           toId: decision.botId,
           sessionId: decision.sessionId,
           role: 'room',
-          roomId: decision.crossRoom === true ? decision.lastRoomId : room.id,
+          roomId: room.id,
           note: 'the user said',
           text,
           files,
@@ -577,12 +667,16 @@ export async function applyRouteDecision(rt, room, decision, message = {}) {
     }
     case 'continue':
     case 'queue': {
+      if (action === 'continue' && decision.crossRoom === true) {
+        await deliverAcrossRooms(rt, room, decision, text, files)
+        return decision
+      }
       if (decision.sessionId == null || typeof rt.deliver !== 'function') return decision
       await rt.deliver({
         toId: decision.botId,
         sessionId: decision.sessionId,
         role: 'room',
-        roomId: decision.crossRoom === true ? decision.lastRoomId : room.id,
+        roomId: room.id,
         note: 'the user said',
         text,
         files,

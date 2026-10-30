@@ -174,6 +174,41 @@ export function ensureLegacy(state, { now = Date.now(), createId, chatOf } = {})
   return Object.keys(linesOf(state)).length !== before || stripped
 }
 
+/**
+ * The line was just delivered in `roomId`. The session id stays. No transcript is stored.
+ * @param {Record<string, any>} state
+ * @param {{ workLineId?: string, sessionId?: string, roomId?: string, now?: number }} [input]
+ */
+export function noteLineRoom(state, { workLineId, sessionId, roomId, now = Date.now() } = {}) {
+  const lines = linesOf(state)
+  const line = (typeof workLineId === 'string' && lines[workLineId] != null)
+    ? lines[workLineId]
+    : (typeof sessionId === 'string' ? Object.values(lines).find(item => item?.sessionId === sessionId) : undefined)
+  if (line == null || typeof roomId !== 'string' || roomId === '') return undefined
+  line.lastRoomId = roomId
+  line.updatedAt = now
+  return line
+}
+
+/**
+ * The only lines an arrival room may show for one cross-room exchange.
+ * Callers pass the new user sentence and, later, the reply. History is not an input.
+ * @param {{ userText?: string, replyText?: string, replyWho?: string, replyBotId?: string }} [input]
+ */
+export function projectExchange({ userText, replyText, replyWho, replyBotId } = {}) {
+  /** @type {{ who: string, text: string, botId?: string }[]} */
+  const lines = []
+  if (typeof userText === 'string' && userText !== '') lines.push({ who: 'User', text: userText })
+  if (typeof replyText === 'string' && replyText !== '') {
+    lines.push({
+      who: typeof replyWho === 'string' && replyWho !== '' ? replyWho : 'Bot',
+      text: replyText,
+      ...(typeof replyBotId === 'string' && replyBotId !== '' ? { botId: replyBotId } : {}),
+    })
+  }
+  return lines
+}
+
 /** Lines of one bot. `busy` is computed and is not written back. */
 export function listByBot(state, botId, liveOf) {
   return Object.values(linesOf(state))

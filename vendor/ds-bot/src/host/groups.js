@@ -508,7 +508,7 @@ export function install(rt) {
 
   // Steer the one busy member. The probe is a steering reply on the current
   // round, not a room-log opener and not a second group_relay.
-  async function acceptRoomSteer(room, member, { text = '', files = [] } = {}) {
+  async function acceptRoomSteer(room, member, { text = '', files = [], exchangeId } = {}) {
     const sessionId = member?.sessionId ?? room?.sessions?.[member?.id]
     if (room == null || member == null || sessionId == null) return
     const reply = steeringReply({ text })
@@ -531,9 +531,16 @@ export function install(rt) {
       note: 'the user said',
       text,
       files,
+      ...(typeof exchangeId === 'string' && exchangeId !== '' ? { exchangeId } : {}),
       steer: true,
       userSteer: true,
     })
+  }
+  // One new line in the arrival room. The work-line session is not copied.
+  rt.appendRoomLine = (room, line) => {
+    if (room == null || line == null || typeof line.text !== 'string' || line.text === '') return
+    ensureRoomLog(room)
+    appendRoom(room, line)
   }
   rt.acceptRoomSteer = acceptRoomSteer
 

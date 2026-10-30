@@ -7701,7 +7701,7 @@ function clearDraftIfPosted(draft, replies = []) {
   if (draft === void 0 || draft === null) return void 0;
   if (draft.botId === void 0) return void 0;
   const text = typeof draft.text === "string" ? draft.text : "";
-  if (text === "") return void 0;
+  if (text === "") return draft.ended ? void 0 : draft;
   for (let i = replies.length - 1; i >= 0; i -= 1) {
     const reply = replies[i];
     if (reply?.kind !== void 0) continue;
@@ -7713,7 +7713,11 @@ function clearDraftIfPosted(draft, replies = []) {
   return draft;
 }
 function draftForDisplay(draft, replies = []) {
-  return clearDraftIfPosted(draft, replies);
+  const kept = clearDraftIfPosted(draft, replies);
+  if (kept === void 0 || kept === null) return void 0;
+  const text = typeof kept.text === "string" ? kept.text : "";
+  if (text === "") return void 0;
+  return kept;
 }
 
 // src/client/cells.js

@@ -1,6 +1,6 @@
 // Live draft text for a group member that is speaking: accumulates text-delta
 // from agent/assistant-stream, then clears when the reply is posted so the
- // final room log / round.replies line is not double-rendered.
+// final room log / round.replies line is not double-rendered.
 
 export function applyRoomStreamFrame(draft, frame, { botId } = {}) {
   if (frame?.type === 'start') {
@@ -22,12 +22,16 @@ export function applyRoomStreamFrame(draft, frame, { botId } = {}) {
 }
 
 // Drop a live draft once its text has been committed into the round replies /
- // room log, so the UI does not keep a streaming row beside the final bubble.
+// room log, so the UI does not keep a streaming row beside the final bubble.
+// Empty start seeds (text === '', attemptId set, not ended) MUST be kept:
+// room-progress polls call this and write the result back onto entry.draft;
+// wiping the seed loses attemptId and later text-deltas hit
+// applyRoomStreamFrame(undefined, …) and are ignored.
 export function clearDraftIfPosted(draft, replies = []) {
   if (draft === undefined || draft === null) return undefined
   if (draft.botId === undefined) return undefined
   const text = typeof draft.text === 'string' ? draft.text : ''
-  if (text === '') return undefined
+  if (text === '') return draft.ended ? undefined : draft
   for (let i = replies.length - 1; i >= 0; i -= 1) {
     const reply = replies[i]
     if (reply?.kind !== undefined) continue
@@ -40,6 +44,12 @@ export function clearDraftIfPosted(draft, replies = []) {
 }
 
 // Client-side: whether a live draft should render as a temporary streaming row.
+// Empty seeds stay in memory for attemptId, but the UI still hides them until
+// the first text-delta (draft?.text is checked by GroupMessage callers too).
 export function draftForDisplay(draft, replies = []) {
-  return clearDraftIfPosted(draft, replies)
+  const kept = clearDraftIfPosted(draft, replies)
+  if (kept === undefined || kept === null) return undefined
+  const text = typeof kept.text === 'string' ? kept.text : ''
+  if (text === '') return undefined
+  return kept
 }

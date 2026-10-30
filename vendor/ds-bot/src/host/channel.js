@@ -231,6 +231,9 @@ export function install(rt) {
         case 'room-progress':
           return ok([...rt.roomProgress.entries()].filter(([, entry]) => entry.roomId === body.roomId).map(([callId, entry]) => {
             const replies = entry.replies ?? []
+            // clearDraftIfPosted keeps empty start seeds (attemptId) so later
+            // text-deltas still accumulate. Only write back when it drops a
+            // posted/ended draft — never wipe an active empty seed here.
             const draft = clearDraftIfPosted(entry.draft, replies)
             if (draft !== entry.draft) entry.draft = draft
             return { callId, replies, speaking: entry.speaking ?? null, ...(draft ? { draft } : {}) }

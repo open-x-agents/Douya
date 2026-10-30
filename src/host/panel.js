@@ -45,6 +45,7 @@ export function installPanel(ctx, rt) {
   ctx.effect(() => register({
     path: PANEL_ROUTE,
     methods: ['GET'],
+    requestBody: 'buffered',
     fetch: async () => new Response(JSON.stringify(snapshotOf(rt)), {
       status: 200,
       headers: { 'content-type': 'application/json; charset=utf-8' },
@@ -54,6 +55,7 @@ export function installPanel(ctx, rt) {
   ctx.effect(() => register({
     path: PANEL_PAGE_ROUTE,
     methods: ['GET'],
+    requestBody: 'buffered',
     fetch: async () => {
       const html = await readFile(new URL('../client/panel.html', import.meta.url), 'utf8')
       return new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } })

@@ -650,6 +650,16 @@ export function install(rt) {
         const { lastText, lastCalled } = entry
         // A turn stopped for a switch goes on in the next part, which answers instead.
         const switched = entry.switched === true
+        // Idle is the absence of this turn. A resume replay or a part switch does
+        // not emit a second completion for the same exchange.
+        rt.noteWorkTurnEnd?.({
+          sessionId: id,
+          exchangeId: info?.exchangeId,
+          turn: event.data?.turn ?? entry.turn,
+          reason: event.data?.reason,
+          switched,
+          now: event.time ?? Date.now(),
+        })
         entry.turn = undefined
         entry.info = undefined
         entry.texts = []

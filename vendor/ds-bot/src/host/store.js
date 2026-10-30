@@ -18,8 +18,8 @@ export const own = (table, key) => (table != null && Object.hasOwn(table, key) ?
 export function install(rt) {
   const { ctx, home, statePath } = rt
 
-  /** @type {{version:1, workspaceId?:string, mainBotIds:string[], bots:Record<string,any>, privateArchives:any[], rooms:Record<string,any>, agents:Record<string,any>, capabilities:{items:Record<string,any>}, exchanges:any[], exchangeTurns:Record<string,number[]>, revision:number}} */
-  const state = { version: 1, mainBotIds: [], bots: {}, privateArchives: [], rooms: {}, agents: {}, capabilities: { items: {} }, exchanges: [], exchangeTurns: {}, works: {}, requests: {}, questions: {}, views: {}, prefs: {}, switching: {}, revision: 0 }
+  /** @type {{version:1, workspaceId?:string, mainBotIds:string[], bots:Record<string,any>, privateArchives:any[], rooms:Record<string,any>, agents:Record<string,any>, capabilities:{items:Record<string,any>}, exchanges:any[], exchangeTurns:Record<string,number[]>, workLines:Record<string,any>, workLineCompleted:Record<string,true>, revision:number}} */
+  const state = { version: 1, mainBotIds: [], bots: {}, privateArchives: [], rooms: {}, agents: {}, capabilities: { items: {} }, exchanges: [], exchangeTurns: {}, works: {}, requests: {}, questions: {}, views: {}, prefs: {}, switching: {}, workLines: {}, workLineCompleted: {}, revision: 0 }
   let loaded = null
   let writing = Promise.resolve()
   const { warn } = rt
@@ -223,8 +223,10 @@ export function install(rt) {
     // Unnamed groups from before names followed their members may still list old names.
     const stale = Object.values(state.rooms).filter(room => !room.named && room.name !== rt.autoRoomName(room.members))
     for (const room of stale) room.name = rt.autoRoomName(room.members)
-    indexSessions()
-    return { migrated: migrated || stale.length > 0, stale }
+    // New lines for chats that predate the index must be saved, or the next
+    // start would mint different ids for the same sessions.
+    const ensured = indexSessions() === true
+    return { migrated: migrated || stale.length > 0 || ensured, stale }
   }
 
   const load = () => loaded ??= (async () => {
@@ -376,6 +378,9 @@ export function install(rt) {
     }
     // The agents module owns the DSH Agent session index; it installs after this.
     rt.indexAgents?.()
+    // Work lines point at these sessions. Missing rows are filled here; a session
+    // that already has a line keeps its id. Returns whether the index grew.
+    return rt.ensureWorkLines?.() === true
   }
   // The Bot a Session speaks for: its own chat, one of its group Sessions, or an
   // earlier segment of either.

@@ -1,3 +1,9 @@
 node_modules/
-*.log
 state.json
+*.log
+
+# A Feishu app id and secret never go into the repository: they arrive as environment
+# variables, or from .env locally, which is ignored.
+.env
+.env.*
+!.env.example

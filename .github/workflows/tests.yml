@@ -1,0 +1,19 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # No dependency install on purpose: the suite runs on the standard library alone, so a
+      # red check can only mean the code changed, never that a registry was slow.
+      - name: Unit tests
+        run: node --test test/*.test.js

@@ -4,24 +4,42 @@
 
 ## 顺序
 
-1. **测试闸**：`node --test test/*.test.js`，跟 `tests.yml` 同一条命令。红在这里就结束，不留 tag。
+1. **pre-release 预检**（`scripts/pre-release.mjs --skip-version`，全绿才往下走）：
+   - **单元测试**：`node --test test/*.test.js`，跟 `tests.yml` 同一条命令；
+   - **干净安装**：`npm pack` → 装进空目录 → 真的 `import` 一次，并检查 `package.json.files` 里没写不存在的路径；
+   - **真实模型 e2e**：结论必须每条都可追源，缺一个信源必须说「还没读到」而不能编。
 2. **新东西闸**：上一个 `v*` tag 之后没有提交，就**不发**，日志与 step summary 里写一行「今天不发」。空版本不是进展。
-3. **算版本**：第一次发布用 `package.json` 里的版本；之后每天升补丁号（`0.1.0` → `0.1.1`）。有人手动改过 `package.json` 且比 tag 新，就尊重那个数字，不越过它再跳一次。
-4. **写**：`CHANGELOG.md` 顶部插一段（日期按 Asia/Shanghai，条目是这段时间的提交标题），`package.json` 的 `version` 改成新号。
-5. **交**：一次提交 `release: vX.Y.Z` 推回 `main`，打附注 tag，`gh release create` 写这一页。
+3. **算版本**：第一次发布用 `package.json` 里的版本；之后每天升补丁号。有人手动改过且比 tag 新，就尊重那个数字。
+4. **写**：`CHANGELOG.md` 顶部插一段（日期按 Asia/Shanghai），`package.json` 的 `version` 改成新号。
+5. **自检**：版本、要打的 tag、CHANGELOG 顶部三者不一致就停在提交之前，不留半成品。
+6. **交**：一次提交 `release: vX.Y.Z` 推回 `main`，打附注 tag，`gh release create` 写这一页。
+
+## 真实模型那一项要一个 secret
+
+仓库 secrets 里需要有 `MODEL_API_KEY`（可选 `MODEL_BASE_URL`、`MODEL_NAME`）。**缺 key 时发版会红在这一步，当天不发版本。**
+
+这是故意的：会跳过的那道闸等于没有。要让发版恢复，就在仓库 Settings → Secrets 里加一个 key，不需要改代码。
 
 ## 一个刻意的取舍
 
-用 `GITHUB_TOKEN` 推送的提交**不会**再触发 `tests.yml`（GitHub 防止工作流互相点燃）。所以测试放在**同一个 job 里、升版本之前**跑：版本里装的仍然是绿过的东西，只是那一趟不会在 `main` 上多出一条 check。
+用 `GITHUB_TOKEN` 推送的提交**不会**再触发 `tests.yml`（GitHub 防止工作流互相点燃）。所以测试放在**同一次运行里、升版本之前**跑：版本里装的仍然是绿过的东西，只是那一趟不会在 `main` 上多出一条 check。
 
 ## 失败怎么读
 
-- **labelled 红在 Tests**：代码坏了，跟发版无关，去修测试。
-- **红在 Release**：看 step summary 那一行，是「跳过」还是真失败。跳过是正常退出，不是红。
-- **tag 推出去了但 release 没发出来**：下一轮会自动补发同一个 tag 的 release，不会升版本、不会出现两个 tag 指同一版。
+| 红在哪 | 含义 | 怎么办 |
+| --- | --- | --- |
+| Pre-release 预检 → 单元测试 | 代码坏了，跟发版无关 | 修测试 |
+| Pre-release 预检 → 干净安装 | 打出来的包装不起来（`files` 清单漏了东西） | 修 `package.json` |
+| Pre-release 预检 → 真实模型 e2e | 模型开始编来源，或超时 | 看打印出的那几行，改提示词或降级 |
+| Release → 跳过 | 今天没有新提交（正常退出，不是失败） | 什么都不用做 |
+| tag 推出去了但 release 没发 | 上一轮半途失败 | 下一轮自动补发同一个 tag，不升版本、不会出现两个 tag 指同一版 |
 
 ## 不做什么
 
-- 不部署、不发布到任何 registry。
+- 不部署、不发布到 npm registry（只验证 tgz）。
 - 不因为「今天该有一条」而造一个空版本。
 - 不改别人的提交：`release:` 开头的版本提交本身不计入第二天的 CHANGELOG。
+
+## 以后会变的一处
+
+现在发版是**直接推 `main`**，因为 `main` 还没有保护。等启用保护 + 合并队列（#23），这一步要改成走队列；那时需要一个能触发 check 的 token，见 #22。

@@ -18,7 +18,7 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,9 +29,15 @@ jobs:
         with:
           node-version: '22'
 
-      # 第一道闸：版本里装的是测试过的东西，不是一句承诺。跟 tests.yml 同一条命令。
-      - name: Tests
-        run: node --test test/*.test.js
+      # 发版前的三道闸：单元测试、干净安装、真实模型 e2e。
+      # 版本号这一项在 Release 步骤写完之后自检（那时它才存在）。
+      # 缺 MODEL_API_KEY 时这一步失败，当天不发版本 —— 这道闸没有 key 就等于没有。
+      - name: Pre-release 预检
+        env:
+          MODEL_API_KEY: ${{ secrets.MODEL_API_KEY }}
+          MODEL_BASE_URL: ${{ secrets.MODEL_BASE_URL }}
+          MODEL_NAME: ${{ secrets.MODEL_NAME }}
+        run: node scripts/pre-release.mjs --skip-version
 
       # 第二道闸：没有新提交就不发版本。空版本会让“每天有进展”变成一句假话。
       - name: Release

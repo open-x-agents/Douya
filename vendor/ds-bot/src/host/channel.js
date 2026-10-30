@@ -7,6 +7,7 @@ import { handoffReply, questionReply, viewReply } from './parts.js'
 import { defaultRelayLimit } from './groups.js'
 import { validateViewAnswer } from 'deep-view/core'
 import { COLORS, EXTRA_COLORS, ROUTE } from './constants.js'
+import { resolveSendMode } from '../shared/send-mode.js'
 
 const LANGUAGES = { zh: 'Chinese (简体中文)', en: 'English' }
 const RUN_STATS = ['sessionStats', 'tokenUsage', 'contextPressure']
@@ -432,10 +433,20 @@ export function install(rt) {
           const past = rt.pastOwners.get(body.sessionId)
           const sessionId = rt.botOf(body.sessionId) ? rt.chatOf(body.sessionId) : past && past.roomId === undefined ? rt.chatOf(past.botId) : body.sessionId
           await rt.ensureCapabilities(sessionId)
+          // Voice / New Chat / team-actions.send may pass queue|steer (busyEnter);
+          // otherwise a running Session defaults to steer so a busy follow-up can
+          // join this turn. Explicit queue still queues.
+          const requested = body.mode === 'steer' || body.mode === 'queue' ? body.mode : undefined
+          let running = rt.live.get(sessionId)?.turn !== undefined
+          if (requested === undefined && !running) {
+            const agent = await rt.resolveAgent(sessionId).catch(() => undefined)
+            running = agent?.status === 'running'
+          }
+          const mode = resolveSendMode({ requested, running })
           await ctx.sessionController.prompt({
             requestId: randomUUID(),
             sessionId,
-            mode: 'queue',
+            mode,
             content: [{ type: 'text', text }],
           }, AbortSignal.timeout(30_000))
           return ok(true)

@@ -17,3 +17,10 @@
   config:
     searchProvider: auto
     fetchProvider: http
+
+# Product (#3): while a turn is running, Enter in the main composer should
+# steer into the current turn (not queue a new one). Users can still pick
+# queue in Conversation settings / Meta+Enter.
+- id: ui-conversation
+  config:
+    busyEnter: steer

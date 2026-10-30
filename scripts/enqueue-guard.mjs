@@ -74,7 +74,9 @@ export function judge(pr) {
   const atHead = checks.filter((c) => !pr.headSha || !c.head_sha || c.head_sha === pr.headSha);
   const tests = atHead.filter((c) => c.name === REQUIRED_CHECK);
   if (tests.length === 0) {
-    reasons.push({ code: 'tests-not-green', message: `head 上没有 \`${REQUIRED_CHECK}\` 的 check` });
+    // 把看到的 check 名字带上：check 的上下文是 job 名，不是 workflow 名，这条坑过一次。
+    const seen = atHead.map((c) => c.name).join(', ') || '（一个都没有）';
+    reasons.push({ code: 'tests-not-green', message: `head 上没有 \`${REQUIRED_CHECK}\` 的 check；看到的 check：${seen}` });
   } else {
     const green = tests.some((c) => c.conclusion === 'success');
     if (!green) {

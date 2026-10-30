@@ -1,0 +1,938 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>演示 · 整页是一条对话（v0.7 形态反转）</title>
+<style>
+  :root{
+    --ink:#15171c; --ink2:#4a4f5a; --ink3:#8b909c;
+    --bg:#f4f2ee; --card:#ffffff; --line:#e8e6e1;
+    --blue:#4a6cf7; --blue-soft:#eef2ff; --blue-line:#dbe3ff;
+    --green:#2f9e6b; --green-soft:#eaf7f0;
+    --amber:#c8862a; --amber-soft:#fdf4e6;
+    --red:#c0392b; --red-soft:#fdeceb;
+    --gray-soft:#f4f3f0;
+    --ease:cubic-bezier(.22,.61,.36,1);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:radial-gradient(1200px 700px at 50% -10%,#ffffff 0,#f4f2ee 55%,#eceae5 100%);
+    color:var(--ink);
+    font:15px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    display:flex;flex-direction:column;align-items:center;
+    padding:16px 18px 12px;min-height:100%;overflow:hidden;
+  }
+  header.top{width:100%;max-width:1100px;display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:10px;flex-wrap:wrap}
+  .top h1{margin:0;font-size:17px;letter-spacing:-.01em}
+  .top .hint{font-size:12.5px;color:var(--ink3)}
+
+  .stage{width:100%;max-width:1100px;display:flex;flex-direction:column;gap:12px;flex:1 1 auto;min-height:0}
+  .device{
+    position:relative;background:#f7f6f3;border:1px solid #e2e0da;border-radius:16px;overflow:hidden;
+    display:flex;flex-direction:column;height:calc(100vh - 228px);min-height:430px;
+    box-shadow:0 26px 60px -34px rgba(21,23,28,.45),0 2px 0 rgba(255,255,255,.6) inset;
+  }
+  .chrome{display:flex;align-items:center;gap:10px;background:#f6f5f2;border-bottom:1px solid var(--line);padding:9px 14px}
+  .lights{display:flex;gap:6px}
+  .lights i{width:10px;height:10px;border-radius:50%;background:#dad8d2;display:block}
+  .url{background:#fff;border:1px solid var(--line);border-radius:7px;padding:3px 10px;font-size:11.5px;color:var(--ink3);min-width:210px}
+  .chrome .when{margin-left:auto;font:12px/1 ui-monospace,Menlo,monospace;color:var(--ink3);font-variant-numeric:tabular-nums}
+
+  /* ——— 整个页面 = 一条对话 ——— */
+  .thread{position:relative;flex:1 1 auto;min-height:0;overflow-y:auto;scroll-behavior:smooth}
+  .stickybar{
+    position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:10px;
+    padding:9px 22px;background:rgba(247,246,243,.94);border-bottom:1px solid var(--line);
+    backdrop-filter:saturate(1.2) blur(6px);
+  }
+  .stickybar b{font-size:12.5px}
+  .stickybar small{font-size:11px;color:var(--ink3)}
+  .stickybar .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+  .jump{border:1px solid var(--line);background:#fff;border-radius:999px;font:inherit;font-size:11.5px;color:var(--ink2);padding:3px 10px;cursor:pointer}
+  .jump:hover{border-color:#cfd3db}
+  .flow{max-width:720px;margin:0 auto;padding:18px 22px 26px;display:flex;flex-direction:column;gap:12px}
+
+  /* 日期分隔 */
+  .day{display:flex;align-items:center;gap:12px;margin:6px 0 2px;color:var(--ink3);font-size:11.5px;letter-spacing:.02em}
+  .day::before,.day::after{content:"";height:1px;background:var(--line);flex:1}
+
+  /* 一条消息：头像在左，内容在右，最后一行是时刻 */
+  .msg{display:grid;grid-template-columns:26px 1fr;gap:10px;align-items:flex-start}
+  .msg .av{width:26px;height:26px;margin-top:1px}
+  .msg .av svg{display:block;width:26px;height:26px}
+  .msg .body{min-width:0}
+  .bubble{background:#fff;border:1px solid var(--line);border-radius:4px 12px 12px 12px;padding:10px 14px;font-size:13.5px;line-height:1.7;max-width:560px}
+  .bubble.me{margin-left:auto;background:#e9eeff;border-color:var(--blue-line);border-radius:12px 4px 12px 12px}
+  .meta{font-size:10.5px;color:var(--ink3);margin:4px 0 0 2px}
+  .meta b{color:var(--amber);font-weight:600}
+  .msg.mine{grid-template-columns:1fr 26px;justify-items:end}
+  .msg.mine .av{grid-column:2;grid-row:1}
+  .msg.mine .body{grid-column:1;grid-row:1;justify-self:end;text-align:right}
+  .msg .when{font-size:10px;color:#b3b7c0;margin-top:3px;font-variant-numeric:tabular-nums}
+
+  /* 卡片：在流里就是满宽，不再有「页面栅格」 */
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-top:2px}
+  .card.wide{margin-left:-26px;margin-right:-26px;padding:20px 26px} /* 面板：比消息列更宽 */
+  .card h4{margin:0 0 3px;font-size:14.5px;letter-spacing:-.01em}
+  .card .why{margin:0 0 6px;font-size:12.5px;color:var(--ink2);line-height:1.62}
+  .card .evi{display:block;font-size:11.5px;color:var(--ink3);margin-top:3px}
+  .card .adv{display:inline-block;background:var(--blue-soft);border:1px solid var(--blue-line);color:#2b4ecf;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:500}
+  .card.closed{background:#fbfaf8}
+  .card.closed h4{text-decoration:line-through;text-decoration-color:#c4c8d0;color:var(--ink2)}
+  .card.closed .adv{display:none}
+
+  .idx{font:600 11px/20px ui-monospace,Menlo,monospace;width:20px;height:20px;text-align:center;border-radius:50%;background:var(--blue-soft);color:var(--blue);display:inline-block;vertical-align:1px;margin-right:7px}
+  .card.closed .idx{background:var(--green-soft);color:var(--green)}
+
+  /* 早报的那一块：结论 + 三个数 + 展开 */
+  .brief .lead{font-size:20px;line-height:1.5;font-weight:600;letter-spacing:-.015em;margin:0 0 10px}
+  .nums{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 10px}
+  .nums div{font-size:11.5px;color:var(--ink3)}
+  .nums b{display:block;font-size:21px;color:var(--ink);letter-spacing:-.02em;line-height:1.25;font-variant-numeric:tabular-nums}
+  .brief .foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .more{border:1px solid var(--line);background:#fff;border-radius:999px;font:inherit;font-size:12px;color:var(--ink2);padding:4px 12px;cursor:pointer}
+  .more:hover{border-color:#cfd3db;color:var(--ink)}
+  .more[aria-expanded="true"]{background:var(--blue-soft);border-color:var(--blue-line);color:#2b4ecf}
+
+  /* 减法 / 等别人 */
+  .skip{background:var(--gray-soft);border-radius:10px;padding:10px 14px;font-size:12.5px;color:var(--ink2)}
+  .skip b{color:var(--ink)}
+  .waiting{border:1px dashed #e0ded8;border-radius:10px;padding:10px 14px;font-size:12.5px;color:var(--ink2)}
+  .waiting b{color:var(--ink)}
+  .waiting em{font-style:normal;color:var(--ink3);font-size:11px;display:block;margin-top:2px}
+
+  /* 富文本 */
+  .q{margin:8px 0 0;padding:1px 0 1px 10px;border-left:2px solid var(--blue-line);font-size:12.5px;color:var(--ink2);line-height:1.65}
+  .q cite{display:block;font-style:normal;font-size:10.5px;color:var(--ink3);margin-top:3px}
+  .mini{width:100%;border-collapse:collapse;font-size:11.5px;margin:8px 0 0}
+  .mini th{text-align:left;padding:0 8px 4px 0;border-bottom:1px solid var(--line);font-size:10px;letter-spacing:.05em;color:var(--ink3);font-weight:600}
+  .mini td{padding:5px 8px 5px 0;border-bottom:1px solid var(--line);color:var(--ink2)}
+  .mini td:first-child{color:var(--ink);font-weight:500;white-space:nowrap}
+  .mini td.n{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink);padding-right:0}
+  .mini tr.sum td{border-bottom:0;padding-top:7px;font-weight:600;color:var(--ink)}
+  .thumbs{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start}
+  .thumb{width:58px;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#fff}
+  .thumb.big{width:120px}
+  .thumb svg{display:block;width:100%;height:auto}
+  .thumb em{display:block;font-style:normal;font-size:9.5px;color:var(--ink3);padding:3px 5px;border-top:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bars{display:grid;gap:6px;margin-top:8px}
+  .bars .row{display:grid;grid-template-columns:64px 1fr 42px;gap:8px;align-items:center;font-size:11px;color:var(--ink2)}
+  .bars .track{height:8px;background:#f2f1ed;border-radius:3px;overflow:hidden}
+  .bars .track i{display:block;height:100%;width:0;background:var(--blue);border-radius:3px;transition:width .8s var(--ease)}
+  .bars .row.alt .track i{background:#c9d3fe}
+  .bars .row b{text-align:right;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink)}
+  .bars.in .track i{width:var(--w)}
+  .gantt{margin-top:12px}
+  .gantt .axis{position:relative;height:15px;font-size:10px;color:var(--ink3);border-bottom:1px solid var(--line);margin-bottom:6px;font-variant-numeric:tabular-nums}
+  .gantt .axis span{position:absolute;top:0;transform:translateX(-50%)}
+  .gantt .axis span:first-child{transform:none}
+  .gantt .lane{position:relative;height:22px;background:#faf9f6;border-radius:4px;margin-bottom:4px;overflow:hidden}
+  .gantt .lane i{position:absolute;top:4px;height:14px;border-radius:3px;background:var(--blue);opacity:.8;transform:scaleX(0);transform-origin:0 50%;transition:transform .7s var(--ease)}
+  .gantt .lane i.mv{background:var(--amber)}
+  .gantt .lane i.soft{background:#c9d3fe}
+  .in .gantt .lane i{transform:scaleX(1)}
+  .gantt .cap{font-size:10px;color:var(--ink3);margin-top:2px}
+
+  /* 时间卡 */
+  .ring-row{display:grid;grid-template-columns:110px 1fr;gap:16px;align-items:center}
+  .ring{width:110px;height:110px;position:relative}
+  .ring svg{transform:rotate(-90deg);width:110px;height:110px}
+  .ring circle{fill:none;stroke-width:11;stroke-linecap:round}
+  .ring .track{stroke:#f2f1ed}
+  .ring .c1{stroke:var(--blue)} .ring .c2{stroke:#8fa6fb} .ring .c3{stroke:#c9d3fe}
+  .ring .txt{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+  .ring .txt b{font-size:15px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .ring .txt span{font-size:10px;color:var(--ink3)}
+  .legend{font-size:12px;color:var(--ink2)}
+  .legend div{display:flex;align-items:center;gap:8px;padding:3px 0}
+  .legend i{width:8px;height:8px;border-radius:2px;display:block}
+  .legend b{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--ink);font-weight:600}
+
+  /* 结算卡 */
+  .done-line{font-size:16px;font-weight:600;margin:0 0 4px;letter-spacing:-.01em}
+  .done-line .n{color:var(--green);font-variant-numeric:tabular-nums;font-size:19px}
+  .done-list{list-style:none;margin:8px 0 0;padding:0}
+  .done-list li{display:grid;grid-template-columns:18px 1fr;gap:9px;padding:7px 0;border-top:1px solid var(--line);font-size:13px}
+  .done-list li:first-child{border-top:0}
+  .tick{width:18px;height:18px;border-radius:50%;background:var(--green-soft);color:var(--green);display:grid;place-items:center;font-size:10px;font-weight:700;margin-top:2px}
+  .done-list em{display:block;font-style:normal;color:var(--ink3);font-size:11px;margin-top:1px}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+  .split .box{border:1px solid var(--line);border-radius:9px;padding:9px 11px}
+  .split .box h6{margin:0 0 3px;font-size:10.5px;color:var(--ink3);letter-spacing:.06em;font-weight:600}
+  .split .box p{margin:0;font-size:12px;color:var(--ink2)}
+  .cut{margin-top:10px;border:1px dashed #cfd8f8;background:var(--blue-soft);border-radius:9px;padding:10px 13px;font-size:12.5px}
+  .cut b{display:block;font-size:11px;color:var(--blue);letter-spacing:.04em;margin-bottom:2px}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 13px;font-size:12.5px;color:var(--ink);font-weight:500;font-family:inherit;cursor:pointer}
+  .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  .actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+
+  /* 提醒小卡（对话里就是一条更小的卡片） */
+  .mini-notice{border:1px solid var(--line);background:#fff;border-radius:12px;padding:11px 14px;max-width:340px;margin-top:2px}
+  .mini-notice .h{font-size:10.5px;color:var(--ink3);letter-spacing:.05em;margin-bottom:4px}
+  .mini-notice b{font-size:13.5px;display:block;margin-bottom:3px}
+  .mini-notice p{margin:0;font-size:12px;color:var(--ink2);line-height:1.6}
+  .mini-notice .row{display:flex;gap:6px;margin-top:8px}
+  .mini-notice .row span{font-size:11px;border:1px solid var(--line);border-radius:6px;padding:2px 8px;color:var(--ink2)}
+
+  /* 输入条：常驻在窗口底部，不随流滚动 */
+  .composer{position:relative;z-index:6;flex:none;border-top:1px solid var(--line);background:#f7f6f3;padding:11px 22px 9px}
+  .composer .box{max-width:720px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 24px -18px rgba(21,23,28,.5)}
+  .composer .row{display:flex;align-items:center;gap:8px;padding:8px 10px 8px 13px}
+  .composer input{flex:1;border:0;outline:none;font:inherit;font-size:13px;padding:5px 0;background:none;min-width:0;color:var(--ink)}
+  .composer input::placeholder{color:#a8acb6}
+  .composer .send{width:28px;height:28px;border-radius:8px;background:var(--blue);color:#fff;border:0;font-size:13px;cursor:pointer;flex:none}
+  .composer .send:disabled{background:#c9cfdd;cursor:default}
+  .composer .fine{max-width:720px;margin:6px auto 0;font-size:10px;color:var(--ink3);text-align:center}
+
+  /* 出现动画 */
+  .fi{display:none}
+  .msg.said{animation:rise .45s var(--ease) both}
+  .msg .av.user{background:#e9eeff;border-radius:50%;display:grid;place-items:center;font-size:10.5px;color:#2b4ecf}
+  .fi.on{display:block;animation:rise .5s var(--ease) both}
+  .msg.on{display:grid}
+  .day.on{display:flex}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+  /* 旁白 + 控制 */
+  .narr{display:flex;gap:12px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:11px;padding:11px 15px;min-height:52px}
+  .narr .clock{font:600 12px/1.9 ui-monospace,Menlo,monospace;color:var(--blue);background:var(--blue-soft);border-radius:5px;padding:1px 7px;white-space:nowrap}
+  .narr p{margin:0;font-size:13px;color:var(--ink2);line-height:1.65}
+  .narr p b{color:var(--ink)}
+  .controls{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .scenes button{font-family:inherit;font-size:12.5px;border:1px solid var(--line);background:#fff;color:var(--ink2);border-radius:8px;padding:7px 12px;cursor:pointer;transition:.2s}
+  .scenes button:hover{border-color:#cfd3db;color:var(--ink)}
+  .scenes button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+  .spacer{flex:1}
+  .play{font-family:inherit;font-size:12.5px;border:1px solid var(--blue);background:var(--blue);color:#fff;border-radius:8px;padding:7px 14px;cursor:pointer;font-weight:600}
+  .play.ghost{background:#fff;color:var(--blue)}
+  .bar{height:3px;background:#e6e4df;border-radius:2px;overflow:hidden;flex:1 1 160px;min-width:120px}
+  .bar i{display:block;height:100%;width:0;background:var(--blue);transition:width .1s linear}
+
+  @media (max-width:760px){
+    .device{height:calc(100vh - 200px);min-height:360px}
+    .flow{padding:14px 14px 20px}
+    .card.wide{margin-left:-14px;margin-right:-14px;padding:16px 14px}
+    .composer{padding:11px 14px 9px}
+    .stickybar{padding:8px 14px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .fi.on{animation:none}
+    .thread{scroll-behavior:auto}
+    .bars .track i{transition:none;width:var(--w)}
+    .gantt .lane i{transition:none;transform:none}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>演示：整页是一条对话 · v0.7 形态反转</h1>
+  <div class="hint">没有侧栏、没有页面、没有浮层——只有一条对话，卡片和面板排在消息里</div>
+</header>
+
+<div class="stage">
+  <div class="device">
+    <div class="chrome">
+      <div class="lights"><i></i><i></i><i></i></div>
+      <div class="url">localhost:7777/</div>
+      <div class="when" id="chromeClock">10-30 08:45</div>
+    </div>
+
+    <div class="thread" id="thread">
+      <div class="stickybar">
+        <svg viewBox="0 0 32 32" width="20" height="20" aria-hidden="true">
+          <circle cx="16" cy="16" r="16" fill="#eef2ff"/>
+          <ellipse cx="16" cy="18" rx="10.5" ry="9.5" fill="#4a6cf7"/>
+          <path d="M16 4.6c0-1.6 1.2-2.6 2.9-2.6-.2 1.7-1.2 2.9-2.9 3.1z" fill="#2f9e6b"/>
+          <circle cx="12.4" cy="16.6" r="1.6" fill="#fff"/>
+          <circle cx="19.6" cy="16.6" r="1.6" fill="#fff"/>
+          <path d="M13.4 20.4q2.6 2.4 5.2 0" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        </svg>
+        <b>豆芽</b><small id="barSub">今天 · 10 月 30 日 周四</small>
+        <div class="right">
+          <button class="jump" id="jumpBtn">回到最新</button>
+        </div>
+      </div>
+
+      <div class="flow" id="flow">
+
+        <div class="day fi" id="d1">10 月 30 日 周四</div>
+
+        <!-- ① 早报 -->
+        <div class="msg fi" id="m1">
+          <div class="av">
+            <svg viewBox="0 0 32 32" aria-hidden="true">
+              <circle cx="16" cy="16" r="16" fill="#eef2ff"/>
+              <ellipse cx="16" cy="18" rx="10.5" ry="9.5" fill="#4a6cf7"/>
+              <path d="M16 4.6c0-1.6 1.2-2.6 2.9-2.6-.2 1.7-1.2 2.9-2.9 3.1z" fill="#2f9e6b"/>
+              <circle cx="12.4" cy="16.6" r="1.6" fill="#fff"/>
+              <circle cx="19.6" cy="16.6" r="1.6" fill="#fff"/>
+              <path d="M13.4 20.4q2.6 2.4 5.2 0" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="body">
+            <div class="bubble brief">
+              <p class="lead">早上好。今天 3 个会，只有 1 件必须今天推完。</p>
+              <div class="nums">
+                <div><b>3</b>件在手</div>
+                <div><b>3.0h</b>会议</div>
+                <div><b>2</b>件在等别人</div>
+              </div>
+              <div class="foot">
+                <button class="more" id="moreBtn" aria-expanded="false">展开今天 3 件</button>
+                <span class="meta" style="margin:0">飞书、日历、邮件已读 · <b>云文档未接入</b></span>
+              </div>
+            </div>
+            <div class="when">08:45</div>
+          </div>
+        </div>
+
+        <!-- 展开后的三件事 -->
+        <div class="msg fi" id="k1">
+          <div class="av"></div>
+          <div class="body">
+            <div class="card">
+              <span class="idx">1</span><h4 style="display:inline">报价单发给张伟</h4>
+              <p class="why" style="margin-top:4px">为什么是今天：他昨天问了两次，卡着周四签约。
+                <span class="evi">依据：飞书 · 张伟 · 10-29 21:14「报价单今天能给吗」</span></p>
+              <blockquote class="q">报价单今天能给吗？<b>能给的话我下午就签。</b>
+                <cite>飞书 · 张伟 · 10-29 21:14 与 21:16 两条，中间没有别人插话</cite></blockquote>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap">
+                <div class="thumb">
+                  <svg viewBox="0 0 76 100" aria-hidden="true">
+                    <rect width="76" height="100" fill="#fbfaf7"/>
+                    <rect x="9" y="10" width="34" height="5" rx="2" fill="#c9ccd3"/>
+                    <rect x="9" y="19" width="20" height="3" rx="1.5" fill="#e2e0da"/>
+                    <rect x="9" y="30" width="58" height="22" rx="3" fill="#eef2ff" stroke="#dbe3ff"/>
+                    <rect x="9" y="58" width="58" height="3" rx="1.5" fill="#ecebe7"/>
+                    <rect x="9" y="65" width="52" height="3" rx="1.5" fill="#ecebe7"/>
+                    <rect x="9" y="72" width="58" height="3" rx="1.5" fill="#ecebe7"/>
+                  </svg>
+                </div>
+                <span style="font-size:11.5px;color:var(--ink3)">他等的是这一份 · 3 页 · 3 处改动都在第 3 页</span>
+                <button class="more" data-open="sheet">看材料</button>
+              </div>
+              <div style="margin-top:9px"><span class="adv">10:00 前发，先发数字后补附件</span></div>
+            </div>
+            <div class="when">08:45</div>
+          </div>
+        </div>
+
+        <div class="msg fi" id="k2">
+          <div class="av"></div>
+          <div class="body">
+            <div class="card">
+              <span class="idx">2</span><h4 style="display:inline">评审会材料定稿</h4>
+              <p class="why" style="margin-top:4px">为什么是今天：会从 14:00 挪到 16:00，多出两小时，够定稿。
+                <span class="evi">依据：日历改动 10-29 18:02；你 10-28 说过「材料周三定」</span></p>
+              <div style="margin-top:8px"><span class="adv">13:00 前只留一页结论页</span></div>
+            </div>
+            <div class="when">08:45</div>
+          </div>
+        </div>
+
+        <div class="msg fi" id="k3">
+          <div class="av"></div>
+          <div class="body">
+            <div class="card">
+              <span class="idx">3</span><h4 style="display:inline">回李静那封邮件</h4>
+              <p class="why" style="margin-top:4px">为什么是今天：她等了两天，一句话就能关掉。
+                <span class="evi">依据：邮件 · 10-28 14:30 · 你没回（只读主题与收发关系）</span></p>
+              <blockquote class="q">主题：合同附件 · 需要你确认版本
+                <b>（同主题第 2 封，前 1 封你没回）</b>
+                <cite>邮件 · 李静 · 10-28 14:30 · 我只读主题与收发关系，正文没有读</cite></blockquote>
+              <div style="margin-top:9px"><span class="adv">回一句「收到，周五给」</span></div>
+            </div>
+            <div class="when">08:45</div>
+          </div>
+        </div>
+
+        <div class="msg fi" id="k4">
+          <div class="av"></div>
+          <div class="body">
+            <div class="skip">今天不用做的：<b>供应商比价表</b>——下周一才要，别今天排。</div>
+            <div class="waiting" style="margin-top:8px">在等别人 · 2 件，不占今天的力气
+              <em>法务周敏：合同盖章（昨天 17:40 已提交）</em>
+              <em>客户张伟：签字（卡在报价单）</em>
+            </div>
+            <div class="when">08:45</div>
+          </div>
+        </div>
+
+        <div class="msg fi" id="k5">
+          <div class="av"></div>
+          <div class="body">
+            <div class="card">
+              <div class="ring-row">
+                <div class="ring">
+                  <svg viewBox="0 0 110 110">
+                    <circle class="track" cx="55" cy="55" r="46"/>
+                    <circle class="c1" id="r1" cx="55" cy="55" r="46"/>
+                    <circle class="c2" id="r2" cx="55" cy="55" r="46"/>
+                    <circle class="c3" id="r3" cx="55" cy="55" r="46"/>
+                  </svg>
+                  <div class="txt"><b>10.0h</b><span>可安排</span></div>
+                </div>
+                <div class="legend">
+                  <div><i style="background:var(--blue)"></i> 会议 <b>3.0h</b></div>
+                  <div><i style="background:#8fa6fb"></i> 自己安排 <b>5.5h</b></div>
+                  <div><i style="background:#c9d3fe"></i> 机动 <b>1.5h</b></div>
+                </div>
+              </div>
+              <div class="gantt">
+                <div class="axis"><span style="left:0">08</span><span style="left:18.2%">10</span><span style="left:36.4%">12</span><span style="left:54.5%">14</span><span style="left:72.7%">16</span><span style="left:90.9%">18</span></div>
+                <div class="lane"><i style="left:15.9%;width:4.6%"></i></div>
+                <div class="lane"><i class="mv" style="left:68.2%;width:4.6%"></i></div>
+                <div class="lane"><i style="left:72.7%;width:18.2%"></i><i class="soft" style="left:90.9%;width:9.1%"></i></div>
+                <div class="cap">琥珀是改过时间的：供应商对齐 11:00 → 15:30；评审会 14:00 → 16:00。</div>
+              </div>
+            </div>
+            <div class="when">08:45</div>
+          </div>
+        </div>
+
+        <!-- ② 会前提醒：也是消息 -->
+        <div class="msg fi" id="m2">
+          <div class="av">
+            <svg viewBox="0 0 32 32" aria-hidden="true">
+              <circle cx="16" cy="16" r="16" fill="#eef2ff"/>
+              <ellipse cx="16" cy="18" rx="10.5" ry="9.5" fill="#4a6cf7"/>
+              <path d="M16 4.6c0-1.6 1.2-2.6 2.9-2.6-.2 1.7-1.2 2.9-2.9 3.1z" fill="#2f9e6b"/>
+              <circle cx="12.4" cy="16.6" r="1.6" fill="#fff"/>
+              <circle cx="19.6" cy="16.6" r="1.6" fill="#fff"/>
+              <path d="M13.4 20.4q2.6 2.4 5.2 0" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="body">
+            <div class="bubble">10 分钟后评审会。带上那一页结论就行。</div>
+            <div class="mini-notice">
+              <div class="h">15:50 · 会前 10 分钟</div>
+              <b>评审会 · 16:00</b>
+              <p>要准备：上一页结论页（报价单 3 处改动已标黄）。<br><b>时间改过：14:00 → 16:00</b>，别按老时间进。</p>
+              <div class="row"><span>材料已就绪</span><span>推迟 10 分钟</span></div>
+            </div>
+            <div class="when">15:50</div>
+          </div>
+        </div>
+
+        <!-- ③ 关掉一件 -->
+        <div class="msg fi" id="m3">
+          <div class="av">
+            <svg viewBox="0 0 32 32" aria-hidden="true">
+              <circle cx="16" cy="16" r="16" fill="#eef2ff"/>
+              <ellipse cx="16" cy="18" rx="10.5" ry="9.5" fill="#4a6cf7"/>
+              <path d="M16 4.6c0-1.6 1.2-2.6 2.9-2.6-.2 1.7-1.2 2.9-2.9 3.1z" fill="#2f9e6b"/>
+              <circle cx="12.4" cy="16.6" r="1.6" fill="#fff"/>
+              <circle cx="19.6" cy="16.6" r="1.6" fill="#fff"/>
+              <path d="M13.4 20.4q2.6 2.4 5.2 0" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="body">
+            <div class="bubble">张伟回了「收到」。<b>第 1 件关掉了</b>——证据是他 16:20 那条，不是我记的。</div>
+            <div style="margin-top:8px">
+              <div class="card closed" id="closedCard">
+                <span class="idx">✓</span><h4 style="display:inline">报价单发给张伟</h4>
+                <blockquote class="q">收到。<b>数字能接受</b>，明天上午签。<cite>飞书 · 张伟 · 16:20 · 他唯一一次说「签」</cite></blockquote>
+              </div>
+            </div>
+            <div class="when">16:22</div>
+          </div>
+        </div>
+
+        <!-- ④ 晚报 -->
+        <div class="msg fi" id="m4">
+          <div class="av">
+            <svg viewBox="0 0 32 32" aria-hidden="true">
+              <circle cx="16" cy="16" r="16" fill="#eef2ff"/>
+              <ellipse cx="16" cy="18" rx="10.5" ry="9.5" fill="#4a6cf7"/>
+              <path d="M16 4.6c0-1.6 1.2-2.6 2.9-2.6-.2 1.7-1.2 2.9-2.9 3.1z" fill="#2f9e6b"/>
+              <circle cx="12.4" cy="16.6" r="1.6" fill="#fff"/>
+              <circle cx="19.6" cy="16.6" r="1.6" fill="#fff"/>
+              <path d="M13.4 20.4q2.6 2.4 5.2 0" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="body">
+            <div class="card">
+              <p class="done-line">今天关掉 <span class="n">3</span> 件，2 件在等别人。</p>
+              <ul class="done-list">
+                <li><span class="tick">✓</span><div>报价单发出，张伟 16:20 回了「收到」<em>证据：飞书 · 张伟 · 16:20 回复</em></div></li>
+                <li><span class="tick">✓</span><div>评审材料定稿<em>证据：文档 15:58 有改动；会上没被打回</em></div></li>
+                <li><span class="tick">✓</span><div>合同附件回了李静<em>证据：你 11:02 发出的邮件</em></div></li>
+              </ul>
+              <div class="split">
+                <div class="box"><h6>等我</h6><p>供应商比价表（明早第一件）</p></div>
+                <div class="box"><h6>等别人</h6><p>法务盖章 · 张伟签字（他说明天给）</p></div>
+              </div>
+              <div class="cut"><b>今天你砍掉的</b>供应商比价表推到下周一——这让今天少了一件事，也让报价单按时发出去了。</div>
+              <div class="actions">
+                <button class="btn primary">就这样</button>
+                <button class="btn">改一句</button>
+                <button class="btn">这件不是我做的</button>
+              </div>
+            </div>
+            <div class="when">18:30</div>
+          </div>
+        </div>
+
+        <!-- ⑤ 追问 -->
+        <div class="msg mine fi" id="q1">
+          <div class="av" style="background:#e9eeff;border-radius:50%;display:grid;place-items:center;font-size:10.5px;color:#2b4ecf">你</div>
+          <div class="body">
+            <div class="bubble me">报价单跟上次比，差在哪？</div>
+            <div class="when">18:34</div>
+          </div>
+        </div>
+        <div class="msg fi" id="a1">
+          <div class="av">
+            <svg viewBox="0 0 32 32" aria-hidden="true">
+              <circle cx="16" cy="16" r="16" fill="#eef2ff"/>
+              <ellipse cx="16" cy="18" rx="10.5" ry="9.5" fill="#4a6cf7"/>
+              <path d="M16 4.6c0-1.6 1.2-2.6 2.9-2.6-.2 1.7-1.2 2.9-2.9 3.1z" fill="#2f9e6b"/>
+              <circle cx="12.4" cy="16.6" r="1.6" fill="#fff"/>
+              <circle cx="19.6" cy="16.6" r="1.6" fill="#fff"/>
+              <path d="M13.4 20.4q2.6 2.4 5.2 0" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="body">
+            <div class="bubble" style="max-width:620px">
+              三处都变了，合计 12.2 → 12.8 万。
+              <table class="mini">
+                <tr><th>项</th><th class="n">上次</th><th class="n">这次</th></tr>
+                <tr><td>实施</td><td class="n">8.2 万</td><td class="n">8.8 万</td></tr>
+                <tr><td>培训</td><td class="n">1.6 万</td><td class="n">1.4 万</td></tr>
+                <tr><td>维护（一年）</td><td class="n">2.4 万</td><td class="n">2.6 万</td></tr>
+                <tr class="sum"><td>合计</td><td class="n">12.2 万</td><td class="n">12.8 万</td></tr>
+              </table>
+              <div class="bars" id="pBars" style="margin-top:10px">
+                <div class="row"><span>这次</span><div class="track"><i style="--w:100%"></i></div><b>12.8</b></div>
+                <div class="row alt"><span>上次</span><div class="track"><i style="--w:95%"></i></div><b>12.2</b></div>
+                <div class="row alt"><span>竞品口头</span><div class="track"><i style="--w:91%"></i></div><b>11.6</b></div>
+              </div>
+              <div class="meta" style="margin-left:0">依据：报价单_v3.pdf 第 2 页与 v2 存档；竞品数字是他 10-27 转述，不是报价单，可信度低。两版我都只读，没有改过。</div>
+            </div>
+            <div class="when">18:34</div>
+          </div>
+        </div>
+
+        <!-- ⑥ 材料面板：在对话流里，比消息列更宽 -->
+        <div class="msg fi" id="p1">
+          <div class="av"></div>
+          <div class="body">
+            <div class="card wide" id="sheet">
+              <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+                <h4 style="font-size:16px;margin:0">报价单_v3.pdf</h4>
+                <span style="font-size:11px;color:var(--ink3)">2 份附件 · 3 处改动 · 需要 1 个签字 · 最后改动 10-29 22:04</span>
+              </div>
+              <div style="display:grid;grid-template-columns:290px 1fr;gap:20px" id="sheetGrid">
+                <div>
+                  <div class="thumbs">
+                    <div class="thumb big">
+                      <svg viewBox="0 0 76 100" aria-hidden="true">
+                        <rect width="76" height="100" fill="#fbfaf7"/>
+                        <rect x="9" y="10" width="34" height="5" rx="2" fill="#c9ccd3"/>
+                        <rect x="9" y="19" width="20" height="3" rx="1.5" fill="#e2e0da"/>
+                        <rect x="9" y="30" width="58" height="22" rx="3" fill="#eef2ff" stroke="#dbe3ff"/>
+                        <rect x="9" y="58" width="58" height="3" rx="1.5" fill="#ecebe7"/>
+                        <rect x="9" y="65" width="52" height="3" rx="1.5" fill="#ecebe7"/>
+                        <rect x="9" y="72" width="58" height="3" rx="1.5" fill="#fdf4e6" stroke="#f0dcb4"/>
+                        <rect x="9" y="79" width="30" height="3" rx="1.5" fill="#ecebe7"/>
+                      </svg>
+                      <em>报价单_v3.pdf · 3 页</em>
+                    </div>
+                    <div class="thumb big">
+                      <svg viewBox="0 0 120 84" aria-hidden="true">
+                        <rect width="120" height="84" fill="#f7f6f2"/>
+                        <rect x="6" y="6" width="108" height="72" rx="3" fill="#fff" stroke="#e6e4de"/>
+                        <path d="M18 26h30M18 34h18" stroke="#c9ccd3" stroke-width="3" stroke-linecap="round"/>
+                        <rect x="58" y="18" width="22" height="16" rx="2" fill="#fdf4e6" stroke="#f0dcb4"/>
+                        <rect x="86" y="18" width="22" height="16" rx="2" fill="#eaf7f0" stroke="#bfe4d2"/>
+                        <path d="M58 46h50M58 54h36" stroke="#dcdfe6" stroke-width="2.5" stroke-linecap="round"/>
+                        <circle cx="20" cy="62" r="7" fill="#eef2ff" stroke="#dbe3ff"/>
+                        <path d="M33 62h18" stroke="#dcdfe6" stroke-width="2.5" stroke-linecap="round"/>
+                      </svg>
+                      <em>评审白板.jpg</em>
+                    </div>
+                  </div>
+                  <div style="font-size:10px;color:var(--ink3);margin-top:7px">缩略图是原图，不是示意图。</div>
+                </div>
+                <div>
+                  <blockquote class="q" style="margin-top:0">数字能接受，明天上午签。<cite>飞书 · 张伟 · 10-29 16:20</cite></blockquote>
+                  <dl style="display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:11.5px;margin:10px 0 0">
+                    <dt style="color:var(--ink3)">改过什么</dt><dd style="margin:0;color:var(--ink2)">第 3 页 3 处：价格、付款节奏、交付期</dd>
+                    <dt style="color:var(--ink3)">谁在看</dt><dd style="margin:0;color:var(--ink2)">张伟 2 次打开（10-29 20:12、22:06）</dd>
+                    <dt style="color:var(--ink3)">还缺谁</dt><dd style="margin:0;color:var(--ink2)">张伟签字；你要发的只有这一份</dd>
+                    <dt style="color:var(--ink3)">我做了什么</dt><dd style="margin:0;color:var(--ink2)">只读目录与改动位置，正文没有替你改</dd>
+                  </dl>
+                </div>
+              </div>
+              <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:9px;font-size:10.5px;color:var(--ink3)">
+                面板比消息列宽 52px（两侧各 26px），因为它是要摊开看的东西。它仍然在流里——没有跳页，没有新窗口，关掉它对话还在原处。
+                <button class="more" style="margin-left:8px" id="closeSheet">收起</button>
+              </div>
+            </div>
+            <div class="when">18:35</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="composer">
+      <div class="box">
+        <div class="row">
+          <input id="ask" placeholder="问一句，比如「这条依据哪来的」" autocomplete="off">
+          <button class="send" id="sendBtn" title="发送">↑</button>
+        </div>
+      </div>
+      <div class="fine">只读你的信源 · 不代发 · 改不了日历 · 一天两条，其余时间闭嘴</div>
+    </div>
+  </div>
+
+  <div class="narr">
+    <span class="clock" id="clock">08:45</span>
+    <p id="narr">点「播放全部」顺着一天看，或直接点下面某一幕。</p>
+  </div>
+
+  <div class="controls">
+    <div class="scenes" id="scenes">
+      <button data-s="brief" class="on">① 早报到（一条消息）</button>
+      <button data-s="pre">② 会前 10 分钟</button>
+      <button data-s="close">③ 关掉一件</button>
+      <button data-s="done">④ 晚报结算</button>
+      <button data-s="ask">⑤ 追问</button>
+      <button data-s="panel">⑥ 材料面板</button>
+    </div>
+    <div class="spacer"></div>
+    <button class="play" id="playAll">▶ 播放全部</button>
+    <button class="play ghost" id="replay">重播</button>
+    <div class="bar"><i id="bar"></i></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var $ = function(id){ return document.getElementById(id); };
+  var thread = $('thread'), flow = $('flow');
+  var runId = 0, timers = [], barTimer = null;
+  var all = flow.querySelectorAll('.fi');
+
+  function clearAll(){
+    timers.forEach(clearTimeout); timers = [];
+    if(barTimer){ clearInterval(barTimer); barTimer = null; }
+    $('bar').style.width = '0%';
+  }
+  function step(ms, fn){
+    var id = runId;
+    timers.push(setTimeout(function(){ if(id === runId) fn(); }, ms));
+  }
+  function narr(html){ $('narr').innerHTML = html; }
+  function setClock(t){ $('clock').textContent = t; $('chromeClock').textContent = '10-30 ' + t; }
+  function on(id, yes){ var el = $(id); if(el) el.classList.toggle('on', yes !== false); }
+  function offAll(){ all.forEach(function(el){ el.classList.remove('on'); }); }
+  function jumpTop(){ var b = thread.style.scrollBehavior; thread.style.scrollBehavior = 'auto'; thread.scrollTop = 0; thread.style.scrollBehavior = b; }
+  function toBottom(smooth){
+    thread.scrollTo({ top: thread.scrollHeight, behavior: smooth === false ? 'auto' : 'smooth' });
+  }
+  function progress(ms){
+    var t0 = Date.now();
+    if(barTimer) clearInterval(barTimer);
+    $('bar').style.width = '0%';
+    barTimer = setInterval(function(){
+      var p = Math.min(1, (Date.now() - t0) / ms);
+      $('bar').style.width = (p * 100) + '%';
+      if(p >= 1){ clearInterval(barTimer); barTimer = null; }
+    }, 80);
+  }
+  var C = 2 * Math.PI * 46;
+  function ring(onOff){
+    var cs = [$('r1'), $('r2'), $('r3')];
+    cs.forEach(function(c){
+      c.style.strokeDasharray = C; c.style.strokeDashoffset = C; c.style.transition = 'none';
+    });
+    void $('r1').getBoundingClientRect();
+    cs.forEach(function(c){ c.style.transition = 'stroke-dashoffset 1s cubic-bezier(.22,.61,.36,1)'; });
+    if(!onOff) return;
+    $('r1').style.strokeDashoffset = C * 0.30;
+    $('r2').style.strokeDashoffset = C * 0.70;
+    $('r3').style.strokeDashoffset = 0;
+  }
+  function expand(onOff){
+    $('moreBtn').setAttribute('aria-expanded', onOff ? 'true' : 'false');
+    $('moreBtn').textContent = onOff ? '收起' : '展开今天 3 件';
+  }
+
+  function reset(){
+    offAll(); ring(false); expand(false);
+    $('moreBtn').disabled = false;
+    $('pBars').classList.remove('in');
+    jumpTop();
+  }
+
+  var scenes = {};
+
+  /* ① 早报 = 一条消息 */
+  scenes.brief = {
+    dur: 9000,
+    run: function(){
+      reset(); progress(scenes.brief.dur);
+      setClock('08:45');
+      on('d1'); on('m1');
+      narr('<b>08:45 早报到了，但它不是一张页面，是一条消息。</b>先给结论、三个数、一句「读了什么」——就这些，首屏不滚。');
+      step(900, function(){ toBottom(); });
+      step(1600, function(){
+        narr('要往下看，得按<b>「展开今天 3 件」</b>。这不是省空间，是让人决定今天读多深——早报默认是摘要，不是报表。');
+      });
+      step(3000, function(){
+        expand(true);
+        on('k1');
+        narr('展开之后，三件事一张一张排在消息下面，<b>不是在另一个页面里</b>。');
+      });
+      step(4000, function(){ on('k2'); });
+      step(4600, function(){ on('k3'); });
+      step(5200, function(){
+        on('k4'); toBottom();
+        narr('减法条和「在等别人」也在同一条流里——它们是同一段话的一部分，不该各占一个页面。');
+      });
+      step(6400, function(){
+        on('k5'); toBottom(); ring(true);
+        narr('时间卡最后出现：<b>先知道做什么，再知道还剩多少</b>。反过来看环，人会先算时间再读事情。');
+      });
+      step(7800, function(){
+        narr('注意这条消息里的时刻只出现一次（08:45）。后面的消息各自带时刻，<b>整条流本身就是时间轴</b>。');
+      });
+    }
+  };
+
+  /* ② 会前提醒 */
+  scenes.pre = {
+    dur: 7200,
+    run: function(){
+      reset(); progress(scenes.pre.dur);
+      setClock('15:50');
+      on('d1'); on('m1'); expand(true);
+      ['k1','k2','k3','k4','k5'].forEach(function(id){ on(id); });
+      ring(true); toBottom(false);
+      narr('<b>15:50，一条新消息插进同一条流。</b>不是浮层、不是系统弹窗——它就在早报下面，隔了七小时，中间没有别的东西。');
+      step(900, function(){
+        on('m2'); toBottom();
+        narr('提醒里有且只有两件事：<b>要准备什么</b>、<b>时间改过</b>。名单、会议链接、缺源声明都不放。');
+      });
+      step(2600, function(){
+        narr('它比早报小得多。同一条流里允许不同的重量：<b>早报是摘要，提醒是一句话</b>。');
+      });
+      step(4400, function(){
+        narr('「时间改过」后面永远跟原时间（14:00 → 16:00）。只写新时间，人会按老时间进会议室。');
+      });
+    }
+  };
+
+  /* ③ 关掉一件 */
+  scenes.close = {
+    dur: 7200,
+    run: function(){
+      reset(); progress(scenes.close.dur);
+      setClock('16:22');
+      on('d1'); on('m1'); expand(true);
+      ['k1','k2','k3','k4','k5'].forEach(function(id){ on(id); });
+      ring(true);
+      step(400, function(){
+        on('m3'); toBottom();
+        narr('16:22，张伟回了「收到」——<b>它自己认出来了，没有让你填表</b>。');
+      });
+      step(1800, function(){
+        narr('关掉的那件事变成一张灰卡，<b>证据留在原地</b>（他 16:20 那条）。上面那句话里的 3 变成 2 是同一刻发生的。');
+      });
+      step(3400, function(){
+        narr('关键：它没有把「关掉」变成「完成」。中间那七八次小成就留到 18:30 一次说——<b>中途报喜会让人一天被夸七次</b>。');
+      });
+      step(5200, function(){
+        narr('所以这条消息里没有「太棒了」，只有一句事实 + 一张变灰的卡。');
+      });
+    }
+  };
+
+  /* ④ 晚报 */
+  scenes.done = {
+    dur: 8200,
+    run: function(){
+      reset(); progress(scenes.done.dur);
+      setClock('18:30');
+      on('d1'); on('m1'); expand(true);
+      ['k1','k2','k3','k4','k5','m2','m3'].forEach(function(id){ on(id); });
+      ring(true);
+      step(400, function(){
+        on('m4'); toBottom();
+        narr('<b>18:30 晚报，也是消息。</b>顺序永远一样：结论 → 做成了（带证据）→ 等我 / 等别人 → 今天你砍掉的 → 就这样。');
+      });
+      step(2200, function(){
+        narr('每条都挂着证据：别人回了、文档改了、你发出了。<b>没有证据的成就我不写</b>——写了就是夸你，不是记事。');
+      });
+      step(4200, function(){
+        narr('「今天你砍掉的」是整条消息的重心：成就感来自取舍，不来自完成数。');
+      });
+      step(6000, function(){
+        narr('主动作只有一个。点完这条消息就算翻过去了，明天 08:45 见。');
+      });
+    }
+  };
+
+  /* ⑤ 追问 */
+  scenes.ask = {
+    dur: 8600,
+    run: function(){
+      reset(); progress(scenes.ask.dur);
+      setClock('18:34');
+      on('d1'); on('m1'); expand(true);
+      ['k1','k2','k3','k4','k5','m2','m3','m4'].forEach(function(id){ on(id); });
+      ring(true);
+      step(300, function(){
+        on('q1'); toBottom();
+        narr('<b>追问就在同一条流里继续。</b>不用打开新窗口，也不用复述你看到的东西——它已经在上下文里。');
+      });
+      step(1200, function(){
+        on('a1'); toBottom(); $('pBars').classList.add('in');
+        narr('回答里带表、带条形、带可信度：<b>竞品那个数是别人转述的，不是报价单</b>——这类话必须说出来。');
+      });
+      step(3600, function(){
+        narr('每个事实后面都有依据和边界（「两版我都只读，没有改过」）。<b>它不会用一个漂亮的数字换掉一句实话。</b>');
+      });
+      step(5800, function(){
+        narr('这就是对话形态的真好处：<b>问题发生在哪，答案就长在哪</b>，不用另开一个「问答页」。');
+      });
+    }
+  };
+
+  /* ⑥ 材料面板 */
+  scenes.panel = {
+    dur: 8600,
+    run: function(){
+      reset(); progress(scenes.panel.dur);
+      setClock('18:35');
+      on('d1'); on('m1'); expand(true);
+      ['k1','k2','k3','k4','k5','m2','m3','m4','q1','a1'].forEach(function(id){ on(id); });
+      ring(true);
+      step(300, function(){ toBottom(); });
+      step(900, function(){
+        on('p1'); toBottom();
+        narr('<b>点「看材料」，面板在流里摊开。</b>比消息列宽 52px（两侧各 26px）——它是摊开看的东西，所以允许更宽。');
+      });
+      step(2800, function(){
+        narr('但它仍然在流里：没有跳页、没有新窗口、没有浮层压在对话上。收起它，对话还在原处。');
+      });
+      step(4600, function(){
+        narr('两张原图缩略、一句原话、四项 kv——<b>每样只回答一个问题</b>：像不像真的、他说了什么、还缺谁、我做了什么。');
+      });
+      step(6400, function(){
+        narr('这一条是这个形态最脆弱的地方：面板一宽，流就断了。<b>所以只允许「点开才宽、看完就收」。</b>');
+      });
+    }
+  };
+
+  var order = ['brief','pre','close','done','ask','panel'];
+  var playingAll = false;
+
+  function go(key, keepPlay){
+    runId++; clearAll();
+    if(!keepPlay) playingAll = false;
+    document.querySelectorAll('#scenes button').forEach(function(b){
+      b.classList.toggle('on', b.getAttribute('data-s') === key);
+    });
+    scenes[key].run();
+  }
+
+  function playAll(){
+    playingAll = true;
+    $('playAll').textContent = '⏸ 暂停';
+    var i = 0;
+    (function next(){
+      if(!playingAll) return;
+      if(i >= order.length){ i = 0; }
+      var key = order[i++];
+      go(key, true);
+      timers.push(setTimeout(function(){
+        if(playingAll && i < order.length) next();
+        else if(playingAll && i >= order.length){ playingAll = false; $('playAll').textContent = '▶ 播放全部'; }
+      }, scenes[key].dur));
+    })();
+  }
+
+  document.querySelectorAll('#scenes button').forEach(function(b){
+    b.addEventListener('click', function(){
+      playingAll = false;
+      $('playAll').textContent = '▶ 播放全部';
+      go(b.getAttribute('data-s'));
+    });
+  });
+
+  $('playAll').addEventListener('click', function(){
+    if(playingAll){
+      playingAll = false; $('playAll').textContent = '▶ 播放全部';
+      runId++; clearAll(); return;
+    }
+    playAll();
+  });
+
+  $('replay').addEventListener('click', function(){
+    var cur = document.querySelector('#scenes button.on');
+    playingAll = false; $('playAll').textContent = '▶ 播放全部';
+    go(cur ? cur.getAttribute('data-s') : 'brief');
+  });
+
+  $('jumpBtn').addEventListener('click', function(){ toBottom(); });
+
+  $('moreBtn').addEventListener('click', function(){
+    var open = $('moreBtn').getAttribute('aria-expanded') === 'true';
+    expand(!open);
+    ['k1','k2','k3','k4','k5'].forEach(function(id, i){
+      if(open) $(id).classList.remove('on');
+      else setTimeout(function(){ on(id); if(id === 'k5') ring(true); }, i * 160);
+    });
+    if(!open) setTimeout(toBottom, 900);
+  });
+
+  document.querySelectorAll('[data-open="sheet"]').forEach(function(b){
+    b.addEventListener('click', function(){
+      on('p1'); setTimeout(toBottom, 60);
+    });
+  });
+  $('closeSheet').addEventListener('click', function(){ on('p1', false); });
+
+  /* 输入条能真的打字：演示页没有接真实信源，所以它只承认这一点 */
+  var AVATAR = '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="16" fill="#eef2ff"/><ellipse cx="16" cy="18" rx="10.5" ry="9.5" fill="#4a6cf7"/><path d="M16 4.6c0-1.6 1.2-2.6 2.9-2.6-.2 1.7-1.2 2.9-2.9 3.1z" fill="#2f9e6b"/><circle cx="12.4" cy="16.6" r="1.6" fill="#fff"/><circle cx="19.6" cy="16.6" r="1.6" fill="#fff"/><path d="M13.4 20.4q2.6 2.4 5.2 0" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>';
+
+  function say(text, mine){
+    var t = $('clock') ? $('clock').textContent : '';
+    var el = document.createElement('div');
+    el.className = 'msg said' + (mine ? ' mine' : '');
+    el.innerHTML = mine
+      ? '<div class="av user">你</div><div class="body"><div class="bubble me"></div><div class="when"></div></div>'
+      : '<div class="av">' + AVATAR + '</div><div class="body"><div class="bubble" style="max-width:600px"></div><div class="when"></div></div>';
+    el.querySelector('.bubble').textContent = text;
+    el.querySelector('.when').textContent = t;
+    $('flow').appendChild(el);
+    setTimeout(toBottom, 60);
+  }
+
+  function submitAsk(){
+    var v = $('ask').value.trim();
+    if(!v) return;
+    $('ask').value = '';
+    say(v, true);
+    setTimeout(function(){
+      say('这一页是演示，我没有接你的日历和邮箱，所以不编一个答案给它。真身回答之前会先去找依据：日程、文件原件、邮件的主题与收发关系；找不到就直说「这条我答不了」，并告诉你缺的是哪个信源。', false);
+    }, 420);
+  }
+  $('sendBtn').addEventListener('click', submitAsk);
+  $('ask').addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ e.preventDefault(); submitAsk(); }
+  });
+
+  go('brief');
+})();
+</script>
+</body>
+</html>

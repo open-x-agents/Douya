@@ -1,0 +1,1237 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>演示 · 数字同事的一天（v0.5 可播放原型）</title>
+<style>
+  :root{
+    --ink:#15171c; --ink2:#4a4f5a; --ink3:#8b909c;
+    --bg:#f4f2ee; --card:#ffffff; --line:#e8e6e1;
+    --blue:#4a6cf7; --blue-soft:#eef2ff; --blue-line:#dbe3ff;
+    --green:#2f9e6b; --green-soft:#eaf7f0;
+    --amber:#c8862a; --amber-soft:#fdf4e6;
+    --red:#c0392b; --red-soft:#fdeceb;
+    --gray-soft:#f4f3f0;
+    --ease:cubic-bezier(.22,.61,.36,1);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:radial-gradient(1200px 700px at 50% -10%,#ffffff 0,#f4f2ee 55%,#eceae5 100%);
+    color:var(--ink);
+    font:15px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    display:flex;flex-direction:column;align-items:center;
+    padding:26px 18px 30px;min-height:100%;
+  }
+  code{font:12px/1.5 ui-monospace,Menlo,monospace;background:#ecebe7;padding:1px 5px;border-radius:4px}
+
+  header.top{width:100%;max-width:1100px;display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+  .top h1{margin:0;font-size:17px;letter-spacing:-.01em}
+  .top .hint{font-size:12.5px;color:var(--ink3)}
+
+  /* ——— 舞台 ——— */
+  .stage{width:100%;max-width:1100px;display:flex;flex-direction:column;gap:12px}
+
+  .device{
+    position:relative;background:#fff;border:1px solid #e2e0da;border-radius:16px;overflow:hidden;
+    box-shadow:0 26px 60px -34px rgba(21,23,28,.45),0 2px 0 rgba(255,255,255,.6) inset;
+  }
+  .chrome{display:flex;align-items:center;gap:10px;background:#f6f5f2;border-bottom:1px solid var(--line);padding:9px 14px}
+  .lights{display:flex;gap:6px}
+  .lights i{width:10px;height:10px;border-radius:50%;background:#dad8d2;display:block}
+  .url{background:#fff;border:1px solid var(--line);border-radius:7px;padding:3px 10px;font-size:11.5px;color:var(--ink3);min-width:210px}
+  .chrome .when{margin-left:auto;font:12px/1 ui-monospace,Menlo,monospace;color:var(--ink3);font-variant-numeric:tabular-nums}
+
+  .app{display:grid;grid-template-columns:168px 1fr;height:560px}
+  @media (max-width:760px){.app{grid-template-columns:1fr;height:620px}.side{display:none}}
+
+  .side{background:#f8f7f4;border-right:1px solid var(--line);padding:14px 10px;font-size:13px}
+  .side .who{display:flex;align-items:center;gap:8px;padding:2px 8px 14px}
+  .side .who img{width:22px;height:22px}
+  .side .who b{font-size:13px;font-weight:600}
+  .nav{padding:6px 10px;border-radius:8px;color:var(--ink2);margin-bottom:2px;transition:.25s var(--ease)}
+  .nav.on{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(21,23,28,.07)}
+  .side .grp{font-size:10.5px;color:#a8acb5;letter-spacing:.08em;padding:13px 10px 5px}
+
+  .views{position:relative;overflow:hidden}
+  .view{position:absolute;inset:0;overflow-y:auto;padding:24px 30px 30px;opacity:0;visibility:hidden;transition:opacity .34s var(--ease),transform .34s var(--ease);transform:translateY(8px)}
+  .view.on{opacity:1;visibility:visible;transform:none}
+  @media (max-width:620px){.view{padding:18px 16px 24px}}
+
+  /* ——— 复用的动效类 ——— */
+  .a{opacity:0;transform:translateY(10px);transition:opacity .5s var(--ease),transform .5s var(--ease)}
+  .a.in{opacity:1;transform:none}
+  .grow{transition:stroke-dashoffset 1s var(--ease)}
+  .flash{animation:flash .7s ease 2}
+  @keyframes flash{50%{background:var(--red-soft)}}
+
+  /* ——— 文字层级 ——— */
+  .concl{font-size:23px;line-height:1.45;letter-spacing:-.015em;margin:0 0 8px;font-weight:600;min-height:2.9em}
+  @media (max-width:620px){.concl{font-size:19px}}
+  .concl .cursor{display:inline-block;width:2px;height:1em;background:var(--blue);vertical-align:-2px;margin-left:2px;animation:blink .9s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .stamp{font-size:11.5px;color:var(--ink3);margin-bottom:18px;line-height:1.7}
+  .stamp b{color:var(--amber);font-weight:600}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
+  .stat{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 13px}
+  .stat b{display:block;font-size:22px;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.3}
+  .stat span{font-size:11.5px;color:var(--ink3)}
+
+  ul.work{list-style:none;margin:0;padding:0}
+  ul.work li{display:grid;grid-template-columns:22px 1fr;gap:11px;padding:12px 0;border-top:1px solid var(--line);transition:.4s var(--ease)}
+  ul.work li:first-child{border-top:0;padding-top:2px}
+  .idx{font:600 11.5px/22px ui-monospace,Menlo,monospace;width:22px;height:22px;text-align:center;border-radius:50%;background:var(--blue-soft);color:var(--blue);transition:.3s}
+  ul.work h4{margin:0 0 2px;font-size:14.5px;transition:.3s}
+  .why{font-size:12.5px;color:var(--ink2);margin:0 0 5px;line-height:1.6}
+  .evi{font-size:11.5px;color:var(--ink3);display:block;margin-top:3px}
+  .adv{display:inline-block;background:var(--blue-soft);border:1px solid var(--blue-line);color:#2b4ecf;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:500}
+  ul.work li.closed{opacity:.55}
+  ul.work li.closed h4{text-decoration:line-through;text-decoration-color:#c4c8d0}
+  ul.work li.closed .idx{background:var(--green-soft);color:var(--green)}
+
+  .skip{margin-top:14px;background:var(--gray-soft);border-radius:9px;padding:10px 13px;font-size:12.5px;color:var(--ink2)}
+  .skip b{color:var(--ink)}
+
+  /* 环 */
+  .ring-row{display:grid;grid-template-columns:132px 1fr;gap:20px;align-items:center;margin-top:6px}
+  @media (max-width:620px){.ring-row{grid-template-columns:1fr}}
+  .ring{width:132px;height:132px;position:relative}
+  .ring svg{transform:rotate(-90deg);width:132px;height:132px}
+  .ring circle{fill:none;stroke-width:12;stroke-linecap:round}
+  .ring .track{stroke:#f2f1ed}
+  .ring .c1{stroke:var(--blue)} .ring .c2{stroke:#8fa6fb} .ring .c3{stroke:#c9d3fe}
+  .ring .txt{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+  .ring .txt b{font-size:17px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .ring .txt span{font-size:10.5px;color:var(--ink3)}
+  .legend{font-size:12.5px;color:var(--ink2)}
+  .legend div{display:flex;align-items:center;gap:8px;padding:4px 0}
+  .legend i{width:8px;height:8px;border-radius:2px;display:block}
+  .legend b{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--ink);font-weight:600}
+
+  .tl{margin-top:16px;border-top:1px solid var(--line);padding-top:14px}
+  .tl h5{margin:0 0 8px;font-size:10.5px;color:var(--ink3);letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+  .tl-row{display:grid;grid-template-columns:48px 1fr;gap:10px;padding:5px 0;font-size:12.5px}
+  .tl-row time{color:var(--ink3);font-variant-numeric:tabular-nums}
+  .tl-row .moved{border-left:2px solid var(--amber);padding-left:9px;background:var(--amber-soft);border-radius:0 6px 6px 0;padding-top:4px;padding-bottom:4px}
+  .tl-row .moved em{font-style:normal;color:var(--amber);font-weight:600;font-size:11px;display:block}
+
+  /* 完成页 */
+  .ev-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap}
+  .ev-line{font-size:22px;line-height:1.45;letter-spacing:-.015em;font-weight:600;margin:0}
+  @media (max-width:620px){.ev-line{font-size:18px}}
+  .ev-line .n{font-size:29px;font-variant-numeric:tabular-nums;color:var(--green)}
+  .done-list{list-style:none;margin:16px 0 0;padding:0}
+  .done-list li{display:grid;grid-template-columns:19px 1fr;gap:10px;padding:10px 0;border-top:1px solid var(--line);font-size:13.5px}
+  .done-list li:first-child{border-top:0}
+  .tick{width:19px;height:19px;border-radius:50%;background:var(--green-soft);color:var(--green);display:grid;place-items:center;font-size:10px;font-weight:700;margin-top:2px;transform:scale(.6);transition:.4s var(--ease)}
+  .in .tick{transform:scale(1)}
+  .done-list em{display:block;font-style:normal;color:var(--ink3);font-size:11.5px;margin-top:1px}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+  @media (max-width:620px){.split{grid-template-columns:1fr}}
+  .split .box{border:1px solid var(--line);border-radius:9px;padding:10px 12px}
+  .split .box h6{margin:0 0 4px;font-size:10.5px;color:var(--ink3);letter-spacing:.06em;font-weight:600}
+  .split .box p{margin:0;font-size:12.5px;color:var(--ink2)}
+  .cut{margin-top:12px;border:1px dashed #cfd8f8;background:var(--blue-soft);border-radius:9px;padding:11px 13px;font-size:12.5px}
+  .cut b{display:block;font-size:11px;color:var(--blue);letter-spacing:.04em;margin-bottom:3px}
+  .actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+  .week{margin-top:26px;border-top:1px solid var(--line);padding-top:16px}
+  .week h5{margin:0 0 8px;font-size:10.5px;color:var(--ink3);letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+  .week-lead{margin:0 0 4px;font-size:13.5px;color:var(--ink2);line-height:1.7}
+  .week-lead b{font-size:17px;letter-spacing:-.02em;color:var(--ink);font-variant-numeric:tabular-nums}
+  .week-lead span{display:block;font-size:11.5px;color:var(--ink3);margin-top:3px}
+  .week-fact{border:1px solid var(--line);border-radius:9px;padding:10px 13px;font-size:12.5px;color:var(--ink2);margin-top:12px}
+  .week-soft{font-size:10.5px;color:var(--ink3);margin-top:8px;line-height:1.6}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 14px;font-size:12.5px;color:var(--ink);font-weight:500;font-family:inherit;cursor:pointer}
+  .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  .pulse{animation:pulse 1.6s ease 2}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(74,108,247,.35)}50%{box-shadow:0 0 0 7px rgba(74,108,247,0)}}
+
+  /* 会话 */
+  .chat{display:flex;flex-direction:column;gap:8px;padding-top:2px}
+  .bubble{max-width:86%;background:#fff;border:1px solid var(--line);border-radius:11px;padding:9px 12px;font-size:13px;line-height:1.65}
+  .bubble.me{margin-left:auto;background:#e9eeff;border-color:var(--blue-line)}
+  .bubble small{display:block;font-size:10.5px;color:var(--ink3);margin-top:4px}
+  .bubble q{quotes:"「" "」"}
+  .typing{display:flex;gap:3px;padding:9px 12px}
+  .typing i{width:5px;height:5px;border-radius:50%;background:#b9bdc7;animation:tp 1s infinite}
+  .typing i:nth-child(2){animation-delay:.15s} .typing i:nth-child(3){animation-delay:.3s}
+  @keyframes tp{0%,60%,100%{opacity:.35;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
+  .composer{margin-top:auto;border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:12.5px;color:var(--ink3);background:#fff}
+
+  /* ——— 常驻对话框 ——— */
+  .dock{position:absolute;right:16px;bottom:16px;z-index:8;display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+  .dockPanel{width:344px;height:440px;background:#fff;border:1px solid var(--line);border-radius:14px;
+    box-shadow:0 26px 60px -22px rgba(21,23,28,.5);display:flex;flex-direction:column;overflow:hidden;
+    transform-origin:100% 100%;opacity:0;transform:translateY(10px) scale(.96);pointer-events:none;
+    transition:.34s var(--ease)}
+  .dockPanel.open{opacity:1;transform:none;pointer-events:auto}
+  .dockHead{display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid var(--line);background:#fbfaf8}
+  .dockHead b{font-size:13px;display:block;line-height:1.4}
+  .dockHead small{font-size:10.5px;color:var(--ink3)}
+  .dockHead .x{margin-left:auto;border:0;background:none;color:var(--ink3);font-size:15px;cursor:pointer;line-height:1;padding:3px 5px}
+  .dockBody{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:#fdfcfb}
+  .dockPanel .bubble{max-width:92%;font-size:12.5px}
+  .dockFoot{border-top:1px solid var(--line);padding:7px 10px;display:flex;gap:8px;align-items:center;background:#fff}
+  .dockFoot input{flex:1;border:0;outline:none;font:inherit;font-size:12.5px;padding:5px 2px;color:var(--ink);background:none;min-width:0}
+  .dockFoot .send{width:27px;height:27px;border-radius:8px;background:var(--blue);color:#fff;border:0;font-size:13px;cursor:pointer;flex:none}
+  .dockBtn{width:46px;height:46px;border-radius:50%;border:1px solid #dfe4ff;background:#fff;display:grid;place-items:center;
+    cursor:pointer;box-shadow:0 12px 26px -12px rgba(21,23,28,.45);position:relative;transition:.25s var(--ease);padding:0}
+  .dockBtn:hover{transform:translateY(-2px);border-color:#c9d4ff}
+  .dockBtn .badge{position:absolute;top:1px;right:1px;width:10px;height:10px;border-radius:50%;background:#e5484d;border:2px solid #fff;opacity:0;transform:scale(.5);transition:.25s var(--ease)}
+  .dockBtn.has .badge{opacity:1;transform:scale(1)}
+  .dockPeek{position:absolute;right:58px;bottom:8px;background:#15171c;color:#fff;font-size:11.5px;padding:5px 10px;
+    border-radius:8px;white-space:nowrap;opacity:0;transform:translateX(6px);transition:.3s var(--ease);pointer-events:none}
+  .dockPeek.in{opacity:1;transform:none}
+  @media (max-width:620px){
+    .dock{right:10px;left:10px;bottom:10px}
+    .dockPanel{width:100%;height:68%}
+    .dockPeek{display:none}
+  }
+
+  /* 信源表 */
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{text-align:left;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);font-weight:600;padding:0 10px 8px 0;border-bottom:1px solid var(--line)}
+  td{padding:9px 10px 9px 0;border-bottom:1px solid var(--line);color:var(--ink2);vertical-align:top}
+  td:first-child{color:var(--ink);font-weight:600;white-space:nowrap}
+  .pill{font-size:11px;padding:2px 7px;border-radius:999px;font-weight:600;white-space:nowrap}
+  .pill.ok{background:var(--green-soft);color:var(--green)}
+  .pill.no{background:var(--red-soft);color:var(--red)}
+  .src-note{margin-top:14px;font-size:12px;color:var(--ink2);background:var(--gray-soft);border-radius:9px;padding:10px 13px}
+
+  /* 浮层：会前提醒 */
+  .notice{position:absolute;top:14px;right:14px;width:290px;background:#fff;border:1px solid var(--line);border-radius:12px;
+    box-shadow:0 18px 40px -18px rgba(21,23,28,.4);padding:13px 15px;opacity:0;transform:translate(14px,-8px) scale(.97);
+    transition:.45s var(--ease);pointer-events:none}
+  .notice.in{opacity:1;transform:none}
+  .notice .h{font-size:10.5px;color:var(--ink3);letter-spacing:.05em;margin-bottom:5px}
+  .notice b{font-size:13.5px;display:block;margin-bottom:4px}
+  .notice p{margin:0;font-size:12px;color:var(--ink2);line-height:1.6}
+  .notice .row{display:flex;gap:6px;margin-top:9px}
+  .notice .row span{font-size:11.5px;border:1px solid var(--line);border-radius:6px;padding:3px 8px;color:var(--ink2)}
+
+  /* toast */
+  .toast{position:absolute;left:18px;bottom:18px;transform:translateY(14px);background:#15171c;color:#fff;
+    font-size:12.5px;padding:8px 15px;border-radius:999px;opacity:0;transition:.4s var(--ease);pointer-events:none;white-space:nowrap}
+  .toast.in{opacity:1;transform:none}
+
+  /* 旁白 + 控制 */
+  .narr{display:flex;gap:12px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:11px;padding:11px 15px;min-height:52px}
+  .narr .clock{font:600 12px/1.9 ui-monospace,Menlo,monospace;color:var(--blue);background:var(--blue-soft);border-radius:5px;padding:1px 7px;white-space:nowrap}
+  .narr p{margin:0;font-size:13px;color:var(--ink2);line-height:1.65}
+  .narr p b{color:var(--ink)}
+
+  .controls{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .scenes button{font-family:inherit;font-size:12.5px;border:1px solid var(--line);background:#fff;color:var(--ink2);
+    border-radius:8px;padding:7px 12px;cursor:pointer;transition:.2s}
+  .scenes button:hover{border-color:#cfd3db;color:var(--ink)}
+  .scenes button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+  .spacer{flex:1}
+  .play{font-family:inherit;font-size:12.5px;border:1px solid var(--blue);background:var(--blue);color:#fff;
+    border-radius:8px;padding:7px 14px;cursor:pointer;font-weight:600}
+  .play.ghost{background:#fff;color:var(--blue)}
+  .bar{height:3px;background:#e6e4df;border-radius:2px;overflow:hidden;flex:1 1 160px;min-width:120px}
+  .bar i{display:block;height:100%;width:0;background:var(--blue);transition:width .1s linear}
+
+  /* ——— 富文本：只在承载证据时出现 ——— */
+  .q{margin:9px 0 0;padding:1px 0 1px 10px;border-left:2px solid var(--blue-line);font-size:12.5px;color:var(--ink2);line-height:1.65}
+  .q cite{display:block;font-style:normal;font-size:10.5px;color:var(--ink3);margin-top:3px}
+  .q b{color:var(--ink);font-weight:600}
+
+  .mini{width:100%;border-collapse:collapse;font-size:11.5px;margin:9px 0 0}
+  .mini th{text-align:left;padding:0 8px 4px 0;border-bottom:1px solid var(--line);font-size:10px;letter-spacing:.05em;color:var(--ink3);font-weight:600}
+  .mini td{padding:5px 8px 5px 0;border-bottom:1px solid var(--line);color:var(--ink2);vertical-align:top}
+  .mini td:first-child{color:var(--ink);font-weight:500;white-space:nowrap}
+  .mini td.n{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink);padding-right:0;white-space:nowrap}
+  .mini tr.up td.n{color:var(--amber)}
+  .mini tr.sum td{border-bottom:0;padding-top:7px;font-weight:600;color:var(--ink)}
+
+  figure.f{margin:11px 0 0}
+  figure.f figcaption{font-size:10.5px;color:var(--ink3);margin-top:6px;line-height:1.55}
+  .thumbs{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start}
+  .thumb{width:74px;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#fff}
+  .thumb.big{width:132px}
+  .thumb.sm{width:46px;flex:none}
+  .attachrow{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:11.5px;color:var(--ink3);flex-wrap:wrap}
+  .attachbtn{border:0;background:none;color:var(--blue);font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:2px}
+  .thumb svg{display:block;width:100%;height:auto}
+  .thumb em{display:block;font-style:normal;font-size:9.5px;color:var(--ink3);padding:3px 5px;border-top:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* 甘特：几点做什么，用位置回答 */
+  .gantt{margin-top:15px}
+  .gantt .axis{position:relative;height:15px;font-size:10px;color:var(--ink3);border-bottom:1px solid var(--line);margin-bottom:6px;font-variant-numeric:tabular-nums}
+  .gantt .axis span{position:absolute;top:0;transform:translateX(-50%)}
+  .gantt .axis span:first-child{transform:none}
+  .gantt .lane{position:relative;height:24px;background:#faf9f6;border-radius:4px;margin-bottom:4px;overflow:hidden}
+  .gantt .lane i{position:absolute;top:5px;height:14px;border-radius:3px;background:var(--blue);opacity:.8;
+    transform:scaleX(0);transform-origin:0 50%;transition:transform .7s var(--ease)}
+  .gantt .lane i.mv{background:var(--amber)}
+  .gantt .lane i.soft{background:#c9d3fe}
+  .gantt.in .lane i{transform:scaleX(1)}
+  .tl.in .gantt .lane i{transform:scaleX(1)}
+  .gantt .cap{font-size:10px;color:var(--ink3);margin-top:2px}
+
+  .bars{display:grid;gap:6px;margin-top:9px}
+  .bars .row{display:grid;grid-template-columns:64px 1fr 42px;gap:8px;align-items:center;font-size:11px;color:var(--ink2)}
+  .bars .track{height:8px;background:#f2f1ed;border-radius:3px;overflow:hidden}
+  .bars .track i{display:block;height:100%;width:0;background:var(--blue);border-radius:3px;transition:width .8s var(--ease)}
+  .bars .row.alt .track i{background:#c9d3fe}
+  .bars .row b{text-align:right;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink);font-size:11px}
+  .bars.in .track i{width:var(--w)}
+  .bars .note{font-size:10px;color:var(--ink3);margin-top:1px}
+
+  .legendline{display:flex;gap:14px;flex-wrap:wrap;font-size:10.5px;color:var(--ink3);margin-top:7px}
+  .legendline i{display:inline-block;width:13px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+
+  .chart-line{fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;
+    stroke-dasharray:100;stroke-dashoffset:100;transition:stroke-dashoffset 1.2s var(--ease)}
+  .in .chart-line{stroke-dashoffset:0}
+
+  /* 等别人：灰底，不给建议 */
+  .waiting{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+  .waiting h5{margin:0 0 7px;font-size:10.5px;color:var(--ink3);letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+  .waitrow{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink2);background:var(--gray-soft);border-radius:8px;padding:7px 10px;margin-bottom:5px}
+  .waitrow em{font-style:normal;color:var(--ink3);font-size:11px;margin-left:auto;text-align:right}
+  .waiting-note{font-size:10.5px;color:var(--ink3);margin-top:6px;line-height:1.55}
+  .chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
+  .chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--ink2);border:1px solid var(--line);border-radius:999px;padding:1px 8px 1px 2px;background:#fff}
+  .chip b{width:17px;height:17px;border-radius:50%;background:var(--blue-soft);color:var(--blue);font-size:9.5px;display:grid;place-items:center;font-weight:600}
+
+  /* 材料卡：整张浮层，因为它是浮在页面上的第二层 */
+  .sheet{position:absolute;inset:0;z-index:9;display:grid;place-items:center;padding:20px;
+    background:rgba(21,23,28,.18);opacity:0;visibility:hidden;transition:.3s var(--ease)}
+  .sheet.in{opacity:1;visibility:visible}
+  .sheetCard{width:100%;max-width:700px;max-height:100%;overflow-y:auto;background:#fff;border:1px solid var(--line);
+    border-radius:16px;box-shadow:0 30px 70px -30px rgba(21,23,28,.5);padding:20px 22px;
+    transform:translateY(10px) scale(.985);transition:.34s var(--ease)}
+  .sheet.in .sheetCard{transform:none}
+  .sheetHead{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px}
+  .sheetHead h3{margin:0;font-size:16px;letter-spacing:-.01em}
+  .sheetHead small{display:block;font-size:11px;color:var(--ink3);margin-top:2px}
+  .sheetHead .x{margin-left:auto;border:0;background:none;color:var(--ink3);font-size:16px;cursor:pointer;line-height:1;padding:2px 4px}
+  .cols2{display:grid;grid-template-columns:150px 1fr;gap:16px}
+  @media (max-width:620px){.cols2{grid-template-columns:1fr}.sheetCard{max-height:100%}}
+
+  @media (prefers-reduced-motion:reduce){
+    .a{transition:none;opacity:1;transform:none}
+    .grow{transition:none}
+    .notice,.toast,.view{transition:none}
+    .pulse,.flash,.typing i{animation:none}
+    .chart-line{transition:none;stroke-dashoffset:0}
+    .bars .track i{transition:none;width:var(--w)}
+    .gantt .lane i{transition:none;transform:none}
+    .sheet,.sheetCard{transition:none}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>演示：数字同事的一天 · v0.5 可播放原型（富文本版）</h1>
+  <div class="hint">八幕 · 点单幕或「播放全部」 · 图片/表格/图表/原话都是真的能点的</div>
+</header>
+
+<div class="stage">
+  <div class="device">
+    <div class="chrome">
+      <div class="lights"><i></i><i></i><i></i></div>
+      <div class="url">localhost:7777/today</div>
+      <div class="when" id="chromeClock">10-30 08:45</div>
+    </div>
+
+    <div class="app">
+      <aside class="side">
+        <div class="who">
+          <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true">
+            <circle cx="16" cy="16" r="16" fill="#eef2ff"/>
+            <ellipse cx="16" cy="18" rx="10.5" ry="9.5" fill="#4a6cf7"/>
+            <path d="M16 4.6c0-1.6 1.2-2.6 2.9-2.6-.2 1.7-1.2 2.9-2.9 3.1z" fill="#2f9e6b"/>
+            <circle cx="12.4" cy="16.6" r="1.6" fill="#fff"/>
+            <circle cx="19.6" cy="16.6" r="1.6" fill="#fff"/>
+            <path d="M13.4 20.4q2.6 2.4 5.2 0" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          </svg>
+          <b>豆芽</b>
+        </div>
+        <div class="nav on" data-nav="today">今天</div>
+        <div class="nav" data-nav="done">完成</div>
+        <div class="grp">信源</div>
+        <div class="nav" data-nav="src">接入状态</div>
+        <div class="grp">设置</div>
+        <div class="nav">偏好（6 句）</div>
+      </aside>
+
+      <div class="views">
+        <!-- 今天 -->
+        <section class="view on" id="v-today">
+          <h3 class="concl"><span id="conclText"></span><span class="cursor" id="cursor"></span></h3>
+          <div class="stamp a" id="stamp">10 月 30 日 周四 08:45 · 飞书、日历、邮件已读；<b>云文档未接入</b></div>
+
+          <div class="stats">
+            <div class="stat a" data-d="0"><b id="nOpen">0</b><span>件在手</span></div>
+            <div class="stat a" data-d="1"><b id="nMeet">0</b><span>会议</span></div>
+            <div class="stat a" data-d="2"><b id="nWait">0</b><span>件在等别人</span></div>
+          </div>
+
+          <ul class="work">
+            <li class="a" id="w1">
+              <span class="idx">1</span>
+              <div>
+                <h4>报价单发给张伟</h4>
+                <p class="why">为什么是今天：他昨天问了两次，卡着周四签约。
+                  <span class="evi">依据：飞书 · 张伟 · 10-29 21:14「报价单今天能给吗」</span></p>
+                <blockquote class="q">报价单今天能给吗？<b>能给的话我下午就签。</b>
+                  <cite>飞书 · 张伟 · 10-29 21:14 与 21:16 两条，中间没有别人插话</cite></blockquote>
+                <div class="attachrow">
+                  <div class="thumb sm">
+                    <svg viewBox="0 0 76 100" aria-hidden="true">
+                      <rect width="76" height="100" fill="#fbfaf7"/>
+                      <rect x="9" y="10" width="34" height="5" rx="2" fill="#c9ccd3"/>
+                      <rect x="9" y="19" width="20" height="3" rx="1.5" fill="#e2e0da"/>
+                      <rect x="9" y="30" width="58" height="22" rx="3" fill="#eef2ff" stroke="#dbe3ff"/>
+                      <rect x="9" y="58" width="58" height="3" rx="1.5" fill="#ecebe7"/>
+                      <rect x="9" y="65" width="52" height="3" rx="1.5" fill="#ecebe7"/>
+                      <rect x="9" y="72" width="58" height="3" rx="1.5" fill="#ecebe7"/>
+                    </svg>
+                  </div>
+                  <span>他等的是这一份 · 3 页 · 3 处改动都在第 3 页</span>
+                  <button class="attachbtn" data-open="sheet">看材料</button>
+                </div>
+                <span class="adv">10:00 前发，先发数字后补附件</span>
+              </div>
+            </li>
+            <li class="a" id="w2">
+              <span class="idx">2</span>
+              <div>
+                <h4>评审会材料定稿</h4>
+                <p class="why">为什么是今天：会从 14:00 挪到 16:00，多出两小时，够定稿。
+                  <span class="evi">依据：日历改动 10-29 18:02；你 10-28 说过「材料周三定」</span></p>
+                <span class="adv">13:00 前只留一页结论页</span>
+              </div>
+            </li>
+            <li class="a" id="w3">
+              <span class="idx">3</span>
+              <div>
+                <h4>回李静那封邮件</h4>
+                <p class="why">为什么是今天：她等了两天，一句话就能关掉。
+                  <span class="evi">依据：邮件 · 10-28 14:30 · 你没回（只读主题与收发关系）</span></p>
+                <blockquote class="q">主题：合同附件 · 需要你确认版本
+                  <b>（同主题第 2 封，前 1 封你没回）</b>
+                  <cite>邮件 · 李静 · 10-28 14:30 · 我只读主题与收发关系，正文没有读</cite></blockquote>
+                <span class="adv">回一句「收到，周五给」</span>
+              </div>
+            </li>
+          </ul>
+
+          <div class="waiting a" id="waiting">
+            <h5>在等别人 · 2 件，不占今天的力气</h5>
+            <div class="waitrow">
+              <span class="chip"><b>周</b>周敏 · 法务</span>
+              合同盖章
+              <em>昨天 17:40 已提交，她说明天给你</em>
+            </div>
+            <div class="waitrow">
+              <span class="chip"><b>张</b>张伟 · 客户</span>
+              签字
+              <em>卡在报价单，发出去才轮到他</em>
+            </div>
+            <div class="waiting-note">等别人不算你的完成数，也不给建议——给别人排活儿不叫建议。</div>
+          </div>
+
+          <div class="skip a" id="skip">今天不用做的：<b>供应商比价表</b>——下周一才要，别今天排。</div>
+
+          <div class="tl a" id="tl">
+            <h5>今天的时间</h5>
+            <div class="ring-row">
+              <div class="ring">
+                <svg viewBox="0 0 132 132">
+                  <circle class="track" cx="66" cy="66" r="55"/>
+                  <circle class="c1 grow" id="r1" cx="66" cy="66" r="55"/>
+                  <circle class="c2 grow" id="r2" cx="66" cy="66" r="55"/>
+                  <circle class="c3 grow" id="r3" cx="66" cy="66" r="55"/>
+                </svg>
+                <div class="txt"><b>10.0h</b><span>可安排</span></div>
+              </div>
+              <div class="legend">
+                <div><i style="background:var(--blue)"></i> 会议 <b>3.0h</b></div>
+                <div><i style="background:#8fa6fb"></i> 自己安排 <b>5.5h</b></div>
+                <div><i style="background:#c9d3fe"></i> 机动 <b>1.5h</b></div>
+              </div>
+            </div>
+            <div style="margin-top:14px">
+              <div class="tl-row"><time>10:00</time><div>发报价单给张伟</div></div>
+              <div class="tl-row"><time>15:30</time><div class="moved"><em>改过时间</em>供应商对齐 · 11:00 → 15:30（30 分钟）</div></div>
+              <div class="tl-row"><time>16:00</time><div class="moved"><em>改过时间</em>评审会（2h）· 14:00 → 16:00，会前 10 分钟提醒</div></div>
+            </div>
+            <div class="gantt" id="gantt">
+              <div class="axis"><span style="left:0">08</span><span style="left:18.2%">10</span><span style="left:36.4%">12</span><span style="left:54.5%">14</span><span style="left:72.7%">16</span><span style="left:90.9%">18</span></div>
+              <div class="lane"><i style="left:15.9%;width:4.6%" title="发报价单"></i></div>
+              <div class="lane"><i class="mv" style="left:68.2%;width:4.6%" title="供应商对齐（原 11:00）"></i></div>
+              <div class="lane"><i style="left:72.7%;width:18.2%" title="评审会 16:00–18:00"></i><i class="soft" style="left:90.9%;width:9.1%" title="机动"></i></div>
+              <div class="cap">颜色越深越不能动；琥珀是改过时间的那个会，它原来在上午。</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 完成 -->
+        <section class="view" id="v-done">
+          <div class="ev-head">
+            <h3 class="ev-line">今天关掉 <span class="n" id="evN">0</span> 件，2 件在等别人。</h3>
+            <div class="stamp" style="margin:0">18:30 · 手上有 5 件</div>
+          </div>
+          <ul class="done-list">
+            <li class="a"><span class="tick">✓</span><div>报价单发出，张伟 16:20 回了「收到」<em>证据：飞书 · 张伟 · 16:20 回复</em>
+              <blockquote class="q">收到。<b>数字能接受</b>，明天上午签。<cite>飞书 · 张伟 · 16:20（这条是唯一一次他说「签」）</cite></blockquote>
+            </div></li>
+            <li class="a"><span class="tick">✓</span><div>评审材料定稿<em>证据：文档 15:58 有改动；会上没被打回</em></div></li>
+            <li class="a"><span class="tick">✓</span><div>合同附件回了李静<em>证据：你 11:02 发出的邮件</em></div></li>
+          </ul>
+          <div class="split">
+            <div class="box a"><h6>等我</h6><p>供应商比价表（明早第一件）</p></div>
+            <div class="box a"><h6>等别人</h6><p>法务盖章 · 张伟签字（他说明天给）</p></div>
+          </div>
+          <div class="cut a"><b>今天你砍掉的</b>供应商比价表推到下周一——这让今天少了一件事，也让报价单按时发出去了。</div>
+          <div class="actions a">
+            <button class="btn primary" id="btnOk">就这样</button>
+            <button class="btn">改一句</button>
+            <button class="btn">这件不是我做的</button>
+          </div>
+
+          <section class="week" id="week">
+            <h5>这一周 · 只画一种对比</h5>
+            <p class="week-lead a">关掉 <b>18</b> 件，砍掉 <b>6</b> 件。<span>只给两个数字。加第三个指标，这页就变成要学的仪表盘。</span></p>
+            <figure class="f a" id="wkChart">
+              <svg viewBox="0 0 300 100" role="img" aria-label="近七天关掉与砍掉件数折线">
+                <line x1="12" y1="18" x2="292" y2="18" stroke="#f0eee9"/>
+                <line x1="12" y1="39.6" x2="292" y2="39.6" stroke="#f0eee9"/>
+                <line x1="12" y1="61.2" x2="292" y2="61.2" stroke="#f0eee9"/>
+                <line x1="12" y1="72" x2="292" y2="72" stroke="#e8e6e1"/>
+                <polyline class="chart-line" pathLength="100" stroke="#2f9e6b"
+                  points="16,50.4 60.7,39.6 105.3,39.6 150,28.8 194.7,50.4 239.3,61.2 284,39.6"/>
+                <polyline class="chart-line" pathLength="100" stroke="#c8862a" style="transition-delay:.25s"
+                  points="16,61.2 60.7,61.2 105.3,72 150,50.4 194.7,61.2 239.3,72 284,61.2"/>
+                <circle cx="150" cy="28.8" r="2.6" fill="#2f9e6b"/>
+                <text x="16" y="88" font-size="9" fill="#8b909c" text-anchor="middle">一</text>
+                <text x="60.7" y="88" font-size="9" fill="#8b909c" text-anchor="middle">二</text>
+                <text x="105.3" y="88" font-size="9" fill="#8b909c" text-anchor="middle">三</text>
+                <text x="150" y="88" font-size="9" fill="#8b909c" text-anchor="middle">四</text>
+                <text x="194.7" y="88" font-size="9" fill="#8b909c" text-anchor="middle">五</text>
+                <text x="239.3" y="88" font-size="9" fill="#8b909c" text-anchor="middle">六</text>
+                <text x="284" y="88" font-size="9" fill="#8b909c" text-anchor="middle">日</text>
+              </svg>
+              <div class="legendline">
+                <span><i style="background:#2f9e6b"></i>关掉（有外部证据）</span>
+                <span><i style="background:#c8862a"></i>砍掉（你主动推走的）</span>
+              </div>
+              <figcaption>周四最高不是好事：那天关掉 4 件、砍掉 2 件，是因为上午两个会被挪走，多出三小时。图表只记事实，不给结论。</figcaption>
+            </figure>
+            <div class="a" id="wkNote">
+              <div class="week-fact"><b>砍掉的 6 件里，4 件下一周真的不用做了。</b>这说明砍得对，不是运气。</div>
+              <div class="week-soft">以下不画：连续天数、效率分、排名、和别人的对比。它们会让人开始为数字干活。</div>
+            </div>
+          </section>
+        </section>
+
+        <!-- 信源 -->
+        <section class="view" id="v-src">
+          <table>
+            <thead><tr><th>信源</th><th>状态</th><th>最后读取</th><th>读到</th><th>边界</th></tr></thead>
+            <tbody>
+              <tr class="a"><td>飞书消息</td><td><span class="pill ok">已连</span></td><td>08:42</td><td>214 条 · 3 个会话</td><td>只读 · 不代发</td></tr>
+              <tr class="a"><td>飞书日历</td><td><span class="pill ok">已连</span></td><td>08:42</td><td>12 个日程</td><td>只读 · 改不了</td></tr>
+              <tr class="a"><td>邮箱</td><td><span class="pill ok">已连</span></td><td>08:40</td><td>38 封 · 仅主题与收发关系</td><td>不读正文 · 不代发</td></tr>
+              <tr class="a" id="rowDoc"><td>云文档改动</td><td><span class="pill no" id="docPill">未连</span></td><td>—</td><td>—</td><td>缺此源时不出「文档被改了」这类证据</td></tr>
+            </tbody>
+          </table>
+          <div class="src-note a">一个源没连上，页面上的说法会悄悄变弱。所以缺源写在抬头，并且当天不产出依赖该源的结论——而不是照常输出、让你以为都读到了。</div>
+        </section>
+      </div>
+    </div>
+
+    <!-- 浮层 -->
+    <div class="notice" id="notice">
+      <div class="h">15:50 · 会前 10 分钟</div>
+      <b>评审会 · 16:00</b>
+      <p>要准备：上一页结论页（报价单 3 处改动已标黄）。<br><b>时间改过：14:00 → 16:00</b>，别按老时间进。</p>
+      <div class="row"><span>材料已就绪</span><span>推迟 10 分钟</span></div>
+    </div>
+
+    <!-- 常驻对话框：唯一的入口 -->
+    <div class="dock">
+      <div class="dockPanel" id="dockPanel">
+        <div class="dockHead">
+          <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true">
+            <circle cx="16" cy="16" r="16" fill="#eef2ff"/>
+            <ellipse cx="16" cy="18" rx="10.5" ry="9.5" fill="#4a6cf7"/>
+            <path d="M16 4.6c0-1.6 1.2-2.6 2.9-2.6-.2 1.7-1.2 2.9-2.9 3.1z" fill="#2f9e6b"/>
+            <circle cx="12.4" cy="16.6" r="1.6" fill="#fff"/>
+            <circle cx="19.6" cy="16.6" r="1.6" fill="#fff"/>
+            <path d="M13.4 20.4q2.6 2.4 5.2 0" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          </svg>
+          <div><b>豆芽</b><small>唯一的对话对象</small></div>
+          <button class="x" id="dockClose" title="收起">✕</button>
+        </div>
+        <div class="dockBody" id="dockBody"></div>
+        <div class="dockFoot">
+          <input id="dockInput" placeholder="问一句，比如「这条依据哪来的」" autocomplete="off">
+          <button class="send" id="dockSend" title="发送">↑</button>
+        </div>
+      </div>
+      <div class="dockPeek" id="dockPeek">早报到了 · 3 件事</div>
+      <button class="dockBtn" id="dockBtn" title="和豆芽说话（⌘J）">
+        <svg viewBox="0 0 32 32" width="27" height="27" aria-hidden="true">
+          <circle cx="16" cy="16" r="16" fill="#eef2ff"/>
+          <ellipse cx="16" cy="18" rx="10.5" ry="9.5" fill="#4a6cf7"/>
+          <path d="M16 4.6c0-1.6 1.2-2.6 2.9-2.6-.2 1.7-1.2 2.9-2.9 3.1z" fill="#2f9e6b"/>
+          <circle cx="12.4" cy="16.6" r="1.6" fill="#fff"/>
+          <circle cx="19.6" cy="16.6" r="1.6" fill="#fff"/>
+          <path d="M13.4 20.4q2.6 2.4 5.2 0" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        </svg>
+        <span class="badge"></span>
+      </button>
+    </div>
+
+    <!-- 材料卡：图片、表格、图，都是证据的另一种写法 -->
+    <div class="sheet" id="sheet">
+      <div class="sheetCard">
+        <div class="sheetHead">
+          <div>
+            <h3>报价单_v3.pdf</h3>
+            <small>2 份附件 · 3 处改动 · 需要 1 个签字 · 最后改动 10-29 22:04</small>
+          </div>
+          <button class="x" id="sheetClose" title="关掉">✕</button>
+        </div>
+
+        <div class="cols2">
+          <div class="a" id="sheetThumbs">
+            <div class="thumbs">
+              <div class="thumb big">
+                <svg viewBox="0 0 76 100" aria-hidden="true">
+                  <rect width="76" height="100" fill="#fbfaf7"/>
+                  <rect x="9" y="10" width="34" height="5" rx="2" fill="#c9ccd3"/>
+                  <rect x="9" y="19" width="20" height="3" rx="1.5" fill="#e2e0da"/>
+                  <rect x="9" y="30" width="58" height="22" rx="3" fill="#eef2ff" stroke="#dbe3ff"/>
+                  <rect x="13" y="35" width="26" height="3" rx="1.5" fill="#b9c6ef"/>
+                  <rect x="13" y="42" width="40" height="3" rx="1.5" fill="#cfd9f7"/>
+                  <rect x="9" y="58" width="58" height="3" rx="1.5" fill="#ecebe7"/>
+                  <rect x="9" y="65" width="52" height="3" rx="1.5" fill="#ecebe7"/>
+                  <rect x="9" y="72" width="58" height="3" rx="1.5" fill="#fdf4e6" stroke="#f0dcb4"/>
+                  <rect x="9" y="79" width="30" height="3" rx="1.5" fill="#ecebe7"/>
+                  <rect x="9" y="88" width="14" height="8" rx="2" fill="#4a6cf7" opacity=".18"/>
+                </svg>
+                <em>报价单_v3.pdf · 3 页</em>
+              </div>
+              <div class="thumb big">
+                <svg viewBox="0 0 120 84" aria-hidden="true">
+                  <rect width="120" height="84" fill="#f7f6f2"/>
+                  <rect x="6" y="6" width="108" height="72" rx="3" fill="#fff" stroke="#e6e4de"/>
+                  <path d="M18 26h30M18 34h18" stroke="#c9ccd3" stroke-width="3" stroke-linecap="round"/>
+                  <rect x="58" y="18" width="22" height="16" rx="2" fill="#fdf4e6" stroke="#f0dcb4"/>
+                  <rect x="86" y="18" width="22" height="16" rx="2" fill="#eaf7f0" stroke="#bfe4d2"/>
+                  <path d="M58 46h50M58 54h36" stroke="#dcdfe6" stroke-width="2.5" stroke-linecap="round"/>
+                  <path d="M48 26l8 6" stroke="#b9bdc7" stroke-width="1.5"/>
+                  <circle cx="20" cy="62" r="7" fill="#eef2ff" stroke="#dbe3ff"/>
+                  <path d="M33 62h18" stroke="#dcdfe6" stroke-width="2.5" stroke-linecap="round"/>
+                </svg>
+                <em>评审白板.jpg</em>
+              </div>
+            </div>
+            <div class="note" style="margin-top:8px">缩略图是原图，不是示意图。点开看全页。</div>
+          </div>
+
+          <div>
+            <blockquote class="q a" id="sheetQ" style="margin-top:0">数字能接受，明天上午签。
+              <cite>飞书 · 张伟 · 10-29 16:20 · 他把「签」这个字只说过一次</cite></blockquote>
+
+            <table class="mini a" id="sheetT">
+              <tr><th>报价项</th><th class="n">上次</th><th class="n">这次</th></tr>
+              <tr><td>实施</td><td class="n">8.2 万</td><td class="n">8.8 万</td></tr>
+              <tr><td>培训</td><td class="n">1.6 万</td><td class="n">1.4 万</td></tr>
+              <tr><td>维护（一年）</td><td class="n">2.4 万</td><td class="n">2.6 万</td></tr>
+              <tr class="sum up"><td>合计</td><td class="n">12.2 万</td><td class="n">12.8 万</td></tr>
+            </table>
+
+            <div class="a" id="sheetBars" style="margin-top:4px">
+              <figure class="f">
+                <div class="bars" id="priceBars">
+                  <div class="row"><span>这次</span><div class="track"><i style="--w:100%"></i></div><b>12.8</b></div>
+                  <div class="row alt"><span>上次</span><div class="track"><i style="--w:95%"></i></div><b>12.2</b></div>
+                  <div class="row alt"><span>竞品口头</span><div class="track"><i style="--w:91%"></i></div><b>11.6</b></div>
+                </div>
+                <div class="legendline"><span>单位：万元 · 竞品数字来自他 10-27 转述，不是报价单，可信度低</span></div>
+              </figure>
+            </div>
+
+            <dl class="kv a" id="sheetKv">
+              <dt>谁在看</dt><dd>张伟 · 2 次打开（10-29 20:12、22:06）</dd>
+              <dt>改过什么</dt><dd>第 3 页 3 处：价格、付款节奏、交付期</dd>
+              <dt>还缺谁</dt><dd>张伟签字；你要发的只有这一份</dd>
+              <dt>我做了什么</dt><dd>只读了这份文档的目录与改动位置，正文没有替你改</dd>
+            </dl>
+          </div>
+        </div>
+
+        <div class="a" id="sheetFoot" style="margin-top:14px;border-top:1px solid var(--line);padding-top:10px;font-size:10.5px;color:var(--ink3)">
+          一张材料卡里，图片、表格、条形图、原话各出现一次，就够了。它们不是装饰——每一样都在回答一个具体问题：像不像真的、差在哪、贵不贵、他到底说了什么。
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <div class="narr">
+    <span class="clock" id="clock">08:45</span>
+    <p id="narr">点「播放全部」开始，或直接点下面某一幕。</p>
+  </div>
+
+  <div class="controls">
+    <div class="scenes" id="scenes">
+      <button data-s="today" class="on">① 早报到达</button>
+      <button data-s="close">② 关掉一件</button>
+      <button data-s="pre">③ 会前提醒</button>
+      <button data-s="done">④ 晚报结算</button>
+      <button data-s="chat">⑤ 常驻对话框</button>
+      <button data-s="src">⑥ 缺源降级</button>
+      <button data-s="week">⑦ 周结算图表</button>
+      <button data-s="doc">⑧ 材料卡</button>
+    </div>
+    <div class="spacer"></div>
+    <button class="play" id="playAll">▶ 播放全部</button>
+    <button class="play ghost" id="replay">重播</button>
+    <div class="bar"><i id="bar"></i></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  var $ = function(id){ return document.getElementById(id); };
+  var views = {today:$('v-today'), done:$('v-done'), src:$('v-src')};
+  var navs = document.querySelectorAll('.nav[data-nav]');
+  var runId = 0, timers = [], barTimer = null;
+
+  /* ---------- 工具 ---------- */
+  function clearAll(){
+    timers.forEach(clearTimeout); timers = [];
+    if(barTimer){ clearInterval(barTimer); barTimer = null; }
+    $('bar').style.width = '0%';
+  }
+  function step(ms, fn){
+    var id = runId;
+    timers.push(setTimeout(function(){ if(id === runId) fn(); }, ms));
+  }
+  function setView(key){
+    Object.keys(views).forEach(function(k){ views[k].classList.toggle('on', k === key); });
+    navs.forEach(function(n){ n.classList.toggle('on', n.getAttribute('data-nav') === key); });
+  }
+  function ai(el, on){ if(el) el.classList.toggle('in', on !== false); }
+  function show(el, on){ if(el) el.classList.toggle('in', on !== false); }
+  function setClock(t, stamp){
+    $('clock').textContent = t;
+    $('chromeClock').textContent = '10-30 ' + t;
+    if(stamp) $('chromeClock').textContent = stamp;
+  }
+  function narr(html){ $('narr').innerHTML = html; }
+  function toast(txt, ms){
+    var t = $('toast');
+    t.textContent = txt; t.classList.add('in');
+    t.dataset.on = '1';
+    timers.push(setTimeout(function(){ t.classList.remove('in'); }, ms || 2200));
+  }
+  function num(el, to, dur, dec, suffix){
+    var t0 = null; dec = dec || 0; suffix = suffix || '';
+    function frame(ts){
+      if(!t0) t0 = ts;
+      var p = Math.min(1, (ts - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = (to * e).toFixed(dec) + (p === 1 ? suffix : '');
+      if(p < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+  function type(text, speed, done){
+    var el = $('conclText'), i = 0;
+    el.textContent = '';
+    var id = runId;
+    (function tick(){
+      if(id !== runId) return;
+      el.textContent = text.slice(0, ++i);
+      if(i < text.length) setTimeout(tick, speed);
+      else if(done) done();
+    })();
+  }
+  var C = 2 * Math.PI * 55; // 345.6
+  function ring(on){
+    var r1 = $('r1'), r2 = $('r2'), r3 = $('r3');
+    [r1,r2,r3].forEach(function(c){
+      c.style.strokeDasharray = C;
+      c.style.strokeDashoffset = on ? C : C;
+      c.style.strokeDashoffset = on ? C : C;
+      c.style.transition = 'none';
+    });
+    void r1.getBoundingClientRect();
+    [r1,r2,r3].forEach(function(c){ c.style.transition = 'stroke-dashoffset 1s cubic-bezier(.22,.61,.36,1)'; });
+    if(!on) return;
+    r1.style.strokeDashoffset = C * 0.30;   // 会议 3.0h / 10h
+    r2.style.strokeDashoffset = C * 0.70;   // 到 8.5h
+    r3.style.strokeDashoffset = 0;          // 满环
+  }
+  function progress(ms){
+    var t0 = Date.now();
+    if(barTimer) clearInterval(barTimer);
+    $('bar').style.width = '0%';
+    barTimer = setInterval(function(){
+      var p = Math.min(1, (Date.now() - t0) / ms);
+      $('bar').style.width = (p * 100) + '%';
+      if(p >= 1) { clearInterval(barTimer); barTimer = null; }
+    }, 80);
+  }
+
+  /* ---------- 每幕的重置 ---------- */
+  function resetToday(){
+    setView('today');
+    $('conclText').textContent = '';
+    $('cursor').style.display = '';
+    ['stamp','skip','tl','waiting'].forEach(function(id){ ai($(id), false); });
+    document.querySelectorAll('#v-today .stat').forEach(function(s){ ai(s, false); });
+    ['w1','w2','w3'].forEach(function(id){ ai($(id), false); $(id).classList.remove('closed'); });
+    $('nOpen').textContent = '0'; $('nMeet').textContent = '0'; $('nWait').textContent = '0';
+    $('v-today').scrollTop = 0;
+    ring(false);
+  }
+  function resetDone(){
+    setView('done');
+    document.querySelectorAll('#v-done .a').forEach(function(e){ ai(e, false); });
+    $('evN').textContent = '0';
+    $('btnOk').classList.remove('pulse');
+    $('v-done').scrollTop = 0;
+  }
+  function resetSrc(){
+    setView('src');
+    document.querySelectorAll('#v-src .a').forEach(function(e){ ai(e, false); });
+    $('docPill').textContent = '未连';
+    $('docPill').className = 'pill no';
+    $('rowDoc').classList.remove('flash');
+  }
+  function resetSheet(){
+    $('sheet').classList.remove('in');
+    ['sheetThumbs','sheetQ','sheetT','sheetBars','priceBars','sheetKv','sheetFoot'].forEach(function(id){ ai($(id), false); });
+  }
+  function resetAll(){
+    resetToday(); resetDone(); resetSrc(); resetSheet(); dockReset();
+    setView('today');
+    show($('notice'), false);
+    $('toast').classList.remove('in');
+  }
+
+  /* ---------- 六幕 ---------- */
+  var scenes = {};
+
+  scenes.today = {
+    dur: 7600,
+    run: function(){
+      resetAll(); progress(scenes.today.dur);
+      setClock('08:45');
+      narr('<b>08:45 早报到达。</b>先出结论（0.0s），数字计数（0.5s），三件事依次浮现（1.2s），负荷环生长（2.4s）。首屏读完约 3.4 秒，不滚。');
+      type('今天 3 个会，只有 1 件必须今天推完。', 22, function(){
+        step(80, function(){ $('cursor').style.display = 'none'; });
+      });
+      step(320, function(){ ai($('stamp')); });
+      step(500, function(){
+        ai(document.querySelectorAll('#v-today .stat')[0]);
+        num($('nOpen'), 3, 700, 0, '');
+      });
+      step(660, function(){
+        ai(document.querySelectorAll('#v-today .stat')[1]);
+        num($('nMeet'), 3.0, 700, 1, 'h');
+      });
+      step(820, function(){
+        ai(document.querySelectorAll('#v-today .stat')[2]);
+        num($('nWait'), 2, 700, 0, '');
+      });
+      step(1200, function(){ ai($('w1')); });
+      step(1520, function(){ ai($('w2')); });
+      step(1840, function(){ ai($('w3')); });
+      step(2150, function(){ ai($('skip')); });
+      step(2300, function(){ ai($('waiting')); });
+      step(2500, function(){ ai($('tl')); ring(true); });
+      step(3400, function(){ narr('首屏读完：结论、三个数字、三件事的标题。往下是材料和「在等谁」——<b>需要才看，首屏不逼你读</b>。三个数字是口径不是装饰：「件在手」只数开着的，「在等别人」单列——<b>等别人不是你的债</b>。'); });
+      step(5200, function(){ narr('「今天不用做的」是这张卡唯一的减法：没有它，3 件会变成 6 件，加上去最省事，砍掉才要判断。'); });
+      step(6400, function(){ narr('第 1 件里那张缩略图和那句原话不是装饰：<b>它回答「他到底等的是哪一份」</b>。富文本只在能回答一个具体问题时出现。'); });
+    }
+  };
+
+  scenes.close = {
+    dur: 6200,
+    run: function(){
+      resetAll(); progress(scenes.close.dur);
+      setClock('16:22');
+      narr('一件事被关掉，不需要用户填任何东西：<b>张伟回了「收到」，这个环就闭了</b>。系统自己认出来，你只需要看见它变绿。');
+      // 先把今天页铺满（静默，不重播动画）
+      ['stamp','skip','tl','waiting'].forEach(function(id){ ai($(id)); });
+      document.querySelectorAll('#v-today .stat').forEach(function(s){ ai(s); });
+      ['w1','w2','w3'].forEach(function(id){ ai($(id)); });
+      ring(true);
+      $('conclText').textContent = '今天 3 个会，只有 1 件必须今天推完。';
+      $('cursor').style.display = 'none';
+      $('nOpen').textContent = '3'; $('nMeet').textContent = '3.0h'; $('nWait').textContent = '2';
+
+      step(600, function(){
+        narr('16:22 张伟回复「收到」——<b>这是证据，不是你的自述</b>。');
+        ai($('w1'));
+      });
+      step(1100, function(){
+        $('w1').classList.add('closed');
+        $('w1').querySelector('.idx').textContent = '✓';
+        num($('nOpen'), 2, 420, 0, '');
+        toast('已关掉 1 件 · 证据：张伟 16:20 回复');
+        $('dockBtn').classList.add('has');
+        show($('dockPeek'), true);
+      });
+      step(2000, function(){
+        narr('右下角只亮一个红点，<b>不自动弹开</b>——它有事要说，但不抢你正在做的事。');
+      });
+      step(2600, function(){
+        show($('dockPeek'), false);
+        narr('注意两件事：<b>计数掉了 1</b>，但完成页的数字要等到 18:30 才算——中途不报喜，报喜会让人一天收到七八次夸奖。');
+      });
+      step(3600, function(){
+        narr('如果这条是「我说我做了」，它不会变绿。<b>只有外部事件能关闭一件事</b>，否则成就感就是自己给自己发的。');
+        $('w1').classList.remove('closed');
+      });
+      step(4600, function(){
+        $('w1').classList.add('closed');
+        $('w1').querySelector('.idx').textContent = '✓';
+      });
+    }
+  };
+
+  scenes.pre = {
+    dur: 6200,
+    run: function(){
+      resetAll(); progress(scenes.pre.dur);
+      setClock('15:50');
+      narr('<b>会前 10 分钟，一张浮层。</b>只有一段话和两个动作——它出现在屏幕角落，不打断你手上那件事。');
+      $('conclText').textContent = '今天 3 个会，只有 1 件必须今天推完。';
+      $('cursor').style.display = 'none';
+      $('nOpen').textContent = '3'; $('nMeet').textContent = '3.0h'; $('nWait').textContent = '2';
+      ['stamp','skip','tl','waiting'].forEach(function(id){ ai($(id)); });
+      document.querySelectorAll('#v-today .stat').forEach(function(s){ ai(s); });
+      ['w1','w2','w3'].forEach(function(id){ ai($(id)); });
+      ring(true);
+
+      step(500, function(){ show($('notice'), true); });
+      step(1600, function(){
+        narr('里面只有两件东西：<b>要准备什么</b>（这里的「报价单结论一页」能追到 10:00 那件事），以及<b>时间改过</b>。');
+      });
+      step(3200, function(){
+        narr('没有「没接入的源」这种话。缺源声明是早报的纪律，搬到会前就只是吓人。');
+      });
+      step(4400, function(){
+        narr('三个会的一天，会前提醒也不会变成三条：<b>只有当天第一个会、或者有改动、或者要准备东西，才单独推</b>。');
+      });
+      step(5400, function(){ show($('notice'), false); });
+    }
+  };
+
+  scenes.done = {
+    dur: 7600,
+    run: function(){
+      resetAll(); progress(scenes.done.dur);
+      setClock('18:30');
+      setView('done');
+      narr('<b>18:30 晚报。</b>顺序永远一样：结论 → 做成了（带证据）→ 等我/等别人 → 今天你砍掉的 → 就这样。');
+      step(300, function(){ num($('evN'), 3, 850); });
+      step(500, function(){
+        var items = document.querySelectorAll('#v-done .done-list .a');
+        items.forEach(function(el, i){ step(i * 260, function(){ ai(el); }); });
+      });
+      step(1600, function(){
+        narr('每一条都挂着证据：<b>别人回了、文档改了、你发出了</b>。没有证据的成就我不写——写了就是夸你，不是记事。');
+      });
+      step(2400, function(){
+        var boxes = document.querySelectorAll('#v-done .split .a');
+        boxes.forEach(function(el, i){ step(i * 200, function(){ ai(el); }); });
+      });
+      step(3400, function(){
+        narr('「等我 / 等别人」分两栏。<b>等别人不是你的债</b>，混在一起人就会觉得自己什么都没做完。');
+      });
+      step(4200, function(){
+        ai(document.querySelector('#v-done .cut'));
+        narr('这一条是整页的重心：<b>今天你砍掉了什么</b>。成就感来自取舍，不来自完成数——完成数只会鼓励你什么都接。');
+      });
+      step(5600, function(){
+        ai(document.querySelector('#v-done .actions'));
+        $('btnOk').classList.add('pulse');
+        narr('主动作只有一个：<b>就这样</b>。点完这件事就算交过了，不用再填表。');
+      });
+    }
+  };
+
+  var CHAT_MSGS = [
+    {me:1, t:'这条依据哪来的？', at:'09:12'},
+    {me:0, t:'飞书 · 张伟 · 10-29 21:14，原话是<q>报价单今天能给吗</q>。<br>我只读了这条和它前后两条，没读你们更早的私聊。', at:'09:12'},
+    {me:1, t:'为什么我今天没收到早报？', at:'10:40'},
+    {me:0, t:'08:45 发了，被系统通知折叠了，没弹出来；页面里能补看。<br>另外你昨天没打开页面，我把主动提醒降到一天一条。', at:'10:40'},
+    {me:1, t:'把 15:30 那个会改到 15:00', at:'11:05'},
+    {me:0, t:'<b>我改不了日历</b>——飞书日历我只拿到读权限。<br>我可以把这件事写进待办（<b>要不要？</b>），或者你自己点这里打开日历改。', at:'11:05'},
+    {me:1, t:'报价单跟上次比，差在哪？', at:'09:14'},
+    {me:0, t:'<table class="mini"><tr><th>项</th><th class="n">上次</th><th class="n">这次</th></tr><tr><td>实施</td><td class="n">8.2</td><td class="n">8.8</td></tr><tr><td>培训</td><td class="n">1.6</td><td class="n">1.4</td></tr><tr><td>维护</td><td class="n">2.4</td><td class="n">2.6</td></tr><tr class="sum up"><td>合计</td><td class="n">12.2</td><td class="n">12.8</td></tr></table>单位万元。依据：报价单_v3.pdf 第 2 页与 v2 存档，两版都只读，我没有改过。', at:'09:14'}
+  ];
+
+  function dockOpen(on){
+    $('dockPanel').classList.toggle('open', on);
+    if(on){ $('dockBtn').classList.remove('has'); show($('dockPeek'), false); }
+  }
+  function dockReset(){
+    $('dockBody').innerHTML = '';
+    $('dockBtn').classList.remove('has');
+    show($('dockPeek'), false);
+    // 面板不再关闭：它是唯一入口，换一幕也得看得见输入框
+  }
+  function pushBubble(msg){
+    var d = document.createElement('div');
+    d.className = 'bubble a' + (msg.me ? ' me' : '');
+    d.innerHTML = msg.t + '<small>' + msg.at + (msg.me ? '' : ' · 豆芽') + '</small>';
+    $('dockBody').appendChild(d);
+    requestAnimationFrame(function(){
+      d.classList.add('in');
+      $('dockBody').scrollTop = $('dockBody').scrollHeight;
+    });
+  }
+
+  scenes.chat = {
+    dur: 10400,
+    run: function(){
+      resetAll(); progress(scenes.chat.dur);
+      setClock('09:12');
+      $('conclText').textContent = '今天 3 个会，只有 1 件必须今天推完。';
+      $('cursor').style.display = 'none';
+      ['stamp','skip','tl','waiting'].forEach(function(id){ ai($(id)); });
+      document.querySelectorAll('#v-today .stat').forEach(function(s){ ai(s); });
+      ['w1','w2','w3'].forEach(function(id){ ai($(id)); });
+      $('nOpen').textContent = '3'; $('nMeet').textContent = '3.0h'; $('nWait').textContent = '2';
+      ring(true);
+      narr('<b>面板上常驻一个对话框。</b>它在每一页的右下角，点开就是这个人——不是第三个入口，是唯一的入口。');
+      step(280, function(){ dockOpen(true); });
+      step(760, function(){ pushBubble(CHAT_MSGS[0]); });
+      step(1500, function(){ pushBubble(CHAT_MSGS[1]); });
+      step(2500, function(){
+        pushBubble(CHAT_MSGS[2]);
+        narr('第一条问依据：源、时间、原话都给出来，<b>还主动说了没读什么</b>——边界也要交代。');
+      });
+      step(3300, function(){
+        pushBubble(CHAT_MSGS[3]);
+        narr('第二条暴露真问题：<b>通知被折叠了</b>。它没说「发了」，而是说清发在哪、为什么你没看见。');
+      });
+      step(4400, function(){ pushBubble(CHAT_MSGS[4]); });
+      step(5100, function(){
+        pushBubble(CHAT_MSGS[5]);
+        narr('第三条最要紧：没有日历写权限时，<b>「已改好」这三个字一次都不许出现</b>。说清做不到，再给两个能做的选择。');
+      });
+      step(6500, function(){ pushBubble(CHAT_MSGS[6]); });
+      step(7100, function(){
+        pushBubble(CHAT_MSGS[7]);
+        narr('第四条：<b>能贴表就贴表</b>。同一句话用表格说，人不用在脑子里做减法——但表里每一格都能追到同一份文件。');
+      });
+      step(8800, function(){
+        narr('它不会一直开着。收起之后，<b>有消息才有红点</b>——静音不等于消失，打扰要由人决定。');
+      });
+    }
+  };
+
+  scenes.src = {
+    dur: 6400,
+    run: function(){
+      resetAll(); progress(scenes.src.dur);
+      setClock('08:43');
+      setView('src');
+      narr('<b>多源之后，缺源比缺功能更常见。</b>一个源没连上，页面上的说法会悄悄变弱——所以缺源必须写在脸上。');
+      var rows = document.querySelectorAll('#v-src tbody tr');
+      rows.forEach(function(el, i){ step(400 + i * 220, function(){ ai(el); }); });
+      step(1600, function(){
+        $('rowDoc').classList.add('flash');
+        narr('云文档没连。它不是「暂时没有新内容」，是<b>这一整类证据今天用不了</b>。');
+      });
+      step(3000, function(){
+        ai(document.querySelector('#v-src .src-note'));
+        narr('所以今天早报的抬头必须写「云文档未接入」，并且<b>不产出任何依赖文档改动的结论</b>——而不是照常输出、让你以为都读到了。');
+      });
+      step(4600, function(){
+        setView('today');
+        $('conclText').textContent = '今天 3 个会，只有 1 件必须今天推完。';
+        $('cursor').style.display = 'none';
+        ['stamp','skip','tl','waiting'].forEach(function(id){ ai($(id)); });
+        document.querySelectorAll('#v-today .stat').forEach(function(s){ ai(s); });
+        ['w1','w2','w3'].forEach(function(id){ ai($(id)); });
+        $('nOpen').textContent = '3'; $('nMeet').textContent = '3.0h'; $('nWait').textContent = '2';
+        ring(true);
+        $('stamp').innerHTML = '10 月 30 日 周四 08:45 · 飞书、日历、邮件已读；<b>云文档未接入</b>（今天不会出现「文档被改了」这类依据）';
+        $('stamp').classList.add('flash');
+        narr('抬头这一句就是诚实：<b>读到了什么、没读到什么，都写在第一屏</b>。降级要看得见，不能静默。');
+      });
+    }
+  };
+
+  /* ⑦ 周结算：图表只在能说实话时出现 */
+  scenes.week = {
+    dur: 8600,
+    run: function(){
+      resetAll(); progress(scenes.week.dur);
+      setClock('18:52');
+      setView('done');
+      $('evN').textContent = '3';
+      var v = $('v-done');
+      v.scrollTop = 0;
+      document.querySelectorAll('#v-done .done-list .a, #v-done .split .a, #v-done .cut, #v-done .actions').forEach(function(e){ ai(e); });
+      narr('<b>「这一周」是完成页的延长，不是第二个产品。</b>没有新入口，往下滚一格就到——周报如果自成一页，人就得多记一个地方。');
+      step(420, function(){ v.scrollTo({ top: 360, behavior: 'smooth' }); });
+      step(1000, function(){ ai(document.querySelector('#v-done .week-lead')); });
+      step(1300, function(){
+        ai($('wkChart'));
+        narr('只画一种对比：<b>关掉</b>和<b>砍掉</b>。加第三根线，这页就要学了。');
+      });
+      step(2600, function(){ ai($('wkNote')); });
+      step(3600, function(){
+        narr('周四关掉 4 件、砍掉 2 件，是这周最高——不是那天更努力，是<b>两个会被挪走、多出三小时</b>。图表只记事实，不给励志结论。');
+      });
+      step(5400, function(){
+        narr('下面那行小字是这张卡的底线：<b>连续天数、效率分、排名、跟别人比，一个都不画</b>。画了就会有人开始为数字干活。');
+      });
+    }
+  };
+
+  /* ⑧ 材料卡：图片、表格、图、原话，各回答一个问题 */
+  scenes.doc = {
+    dur: 8600,
+    run: function(){
+      resetAll(); progress(scenes.doc.dur);
+      setClock('09:26');
+      setView('today');
+      $('conclText').textContent = '今天 3 个会，只有 1 件必须今天推完。';
+      $('cursor').style.display = 'none';
+      ['stamp','skip','tl','waiting'].forEach(function(id){ ai($(id)); });
+      document.querySelectorAll('#v-today .stat').forEach(function(s){ ai(s); });
+      ['w1','w2','w3'].forEach(function(id){ ai($(id)); });
+      $('nOpen').textContent = '3'; $('nMeet').textContent = '3.0h'; $('nWait').textContent = '2';
+      ring(true);
+      narr('<b>第 1 件上的缩略图点开，是一整张材料卡。</b>图片、表格、条形图、原话，各出现一次，各有各要回答的问题。');
+      step(650, function(){ show($('sheet'), true); });
+      step(950, function(){ ai($('sheetThumbs')); });
+      step(1350, function(){ ai($('sheetQ')); });
+      step(1850, function(){ ai($('sheetT')); });
+      step(2400, function(){ ai($('sheetBars')); ai($('priceBars')); });
+      step(3300, function(){ ai($('sheetKv')); });
+      step(4300, function(){
+        ai($('sheetFoot'));
+        narr('每一样都在回答一个具体问题：<b>像不像真的</b>（缩略图）、<b>他到底说了什么</b>（原话）、<b>差在哪</b>（表格）、<b>贵不贵</b>（条形图）。');
+      });
+      step(6000, function(){
+        narr('回答不了问题的一律不放：封面图、装饰插画、图标墙、为了动而动的「数据可视化」——它们只会让人以为自己读到了更多。');
+      });
+    }
+  };
+
+  /* ---------- 调度 ---------- */
+  var order = ['today','close','pre','done','chat','src','week','doc'];
+  var playingAll = false;
+
+  function go(key, keepPlay){
+    runId++; clearAll();
+    if(!keepPlay) playingAll = false;
+    document.querySelectorAll('#scenes button').forEach(function(b){
+      b.classList.toggle('on', b.getAttribute('data-s') === key);
+    });
+    scenes[key].run();
+  }
+
+  function playAll(){
+    playingAll = true;
+    $('playAll').textContent = '⏸ 暂停';
+    var i = 0;
+    (function next(){
+      if(!playingAll) return;
+      if(i >= order.length){ i = 0; }
+      var key = order[i++];
+      go(key, true);
+      timers.push(setTimeout(function(){
+        if(playingAll && i < order.length) next();
+        else if(playingAll && i >= order.length){ playingAll = false; $('playAll').textContent = '▶ 播放全部'; }
+      }, scenes[key].dur));
+    })();
+  }
+
+  document.querySelectorAll('#scenes button').forEach(function(b){
+    b.addEventListener('click', function(){
+      playingAll = false;
+      $('playAll').textContent = '▶ 播放全部';
+      go(b.getAttribute('data-s'));
+    });
+  });
+
+  $('playAll').addEventListener('click', function(){
+    if(playingAll){
+      playingAll = false;
+      $('playAll').textContent = '▶ 播放全部';
+      runId++; clearAll();
+      return;
+    }
+    playAll();
+  });
+
+  $('replay').addEventListener('click', function(){
+    var cur = document.querySelector('#scenes button.on');
+    playingAll = false;
+    $('playAll').textContent = '▶ 播放全部';
+    go(cur ? cur.getAttribute('data-s') : 'today');
+  });
+
+  $('dockBtn').addEventListener('click', function(){
+    dockOpen(!$('dockPanel').classList.contains('open'));
+  });
+  $('dockClose').addEventListener('click', function(){ dockOpen(false); });
+  $('sheetClose').addEventListener('click', function(){ show($('sheet'), false); });
+  $('sheet').addEventListener('click', function(e){ if(e.target === $('sheet')) show($('sheet'), false); });
+  document.querySelectorAll('[data-open="sheet"]').forEach(function(b){
+    b.addEventListener('click', function(){
+      show($('sheet'), true);
+      ['sheetThumbs','sheetQ','sheetT','sheetBars','priceBars','sheetKv','sheetFoot'].forEach(function(id, i){
+        setTimeout(function(){ ai($(id)); }, 120 + i * 90);
+      });
+    });
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape') show($('sheet'), false);
+  });
+  document.addEventListener('keydown', function(e){
+    if((e.metaKey || e.ctrlKey) && String(e.key).toLowerCase() === 'j'){
+      e.preventDefault();
+      dockOpen(!$('dockPanel').classList.contains('open'));
+    }
+  });
+
+  // 输入框能真的打字：演示页没有接真实信源，所以它只承认这一点
+  function dockSay(){
+    var v = $('dockInput').value.trim();
+    if(!v) return;
+    $('dockInput').value = '';
+    dockOpen(true);
+    pushBubble({me:1, t: v.replace(/[<>&]/g, ''), at: $('clock') ? $('clock').textContent : '09:12'});
+    setTimeout(function(){
+      pushBubble({me:0, t:'这一页是演示，我没有接你的日历和邮箱，所以不编一个答案给它。<br>真身回答之前会先去找依据：日程、文件原件、邮件的主题与收发关系；找不到就直说「这条我答不了」，并告诉你缺的是哪个信源。', at: $('clock') ? $('clock').textContent : '09:12'});
+    }, 420);
+  }
+  $('dockSend').addEventListener('click', dockSay);
+  $('dockInput').addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ e.preventDefault(); dockSay(); }
+  });
+
+  // 首屏：自动播第一幕
+  go('today');
+  setTimeout(function(){ dockOpen(true); }, 700);
+})();
+</script>
+</body>
+</html>

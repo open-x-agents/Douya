@@ -8,6 +8,7 @@ import { defaultRelayLimit } from './groups.js'
 import { validateViewAnswer } from 'deep-view/core'
 import { COLORS, EXTRA_COLORS, ROUTE } from './constants.js'
 import { resolveSendMode } from '../shared/send-mode.js'
+import { clearDraftIfPosted } from '../shared/room-draft.js'
 
 const LANGUAGES = { zh: 'Chinese (简体中文)', en: 'English' }
 const RUN_STATS = ['sessionStats', 'tokenUsage', 'contextPressure']
@@ -228,7 +229,12 @@ export function install(rt) {
           await rt.load()
           return ok(await rt.usageView({ timeZone: typeof body.timeZone === 'string' ? body.timeZone.slice(0, 64) : undefined }))
         case 'room-progress':
-          return ok([...rt.roomProgress.entries()].filter(([, entry]) => entry.roomId === body.roomId).map(([callId, entry]) => ({ callId, replies: entry.replies, speaking: entry.speaking ?? null })))
+          return ok([...rt.roomProgress.entries()].filter(([, entry]) => entry.roomId === body.roomId).map(([callId, entry]) => {
+            const replies = entry.replies ?? []
+            const draft = clearDraftIfPosted(entry.draft, replies)
+            if (draft !== entry.draft) entry.draft = draft
+            return { callId, replies, speaking: entry.speaking ?? null, ...(draft ? { draft } : {}) }
+          }))
         case 'create-bot': {
           await rt.bootstrap()
           const bot = await rt.createBot({ name: body.name, role: body.role, color: body.color, instructions: body.instructions, brief: body.brief, avatar: body.avatar, model: body.model, effort: body.effort, workDir: body.workDir })

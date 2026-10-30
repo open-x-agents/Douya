@@ -27,6 +27,7 @@ import { escapeRegExp, headOf, splitRef, textOf } from './text.js'
 import { mentionSpans, speakerOf } from '../shared/mentions.js'
 import { GROUP_REF, output } from './tools.js'
 import { failureLine } from './turns.js'
+import { applyRoomStreamFrame, clearDraftIfPosted } from '../shared/room-draft.js'
 
 const ROOM_LOG_MAX = 60
 const ROOM_FIRST_LOOK = 12
@@ -285,6 +286,9 @@ export function install(rt) {
   const postInRound = (room, round, member, text, duration) => {
     appendRoom(room, { who: member.name, botId: member.id, text })
     round.replies.push({ botId: member.id, name: member.name, color: member.color, text, time: Date.now(), ...(duration === undefined ? {} : { duration }) })
+    // Final (or step) text is in replies now: drop the live draft so the UI does not
+    // keep a streaming row beside the committed bubble.
+    round.draft = clearDraftIfPosted(round.draft, round.replies)
     void rt.save().catch(() => {})
   }
 
@@ -514,6 +518,7 @@ export function install(rt) {
       const startedAt = Date.now()
       const reply = await roomTurn(room, member, session.id, { text, files: prompt.files }, slot.note ?? 'your turn', signal, round, slot.by, said)
       round.speaking = null
+      if (round.draft?.botId === member.id) round.draft = undefined
       const final = typeof reply === 'string' && !isPass(reply) ? reply : undefined
       if (reply?.failure !== undefined) {
         // Not a pass: the user sees why the member is silent, and the round goes on.
@@ -815,6 +820,7 @@ export function install(rt) {
         const line = [text, ...files.map(fileLine)].filter(Boolean).join('\n')
         appendRoom(room, { who: sender.name, botId: sender.id, text: line, ...(files.length > 0 ? { files } : {}) })
         running.replies.push({ botId: sender.id, name: sender.name, color: sender.color, text: line, time: Date.now() })
+        running.draft = clearDraftIfPosted(running.draft, running.replies)
         logged = room.seq
       }
       await rt.save()
@@ -911,6 +917,18 @@ export function install(rt) {
     return entry.lines.splice(0).join('\n\n')
   }
   rt.withRoomSteps = (lines, reply) => (lines === '' ? reply : isPass(reply) ? lines : `${lines}\n\n${reply}`)
+
+  // User-visible group turns: mirror agent/assistant-stream text-delta into the
+  // active round's draft so room-progress can live-render GroupMessage. Bot↔Bot
+  // exchange turns are not speaking in a round, so they never get a draft here.
+  ctx.on('agent/assistant-stream', ({ agent, frame }) => {
+    const owner = rt.groupOwners.get(agent.id)
+    if (owner === undefined) return
+    const round = [...rt.roomProgress.values()].find(entry => entry.roomId === owner.roomId && entry.speaking === owner.botId)
+    if (round === undefined) return
+    round.draft = applyRoomStreamFrame(round.draft, frame, { botId: owner.botId })
+    if (frame?.type === 'end') round.draft = clearDraftIfPosted(round.draft, round.replies)
+  })
 
   // The user stops a member's work in this group from the group's details. Messages
   // still waiting for that member here go with it.

@@ -19,6 +19,7 @@ import { heldCardKey } from './sources.js'
 import { BtwCardView } from './btw.js'
 import { partIndexOf, withBtwRows } from './btw-model.js'
 import { layoutOf, thinkingShown } from './themes.js'
+import { draftForDisplay } from '../shared/room-draft.js'
 
 export { clockLabel }
 
@@ -295,7 +296,7 @@ function SpeakerHead({ bot, time }) {
 // One Bot message inside a group chat: avatar, name (with its group role), when it ran
 // and how long it took, bubble. The flat layout moves the avatar from beside the last
 // bubble to the head of the name row, so the text below runs the whole width.
-function GroupMessage({ bot, text, texts = [text], room, roster, actions, msgKey, useUi, whole, time, duration }) {
+function GroupMessage({ bot, text, texts = [text], room, roster, actions, msgKey, useUi, whole, time, duration, streaming }) {
   const lead = h('button', { type: 'button', className: 'bt-lead', 'aria-label': t("Open {name}'s chat", { name: bot.name }), onClick: () => actions.openSession(bot.id) },
     h(BotMark, { bot, size: 22 }))
   const flat = layoutOf(roster.prefs) === 'flat'
@@ -305,7 +306,7 @@ function GroupMessage({ bot, text, texts = [text], room, roster, actions, msgKey
       room?.admin === bot.id ? h('span', { className: 'bt-group-role' }, t('Admin')) : null,
       Number.isFinite(time) ? h('span', { className: 'bt-group-time', title: clockLabel(time) }, messageClock(time)) : null,
       took ? h('span', { className: 'bt-group-took', title: t('Ran for {duration}', { duration: took }) }, took) : null),
-    h(Bubbles, { texts, roster, selfId: bot.id, actions, sessionId: room?.id, msgKey, useUi, lead: flat ? null : lead, whole }))
+    h(Bubbles, { texts, roster, selfId: bot.id, actions, streaming, sessionId: room?.id, msgKey, useUi, lead: flat ? null : lead, whole }))
 }
 
 // A member's messages in a row, as one block under its name: what it says while it
@@ -870,7 +871,7 @@ function scanReplies(text, start, replies) {
 }
 
 function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi, useWork }) {
-  const [live, setLive] = useState({ replies: [], speaking: null })
+  const [live, setLive] = useState({ replies: [], speaking: null, draft: null })
   useEffect(() => {
     if (done) return undefined
     let stop = false
@@ -880,9 +881,14 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
       const result = await actions.roomProgress(sessionId)
       if (stop) return
       const entry = (result ?? []).find(item => item.callId === callId) ?? (result ?? [])[0]
-      const key = entry ? JSON.stringify([entry.replies, entry.speaking]) : ''
-      if (entry && key !== seen) { seen = key; setLive({ replies: entry.replies ?? [], speaking: entry.speaking ?? null }) }
-      timer = setTimeout(tick, document.hidden ? 5000 : 1000)
+      // Include draft text so text-delta growth re-renders without waiting for a post.
+      const key = entry ? JSON.stringify([entry.replies, entry.speaking, entry.draft]) : ''
+      if (entry && key !== seen) {
+        seen = key
+        setLive({ replies: entry.replies ?? [], speaking: entry.speaking ?? null, draft: entry.draft ?? null })
+      }
+      // Poll faster while a draft is growing so the bubble tracks tokens.
+      timer = setTimeout(tick, document.hidden ? 5000 : (entry?.draft?.text ? 250 : 1000))
     }
     void tick()
     return () => { stop = true; clearTimeout(timer) }
@@ -894,11 +900,12 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
     replies = parsed.replies.length ? parsed.replies : live.replies
     broken = parsed.broken
   }
-  // Members speak one at a time, so only the current speaker is typing.
-  const pending = done || !live.speaking ? [] : [live.speaking]
+  const draft = done ? undefined : draftForDisplay(live.draft, replies)
+  // Members speak one at a time. A live draft replaces the bare typing row.
+  const pending = done || !live.speaking || (draft?.text && draft.botId === live.speaking) ? [] : [live.speaking]
   const speakerTool = useWork?.(work => work.bots?.[live.speaking]?.tool) ?? undefined
   const speakerDoing = useWork?.(work => (work.bots?.[live.speaking]?.tool ? workPhrase(work.bots[live.speaking]) : undefined)) ?? undefined
-  if (replies.length === 0 && pending.length === 0) {
+  if (replies.length === 0 && pending.length === 0 && !(draft?.text)) {
     // A pruned tool result left nothing to draw; keep a marker row instead of an
     // empty turn, which reads as a blank gap on a narrow first paint.
     return broken ? h('div', { className: 'bt-group-replies' }, h('div', { className: 'bt-event' }, t('The group replies could not be shown'))) : null
@@ -951,6 +958,20 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
       }
       return h(GroupMessage, { key: `${reply.botId}-${index}`, bot, texts, room, roster, actions, msgKey: callId ? `${sessionId}:${callId}:${index}` : undefined, useUi, time, duration })
     }),
+    draft?.text ? (() => {
+      const bot = roster.byId[draft.botId] ?? { id: draft.botId, name: t('a Bot'), color: 'gray' }
+      return h(GroupMessage, {
+        key: `draft-${draft.botId}-${draft.attemptId ?? 'live'}`,
+        bot,
+        texts: [draft.text],
+        room,
+        roster,
+        actions,
+        msgKey: callId ? `${sessionId}:${callId}:draft:${draft.botId}` : `${sessionId}:draft:${draft.botId}`,
+        useUi,
+        streaming: true,
+      })
+    })() : null,
     pending.map((id) => {
       const bot = roster.byId[id]
       if (!bot) return null

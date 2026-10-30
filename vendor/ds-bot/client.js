@@ -7678,6 +7678,44 @@ function BtwTurnTail({ turn, sessionId, useRoster, actions }) {
   return (0, import_react15.createElement)("div", { className: "bt-btw-stack" }, cards.map((card) => (0, import_react15.createElement)(BtwCardView, { key: card.id, card, sessionId, actions })));
 }
 
+// src/shared/room-draft.js
+function applyRoomStreamFrame(draft, frame, { botId } = {}) {
+  if (frame?.type === "start") {
+    return { botId, text: "", attemptId: frame.attemptId };
+  }
+  if (draft === void 0 || draft === null) return draft;
+  if (frame?.attemptId !== void 0 && draft.attemptId !== void 0 && frame.attemptId !== draft.attemptId) {
+    return draft;
+  }
+  if (frame?.type === "chunk" && frame.chunk?.type === "text-delta") {
+    const piece = typeof frame.chunk.text === "string" ? frame.chunk.text : "";
+    if (piece === "") return draft;
+    return { ...draft, text: `${draft.text ?? ""}${piece}` };
+  }
+  if (frame?.type === "end") {
+    return { ...draft, ended: true };
+  }
+  return draft;
+}
+function clearDraftIfPosted(draft, replies = []) {
+  if (draft === void 0 || draft === null) return void 0;
+  if (draft.botId === void 0) return void 0;
+  const text = typeof draft.text === "string" ? draft.text : "";
+  if (text === "") return void 0;
+  for (let i = replies.length - 1; i >= 0; i -= 1) {
+    const reply = replies[i];
+    if (reply?.kind !== void 0) continue;
+    if (reply?.botId !== draft.botId) continue;
+    const posted = typeof reply.text === "string" ? reply.text : "";
+    if (posted === text || posted.startsWith(text) || text.startsWith(posted)) return void 0;
+    break;
+  }
+  return draft;
+}
+function draftForDisplay(draft, replies = []) {
+  return clearDraftIfPosted(draft, replies);
+}
+
 // src/client/cells.js
 var import_react16 = require("react");
 var import_react_dom = require("react-dom");
@@ -7994,7 +8032,7 @@ function SpeakerHead({ bot, time }) {
     Number.isFinite(time) ? (0, import_react16.createElement)("span", { className: "bt-group-time", title: clockLabel(time) }, messageClock(time)) : null
   );
 }
-function GroupMessage({ bot, text, texts: texts2 = [text], room: room2, roster, actions, msgKey, useUi, whole, time, duration }) {
+function GroupMessage({ bot, text, texts: texts2 = [text], room: room2, roster, actions, msgKey, useUi, whole, time, duration, streaming }) {
   const lead = (0, import_react16.createElement)(
     "button",
     { type: "button", className: "bt-lead", "aria-label": t("Open {name}'s chat", { name: bot.name }), onClick: () => actions.openSession(bot.id) },
@@ -8014,7 +8052,7 @@ function GroupMessage({ bot, text, texts: texts2 = [text], room: room2, roster, 
       Number.isFinite(time) ? (0, import_react16.createElement)("span", { className: "bt-group-time", title: clockLabel(time) }, messageClock(time)) : null,
       took ? (0, import_react16.createElement)("span", { className: "bt-group-took", title: t("Ran for {duration}", { duration: took }) }, took) : null
     ),
-    (0, import_react16.createElement)(Bubbles, { texts: texts2, roster, selfId: bot.id, actions, sessionId: room2?.id, msgKey, useUi, lead: flat ? null : lead, whole })
+    (0, import_react16.createElement)(Bubbles, { texts: texts2, roster, selfId: bot.id, actions, streaming, sessionId: room2?.id, msgKey, useUi, lead: flat ? null : lead, whole })
   );
 }
 function stackReplies(replies) {
@@ -8533,7 +8571,7 @@ function scanReplies(text, start, replies) {
   }
 }
 function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi, useWork }) {
-  const [live, setLive] = (0, import_react16.useState)({ replies: [], speaking: null });
+  const [live, setLive] = (0, import_react16.useState)({ replies: [], speaking: null, draft: null });
   (0, import_react16.useEffect)(() => {
     if (done) return void 0;
     let stop = false;
@@ -8543,12 +8581,12 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
       const result = await actions.roomProgress(sessionId);
       if (stop) return;
       const entry = (result ?? []).find((item) => item.callId === callId) ?? (result ?? [])[0];
-      const key = entry ? JSON.stringify([entry.replies, entry.speaking]) : "";
+      const key = entry ? JSON.stringify([entry.replies, entry.speaking, entry.draft]) : "";
       if (entry && key !== seen) {
         seen = key;
-        setLive({ replies: entry.replies ?? [], speaking: entry.speaking ?? null });
+        setLive({ replies: entry.replies ?? [], speaking: entry.speaking ?? null, draft: entry.draft ?? null });
       }
-      timer = setTimeout(tick, document.hidden ? 5e3 : 1e3);
+      timer = setTimeout(tick, document.hidden ? 5e3 : entry?.draft?.text ? 250 : 1e3);
     };
     void tick();
     return () => {
@@ -8563,10 +8601,11 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
     replies = parsed.replies.length ? parsed.replies : live.replies;
     broken = parsed.broken;
   }
-  const pending = done || !live.speaking ? [] : [live.speaking];
+  const draft = done ? void 0 : draftForDisplay(live.draft, replies);
+  const pending = done || !live.speaking || draft?.text && draft.botId === live.speaking ? [] : [live.speaking];
   const speakerTool = useWork?.((work) => work.bots?.[live.speaking]?.tool) ?? void 0;
   const speakerDoing = useWork?.((work) => work.bots?.[live.speaking]?.tool ? workPhrase(work.bots[live.speaking]) : void 0) ?? void 0;
-  if (replies.length === 0 && pending.length === 0) {
+  if (replies.length === 0 && pending.length === 0 && !draft?.text) {
     return broken ? (0, import_react16.createElement)("div", { className: "bt-group-replies" }, (0, import_react16.createElement)("div", { className: "bt-event" }, t("The group replies could not be shown"))) : null;
   }
   const room2 = roster.roomsById[sessionId];
@@ -8641,6 +8680,20 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
       }
       return (0, import_react16.createElement)(GroupMessage, { key: `${reply.botId}-${index}`, bot, texts: texts2, room: room2, roster, actions, msgKey: callId ? `${sessionId}:${callId}:${index}` : void 0, useUi, time, duration });
     }),
+    draft?.text ? (() => {
+      const bot = roster.byId[draft.botId] ?? { id: draft.botId, name: t("a Bot"), color: "gray" };
+      return (0, import_react16.createElement)(GroupMessage, {
+        key: `draft-${draft.botId}-${draft.attemptId ?? "live"}`,
+        bot,
+        texts: [draft.text],
+        room: room2,
+        roster,
+        actions,
+        msgKey: callId ? `${sessionId}:${callId}:draft:${draft.botId}` : `${sessionId}:draft:${draft.botId}`,
+        useUi,
+        streaming: true
+      });
+    })() : null,
     pending.map((id) => {
       const bot = roster.byId[id];
       if (!bot) return null;

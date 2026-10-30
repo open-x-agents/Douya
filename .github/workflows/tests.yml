@@ -6,7 +6,8 @@ on:
   pull_request:
 
 jobs:
-  test:
+  # 这个 job 的名字就是 PR 上的 check 上下文（pr-guard 要求的正是 `tests`）。
+  tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

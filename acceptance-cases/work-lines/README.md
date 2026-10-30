@@ -15,4 +15,4 @@
 
 `node --test acceptance-cases/work-lines/work-lines.test.js`
 
-不实现入站路由、跨房间投影、完成重排。不改 #18 的 steer 判定。
+本目录只验收索引。入站路由在 `acceptance-cases/work-line-routing/`。跨房间投影和完成重排不在这里。

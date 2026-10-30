@@ -28,6 +28,7 @@ import { mentionSpans, speakerOf } from '../shared/mentions.js'
 import { GROUP_REF, output } from './tools.js'
 import { failureLine } from './turns.js'
 import { keepDraftOnSlotEnd, opensGroupRelay, roundForStream, steeringReply, stepRoute, takeSteeredLine } from './group-steer.js'
+import { routeTakesEffect } from './route-inbound.js'
 import { applyRoomStreamFrame, clearDraftIfPosted } from '../shared/room-draft.js'
 
 const ROOM_LOG_MAX = 60
@@ -467,6 +468,7 @@ export function install(rt) {
     if (list.length === 0) relayIntents.delete(roomId)
     return true
   }
+  rt.peekRelayIntent = (roomId, text) => (relayIntents.get(roomId) ?? []).includes(text)
 
   // Resolve once every listed member session has left its turn. turns.js is
   // installed first, so its turn/end handler posts the reply before these hooks run.
@@ -558,6 +560,18 @@ export function install(rt) {
       if (taken.action === 'drop') {
         if (taken.lines.length === 0) steeredLines.delete(room.id)
         else steeredLines.set(room.id, taken.lines)
+        continue
+      }
+      const routed = rt.routeRoomUser?.({
+        room,
+        text: line.text,
+        explicitQueue: rt.pendingRoomQueue?.(room.id, line.text) === true || rt.peekRelayIntent?.(room.id, line.text) === true,
+        explicitNew: false,
+        plain: true,
+        via: 'drain',
+      })
+      if (routeTakesEffect(routed)) {
+        void rt.applyRouteDecision?.(room, routed, { text: routed.text ?? line.text }).catch(error => rt.warn('ds-bot: inbound route failed: %s', error))
         continue
       }
       opened = true

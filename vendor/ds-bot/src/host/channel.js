@@ -10,6 +10,7 @@ import { COLORS, EXTRA_COLORS, ROUTE } from './constants.js'
 import { resolveSendMode } from '../shared/send-mode.js'
 import { clearDraftIfPosted } from '../shared/room-draft.js'
 import { decideRoomSteer, roomMembers, textNamesMember } from './group-steer.js'
+import { routeTakesEffect } from './route-inbound.js'
 
 const LANGUAGES = { zh: 'Chinese (简体中文)', en: 'English' }
 const RUN_STATS = ['sessionStats', 'tokenUsage', 'contextPressure']
@@ -455,26 +456,40 @@ export function install(rt) {
           const room = rt.roomOf(sessionId)
           if (room !== undefined) {
             const members = roomMembers(room, id => rt.live.get(id), id => rt.botOf(id))
-            const decision = decideRoomSteer({
-              members,
+            const routed = rt.routeRoomUser?.({
+              room,
+              text,
               explicitQueue: requested === 'queue',
               explicitNew: body.mode === 'new',
-              named: textNamesMember(text, members),
               plain: !text.includes('dsh-session:'),
+              via: 'channel',
             })
-            switch (decision.action) {
-              case 'steer':
-                await rt.acceptRoomSteer(room, decision.member, { text })
-                return ok(true)
-              case 'relay':
-                rt.noteRelayIntent(sessionId, text)
-                break
-              default: {
-                /** @type {never} */
-                const unexpected = decision.action
-                throw new Error(`Unknown room steer action ${String(unexpected)}`)
+            if (routeTakesEffect(routed)) {
+              await rt.applyRouteDecision(room, routed, { text: routed.text ?? text })
+              return ok(true)
+            }
+            if (!(routed?.action === 'queue' && routed.relay === true)) {
+              const decision = decideRoomSteer({
+                members,
+                explicitQueue: requested === 'queue',
+                explicitNew: body.mode === 'new',
+                named: textNamesMember(text, members),
+                plain: !text.includes('dsh-session:'),
+              })
+              switch (decision.action) {
+                case 'steer':
+                  await rt.acceptRoomSteer(room, decision.member, { text })
+                  return ok(true)
+                case 'relay':
+                  break
+                default: {
+                  /** @type {never} */
+                  const unexpected = decision.action
+                  throw new Error(`Unknown room steer action ${String(unexpected)}`)
+                }
               }
             }
+            rt.noteRelayIntent(sessionId, text)
           }
           let running = rt.live.get(sessionId)?.turn !== undefined
           if (requested === undefined && !running) {

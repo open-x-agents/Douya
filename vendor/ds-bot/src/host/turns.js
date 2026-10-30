@@ -4,6 +4,7 @@
 // Turn tracking: which turns were triggered by another Bot, and what they said.
 import { HANDOFF_ACK, MESSAGE_INLINE_MAX, REFERENCE_KIND, REPLY_KIND, SOURCE_KIND } from './constants.js'
 import { decideRoomSteer, explicitSendFlags, isJoinedFollowUp, pairComposerEcho, rememberComposerSteer, roomMembers, textNamesMember } from './group-steer.js'
+import { routeTakesEffect } from './route-inbound.js'
 import { absoluteLinks } from './links.js'
 import { textOf } from './text.js'
 import { reminderText } from './schedules.js'
@@ -368,6 +369,8 @@ export function install(rt) {
     if (list.length === 0) busyQueueLines.delete(roomId)
     return true
   }
+  // drainRoomInbox sees a next-turn splice before user/message consumes it.
+  rt.pendingRoomQueue = (id, text) => (busyQueueLines.get(id) ?? []).includes(text)
   const roomUserContent = (content) => {
     const blocks = Array.isArray(content) ? content : []
     return {
@@ -407,6 +410,21 @@ export function install(rt) {
     const queuedByChannel = rt.takeRelayIntent?.(roomId, text) === true
     const explicitQueue = flags.explicitQueue || queuedByComposer || queuedByChannel
     const plain = images.length === 0 && files.length === 0 && !text.includes('dsh-session:')
+    const routed = rt.routeRoomUser?.({
+      room,
+      text,
+      explicitQueue,
+      explicitNew: flags.explicitNew,
+      plain,
+      via: 'user',
+    })
+    const queued = { text, ...(images.length > 0 ? { images } : {}), ...(files.length > 0 ? { files } : {}) }
+    if (routeTakesEffect(routed)) {
+      composerSteerPending.set(roomId, rememberComposerSteer(paired.pending, text, via))
+      rt.noteSteeredRoomLine?.(roomId, text)
+      void rt.applyRouteDecision?.(room, routed, { text: routed.text ?? text, files }).catch(error => rt.warn('ds-bot: inbound route failed: %s', error))
+      return
+    }
     const decision = decideRoomSteer({
       members,
       explicitQueue,
@@ -414,7 +432,6 @@ export function install(rt) {
       named: textNamesMember(text, members),
       plain,
     })
-    const queued = { text, ...(images.length > 0 ? { images } : {}), ...(files.length > 0 ? { files } : {}) }
     const canSteer = decision.action === 'steer' && decision.member !== undefined && typeof rt.acceptRoomSteer === 'function'
     switch (decision.action) {
       case 'steer':

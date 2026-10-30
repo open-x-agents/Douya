@@ -574,8 +574,8 @@
         </div>
         <div class="dockBody" id="dockBody"></div>
         <div class="dockFoot">
-          <input id="dockInput" placeholder="问一句，比如「这条依据哪来的」" readonly>
-          <button class="send" title="发送">↑</button>
+          <input id="dockInput" placeholder="问一句，比如「这条依据哪来的」" autocomplete="off">
+          <button class="send" id="dockSend" title="发送">↑</button>
         </div>
       </div>
       <div class="dockPeek" id="dockPeek">早报到了 · 3 件事</div>
@@ -989,7 +989,7 @@
     $('dockBody').innerHTML = '';
     $('dockBtn').classList.remove('has');
     show($('dockPeek'), false);
-    $('dockPanel').classList.remove('open');
+    // 面板不再关闭：它是唯一入口，换一幕也得看得见输入框
   }
   function pushBubble(msg){
     var d = document.createElement('div');
@@ -1212,8 +1212,25 @@
     }
   });
 
+  // 输入框能真的打字：演示页没有接真实信源，所以它只承认这一点
+  function dockSay(){
+    var v = $('dockInput').value.trim();
+    if(!v) return;
+    $('dockInput').value = '';
+    dockOpen(true);
+    pushBubble({me:1, t: v.replace(/[<>&]/g, ''), at: $('clock') ? $('clock').textContent : '09:12'});
+    setTimeout(function(){
+      pushBubble({me:0, t:'这一页是演示，我没有接你的日历和邮箱，所以不编一个答案给它。<br>真身回答之前会先去找依据：日程、文件原件、邮件的主题与收发关系；找不到就直说「这条我答不了」，并告诉你缺的是哪个信源。', at: $('clock') ? $('clock').textContent : '09:12'});
+    }, 420);
+  }
+  $('dockSend').addEventListener('click', dockSay);
+  $('dockInput').addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ e.preventDefault(); dockSay(); }
+  });
+
   // 首屏：自动播第一幕
   go('today');
+  setTimeout(function(){ dockOpen(true); }, 700);
 })();
 </script>
 </body>

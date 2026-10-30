@@ -160,3 +160,28 @@ export function takeSteeredLine(lines, text) {
   if (index === -1) return { action: 'open', lines: list }
   return { action: 'drop', lines: list.filter((_, at) => at !== index) }
 }
+
+/**
+ * Composer busyEnter=steer inserts the line into the room inbox (next-step)
+ * before `user/message`. The first of those two events steers; the other is
+ * the same line and must not queue. Two events from the same door (two real
+ * sends, or two splices) both stay fresh.
+ * @param {{ text: string, via: 'splice' | 'message' }[]} pending
+ * @param {string} text
+ * @param {'splice' | 'message'} via
+ * @returns {{ role: 'echo' | 'fresh', pending: { text: string, via: 'splice' | 'message' }[] }}
+ */
+export function pairComposerEcho(pending, text, via) {
+  const list = (Array.isArray(pending) ? pending : []).map(item => ({ text: item.text, via: item.via }))
+  const index = list.findIndex(item => item.text === text && item.via !== via)
+  if (index === -1) return { role: 'fresh', pending: list }
+  list.splice(index, 1)
+  return { role: 'echo', pending: list }
+}
+
+/** @param {{ text: string, via: 'splice' | 'message' }[]} pending @param {string} text @param {'splice' | 'message'} via */
+export function rememberComposerSteer(pending, text, via) {
+  const list = (Array.isArray(pending) ? pending : []).map(item => ({ text: item.text, via: item.via }))
+  list.push({ text, via })
+  return list.length > 20 ? list.slice(-20) : list
+}

@@ -3,7 +3,7 @@
 //
 // Turn tracking: which turns were triggered by another Bot, and what they said.
 import { HANDOFF_ACK, MESSAGE_INLINE_MAX, REFERENCE_KIND, REPLY_KIND, SOURCE_KIND } from './constants.js'
-import { decideRoomSteer, explicitSendFlags, isJoinedFollowUp, roomMembers, textNamesMember } from './group-steer.js'
+import { decideRoomSteer, explicitSendFlags, isJoinedFollowUp, pairComposerEcho, rememberComposerSteer, roomMembers, textNamesMember } from './group-steer.js'
 import { absoluteLinks } from './links.js'
 import { textOf } from './text.js'
 import { reminderText } from './schedules.js'
@@ -351,6 +351,97 @@ export function install(rt) {
     const room = rt.roomOf(rt.groupOwners.get(id)?.roomId) ?? rt.roomOf(id)
     return room ? `group "${room.name}"` : 'own chat'
   }
+  // Lines already steered from the inbox splice or from user/message. The other
+  // event is the same composer send and must not queue a second round.
+  /** @type {Map<string, {text: string, via: 'splice' | 'message'}[]>} */
+  const composerSteerPending = new Map()
+  // Composer queue while the room's own turn is running lands in next-turn.
+  // busyEnter would have used next-step, so this is an explicit queue.
+  /** @type {Map<string, string[]>} */
+  const busyQueueLines = new Map()
+  const takeBusyQueue = (roomId, text) => {
+    const list = busyQueueLines.get(roomId)
+    if (list === undefined) return false
+    const index = list.indexOf(text)
+    if (index === -1) return false
+    list.splice(index, 1)
+    if (list.length === 0) busyQueueLines.delete(roomId)
+    return true
+  }
+  const roomUserContent = (content) => {
+    const blocks = Array.isArray(content) ? content : []
+    return {
+      text: textOf(content),
+      images: blocks.filter(block => block?.type === 'image' && !block.offloaded).map(block => block.attachment),
+      files: blocks.filter(block => block?.type === 'file' && block.attachment !== undefined).map(block => block.attachment),
+    }
+  }
+  // `via` is `splice` when the composer inserted the line into the room inbox,
+  // and `message` when the deferred user/message finally arrives.
+  const admitRoomUser = (roomId, parts, via) => {
+    const { text, images, files, source, data } = parts
+    if (text === '' && images.length === 0 && files.length === 0) return
+    const paired = pairComposerEcho(composerSteerPending.get(roomId) ?? [], text, via)
+    switch (paired.role) {
+      case 'echo':
+        if (paired.pending.length === 0) composerSteerPending.delete(roomId)
+        else composerSteerPending.set(roomId, paired.pending)
+        return
+      case 'fresh':
+        break
+      default: {
+        /** @type {never} */
+        const unexpected = paired.role
+        throw new Error(`Unknown composer echo ${String(unexpected)}`)
+      }
+    }
+    const room = rt.roomOf(roomId)
+    if (room === undefined) return
+    const members = roomMembers(room, sessionId => live.get(sessionId), botId => rt.botOf(botId))
+    const flags = explicitSendFlags(source ?? {}, data ?? {})
+    // Composer queue is visible here when the source carries it, when the line
+    // was spliced into next-turn during this room turn, or when channel.send
+    // noted a relay intent before prompting the room. Consume every matching
+    // token so one queued line does not force the next identical text to relay.
+    const queuedByComposer = takeBusyQueue(roomId, text)
+    const queuedByChannel = rt.takeRelayIntent?.(roomId, text) === true
+    const explicitQueue = flags.explicitQueue || queuedByComposer || queuedByChannel
+    const plain = images.length === 0 && files.length === 0 && !text.includes('dsh-session:')
+    const decision = decideRoomSteer({
+      members,
+      explicitQueue,
+      explicitNew: flags.explicitNew,
+      named: textNamesMember(text, members),
+      plain,
+    })
+    const queued = { text, ...(images.length > 0 ? { images } : {}), ...(files.length > 0 ? { files } : {}) }
+    const canSteer = decision.action === 'steer' && decision.member !== undefined && typeof rt.acceptRoomSteer === 'function'
+    switch (decision.action) {
+      case 'steer':
+        if (canSteer) {
+          composerSteerPending.set(roomId, rememberComposerSteer(paired.pending, text, via))
+          rt.noteSteeredRoomLine?.(roomId, text)
+          void rt.acceptRoomSteer(room, decision.member, { text, files }).catch(error => rt.warn('ds-bot: group steer failed: %s', error))
+          return
+        }
+        if (via === 'splice') return
+        rt.allowRelayText?.(roomId, text)
+        queueRoomMessage(roomId, queued)
+        return
+      case 'relay':
+        // The inbox already holds a spliced line. drainRoomInbox posts that copy.
+        if (via === 'splice') return
+        rt.allowRelayText?.(roomId, text)
+        queueRoomMessage(roomId, queued)
+        return
+      default: {
+        /** @type {never} */
+        const unexpected = decision.action
+        throw new Error(`Unknown room steer action ${String(unexpected)}`)
+      }
+    }
+  }
+
   const noteTurnFailure = (id, failure) => {
     rt.noteFailure({
       source: 'turn',
@@ -494,47 +585,7 @@ export function install(rt) {
         } else if (source?.kind === REFERENCE_KIND && rt.roomOf(id)) {
           attachReference(roomInbox.get(id), source, textOf(event.data.content))
         } else if (source?.kind === 'user' || source?.kind === REPLY_KIND) {
-          if (rt.roomOf(id) && source.kind === 'user') {
-            const content = Array.isArray(event.data.content) ? event.data.content : []
-            const images = content.filter(block => block?.type === 'image' && !block.offloaded).map(block => block.attachment)
-            const files = content.filter(block => block?.type === 'file' && block.attachment !== undefined).map(block => block.attachment)
-            const text = textOf(event.data.content)
-            const room = rt.roomOf(id)
-            const members = roomMembers(room, sessionId => live.get(sessionId), botId => rt.botOf(botId))
-            const flags = explicitSendFlags(source, event.data)
-            // Composer queue is visible here only when the source carries it, or
-            // when channel.send noted a relay intent before prompting the room.
-            const explicitQueue = flags.explicitQueue || rt.takeRelayIntent?.(id, text) === true
-            const plain = images.length === 0 && files.length === 0 && !text.includes('dsh-session:')
-            const decision = decideRoomSteer({
-              members,
-              explicitQueue,
-              explicitNew: flags.explicitNew,
-              named: textNamesMember(text, members),
-              plain,
-            })
-            const queued = { text, ...(images.length > 0 ? { images } : {}), ...(files.length > 0 ? { files } : {}) }
-            switch (decision.action) {
-              case 'steer':
-                if (decision.member !== undefined && typeof rt.acceptRoomSteer === 'function') {
-                  rt.noteSteeredRoomLine?.(id, text)
-                  void rt.acceptRoomSteer(room, decision.member, { text, files }).catch(error => rt.warn('ds-bot: group steer failed: %s', error))
-                  break
-                }
-                rt.allowRelayText?.(id, text)
-                queueRoomMessage(id, queued)
-                break
-              case 'relay':
-                rt.allowRelayText?.(id, text)
-                queueRoomMessage(id, queued)
-                break
-              default: {
-                /** @type {never} */
-                const unexpected = decision.action
-                throw new Error(`Unknown room steer action ${String(unexpected)}`)
-              }
-            }
-          }
+          if (rt.roomOf(id) && source.kind === 'user') admitRoomUser(id, { ...roomUserContent(event.data?.content), source, data: event.data }, 'message')
           const own = rt.chatOwners.get(id)
           if (own !== undefined) rt.dropKickoff(own)
           // Any user message answers or supersedes the open question card and view card.
@@ -551,14 +602,30 @@ export function install(rt) {
         }
         break
       }
-      case 'agent/inbox/spliced':
+      case 'agent/inbox/spliced': {
         // A message the user steered into the running turn is fresh input, like
         // a send that never queued.
-        if (event.data?.target === 'next-step' && entry.turn !== undefined
-          && (event.data.inserted ?? []).some(message => message?.source?.kind === 'user')) {
+        const inserted = (event.data?.inserted ?? []).filter(message => message?.source?.kind === 'user')
+        if (event.data?.target === 'next-step' && entry.turn !== undefined && inserted.length > 0) {
           entry.steeredAt = event.time ?? Date.now()
         }
+        // busyEnter=steer calls agent.steer on the room session. The line is in
+        // next-step immediately; user/message waits until that session's next
+        // step, which is often after the member has already finished. Admit it
+        // here, while the member is still busy, so drain cannot post it as a
+        // new user bubble.
+        if (rt.roomOf(id) && inserted.length > 0 && event.data?.target === 'next-step') {
+          for (const message of inserted) {
+            admitRoomUser(id, { ...roomUserContent(message.content), source: message.source, data: message }, 'splice')
+          }
+        } else if (rt.roomOf(id) && inserted.length > 0 && event.data?.target === 'next-turn' && entry.turn !== undefined) {
+          for (const message of inserted) {
+            const text = textOf(message.content)
+            if (text !== '') busyQueueLines.set(id, [...(busyQueueLines.get(id) ?? []), text])
+          }
+        }
         break
+      }
       case 'assistant/message': {
         const content = event.data?.message?.content
         const text = textOf(content)

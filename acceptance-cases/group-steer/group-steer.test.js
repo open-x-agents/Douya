@@ -13,6 +13,8 @@ import {
   isJoinedFollowUp,
   keepDraftOnSlotEnd,
   opensGroupRelay,
+  pairComposerEcho,
+  rememberComposerSteer,
   roundForStream,
   steerTarget,
   stepRoute,
@@ -41,6 +43,8 @@ function host() {
   const handlers = []
   const steered = []
   const delivered = []
+  const noted = []
+  const allowed = []
   const room = {
     id: 'r1',
     name: 'Launch',
@@ -71,15 +75,26 @@ function host() {
     noteFailure() {},
     deliver: async (payload) => { delivered.push(payload) },
     acceptRoomSteer: async (target, member, message) => { steered.push({ target, member, message }) },
-    noteSteeredRoomLine() {},
+    noteSteeredRoomLine(_roomId, text) { noted.push(text) },
     takeRelayIntent: () => false,
-    allowRelayText() {},
+    allowRelayText(_roomId, text) { allowed.push(text) },
   }
   installTurns(rt)
   const emit = (sessionId, event) => {
     for (const fn of handlers) fn({ id: sessionId }, event)
   }
-  return { rt, emit, steered, delivered, room }
+  return { rt, emit, steered, delivered, room, noted, allowed }
+}
+
+function spliced(text, target = 'next-step', source = { kind: 'user' }) {
+  return {
+    type: 'agent/inbox/spliced',
+    time: 3250,
+    data: {
+      target,
+      inserted: [{ id: 'm1', role: 'user', source, content: [{ type: 'text', text }] }],
+    },
+  }
 }
 
 function userMessage(text, source = { kind: 'user' }) {
@@ -113,6 +128,34 @@ test('G1 does not schedule the steered interjection as a joined follow-up', () =
   emit('ga', { type: 'turn/end', data: { reason: { kind: 'completed' } } })
   assert.equal(delivered.some(item => item.exchangeId === 'e1' || item.deferred === true), false)
   assert.equal(rt.live.get('ga').turn, undefined)
+})
+
+test('G1 composer next-step splice steers before the deferred user/message', () => {
+  const { rt, emit, steered, noted, allowed } = host()
+  emit('ga', { type: 'turn/start', data: { turn: 4 }, time: 1 })
+  emit('r1', spliced(PROBE))
+  assert.equal(steered.length, 1)
+  assert.equal(steered[0].member.sessionId, 'ga')
+  assert.equal(steered[0].message.text, PROBE)
+  assert.deepEqual(noted, [PROBE])
+  assert.equal(rt.roomInbox.get('r1'), undefined)
+  assert.deepEqual(allowed, [])
+  emit('ga', { type: 'turn/end', data: { reason: { kind: 'completed' } } })
+  emit('r1', userMessage(PROBE))
+  assert.equal(steered.length, 1)
+  assert.equal(rt.roomInbox.get('r1'), undefined)
+  assert.deepEqual(allowed, [])
+})
+
+test('G1 two plain sends of the same text both steer when neither is the deferred echo', () => {
+  const { emit, steered } = host()
+  emit('ga', { type: 'turn/start', data: { turn: 4 }, time: 1 })
+  emit('r1', userMessage(PROBE))
+  emit('r1', userMessage(PROBE))
+  assert.equal(steered.length, 2)
+  assert.equal(pairComposerEcho(rememberComposerSteer([], PROBE, 'splice'), PROBE, 'message').role, 'echo')
+  assert.equal(pairComposerEcho(rememberComposerSteer([], PROBE, 'message'), PROBE, 'message').role, 'fresh')
+  assert.equal(pairComposerEcho(rememberComposerSteer([], PROBE, 'splice'), PROBE, 'splice').role, 'fresh')
 })
 
 test('G1 two busy members stay on relay (routing is a later PR)', () => {
@@ -152,6 +195,24 @@ test('G2 a working slot keeps the draft and does not open another relay', () => 
   assert.equal(opensGroupRelay({ suppressed: true }), false)
 })
 
+test('G2 a next-step splice still steers after the room turn ended while the member is working', () => {
+  const { rt, emit, steered } = host()
+  emit('ga', { type: 'turn/start', data: { turn: 9 }, time: 1 })
+  emit('r1', spliced(PROBE))
+  assert.equal(steered.length, 1)
+  assert.equal(steered[0].member.sessionId, 'ga')
+  assert.equal(rt.roomInbox.get('r1'), undefined)
+})
+
+test('G2 a follow-up while only the member is busy still steers when the room itself is idle', () => {
+  const { rt, emit, steered } = host()
+  emit('ga', { type: 'turn/start', data: { turn: 9 }, time: 1 })
+  emit('r1', spliced(PROBE, 'next-turn'))
+  emit('r1', userMessage(PROBE))
+  assert.equal(steered.length, 1)
+  assert.equal(rt.roomInbox.get('r1'), undefined)
+})
+
 test('G3 explicit queue, explicit new, a named member, or a non-plain message relays', () => {
   const live = busyLive()
   assert.equal(steerTarget({ memberLive: live, explicitQueue: true }), 'relay')
@@ -170,6 +231,27 @@ test('G3 explicit queue, explicit new, a named member, or a non-plain message re
   emit('r1', userMessage('fresh', { kind: 'user', mode: 'new' }))
   assert.equal(steered.length, 0)
   assert.deepEqual(rt.roomInbox.get('r1').map(item => item.text), [PROBE, PROBE, '@Writer look', 'fresh'])
+})
+
+test('G3 a next-turn splice during the room turn does not steer, and does not queue the next identical line', () => {
+  const { rt, emit, steered } = host()
+  const intents = [PROBE]
+  rt.takeRelayIntent = (_roomId, text) => {
+    const index = intents.indexOf(text)
+    if (index === -1) return false
+    intents.splice(index, 1)
+    return true
+  }
+  emit('r1', { type: 'turn/start', data: { turn: 1 }, time: 1 })
+  emit('ga', { type: 'turn/start', data: { turn: 4 }, time: 1 })
+  emit('r1', spliced(PROBE, 'next-turn'))
+  assert.equal(steered.length, 0)
+  emit('r1', userMessage(PROBE))
+  assert.equal(steered.length, 0)
+  assert.deepEqual(rt.roomInbox.get('r1').map(item => item.text), [PROBE])
+  emit('r1', userMessage(PROBE))
+  assert.equal(steered.length, 1)
+  assert.equal(steered[0].message.text, PROBE)
 })
 
 test('G4 private busy steer stays on UserMessageCell and does not enter the group path', () => {
@@ -208,7 +290,10 @@ test('G6 channel.send and the composer both call steerTarget', () => {
   const cells = source('vendor/ds-bot/src/client/cells.js')
   const delivery = source('vendor/ds-bot/src/host/delivery.js')
   assert.match(turns, /decideRoomSteer\(/)
+  assert.match(turns, /admitRoomUser\(/)
+  assert.match(turns, /target === 'next-step'/)
   assert.match(channelSource, /decideRoomSteer\(/)
+  assert.match(channelSource, /acceptRoomSteer\(/)
   assert.match(steer, /export function steerTarget/)
   assert.match(groups, /keepDraftOnSlotEnd/)
   assert.match(groups, /roundForStream/)

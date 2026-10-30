@@ -56,3 +56,25 @@ test('PANEL_PAGE_ROUTE and PANEL_ROUTE both live under /api/', () => {
   assert.equal(PANEL_ROUTE, '/api/opendigitalmate')
   assert.equal(PANEL_PAGE_ROUTE, '/api/opendigitalmate/page')
 })
+
+import { installPanel } from '../src/host/panel.js'
+
+test('installPanel registers both routes under /api/ with buffered bodies', () => {
+  const registered = []
+  const ctx = {
+    effect: (fn) => { fn(); return undefined },
+    connection: { fetch: { register: (route) => { registered.push(route); return () => {} } } },
+  }
+  const rt = {
+    store: { get: () => ({}) },
+    today: () => '2026-10-30',
+    now: () => new Date('2026-10-30T08:00:00Z'),
+  }
+  assert.equal(installPanel(ctx, rt), true)
+  assert.deepEqual(registered.map(route => route.path).sort(), ['/api/opendigitalmate', '/api/opendigitalmate/page'].sort())
+  for (const route of registered) {
+    assert.equal(route.requestBody, 'buffered')
+    assert.deepEqual(route.methods, ['GET'])
+    assert.equal(route.path.startsWith('/api/'), true)
+  }
+})

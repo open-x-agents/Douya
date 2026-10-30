@@ -10,6 +10,7 @@ import { install as installWorkLines } from '../../vendor/ds-bot/src/host/work-l
 import { install as installRoute } from '../../vendor/ds-bot/src/host/route-inbound.js'
 import {
   addressedBot,
+  answerChoice,
   effectsOf,
   explicitIntent,
   routeCard,
@@ -378,6 +379,76 @@ test('R10 an ask card does not deliver, log, or time out', async () => {
   assert.equal(JSON.stringify(host.rooms.r1.log), before)
 })
 
+test('confirm by choice id clears the saved card before delivery and keeps the held text', async () => {
+  const pending = {
+    choices: [
+      { id: 'line-aaaa', sessionId: 'ga', label: '甲', busy: true },
+      { id: 'line-bbbb', sessionId: 'session-line-b', label: '乙', busy: false },
+    ],
+  }
+  assert.equal(answerChoice('line-bbbb', pending).id, 'line-bbbb')
+  assert.equal(answerChoice('session-line-b', pending).sessionId, 'session-line-b')
+  assert.equal(answerChoice('use line-bbbb please', pending).id, 'line-bbbb')
+  assert.equal(answerChoice(PROBE, pending), undefined)
+
+  const host = wireHost({
+    workLines: {
+      a: stored({ id: 'line-a', sessionId: 'ga', label: '甲', quote: { roomId: 'r1', seq: 1 }, updatedAt: 1 }),
+      b: stored({ id: 'line-b', sessionId: 'ga2', label: '乙', quote: { roomId: 'r1', seq: 2 }, updatedAt: 9 }),
+    },
+    logs: { r1: [{ seq: 1, who: 'User', text: POEM }, { seq: 2, who: 'User', text: BEACH }] },
+  })
+  const suppressed = []
+  const saved = []
+  host.rt.suppressRelayText = (roomId, text) => { suppressed.push({ roomId, text }) }
+  host.rt.holdRoomRoute = () => {}
+  host.rt.save = async () => { saved.push(JSON.parse(JSON.stringify(host.rt.state.pendingRoutes))) }
+  const steer = host.rt.acceptRoomSteer
+  host.rt.acceptRoomSteer = async (...args) => {
+    host.rt.state.pendingRoutes = JSON.parse(JSON.stringify(saved.at(-1) ?? {}))
+    return steer(...args)
+  }
+  host.emit('ga', { type: 'turn/start', data: { turn: 1 }, time: 1 })
+  host.emit('ga2', { type: 'turn/start', data: { turn: 2 }, time: 1 })
+  host.emit('r1', userMessage(PROBE))
+  await flush()
+  assert.equal(suppressed.at(-1)?.text, PROBE)
+  assert.ok(saved.at(-1)?.r1)
+  assert.equal(host.rt.state.pendingRoutes.r1.timeoutSends, false)
+
+  host.emit('r1', userMessage('line-b'))
+  await flush()
+  assert.equal(host.rt.state.pendingRoutes.r1, undefined)
+  assert.equal(saved.at(-1)?.r1, undefined)
+  assert.equal(host.steered.length, 1)
+  assert.equal(host.steered[0].message.text, PROBE)
+  assert.equal(host.steered[0].member.sessionId, 'ga2')
+  assert.equal(host.delivered.length, 0)
+})
+
+test('create selects the new session model and delivers the user text', async () => {
+  const host = wireHost({
+    workLines: { poem: stored({ id: 'poem', quote: { roomId: 'r1', seq: 1 } }) },
+    logs: { r1: [{ seq: 1, who: 'User', text: POEM }] },
+  })
+  let disk = {}
+  const selected = []
+  host.rt.desiredModel = async () => 'prov/model'
+  host.rt.selectSessionModel = async (sessionId, route) => { selected.push({ sessionId, route }) }
+  host.rt.applyPermission = async () => {}
+  host.rt.save = async () => { disk = JSON.parse(JSON.stringify(host.rt.state.workLines)) }
+  host.rt.ensureCapabilities = async () => {
+    host.rt.state.workLines = JSON.parse(JSON.stringify(disk))
+  }
+  host.emit('r1', userMessage(PROBE))
+  await flush()
+  assert.deepEqual(selected, [{ sessionId: 'session-new', route: { provider: 'prov', model: 'model' } }])
+  assert.equal(host.delivered.at(-1)?.text, PROBE)
+  assert.equal(host.delivered.at(-1)?.sessionId, 'session-new')
+  assert.equal(host.delivered.at(-1)?.steer, false)
+  assert.equal(Object.values(host.rt.state.workLines).some(item => item.sessionId === 'session-new'), true)
+})
+
 test('R11 the card highlights the newest busy line, else the newest line', () => {
   const busy = decide('zzz', [
     line({ id: 'idle', busy: false, updatedAt: 100, doc: '完全不同的话题啊' }),
@@ -471,8 +542,12 @@ test('R15 the composer, drainRoomInbox, and channel.send share one decision', ()
   const drain = groups.slice(groups.indexOf('function drainRoomInbox'), groups.indexOf('async function runRound'))
   const send = channel.slice(channel.indexOf("case 'send'"), channel.indexOf("case 'btw-delete'"))
   assert.match(admit, /routeRoomUser\?\.\(/)
+  assert.match(admit, /suppressRelayText\?\.\(/)
+  assert.match(admit, /holdRoomRoute\?\.\(/)
   assert.match(drain, /routeRoomUser\?\.\(/)
   assert.match(send, /routeRoomUser\?\.\(/)
+  assert.match(groups, /consumeRouteHold/)
+  assert.match(channel, /pendingRoutes: state\.pendingRoutes/)
   assert.match(turns, /decideRoomSteer\(/)
   assert.match(channel, /decideRoomSteer\(/)
   assert.match(channel, /acceptRoomSteer\(/)

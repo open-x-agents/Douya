@@ -422,9 +422,14 @@ export function install(rt) {
     if (routeTakesEffect(routed)) {
       composerSteerPending.set(roomId, rememberComposerSteer(paired.pending, text, via))
       rt.noteSteeredRoomLine?.(roomId, text)
+      // Before the room session's own turn reads this message. Otherwise it
+      // synthesizes group_relay, posts an empty User row, and the admin speaks.
+      rt.suppressRelayText?.(roomId, text)
+      rt.holdRoomRoute?.(roomId)
       void rt.applyRouteDecision?.(room, routed, { text: routed.text ?? text, files }).catch(error => rt.warn('ds-bot: inbound route failed: %s', error))
       return
     }
+    rt.releaseRoomRoute?.(roomId)
     const decision = decideRoomSteer({
       members,
       explicitQueue,

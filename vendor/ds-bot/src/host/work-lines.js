@@ -3,7 +3,7 @@
 // Bot's MEMORY.md stays one file per bot. Busy is live.turn, not a stored status.
 import { randomUUID } from 'node:crypto'
 import { HISTORY_TIMEOUT_MS } from './constants.js'
-import { textOf } from './text.js'
+import { splitRef, textOf } from './text.js'
 
 /** Keys a saved line may carry. Anything else is a body and is not stored. */
 export const INDEX_FIELDS = Object.freeze(['id', 'botId', 'sessionId', 'lastRoomId', 'quote', 'label', 'updatedAt', 'closedAt', 'segments'])
@@ -329,20 +329,52 @@ export function install(rt) {
     return added
   }
 
+  // A brand-new line session has to carry the bot's model before followup, or the
+  // user text stays out of the session file and the line never becomes busy.
+  const prepareWorkSession = async (bot, sessionId, room) => {
+    if (typeof rt.desiredModel === 'function' && typeof rt.selectSessionModel === 'function') {
+      const ref = await rt.desiredModel(bot).catch(error => {
+        rt.warn?.('ds-bot: model for a new work line of %s not chosen: %s', bot?.name, error)
+        return undefined
+      })
+      const route = splitRef(ref)
+      if (route !== undefined) {
+        await rt.selectSessionModel(sessionId, route)
+          .catch(error => rt.warn?.('ds-bot: model for a new work line of %s not applied: %s', bot?.name, error))
+      }
+    }
+    if (typeof rt.applyPermission === 'function') {
+      await rt.applyPermission(bot, sessionId, room)
+        .catch(error => rt.warn?.('ds-bot: permission for a new work line of %s not applied: %s', bot?.name, error))
+    }
+    if (typeof rt.resolveAgent === 'function') {
+      await rt.resolveAgent(sessionId)
+        .catch(error => rt.warn?.('ds-bot: work line session %s not resolved: %s', sessionId, error))
+    }
+  }
+
   rt.createWorkLine = async ({ botId, roomId, sessionId, quote, label } = {}) => {
     const bot = rt.botOf(botId)
     if (bot === undefined) throw new Error(`Unknown Bot ${botId}`)
+    const room = typeof roomId === 'string' ? rt.roomOf(roomId) : undefined
     let target = sessionId
+    let created = false
     if (target === undefined) {
-      const room = roomId === undefined ? undefined : rt.roomOf(roomId)
-      target = await rt.createSession(room ? `${bot.name} · ${room.name}` : bot.name, {})
+      const dir = rt.workDirOf?.({ botId, roomId })
+      target = await rt.createSession(
+        room ? `${bot.name} · ${room.name}` : bot.name,
+        typeof dir === 'string' && dir !== '' ? { dir } : {},
+      )
+      created = true
     }
     const line = createLine(state, { botId, sessionId: target, roomId, quote, label, createId: () => randomUUID() })
-    const primary = roomId === undefined ? undefined : rt.roomOf(roomId)?.sessions?.[botId]
+    const primary = room?.sessions?.[botId]
     if (typeof roomId === 'string' && target !== primary) {
       rt.groupOwners.set(target, { botId, roomId, workLineId: line.id })
     }
+    if (created) await prepareWorkSession(bot, target, room)
     await rt.save?.()
+    if (created && typeof rt.ensureCapabilities === 'function') await rt.ensureCapabilities(target)
     return line
   }
 

@@ -60,6 +60,8 @@ export function install(rt) {
     privateArchives: rt.archivesView(),
     exchangeTurns: state.exchangeTurns,
     questions: state.questions,
+    // Inbound ask cards. The desktop reads these from /api state; a timeout does not send them.
+    pendingRoutes: state.pendingRoutes ?? {},
     views: state.views ?? {},
     // Aside answers of each Bot's current part, newest first. Not part of the
     // model-visible history; earlier parts send their cards on their own pages.
@@ -465,9 +467,12 @@ export function install(rt) {
               via: 'channel',
             })
             if (routeTakesEffect(routed)) {
+              rt.suppressRelayText?.(room.id, text)
+              rt.holdRoomRoute?.(room.id)
               await rt.applyRouteDecision(room, routed, { text: routed.text ?? text })
               return ok(true)
             }
+            rt.releaseRoomRoute?.(room.id)
             if (!(routed?.action === 'queue' && routed.relay === true)) {
               const decision = decideRoomSteer({
                 members,

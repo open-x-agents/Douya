@@ -450,6 +450,17 @@ export function install(rt) {
     texts.add(text)
     suppressedRelay.set(roomId, texts)
   }
+  // A routed composer message must not fall through to an empty User row when
+  // group_relay still runs. Cleared when a later message really does relay.
+  /** @type {Set<string>} */
+  const routeHolds = new Set()
+  rt.holdRoomRoute = (roomId) => {
+    if (typeof roomId === 'string' && roomId !== '') routeHolds.add(roomId)
+  }
+  rt.releaseRoomRoute = (roomId) => {
+    routeHolds.delete(roomId)
+  }
+  rt.consumeRouteHold = (roomId) => routeHolds.delete(roomId)
   rt.allowRelayText = (roomId, text) => {
     suppressedRelay.get(roomId)?.delete(text)
   }
@@ -571,9 +582,12 @@ export function install(rt) {
         via: 'drain',
       })
       if (routeTakesEffect(routed)) {
+        rt.suppressRelayText(room.id, line.text)
+        rt.holdRoomRoute(room.id)
         void rt.applyRouteDecision?.(room, routed, { text: routed.text ?? line.text }).catch(error => rt.warn('ds-bot: inbound route failed: %s', error))
         continue
       }
+      rt.releaseRoomRoute(room.id)
       opened = true
       appendRoom(room, { who: 'User', text: line.text })
       round.replies.push({ kind: 'user', text: line.text, time: Date.now() })
@@ -729,6 +743,9 @@ export function install(rt) {
       // Session folds into one turn are not lost; the newest one picks the speakers.
       const queued = rt.roomInbox.get(room.id) ?? []
       rt.roomInbox.delete(room.id)
+      // The composer already gave this message to a work line. An empty inbox
+      // must not become a blank User row or a fresh admin turn.
+      if (queued.length === 0 && rt.consumeRouteHold(room.id)) return JSON.stringify({ held: true })
       const posts = queued.length > 0 ? queued : [{ text: '' }]
       // A post a running round already logged stays inside the round this relay opens.
       const startSeq = Math.min(room.seq + 1, ...posts.map(post => post.logged).filter(seq => typeof seq === 'number'))

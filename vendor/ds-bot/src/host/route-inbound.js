@@ -224,18 +224,26 @@ export function routeInbound({ text = '', roomId, botId, lines = [], explicitQue
   }
 }
 
-/** @param {string} text @param {{ choices?: { id?: string, label?: string }[] }} pending */
+function mentionsId(text, id) {
+  return typeof id === 'string' && id.length >= 8 && text.includes(id.toLowerCase())
+}
+
+/** @param {string} text @param {{ choices?: { id?: string, label?: string, sessionId?: string }[] }} pending */
 export function answerChoice(text, pending) {
   const choices = pending?.choices ?? []
   const intent = explicitIntent(text)
   if (intent.kind === 'name') {
-    const byId = choices.find(choice => choice.id === intent.label)
+    const byId = choices.find(choice => choice.id === intent.label || choice.sessionId === intent.label)
     if (byId !== undefined) return byId
     const byLabel = choices.filter(choice => choice.label === intent.label)
     return byLabel.length === 1 ? byLabel[0] : undefined
   }
   const trimmed = String(text ?? '').trim()
-  return choices.find(choice => choice.id === trimmed)
+  const exact = choices.find(choice => choice.id === trimmed || choice.sessionId === trimmed)
+  if (exact !== undefined) return exact
+  const lower = trimmed.toLowerCase()
+  const loose = choices.filter(choice => mentionsId(lower, choice.id) || mentionsId(lower, choice.sessionId))
+  return loose.length === 1 ? loose[0] : undefined
 }
 
 /** The ask card. It lives on `pendingRoutes`, and a timeout does not send it. */
@@ -515,10 +523,21 @@ function memberFrom(room, decision) {
  * @param {any} decision
  * @param {{ text?: string, files?: any[] }} [message]
  */
+async function persistRoute(rt) {
+  if (typeof rt.save !== 'function') return
+  await rt.save()
+}
+
 export async function applyRouteDecision(rt, room, decision, message = {}) {
   const text = typeof decision?.text === 'string' ? decision.text : String(message.text ?? '')
   const files = message.files ?? []
   const action = decision?.action
+  // Ask replaces whatever card was showing. Every other leaving action must hit
+  // disk before deliver, because a later load would put the card back.
+  if (decision?.clearPending === true && action !== 'ask') {
+    delete pendingTable(rt.state)[room.id]
+    await persistRoute(rt)
+  }
   switch (action) {
     case 'hold':
     case 'legacy':
@@ -532,6 +551,7 @@ export async function applyRouteDecision(rt, room, decision, message = {}) {
         at: Date.now(),
         timeoutSends: false,
       }
+      await persistRoute(rt)
       return decision
     }
     case 'steer': {

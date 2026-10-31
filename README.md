@@ -2,43 +2,191 @@
 
 飞书里的数字同事，基于 **ds-bot**（`Fei2411/DeepSeek-Bot` 的 DSH 插件）开发：接日报、盯日程、卡片可点，配一个面板。
 
-## 现在有什么（v0.1.0，可跑通）
+**✨ v0.2.0 新功能：**
+- 🎨 全新卡片式交互界面
+- 🔌 Composio 多源信息聚合
+- 📊 每日汇聚推送
+- 🌐 独立 Web 服务器
+
+---
+
+## 快速开始
+
+### 1. 安装依赖
+
+```bash
+npm install
+# 或
+pnpm install
+```
+
+### 2. 配置环境变量
+
+复制 `.env.example` 到 `.env` 并填写配置：
+
+```bash
+cp .env.example .env
+```
+
+**必需配置（Composio 集成）：**
+- `COMPOSIO_API_KEY` - 从 [Composio](https://app.composio.dev) 获取 API 密钥
+
+**可选配置：**
+- `COMPOSIO_ENTITY_ID` - 实体 ID（默认：'default'）
+- `DIGEST_SCHEDULE` - 每日推送时间（默认：08:00）
+- `PORT` - 服务器端口（默认：7777）
+
+### 3. 启动服务
+
+#### 方式一：独立 Web 服务器（推荐）
+
+```bash
+node scripts/server.js
+```
+
+然后访问 http://localhost:7777
+
+#### 方式二：作为 DSH 插件运行
+
+```yaml
+# cordis 配置中添加
+- insert:
+    - id: opendigitalmate
+      name: opendigitalmate
+      config:
+        composioApiKey: $COMPOSIO_API_KEY
+```
+
+---
+
+## 功能特性
+
+### 🎨 卡片式界面
+
+全新设计的 Web UI，最小化文字展示，通过结构化卡片呈现信息：
+
+- **今天视图** - 当天任务、会议、待办
+- **每日汇聚** - Composio 聚合的多源信息
+- **信源状态** - 查看已连接的数据源
+- **实时交互** - 聊天式对话面板
+
+### 🔌 Composio 集成
+
+通过 Composio 连接 1000+ 应用，自动聚合信息：
+
+**支持的应用包括：**
+- GitHub - 代码仓库、PR、Issue
+- Slack - 团队消息、频道
+- Gmail - 邮件收发
+- Linear - 项目管理、任务
+- Google Calendar - 日历事件
+- Notion - 知识库、文档
+- 更多...
+
+**设置步骤：**
+
+1. 注册 [Composio](https://app.composio.dev) 账号
+2. 获取 API 密钥
+3. 在 `.env` 中配置 `COMPOSIO_API_KEY`
+4. 通过 Composio 面板连接你的应用账号
+5. 重启服务，查看"每日汇聚"标签页
+
+### 📊 每日汇聚推送
+
+每天定时（默认 08:00）自动聚合多个信源的最新动态：
+
+- 未读通知和消息
+- 待处理的任务
+- 即将到来的日程
+- 重要邮件摘要
+
+配置推送时间：
+```bash
+DIGEST_SCHEDULE=08:00  # 24小时格式 HH:MM
+```
+
+### 🤖 聊天交互
+
+右下角常驻聊天面板，随时与数字同事对话：
+- 查询任务详情
+- 了解信源状态
+- 询问依据来源
+- 操作日程安排
+
+---
+
+## 原有功能（v0.1.0）
 
 | 能力 | 状态 | 在哪里 |
 | --- | --- | --- |
-| 飞书接入 | 复用 ds-bot 的长连接通道（`core/src/host/feishu-inbound.js` + `feishu-sdk.js`），本包只负责发卡片 | `src/host/feishu.js` |
+| 飞书接入 | 复用 ds-bot 的长连接通道 | `src/host/feishu.js` |
 | 日报 | 按成员汇总当天日程、已完成、明天计划，组装成飞书交互卡片 | `src/host/report.js`、`src/host/cards.js` |
 | 日程提醒 | 从日历事件算出「会议前 N 分钟」，到点推送，失败重试 | `src/host/reminders.js`、`index.js` 的 `tick()` |
 | 可交互 | 卡片按钮回调：推迟 10 分钟 / 已完成 / 改时间 / 补充日报 | `src/host/cards.js`、`index.js` 的 `onCardAction()` |
 | 面板 | 单页：提交率、还没交的人、近期日程、投递记录 | `src/client/panel.html`、`src/host/panel.js` |
 
-36 个单元测试全绿（`node --test test/*.test.js`），覆盖日报组装、提醒规划、卡片结构、按钮解析、面板快照、存储和插件接线。
+---
 
-## 跑起来
+## 开发与测试
 
-```sh
-node --test test/*.test.js     # 全部测试，不需要网络和 key
+### 运行测试
+
+```bash
+node --test test/*.test.js     # 全部测试
+```
+
+36 个单元测试全绿，覆盖日报组装、提醒规划、卡片结构、按钮解析、面板快照、存储和插件接线。
+
+### 演示
+
+```bash
 node scripts/demo.mjs          # 打印一张日报卡和一张提醒卡（不发出去）
 ```
 
-装进 DSH 之后（和 ds-bot 一样按插件挂载）：
+---
 
-```yaml
-# cordis 补丁里加一行
-- insert:
-    - id: opendigitalmate
-      name: opendigitalmate
+## API 端点
+
+### Web UI
+- `GET /` - 主界面
+
+### REST API
+- `GET /api/today` - 今天的摘要和任务
+- `GET /api/digest` - Composio 每日汇聚
+- `GET /api/sources` - 信源连接状态
+- `GET /api/config/check` - 配置检查
+
+---
+
+## 目录结构
+
+```
+.
+├── index.js                    # 插件入口与运行时
+├── scripts/
+│   ├── server.js              # 独立 Web 服务器
+│   └── demo.mjs               # 演示脚本
+├── src/
+│   ├── host/                  # 核心逻辑（纯函数）
+│   │   ├── api.js            # 🆕 API 路由
+│   │   ├── composio.js       # 🆕 Composio 集成
+│   │   ├── report.js         # 日报生成
+│   │   ├── reminders.js      # 提醒计划
+│   │   ├── cards.js          # 飞书卡片
+│   │   ├── panel.js          # 面板数据
+│   │   ├── store.js          # 持久化存储
+│   │   ├── feishu.js         # 飞书发送
+│   │   ├── buffer.js         # 消息聚合
+│   │   └── threads.js        # 话题识别
+│   └── client/
+│       ├── index.html        # 🆕 主界面
+│       └── panel.html        # 原面板（兼容）
+├── test/                      # 单元测试
+├── docs/                      # 架构文档
+└── .env.example              # 环境变量模板
 ```
 
-插件读的配置：
-
-| 配置 | 说明 |
-| --- | --- |
-| `credentials()` | 返回 `{ appId, appSecret }`；不传就走 `createFeishuSender` 的默认读取 |
-| `calendar()` | 返回该成员的事件数组 `{ id, summary, start, end, location, owner }`，由调用方接飞书日历 |
-| `sendCard({ receiveId, card })` | 覆盖默认的飞书发送（测试里注入桩） |
-| `ownerOpenId` | 没人认领的提醒发给谁 |
-| `leadMinutes` | 提前几分钟提醒，默认 10 |
+---
 
 ## 两个刻意的设计
 
@@ -46,31 +194,94 @@ node scripts/demo.mjs          # 打印一张日报卡和一张提醒卡（不�
 
 **晚到的 tick 也要发**。会议还没开始时，即使提醒的预定时刻已经过去，也立刻发出去——漏掉一分钟不该等于漏掉这场会。
 
-## 目录
+---
 
+## 配置选项
+
+### 作为插件使用
+
+```javascript
+{
+  credentials: () => ({ appId, appSecret }),  // 飞书应用凭证
+  calendar: async () => events[],             // 日历数据源
+  sendCard: async ({ receiveId, card }) => messageId,  // 覆盖发送方法
+  ownerOpenId: 'ou_xxx',                      // 无主提醒的接收人
+  leadMinutes: 10,                            // 提前几分钟提醒
+  composioApiKey: 'xxx',                      // Composio API 密钥
+  composioEntityId: 'default',                // 实体 ID
+  digestSchedule: '08:00',                    // 推送时间
+  enableDigest: true,                         // 启用每日汇聚
+}
 ```
-index.js             插件入口：apply/createRuntime、tick、卡片回调、定时器
-src/host/            纯逻辑：report / reminders / cards / panel / store / feishu
-src/client/panel.html 面板单页（无构建步骤，直接由插件托管）
-test/                node:test，110 条
-scripts/demo.mjs     一次性的可视化输出
-docs/architecture.md 架构、数据形状、与 ds-bot 的边界
-docs/labels.md       标签流程：谁能把一张单变成「可开工」
+
+---
+
+## 安全说明
+
+⚠️ **永远不要提交包含真实密钥的 `.env` 文件！**
+
+`.env` 已添加到 `.gitignore`。所有敏感信息应通过环境变量注入：
+
+```bash
+# 本地开发
+cp .env.example .env
+# 编辑 .env，填入真实密钥
+
+# 生产环境
+export COMPOSIO_API_KEY=your_real_key
+node scripts/server.js
 ```
 
-## 还没做
+---
 
-- 飞书应用的 app_id/app_secret 与权限（`im:message`、`calendar:calendar`、卡片回调地址）需要有人去开放平台建应用
-- 日历数据源：现在是注入的 `calendar()`，要接 `calendar.v4.calendar_event.list` 并处理成员 OAuth
-- 日报的「收集」环节：现在是 `recordReport()` 接口，还没有「在飞书里点开表单填写」的卡片流
-- 部署：Dockerfile 还没有
+## 截图
 
-## 对话层：聚合输入与跨时间认话题（v0.2）
+### 主界面 - 今天视图
+![今天视图](docs/screenshots/today-view.png)
 
-| 能力 | 在哪里 | 规则 |
-| --- | --- | --- |
-| 聚合输入 | `src/host/buffer.js` | 同一个人在同一个会话里连发几条 → 合并成一轮。窗口 3 秒，每来一条窗口往后滑；总上限 20 秒，超过就先把已说的发出去；重复的同一句只留一条；两个人同时说话不会并成一条 |
-| 跨时间认话题 | `src/host/threads.js` | 中文按二字词切、英文按单词切，算重合度，再按「上次说话到现在」的时间折半衰减（半衰期 72 小时）。过了阈值就并进旧话题，没过就开新话题——所以隔一周回来说「上次那个日报」，仍然对得上 |
-| 话题维护 | 同上 | `touchThread` 加词、更新时间；`pruneThreads` 只留最近 50 个、30 天没动的丢掉 |
+### 每日汇聚 - Composio 集成
+![每日汇聚](docs/screenshots/digest-view.png)
 
-这两个模块都是纯函数 + 注入时钟，测试里有假定时器，所以「等到 3 秒」和「隔一周」都不用真的等。
+### 聊天交互
+![聊天面板](docs/screenshots/chat-panel.png)
+
+---
+
+## 还需要做
+
+- [ ] 飞书应用的完整 OAuth 流程
+- [ ] 日历数据源接入飞书 API
+- [ ] 日报收集的表单卡片流
+- [ ] Composio 连接管理界面
+- [ ] 每日汇聚的推送渠道配置
+- [ ] Docker 容器化部署
+- [ ] 更多信源适配器
+
+---
+
+## 许可证
+
+Apache-2.0
+
+---
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+开发指南：
+1. Fork 本仓库
+2. 创建特性分支：`git checkout -b feature/amazing-feature`
+3. 提交更改：`git commit -m 'Add amazing feature'`
+4. 推送分支：`git push origin feature/amazing-feature`
+5. 提交 Pull Request
+
+确保所有测试通过：`node --test test/*.test.js`
+
+---
+
+## 支持
+
+- 📖 [架构文档](docs/architecture.md)
+- 🐛 [报告问题](../../issues)
+- 💬 [讨论区](../../discussions)

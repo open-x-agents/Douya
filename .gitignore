@@ -8,3 +8,4 @@ state.json
 .env.*
 !.env.example
 .release-notes.md
+.odm-data/

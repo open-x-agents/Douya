@@ -17,7 +17,10 @@
     "docs/"
   ],
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "start": "node scripts/server.js",
+    "dev": "node scripts/server.js 7777",
+    "demo": "node scripts/demo.mjs"
   },
   "keywords": [
     "dsh-plugin",

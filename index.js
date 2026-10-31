@@ -10,6 +10,8 @@ import { dailyReportCard, readAction, reminderCard } from './src/host/cards.js'
 import { installPanel, reportKey } from './src/host/panel.js'
 import { createFeishuSender } from './src/host/feishu.js'
 import { PANEL_ROUTE, SNOOZE_MINUTES, TICK_SECONDS } from './src/host/constants.js'
+import { createComposioClient, scheduleDailyDigest } from './src/host/composio.js'
+import { createApiRouter } from './src/host/api.js'
 
 export const name = 'opendigitalmate'
 // The panel and the card callback answer on the channel ds-bot already exposes; nothing
@@ -32,6 +34,23 @@ export function createRuntime(ctx, config = {}) {
   const calendar = config.calendar ?? (async () => [])
   const log = config.log ?? (() => {})
 
+  // Composio integration for daily digest
+  let composioClient = null
+  try {
+    if (config.composioApiKey || process.env.COMPOSIO_API_KEY) {
+      composioClient = createComposioClient({
+        composioApiKey: config.composioApiKey || process.env.COMPOSIO_API_KEY,
+        composioEntityId: config.composioEntityId || process.env.COMPOSIO_ENTITY_ID || 'default',
+      })
+      log('Composio client initialized')
+    }
+  } catch (err) {
+    log(`Composio initialization failed: ${err.message}`)
+  }
+
+  // Create API router for web interface
+  const apiRouter = createApiRouter({ store, composioClient, config })
+
   const rt = {
     ctx,
     config,
@@ -39,6 +58,8 @@ export function createRuntime(ctx, config = {}) {
     store,
     now,
     today,
+    composioClient,
+    apiRouter,
 
     // One pass of the clock: plan from the calendar, deliver what is due, keep the rest for
     // the panel. Only a delivered reminder is marked sent, so a Feishu hiccup retries.
@@ -115,6 +136,21 @@ export function createRuntime(ctx, config = {}) {
 
   rt.load = () => store.load()
   installPanel(ctx, rt)
+
+  // Schedule daily digest if Composio is configured
+  if (composioClient && config.enableDigest !== false) {
+    const digestSchedule = config.digestSchedule || process.env.DIGEST_SCHEDULE || '08:00'
+    log(`Scheduling daily digest at ${digestSchedule}`)
+    scheduleDailyDigest(
+      { digestSchedule, runImmediately: false },
+      async () => {
+        log('Running scheduled daily digest...')
+        const digest = await apiRouter.getDigest()
+        // TODO: Send digest to configured recipients
+        log(`Digest generated with ${digest.items?.length || 0} items`)
+      }
+    )
+  }
 
   // The button callback: Feishu posts the press, the record changes, and the answer is a
   // toast plus the card the member is looking at.

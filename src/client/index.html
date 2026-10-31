@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>数字同事 · Open Digital Mate</title>
+<style>
+  :root{
+    --ink:#15171c; --ink2:#4a4f5a; --ink3:#8b909c;
+    --bg:#f4f2ee; --card:#ffffff; --line:#e8e6e1;
+    --blue:#4a6cf7; --blue-soft:#eef2ff; --blue-line:#dbe3ff;
+    --green:#2f9e6b; --green-soft:#eaf7f0;
+    --amber:#c8862a; --amber-soft:#fdf4e6;
+    --red:#c0392b; --red-soft:#fdeceb;
+    --gray-soft:#f4f3f0;
+    --ease:cubic-bezier(.22,.61,.36,1);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:radial-gradient(1200px 700px at 50% -10%,#ffffff 0,#f4f2ee 55%,#eceae5 100%);
+    color:var(--ink);
+    font:15px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    display:flex;flex-direction:column;align-items:center;
+    padding:26px 18px 30px;min-height:100%;
+  }
+  code{font:12px/1.5 ui-monospace,Menlo,monospace;background:#ecebe7;padding:1px 5px;border-radius:4px}
+
+  header.top{width:100%;max-width:1100px;display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+  .top h1{margin:0;font-size:17px;letter-spacing:-.01em}
+  .top .hint{font-size:12.5px;color:var(--ink3)}
+
+  .stage{width:100%;max-width:1100px;display:flex;flex-direction:column;gap:12px}
+
+  .device{
+    position:relative;background:#fff;border:1px solid #e2e0da;border-radius:16px;overflow:hidden;
+    box-shadow:0 26px 60px -34px rgba(21,23,28,.45),0 2px 0 rgba(255,255,255,.6) inset;
+  }
+  .chrome{display:flex;align-items:center;gap:10px;background:#f6f5f2;border-bottom:1px solid var(--line);padding:9px 14px}
+  .lights{display:flex;gap:6px}
+  .lights i{width:10px;height:10px;border-radius:50%;background:#dad8d2;display:block}
+  .url{background:#fff;border:1px solid var(--line);border-radius:7px;padding:3px 10px;font-size:11.5px;color:var(--ink3);min-width:210px}
+  .chrome .when{margin-left:auto;font:12px/1 ui-monospace,Menlo,monospace;color:var(--ink3);font-variant-numeric:tabular-nums}
+
+  .app{display:grid;grid-template-columns:168px 1fr;height:560px}
+  @media (max-width:760px){.app{grid-template-columns:1fr;height:620px}.side{display:none}}
+
+  .side{background:#f8f7f4;border-right:1px solid var(--line);padding:14px 10px;font-size:13px}
+  .side .who{display:flex;align-items:center;gap:8px;padding:2px 8px 14px}
+  .side .who img{width:22px;height:22px}
+  .side .who b{font-size:13px;font-weight:600}
+  .nav{padding:6px 10px;border-radius:8px;color:var(--ink2);margin-bottom:2px;transition:.25s var(--ease);cursor:pointer}
+  .nav.on{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(21,23,28,.07)}
+  .side .grp{font-size:10.5px;color:#a8acb5;letter-spacing:.08em;padding:13px 10px 5px}
+
+  .views{position:relative;overflow:hidden}
+  .view{position:absolute;inset:0;overflow-y:auto;padding:24px 30px 30px;opacity:0;visibility:hidden;transition:opacity .34s var(--ease),transform .34s var(--ease);transform:translateY(8px)}
+  .view.on{opacity:1;visibility:visible;transform:none}
+  @media (max-width:620px){.view{padding:18px 16px 24px}}
+
+  .a{opacity:0;transform:translateY(10px);transition:opacity .5s var(--ease),transform .5s var(--ease)}
+  .a.in{opacity:1;transform:none}
+
+  .concl{font-size:23px;line-height:1.45;letter-spacing:-.015em;margin:0 0 8px;font-weight:600;min-height:2.9em}
+  @media (max-width:620px){.concl{font-size:19px}}
+  .stamp{font-size:11.5px;color:var(--ink3);margin-bottom:18px;line-height:1.7}
+  .stamp b{color:var(--amber);font-weight:600}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
+  .stat{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 13px}
+  .stat b{display:block;font-size:22px;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.3}
+  .stat span{font-size:11.5px;color:var(--ink3)}
+
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:12px}
+  .card h3{margin:0 0 8px;font-size:15px;font-weight:600}
+  .card p{margin:0;font-size:13px;color:var(--ink2);line-height:1.6}
+  .card .meta{font-size:11.5px;color:var(--ink3);margin-top:8px}
+  .card .actions{display:flex;gap:8px;margin-top:12px}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 14px;font-size:12.5px;color:var(--ink);font-weight:500;font-family:inherit;cursor:pointer;transition:.2s}
+  .btn:hover{border-color:#cfd3db}
+  .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  .btn.primary:hover{background:#3d5ce8}
+
+  ul.work{list-style:none;margin:0;padding:0}
+  ul.work li{display:grid;grid-template-columns:22px 1fr;gap:11px;padding:12px 0;border-top:1px solid var(--line)}
+  ul.work li:first-child{border-top:0;padding-top:2px}
+  .idx{font:600 11.5px/22px ui-monospace,Menlo,monospace;width:22px;height:22px;text-align:center;border-radius:50%;background:var(--blue-soft);color:var(--blue)}
+  ul.work h4{margin:0 0 2px;font-size:14.5px}
+  .why{font-size:12.5px;color:var(--ink2);margin:0 0 5px;line-height:1.6}
+  .evi{font-size:11.5px;color:var(--ink3);display:block;margin-top:3px}
+  .adv{display:inline-block;background:var(--blue-soft);border:1px solid var(--blue-line);color:#2b4ecf;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:500}
+
+  ul.work li.closed{opacity:.55}
+  ul.work li.closed h4{text-decoration:line-through}
+  ul.work li.closed .idx{background:var(--green-soft);color:var(--green)}
+
+  .dockPanel{position:fixed;right:16px;bottom:16px;width:380px;max-height:500px;background:#fff;border:1px solid var(--line);border-radius:14px;
+    box-shadow:0 26px 60px -22px rgba(21,23,28,.5);display:flex;flex-direction:column;overflow:hidden;
+    transform-origin:100% 100%;opacity:0;transform:translateY(10px) scale(.96);pointer-events:none;
+    transition:.34s var(--ease);z-index:1000}
+  .dockPanel.open{opacity:1;transform:none;pointer-events:auto}
+  .dockHead{display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid var(--line);background:#fbfaf8}
+  .dockHead b{font-size:13px;display:block;line-height:1.4}
+  .dockHead small{font-size:10.5px;color:var(--ink3)}
+  .dockHead .x{margin-left:auto;border:0;background:none;color:var(--ink3);font-size:15px;cursor:pointer;line-height:1;padding:3px 5px}
+  .dockBody{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:#fdfcfb}
+  .bubble{max-width:86%;background:#fff;border:1px solid var(--line);border-radius:11px;padding:9px 12px;font-size:13px;line-height:1.65}
+  .bubble.me{margin-left:auto;background:#e9eeff;border-color:var(--blue-line)}
+  .bubble small{display:block;font-size:10.5px;color:var(--ink3);margin-top:4px}
+  .dockFoot{border-top:1px solid var(--line);padding:7px 10px;display:flex;gap:8px;align-items:center;background:#fff}
+  .dockFoot input{flex:1;border:0;outline:none;font:inherit;font-size:12.5px;padding:5px 2px;color:var(--ink);background:none;min-width:0}
+  .dockFoot .send{width:27px;height:27px;border-radius:8px;background:var(--blue);color:#fff;border:0;font-size:13px;cursor:pointer}
+  
+  .dockBtn{position:fixed;right:16px;bottom:16px;width:46px;height:46px;border-radius:50%;border:1px solid #dfe4ff;background:#fff;
+    cursor:pointer;box-shadow:0 12px 26px -12px rgba(21,23,28,.45);display:grid;place-items:center;z-index:999;transition:.25s var(--ease)}
+  .dockBtn:hover{transform:translateY(-2px);border-color:#c9d4ff}
+  .dockBtn.has .badge{opacity:1;transform:scale(1)}
+  .badge{position:absolute;top:1px;right:1px;width:10px;height:10px;border-radius:50%;background:#e5484d;border:2px solid #fff;opacity:0;transform:scale(.5);transition:.25s var(--ease)}
+
+  .loading{text-align:center;padding:40px;color:var(--ink3)}
+  .error{background:var(--red-soft);border:1px solid var(--red);border-radius:8px;padding:12px;margin:12px 0;color:var(--red)}
+
+  @media (max-width:620px){
+    .dockPanel{width:calc(100vw - 32px);right:16px;left:16px;bottom:10px;max-height:60%}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>数字同事 · Open Digital Mate</h1>
+  <div class="hint">每日汇聚、智能提醒、卡片交互</div>
+</header>
+
+<div class="stage">
+  <div class="device">
+    <div class="chrome">
+      <div class="lights"><i></i><i></i><i></i></div>
+      <div class="url">localhost:7777/today</div>
+      <div class="when" id="chromeClock">—</div>
+    </div>
+
+    <div class="app">
+      <aside class="side">
+        <div class="who">
+          <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true">
+            <circle cx="16" cy="16" r="16" fill="#eef2ff"/>
+            <ellipse cx="16" cy="18" rx="10.5" ry="9.5" fill="#4a6cf7"/>
+            <path d="M16 4.6c0-1.6 1.2-2.6 2.9-2.6-.2 1.7-1.2 2.9-2.9 3.1z" fill="#2f9e6b"/>
+            <circle cx="12.4" cy="16.6" r="1.6" fill="#fff"/>
+            <circle cx="19.6" cy="16.6" r="1.6" fill="#fff"/>
+            <path d="M13.4 20.4q2.6 2.4 5.2 0" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          </svg>
+          <b>豆芽</b>
+        </div>
+        <div class="nav on" data-view="today">今天</div>
+        <div class="nav" data-view="digest">每日汇聚</div>
+        <div class="nav" data-view="sources">信源状态</div>
+        <div class="grp">设置</div>
+        <div class="nav" data-view="settings">配置</div>
+      </aside>
+
+      <div class="views">
+        <!-- 今天视图 -->
+        <section class="view on" id="v-today">
+          <h3 class="concl" id="conclText">正在加载...</h3>
+          <div class="stamp a in" id="stamp">—</div>
+
+          <div class="stats">
+            <div class="stat a in">
+              <b id="nOpen">0</b>
+              <span>件在手</span>
+            </div>
+            <div class="stat a in">
+              <b id="nMeet">0</b>
+              <span>会议</span>
+            </div>
+            <div class="stat a in">
+              <b id="nWait">0</b>
+              <span>件在等别人</span>
+            </div>
+          </div>
+
+          <div id="workList"></div>
+        </section>
+
+        <!-- 每日汇聚 (Composio) -->
+        <section class="view" id="v-digest">
+          <h3 class="concl">每日汇聚</h3>
+          <div class="stamp a in">通过 Composio 聚合多个信源的最新动态</div>
+
+          <div id="digestContent"></div>
+        </section>
+
+        <!-- 信源状态 -->
+        <section class="view" id="v-sources">
+          <h3 class="concl">信源接入状态</h3>
+          <div class="stamp a in">查看已连接的数据源和权限范围</div>
+
+          <div id="sourcesContent"></div>
+        </section>
+
+        <!-- 设置 -->
+        <section class="view" id="v-settings">
+          <h3 class="concl">配置</h3>
+          <div class="stamp a in">环境变量和Composio配置</div>
+
+          <div class="card a in">
+            <h3>Composio 配置</h3>
+            <p>需要设置以下环境变量：</p>
+            <ul style="margin:8px 0;padding-left:20px;font-size:13px;color:var(--ink2)">
+              <li><code>COMPOSIO_API_KEY</code> - Composio API密钥</li>
+              <li><code>COMPOSIO_ENTITY_ID</code> - 实体ID（可选，默认为 'default'）</li>
+              <li><code>DIGEST_SCHEDULE</code> - 推送时间（格式：HH:MM，默认 08:00）</li>
+            </ul>
+            <p style="margin-top:12px">当前状态：<span id="configStatus">检查中...</span></p>
+          </div>
+
+          <div class="card a in">
+            <h3>可连接的应用</h3>
+            <p>通过 Composio 可以连接 1000+ 应用，包括：</p>
+            <ul style="margin:8px 0;padding-left:20px;font-size:13px;color:var(--ink2)">
+              <li>GitHub - 代码仓库和PR/Issue</li>
+              <li>Slack - 团队消息</li>
+              <li>Notion - 知识库和任务</li>
+              <li>Gmail - 邮件</li>
+              <li>Linear - 项目管理</li>
+              <li>Calendar - 日历事件</li>
+            </ul>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 聊天面板 -->
+<button class="dockBtn" id="dockBtn" title="和豆芽说话">
+  <svg viewBox="0 0 32 32" width="27" height="27" aria-hidden="true">
+    <circle cx="16" cy="16" r="16" fill="#eef2ff"/>
+    <ellipse cx="16" cy="18" rx="10.5" ry="9.5" fill="#4a6cf7"/>
+    <path d="M16 4.6c0-1.6 1.2-2.6 2.9-2.6-.2 1.7-1.2 2.9-2.9 3.1z" fill="#2f9e6b"/>
+    <circle cx="12.4" cy="16.6" r="1.6" fill="#fff"/>
+    <circle cx="19.6" cy="16.6" r="1.6" fill="#fff"/>
+    <path d="M13.4 20.4q2.6 2.4 5.2 0" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  </svg>
+  <span class="badge"></span>
+</button>
+
+<div class="dockPanel" id="dockPanel">
+  <div class="dockHead">
+    <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true">
+      <circle cx="16" cy="16" r="16" fill="#eef2ff"/>
+      <ellipse cx="16" cy="18" rx="10.5" ry="9.5" fill="#4a6cf7"/>
+      <path d="M16 4.6c0-1.6 1.2-2.6 2.9-2.6-.2 1.7-1.2 2.9-2.9 3.1z" fill="#2f9e6b"/>
+      <circle cx="12.4" cy="16.6" r="1.6" fill="#fff"/>
+      <circle cx="19.6" cy="16.6" r="1.6" fill="#fff"/>
+      <path d="M13.4 20.4q2.6 2.4 5.2 0" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    </svg>
+    <div><b>豆芽</b><small>数字同事</small></div>
+    <button class="x" id="dockClose">✕</button>
+  </div>
+  <div class="dockBody" id="dockBody">
+    <div class="bubble">
+      你好！我是豆芽，你的数字同事。有什么可以帮你？
+      <small>刚刚</small>
+    </div>
+  </div>
+  <div class="dockFoot">
+    <input id="dockInput" placeholder="问我任何事情..." />
+    <button class="send" id="dockSend">↑</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  const $ = id => document.getElementById(id);
+  const views = { today: $('v-today'), digest: $('v-digest'), sources: $('v-sources'), settings: $('v-settings') };
+  
+  // View navigation
+  document.querySelectorAll('.nav[data-view]').forEach(nav => {
+    nav.addEventListener('click', () => {
+      const view = nav.getAttribute('data-view');
+      document.querySelectorAll('.nav').forEach(n => n.classList.remove('on'));
+      nav.classList.add('on');
+      Object.keys(views).forEach(k => views[k].classList.toggle('on', k === view));
+      if (view === 'digest') loadDigest();
+      if (view === 'sources') loadSources();
+      if (view === 'settings') checkConfig();
+    });
+  });
+
+  // Dock panel
+  $('dockBtn').addEventListener('click', () => {
+    $('dockPanel').classList.toggle('open');
+    $('dockBtn').classList.remove('has');
+  });
+  $('dockClose').addEventListener('click', () => {
+    $('dockPanel').classList.remove('open');
+  });
+
+  // Chat send
+  $('dockSend').addEventListener('click', sendMessage);
+  $('dockInput').addEventListener('keypress', e => {
+    if (e.key === 'Enter') sendMessage();
+  });
+
+  function sendMessage() {
+    const input = $('dockInput');
+    const text = input.value.trim();
+    if (!text) return;
+
+    const body = $('dockBody');
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble me';
+    bubble.innerHTML = `${escapeHtml(text)}<small>${new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'})}</small>`;
+    body.appendChild(bubble);
+    body.scrollTop = body.scrollHeight;
+    input.value = '';
+
+    // TODO: Send to backend
+    setTimeout(() => {
+      const reply = document.createElement('div');
+      reply.className = 'bubble';
+      reply.innerHTML = `收到你的消息，正在处理中...<small>${new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'})}</small>`;
+      body.appendChild(reply);
+      body.scrollTop = body.scrollHeight;
+    }, 500);
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // Load today's data
+  async function loadToday() {
+    try {
+      const res = await fetch('/api/today');
+      const data = await res.json();
+      
+      $('conclText').textContent = data.summary || '今天没有待办事项';
+      $('stamp').innerHTML = `${data.date} · ${data.sources || '数据源已连接'}`;
+      $('nOpen').textContent = data.openCount || 0;
+      $('nMeet').textContent = (data.meetingHours || 0).toFixed(1) + 'h';
+      $('nWait').textContent = data.waitingCount || 0;
+      $('chromeClock').textContent = new Date().toLocaleString('zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(/\//g,'-');
+
+      renderWorkList(data.tasks || []);
+    } catch (err) {
+      console.error('Failed to load today:', err);
+      $('conclText').textContent = '加载失败，请稍后重试';
+    }
+  }
+
+  function renderWorkList(tasks) {
+    const html = tasks.length === 0 ? '<p class="card a in">今天没有待办事项 🎉</p>' :
+      '<ul class="work">' + tasks.map((task, i) => `
+        <li class="a in ${task.closed ? 'closed' : ''}">
+          <span class="idx">${task.closed ? '✓' : i + 1}</span>
+          <div>
+            <h4>${escapeHtml(task.title)}</h4>
+            <p class="why">${escapeHtml(task.reason || '')}
+              ${task.evidence ? `<span class="evi">${escapeHtml(task.evidence)}</span>` : ''}
+            </p>
+            ${task.advice ? `<span class="adv">${escapeHtml(task.advice)}</span>` : ''}
+          </div>
+        </li>
+      `).join('') + '</ul>';
+    $('workList').innerHTML = html;
+  }
+
+  // Load Composio digest
+  async function loadDigest() {
+    const content = $('digestContent');
+    content.innerHTML = '<div class="loading">加载中...</div>';
+    
+    try {
+      const res = await fetch('/api/digest');
+      const data = await res.json();
+      
+      if (data.error) {
+        content.innerHTML = `<div class="error">${escapeHtml(data.error)}</div>`;
+        return;
+      }
+
+      const cards = data.items?.map(item => `
+        <div class="card a in">
+          <h3>${escapeHtml(item.title)}</h3>
+          <p>${escapeHtml(item.description)}</p>
+          <div class="meta">${escapeHtml(item.source)} · ${escapeHtml(item.time)}</div>
+          ${item.actions ? `
+            <div class="actions">
+              ${item.actions.map(action => `<button class="btn ${action.primary ? 'primary' : ''}">${escapeHtml(action.label)}</button>`).join('')}
+            </div>
+          ` : ''}
+        </div>
+      `).join('') || '';
+      
+      content.innerHTML = cards || '<div class="card a in"><p>暂无汇聚内容</p></div>';
+    } catch (err) {
+      console.error('Failed to load digest:', err);
+      content.innerHTML = '<div class="error">加载失败，请检查 Composio 配置</div>';
+    }
+  }
+
+  // Load sources status
+  async function loadSources() {
+    const content = $('sourcesContent');
+    content.innerHTML = '<div class="loading">加载中...</div>';
+    
+    try {
+      const res = await fetch('/api/sources');
+      const data = await res.json();
+      
+      const cards = data.sources?.map(src => `
+        <div class="card a in">
+          <h3>${escapeHtml(src.name)}</h3>
+          <p>状态: <span style="color:${src.connected ? 'var(--green)' : 'var(--red)'}">
+            ${src.connected ? '✓ 已连接' : '✗ 未连接'}
+          </span></p>
+          <div class="meta">${escapeHtml(src.description || '')}</div>
+        </div>
+      `).join('') || '';
+      
+      content.innerHTML = cards || '<div class="card a in"><p>暂无信源</p></div>';
+    } catch (err) {
+      console.error('Failed to load sources:', err);
+      content.innerHTML = '<div class="error">加载失败</div>';
+    }
+  }
+
+  // Check config
+  async function checkConfig() {
+    try {
+      const res = await fetch('/api/config/check');
+      const data = await res.json();
+      const status = $('configStatus');
+      if (data.configured) {
+        status.innerHTML = '<span style="color:var(--green)">✓ 已配置</span>';
+      } else {
+        status.innerHTML = '<span style="color:var(--amber)">⚠ 未配置或配置不完整</span>';
+      }
+    } catch (err) {
+      $('configStatus').innerHTML = '<span style="color:var(--red)">检查失败</span>';
+    }
+  }
+
+  // Initialize
+  loadToday();
+  setInterval(loadToday, 60000); // Refresh every minute
+})();
+</script>
+</body>
+</html>

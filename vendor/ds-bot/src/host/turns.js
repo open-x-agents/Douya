@@ -810,5 +810,11 @@ export function install(rt) {
     }
   })
 
-  Object.assign(rt, { live, liveOf, roomWaiters, roomProgress, roomInbox, activityView, workView, roomWorkView, turnsView, steeredView, callDetail, doingOf, stopRoomTurn, releaseBot })
+  // Group assistant-stream reads this before painting a draft. A room turn is
+  // visible. A request or stopped turn owes another Bot a reply and is not.
+  // A turn that has not claimed a trigger yet stays visible, so the user's
+  // round is not dropped before its source arrives.
+  rt.turnVisibleInGroup = (sessionId) => speaksInGroup(sessionId, live.get(sessionId)?.info)
+
+  Object.assign(rt, { live, liveOf, roomWaiters, roomProgress, roomInbox, activityView, workView, roomWorkView, turnsView, steeredView, callDetail, doingOf, stopRoomTurn, releaseBot, turnVisibleInGroup: rt.turnVisibleInGroup })
 }

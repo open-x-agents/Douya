@@ -222,14 +222,16 @@ test('R3 新开 and /new create while a line is busy', async () => {
     workLines: { poem: stored({ id: 'poem', quote: { roomId: 'r1', seq: 1 } }) },
     logs: { r1: [{ seq: 1, who: 'User', text: POEM }] },
   })
-  const before = JSON.stringify(host.rooms.r1.log)
+  const before = host.rooms.r1.log.map(entry => entry.text)
   host.emit('ga', { type: 'turn/start', data: { turn: 1 }, time: 1 })
   host.emit('r1', userMessage('新开一首'))
   await flush()
   assert.equal(host.steered.length, 0)
   assert.equal(host.delivered.at(-1)?.sessionId, 'session-new')
   assert.equal(host.delivered.at(-1)?.steer, false)
-  assert.equal(JSON.stringify(host.rooms.r1.log), before)
+  assert.deepEqual(host.rooms.r1.log.map(entry => entry.text), [...before, '新开一首'])
+  assert.equal(host.rooms.r1.log.at(-1).who, 'User')
+  assert.equal(host.rooms.r1.log.at(-1).kind, undefined)
 })
 
 test('R4 续： and a card id select that line', () => {
@@ -336,7 +338,7 @@ test('R9 two busy lines ask when both miss or both hit', () => {
   assert.equal(idleHit.workLineId, 'c')
 })
 
-test('R10 an ask card does not deliver, log, or time out', async () => {
+test('R10 an ask card logs the sentence once and does not deliver or time out', async () => {
   const host = wireHost({
     workLines: {
       a: stored({ id: 'a', sessionId: 'ga', label: '甲', quote: { roomId: 'r1', seq: 1 }, updatedAt: 1 }),
@@ -344,7 +346,7 @@ test('R10 an ask card does not deliver, log, or time out', async () => {
     },
     logs: { r1: [{ seq: 1, who: 'User', text: POEM }, { seq: 2, who: 'User', text: BEACH }] },
   })
-  const before = JSON.stringify(host.rooms.r1.log)
+  const before = host.rooms.r1.log.length
   host.emit('ga', { type: 'turn/start', data: { turn: 1 }, time: 1 })
   host.emit('ga2', { type: 'turn/start', data: { turn: 2 }, time: 1 })
   host.emit('r1', userMessage(PROBE))
@@ -353,22 +355,29 @@ test('R10 an ask card does not deliver, log, or time out', async () => {
   assert.ok(pending)
   assert.equal(pending.timeoutSends, false)
   assert.equal(pending.highlight, 'b')
+  assert.equal(pending.seq, host.rooms.r1.seq)
   assert.equal(routeCard(pending).kind, 'route')
   assert.equal(routeCard(pending).timeoutSends, false)
+  assert.equal(routeCard(pending).text, PROBE)
   assert.equal(effectsOf({ action: 'ask' }).modelTurn, false)
   assert.equal(effectsOf({ action: 'ask' }).writeLog, false)
   assert.equal(effectsOf({ action: 'ask' }).deliver, false)
+  assert.equal(effectsOf({ action: 'ask' }).copyTranscript, false)
   assert.equal(host.steered.length, 0)
   assert.equal(host.delivered.length, 0)
   assert.equal(host.rt.roomInbox.get('r1'), undefined)
-  assert.equal(JSON.stringify(host.rooms.r1.log), before)
+  assert.equal(host.rooms.r1.log.length, before + 1)
+  assert.equal(host.rooms.r1.log.at(-1).who, 'User')
+  assert.equal(host.rooms.r1.log.at(-1).text, PROBE)
+  assert.equal(host.rooms.r1.log.at(-1).kind, undefined)
+  const afterAsk = JSON.stringify(host.rooms.r1.log)
 
   host.emit('r1', userMessage('随便说说'))
   await flush()
   assert.equal(host.steered.length, 0)
   assert.equal(host.delivered.length, 0)
   assert.equal(host.rt.state.pendingRoutes.r1, pending)
-  assert.equal(JSON.stringify(host.rooms.r1.log), before)
+  assert.equal(JSON.stringify(host.rooms.r1.log), afterAsk)
 
   host.emit('r1', userMessage('续：乙'))
   await flush()
@@ -376,7 +385,8 @@ test('R10 an ask card does not deliver, log, or time out', async () => {
   assert.equal(host.steered.length, 1)
   assert.equal(host.steered[0].message.text, PROBE)
   assert.equal(host.steered[0].member.sessionId, 'ga2')
-  assert.equal(JSON.stringify(host.rooms.r1.log), before)
+  assert.equal(JSON.stringify(host.rooms.r1.log), afterAsk)
+  assert.equal(host.rooms.r1.log.some(entry => entry.text === '续：乙'), false)
 })
 
 test('confirm by choice id clears the saved card before delivery and keeps the held text', async () => {
@@ -424,6 +434,8 @@ test('confirm by choice id clears the saved card before delivery and keeps the h
   assert.equal(host.steered[0].message.text, PROBE)
   assert.equal(host.steered[0].member.sessionId, 'ga2')
   assert.equal(host.delivered.length, 0)
+  assert.equal(host.rooms.r1.log.filter(entry => entry.who === 'User' && entry.text === PROBE).length, 1)
+  assert.equal(host.rooms.r1.log.some(entry => entry.text === 'line-b'), false)
 })
 
 test('create selects the new session model and delivers the user text', async () => {
@@ -584,7 +596,7 @@ test('R16 a busy line in another room does not steer on its own', async () => {
       r2: [{ seq: 1, who: 'User', text: OLD }],
     },
   })
-  const before = JSON.stringify(host.rooms.r1.log)
+  const before = host.rooms.r1.log.map(entry => entry.text)
   host.emit('remote', { type: 'turn/start', data: { turn: 3 }, time: 1 })
   host.emit('r1', userMessage(PROBE))
   await flush()
@@ -592,7 +604,8 @@ test('R16 a busy line in another room does not steer on its own', async () => {
   assert.equal(host.delivered.at(-1)?.sessionId, 'session-new')
   assert.equal(host.delivered.at(-1)?.text, PROBE)
   assert.equal(host.delivered.at(-1)?.steer, false)
-  assert.equal(JSON.stringify(host.rooms.r1.log), before)
+  assert.deepEqual(host.rooms.r1.log.map(entry => entry.text), [...before, PROBE])
+  assert.equal(host.rooms.r1.log.at(-1).who, 'User')
   assert.equal(JSON.stringify(host.rooms.r1.log).includes(OLD), false)
   assert.notEqual(host.rt.state.workLines.far, undefined)
   assert.equal(Object.values(host.rt.state.workLines).some(item => item.sessionId === 'session-new'), true)

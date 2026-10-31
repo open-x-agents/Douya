@@ -30,6 +30,7 @@ import { failureLine } from './turns.js'
 import { keepDraftOnSlotEnd, opensGroupRelay, roundForStream, steeringReply, stepRoute, takeSteeredLine } from './group-steer.js'
 import { routeTakesEffect } from './route-inbound.js'
 import { applyRoomStreamFrame, clearDraftIfPosted } from '../shared/room-draft.js'
+import { lateCite } from '../shared/work-line-complete.js'
 
 const ROOM_LOG_MAX = 60
 const ROOM_FIRST_LOOK = 12
@@ -285,9 +286,13 @@ export function install(rt) {
 
   // A member's message in the round: in the log, for the members after it, and in the
   // round's replies, for the user.
-  const postInRound = (room, round, member, text, duration) => {
-    appendRoom(room, { who: member.name, botId: member.id, text })
-    round.replies.push({ botId: member.id, name: member.name, color: member.color, text, time: Date.now(), ...(duration === undefined ? {} : { duration }) })
+  const postInRound = (room, round, member, text, duration, cite = {}) => {
+    const named = lateCite(cite)
+    const pointer = typeof named.quoteSeq === 'number'
+      ? { quote: { roomId: named.quoteRoomId ?? room.id, seq: named.quoteSeq } }
+      : {}
+    appendRoom(room, { who: member.name, botId: member.id, text, ...pointer })
+    round.replies.push({ botId: member.id, name: member.name, color: member.color, text, time: Date.now(), ...(duration === undefined ? {} : { duration }), ...named })
     // Final (or step) text is in replies now: drop the live draft so the UI does not
     // keep a streaming row beside the committed bubble.
     round.draft = clearDraftIfPosted(round.draft, round.replies)
@@ -508,7 +513,7 @@ export function install(rt) {
 
   // Steer the one busy member. The probe is a steering reply on the current
   // round, not a room-log opener and not a second group_relay.
-  async function acceptRoomSteer(room, member, { text = '', files = [], exchangeId } = {}) {
+  async function acceptRoomSteer(room, member, { text = '', files = [], exchangeId, quoteText, quoteSeq, quoteRoomId } = {}) {
     const sessionId = member?.sessionId ?? room?.sessions?.[member?.id]
     if (room == null || member == null || sessionId == null) return
     const reply = steeringReply({ text })
@@ -532,6 +537,9 @@ export function install(rt) {
       text,
       files,
       ...(typeof exchangeId === 'string' && exchangeId !== '' ? { exchangeId } : {}),
+      ...(typeof quoteText === 'string' && quoteText !== '' ? { quoteText } : {}),
+      ...(typeof quoteSeq === 'number' && Number.isFinite(quoteSeq) ? { quoteSeq } : {}),
+      ...(typeof quoteRoomId === 'string' && quoteRoomId !== '' ? { quoteRoomId } : {}),
       steer: true,
       userSteer: true,
     })
@@ -986,8 +994,20 @@ export function install(rt) {
         logged = room.seq
       } else {
         const line = [text, ...files.map(fileLine)].filter(Boolean).join('\n')
-        appendRoom(room, { who: sender.name, botId: sender.id, text: line, ...(files.length > 0 ? { files } : {}) })
-        running.replies.push({ botId: sender.id, name: sender.name, color: sender.color, text: line, time: Date.now() })
+        const cite = extra.late === true ? lateCite(extra) : {}
+        const pointer = typeof cite.quoteSeq === 'number'
+          ? { quote: { roomId: cite.quoteRoomId ?? room.id, seq: cite.quoteSeq } }
+          : {}
+        appendRoom(room, { who: sender.name, botId: sender.id, text: line, ...(files.length > 0 ? { files } : {}), ...pointer })
+        running.replies.push({
+          botId: sender.id,
+          name: sender.name,
+          color: sender.color,
+          text: line,
+          time: Date.now(),
+          ...cite,
+          ...(extra.late === true ? { late: true } : {}),
+        })
         running.draft = clearDraftIfPosted(running.draft, running.replies)
         logged = room.seq
       }
@@ -1024,7 +1044,7 @@ export function install(rt) {
       const route = stepRoute({ userSteered: true, calls, hasRound: running !== undefined })
       switch (route) {
         case 'same':
-          if (bubble !== undefined && !isPass(text)) postInRound(room, bubble, member, text)
+          if (bubble !== undefined && !isPass(text)) postInRound(room, bubble, member, text, undefined, lateCite(info))
           return
         case 'post':
           break
@@ -1036,7 +1056,7 @@ export function install(rt) {
       }
     }
     if (isPass(text) && !done) return
-    await postToRoom(room, member, done ? '' : text, { late: true, ...(done ? { done: true } : {}), ...(info.askedBy ? { askedBy: info.askedBy } : {}) })
+    await postToRoom(room, member, done ? '' : text, { late: true, ...lateCite(info), ...(done ? { done: true } : {}), ...(info.askedBy ? { askedBy: info.askedBy } : {}) })
       .catch(error => rt.warn('ds-bot: late group reply from %s failed: %s', member.name, error))
   }
   rt.lateRoomReply = lateRoomReply

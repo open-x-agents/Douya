@@ -13,7 +13,7 @@
 | D5 | 只有一条完成 | 不拿它去跟无关消息重排 |
 | D6 | 完成发生在另一间房 | 当前房间的滚动不变 |
 | D7 | 同一个 `exchangeId` 的 `turn/end` 来两次 | 只投影一对引用和回复 |
-| D8 | 引用文字 | 用这条线 `quote` 指到的用户原句，不用截短的标题 |
+| D8 | 引用文字 | 用这条线 `quote` 指到的用户原句，不用截短的标题。机器人那一行、seq 0、以及已经滚出日志的指针都不是原句 |
 
 `node --test acceptance-cases/work-line-complete/complete.test.js`
 

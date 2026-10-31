@@ -72,15 +72,31 @@ export function dedupeCompletions(events) {
 
 /**
  * The user sentence a quote pointer names. A label is not a sentence.
+ * Seq 0, a missing row, and a bot row are not a sentence.
  * @param {{ roomId?: string, seq?: number } | undefined} quote
- * @param {Record<string, { seq?: number, text?: string }[]>} [logs]
+ * @param {Record<string, { seq?: number, who?: string, kind?: string, text?: string }[]>} [logs]
  */
 export function quoteSentence(quote, logs) {
   if (quote == null || typeof quote !== 'object') return ''
+  if (typeof quote.seq !== 'number' || !Number.isFinite(quote.seq) || quote.seq === 0) return ''
   const rows = logs?.[quote.roomId]
   if (!Array.isArray(rows)) return ''
   const row = rows.find(line => line?.seq === quote.seq)
-  return typeof row?.text === 'string' ? row.text : ''
+  if (row == null || row.who !== 'User' || row.kind != null) return ''
+  return typeof row.text === 'string' && row.text !== '' ? row.text : ''
+}
+
+/**
+ * Cite carried on a late room reply. Empty when this turn did not log a user sentence.
+ * @param {{ quoteText?: string, quoteSeq?: number, quoteRoomId?: string } | undefined} info
+ */
+export function lateCite(info) {
+  if (typeof info?.quoteText !== 'string' || info.quoteText === '') return {}
+  /** @type {{ quoteText: string, quoteSeq?: number, quoteRoomId?: string }} */
+  const cite = { quoteText: info.quoteText }
+  if (typeof info.quoteSeq === 'number' && Number.isFinite(info.quoteSeq)) cite.quoteSeq = info.quoteSeq
+  if (typeof info.quoteRoomId === 'string' && info.quoteRoomId !== '') cite.quoteRoomId = info.quoteRoomId
+  return cite
 }
 
 const eventRoom = (event) => {
@@ -119,6 +135,27 @@ export function orderedCompletions(events, { roomId, logs } = {}) {
 }
 
 const sameId = (left, right) => hasId(left) && left === right
+
+const anchorsCompletion = (reply) => reply != null && (
+  reply.kind === 'working' || reply.kind === undefined || reply.kind === 'completion-reply'
+)
+
+/**
+ * Completions this cell may paint. A row anchors one only by workLineId or
+ * exchangeId, and only when that row is the working or posted reply. Text is
+ * not an anchor: two identical greetings must not steal each other's cell.
+ * Input order is kept.
+ * @param {unknown[]} [replies]
+ * @param {unknown[]} [completions]
+ */
+export function anchoredCompletions(replies, completions) {
+  const rows = Array.isArray(replies) ? replies : []
+  const list = Array.isArray(completions) ? completions : []
+  return list.filter(item => rows.some(reply => {
+    if (!anchorsCompletion(reply)) return false
+    return sameId(reply?.workLineId, item?.workLineId) || sameId(reply?.exchangeId, item?.exchangeId)
+  }))
+}
 
 const isPostedReply = (reply, item) => {
   if (reply == null || reply.kind !== undefined) return false
@@ -161,6 +198,7 @@ const quoteRow = (item) => {
     kind: 'completion-quote',
     exchangeId: item.exchangeId,
     workLineId: item.workLineId,
+    who: 'User',
     text: item.quoteText,
     completedAt: item.completedAt,
   }

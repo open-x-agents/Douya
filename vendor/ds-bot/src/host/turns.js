@@ -597,7 +597,9 @@ export function install(rt) {
           queueRoomMessage(id, { text: '', resume: true })
         } else if (source?.kind === SOURCE_KIND) {
           if (entry.turn === undefined) entry.pending = source
-          else if (!opened) claimTrigger(id, entry, source)
+          // A follow-up steered into a turn that already has its trigger is another
+          // sentence of the same cite. Claiming it would keep only that sentence.
+          else if (!opened && source.userSteer !== true) claimTrigger(id, entry, source)
           else if (source.work !== undefined && source.work !== rt.workOf?.(entry.info) && !expectsReply(source)) {
             // A result for other work than this turn's informs it, and comes back in a
             // turn of its own once this one ends, which goes on with that work.

@@ -7,7 +7,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { SOURCE_KIND } from '../../vendor/ds-bot/src/host/constants.js'
 import { install as installTurns } from '../../vendor/ds-bot/src/host/turns.js'
-import { applyRouteDecision } from '../../vendor/ds-bot/src/host/route-inbound.js'
+import { install as installWorkLines } from '../../vendor/ds-bot/src/host/work-lines.js'
+import { applyRouteDecision, install as installRoute } from '../../vendor/ds-bot/src/host/route-inbound.js'
 import { createLine, indexOnly, noteTurnEnd } from '../../vendor/ds-bot/src/host/work-lines.js'
 import { isJoinedFollowUp } from '../../vendor/ds-bot/src/host/group-steer.js'
 import { lateCite, projectRelay } from '../../vendor/ds-bot/src/shared/work-line-complete.js'
@@ -15,6 +16,7 @@ import {
   appendCite,
   applyLogPointer,
   citeForPost,
+  citesOf,
   citeTexts,
   citedFromLog,
   hideCitedHistory,
@@ -381,7 +383,8 @@ test('an opening relay still running shows hi and 你们是谁 once each before 
   assert.match(groups, /inbox\?\.remove\?\.\(messageId\)/)
   const router = source('vendor/ds-bot/src/host/route-inbound.js')
   const steerCase = router.slice(router.indexOf("case 'steer': {"), router.indexOf("case 'continue':", router.indexOf("case 'steer': {")))
-  assert.match(steerCase, /acceptRoomSteer\(room, member, \{ text, files, \.\.\.cite, \.\.\.\(messageId/)
+  assert.match(steerCase, /acceptRoomSteer\(room, member,/)
+  assert.match(steerCase, /messageId: itemId/)
   const turns = source('vendor/ds-bot/src/host/turns.js')
   assert.match(turns, /acceptRoomSteer\(room, decision\.member, \{ text, files, \.\.\.\(messageId/)
   const cells = source('vendor/ds-bot/src/client/cells.js')
@@ -427,4 +430,185 @@ test('the late cite paints user bubbles and history hides a sentence that cite a
   assert.match(groups.slice(steerAt, steerEnd), /steerCites/)
   assert.match(groups.slice(steerAt, steerEnd), /steerSentence/)
   assert.match(groups.slice(steerAt, steerEnd), /quoteText/)
+})
+
+function focusRoom(lines) {
+  const handlers = []
+  const steered = []
+  const delivered = []
+  const cited = []
+  const created = []
+  const rooms = {
+    r1: {
+      id: 'r1',
+      name: 'F2',
+      admin: 'chief',
+      members: ['chief'],
+      sessions: { chief: 'ga' },
+      seq: 1,
+      log: [{ seq: 1, who: 'User', text: '新开 请写一篇约900字散文《秋水》', messageId: 'm-essay' }],
+    },
+  }
+  const bots = { chief: { id: 'chief', name: 'Chief' } }
+  const rt = {
+    ctx: { on: (type, fn) => { if (type === 'session/event') handlers.push(fn) } },
+    state: {
+      questions: {},
+      views: {},
+      exchanges: [],
+      exchangeTurns: {},
+      workLines: lines,
+      workLineCompleted: {},
+      pendingRoutes: {},
+      rooms,
+      bots,
+    },
+    warn() {},
+    save: async () => {},
+    dropKickoff() {},
+    roomOf: (id) => rooms[id],
+    botOf: (id) => bots[id],
+    isBotSession: (id) => id === 'ga' || id === 'work' || id === 'work-b',
+    groupOwners: new Map([
+      ['ga', { botId: 'chief', roomId: 'r1' }],
+      ['work', { botId: 'chief', roomId: 'r1', workLineId: 'essay-line' }],
+    ]),
+    chatOwners: new Map(),
+    selfOf: (id) => id,
+    switchJobs: () => [],
+    roomWaiters: new Map(),
+    lateRoomReply() {},
+    takeRoomSteps: () => '',
+    withRoomSteps: (_held, reply) => reply,
+    noteFailure() {},
+    deliver: async (payload) => { delivered.push(payload) },
+    acceptRoomSteer: async (room, member, message) => { steered.push({ room, member, message }) },
+    noteSteeredRoomLine() {},
+    suppressRelayText() {},
+    holdRoomRoute() {},
+    releaseRoomRoute() {},
+    takeRelayIntent: () => false,
+    allowRelayText() {},
+    createSession: async () => { created.push('session-new'); return 'session-new' },
+    isAdminOf: (room, botId) => room?.admin === botId,
+    roomProgress: new Map(),
+  }
+  installTurns(rt)
+  installWorkLines(rt)
+  installRoute(rt)
+  rt.lateRoomReply = (_sessionId, info) => { cited.push(info) }
+  const emit = (sessionId, event) => {
+    for (const fn of handlers) fn({ id: sessionId }, event)
+  }
+  return { rt, emit, steered, delivered, cited, created, rooms }
+}
+
+function roomSend(text, id) {
+  return { type: 'user/message', data: { id, source: { kind: 'user' }, content: [{ type: 'text', text }] } }
+}
+
+async function settle() {
+  for (let step = 0; step < 8; step += 1) await new Promise(resolve => setImmediate(resolve))
+}
+
+test('a busy essay line takes 你们是谁 then 在干嘛 while the group session is also busy', async () => {
+  const essay = {
+    id: 'essay-line',
+    botId: 'chief',
+    sessionId: 'work',
+    lastRoomId: 'r1',
+    quote: { roomId: 'r1', seq: 1 },
+    label: '秋水',
+    updatedAt: 5,
+    segments: [],
+  }
+  const { rt, emit, steered, delivered, cited, created, rooms } = focusRoom({ essay })
+  emit('work', userMessage('新开 请写一篇约900字散文《秋水》', { exchangeId: 'e0', quoteSeq: 1, quoteRoomId: 'r1' }))
+  emit('work', { type: 'turn/start', data: { turn: 4 }, time: 1 })
+  emit('ga', { type: 'turn/start', data: { turn: 1 }, time: 1 })
+  emit('r1', roomSend(FIRST, 'm-who'))
+  emit('r1', roomSend(FOLLOW, 'm-do'))
+  await settle()
+  assert.equal(rt.state.pendingRoutes.r1, undefined)
+  assert.equal(created.length, 0)
+  assert.equal(delivered.length, 0)
+  assert.equal(Object.keys(rt.state.workLines).length, 1)
+  assert.deepEqual(steered.map(item => item.message.text), [FIRST, FOLLOW])
+  assert.deepEqual(steered.map(item => item.member.sessionId), ['work', 'work'])
+  assert.deepEqual(steered.map(item => item.message.quoteSeq), [2, 3])
+  assert.deepEqual(steered.map(item => item.message.quoteText), [FIRST, FOLLOW])
+  assert.deepEqual(steered.map(item => item.message.messageId), ['m-who', 'm-do'])
+  for (const item of steered) {
+    emit('work', userMessage(item.message.text, {
+      exchangeId: `e-${item.message.quoteSeq}`,
+      quoteSeq: item.message.quoteSeq,
+      quoteRoomId: 'r1',
+      userSteer: true,
+    }))
+  }
+  emit('work', { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '秋水' }] } } })
+  emit('work', { type: 'turn/end', data: { reason: { kind: 'completed' } }, time: 9 })
+  const named = lateCite(cited.at(-1))
+  assert.deepEqual(citeTexts(named).slice(-2), [FIRST, FOLLOW])
+  assert.equal(named.quotes.at(-2).seq, 2)
+  assert.equal(named.quotes.at(-1).seq, 3)
+  assert.equal(Object.hasOwn(named, 'late'), false)
+  const posted = { ...named, late: citesOf(named).length > 1 }
+  assert.equal(posted.late, true)
+  assert.deepEqual(citeTexts(posted), citeTexts(named))
+  const pointer = logPointer(named, 'r1')
+  assert.equal(pointer.quotes.length, citeTexts(named).length)
+  const log = [...rooms.r1.log, { seq: 4, who: 'Chief', botId: 'chief', text: '秋水', ...pointer }]
+  const hidden = citedFromLog(log, 'r1')
+  assert.equal(hidden.ids.includes('m-who'), true)
+  assert.equal(hidden.ids.includes('m-do'), true)
+  assert.equal(hideCitedHistory({ text: FIRST, messageId: 'm-who', citedTexts: hidden.texts, citedIds: hidden.ids }), true)
+  assert.equal(hideCitedHistory({ text: FOLLOW, messageId: 'm-do', citedTexts: hidden.texts, citedIds: hidden.ids }), true)
+  assert.match(source('vendor/ds-bot/src/host/groups.js'), /multi \? \{ late: true \}/)
+})
+
+test('confirming the busy line after an ask still cites 你们是谁 and 在干嘛 in send order', async () => {
+  const lines = {
+    essay: {
+      id: 'essay-line',
+      botId: 'chief',
+      sessionId: 'work',
+      lastRoomId: 'r1',
+      quote: { roomId: 'r1', seq: 1 },
+      label: '秋水',
+      updatedAt: 5,
+      segments: [],
+    },
+    other: {
+      id: 'other-line',
+      botId: 'chief',
+      sessionId: 'work-b',
+      lastRoomId: 'r1',
+      quote: { roomId: 'r1', seq: 1 },
+      label: '另一件',
+      updatedAt: 4,
+      segments: [],
+    },
+  }
+  const { rt, emit, steered, delivered, created } = focusRoom(lines)
+  emit('work', { type: 'turn/start', data: { turn: 4 }, time: 1 })
+  emit('work-b', { type: 'turn/start', data: { turn: 5 }, time: 1 })
+  emit('r1', roomSend(FIRST, 'm-who'))
+  await settle()
+  assert.equal(rt.state.pendingRoutes.r1?.text, FIRST)
+  emit('r1', roomSend(FOLLOW, 'm-do'))
+  await settle()
+  assert.equal(steered.length, 0)
+  assert.equal(delivered.length, 0)
+  assert.deepEqual(rt.state.pendingRoutes.r1.texts, [FIRST, FOLLOW])
+  emit('r1', roomSend('essay-line', 'm-choice'))
+  await settle()
+  assert.equal(rt.state.pendingRoutes.r1, undefined)
+  assert.equal(created.length, 0)
+  assert.equal(delivered.length, 0)
+  assert.deepEqual(steered.map(item => item.message.text), [FIRST, FOLLOW])
+  assert.deepEqual(steered.map(item => item.member.sessionId), ['work', 'work'])
+  assert.deepEqual(steered.map(item => item.message.quoteText), [FIRST, FOLLOW])
+  assert.ok(steered[0].message.quoteSeq < steered[1].message.quoteSeq)
+  assert.equal(steered.some(item => item.message.text === 'essay-line'), false)
 })

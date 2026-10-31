@@ -298,6 +298,9 @@ export function install(rt) {
     const explicit = citesOf(cite).length > 0
     const named = citeForPost(cite, round?.steerCites)
     const pointer = loggedQuote(room, named)
+    // Two or more sentences are the late cite: user bubbles on this reply.
+    // Steering rows of those sentences hide, so each line is still drawn once.
+    const multi = citesOf(named).length > 1
     appendRoom(room, { who: member.name, botId: member.id, text, ...pointer })
     round.replies.push({
       botId: member.id,
@@ -307,6 +310,7 @@ export function install(rt) {
       time: Date.now(),
       ...(duration === undefined ? {} : { duration }),
       ...(explicit ? named : {}),
+      ...(multi ? { late: true } : {}),
     })
     // Final (or step) text is in replies now: drop the live draft so the UI does not
     // keep a streaming row beside the committed bubble.

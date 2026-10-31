@@ -169,25 +169,29 @@ function matchIdle(text, idle, roomId, botId) {
 function autoRoute(text, lines, roomId, botId) {
   const open = lines.filter(line => line?.closedAt == null)
   if (open.length === 0) return createDecision(botId)
-  const busy = open.filter(line => line.busy === true)
+  // An implicit group session is the round, not a second task. One local work
+  // line still takes a follow-up while that session is also busy.
+  const realBusy = open.some(line => line.busy === true && line.implicit !== true)
+  const pool = realBusy ? open.filter(line => line.implicit !== true) : open
+  const busy = pool.filter(line => line.busy === true)
   const local = busy.filter(line => line.lastRoomId === roomId)
-  const idle = open.filter(line => line.busy !== true)
+  const idle = pool.filter(line => line.busy !== true)
   if (busy.length === 1 && local.length === 1) {
     const current = local[0]
     const busyBand = band(score(text, current))
     const idleHits = idle.filter(line => band(score(text, line)) === 'hit')
     const idleUnsure = idle.filter(line => band(score(text, line)) === 'unsure')
     if (busyBand === 'miss' && idleHits.length === 1 && idleUnsure.length === 0) return lineChoice(idleHits[0], roomId)
-    if (busyBand === 'miss' && (idleHits.length > 1 || (idleHits.length > 0 && idleUnsure.length > 0))) return ask(open)
+    if (busyBand === 'miss' && (idleHits.length > 1 || (idleHits.length > 0 && idleUnsure.length > 0))) return ask(pool)
     return lineChoice(current, roomId)
   }
   if (busy.length >= 2 || (busy.length === 1 && local.length === 0)) {
     const hits = busy.filter(line => band(score(text, line)) === 'hit')
     const unsures = busy.filter(line => band(score(text, line)) === 'unsure')
     if (hits.length === 1 && unsures.length === 0) return lineChoice(hits[0], roomId)
-    if (hits.length >= 2 || unsures.length > 0) return ask(open)
+    if (hits.length >= 2 || unsures.length > 0) return ask(pool)
     const idleDecision = matchIdle(text, idle, roomId, botId)
-    if (busy.length >= 2 && idleDecision.action === 'create') return ask(open)
+    if (busy.length >= 2 && idleDecision.action === 'create') return ask(pool)
     return idleDecision
   }
   return matchIdle(text, idle, roomId, botId)
@@ -471,6 +475,8 @@ export function routeRoomUser(rt, input = {}) {
   if (pending && !queued && intent.kind !== 'new') {
     const choice = answerChoice(text, pending)
     if (choice === undefined) return { action: 'hold', steer: false, botId: pending.botId, text, clearPending: false }
+    const held = Array.isArray(pending.held) ? pending.held.map(item => ({ ...item })) : undefined
+    const first = typeof pending.text === 'string' ? pending.text : text
     return emit(rt, room, members, {
       action: choice.busy === true ? 'steer' : 'continue',
       steer: choice.busy === true,
@@ -481,8 +487,10 @@ export function routeRoomUser(rt, input = {}) {
       label: choice.label,
       updatedAt: choice.updatedAt ?? 0,
       crossRoom: typeof choice.lastRoomId === 'string' && choice.lastRoomId !== room.id,
-      text: typeof pending.text === 'string' ? pending.text : text,
-    }, typeof pending.text === 'string' ? pending.text : text, pending)
+      text: first,
+      logged: true,
+      ...(held !== undefined && held.length > 0 ? { held } : {}),
+    }, first, pending)
   }
   const selected = selectRouteBot(text, members, indexedBotIds(rt, members))
   switch (selected.kind) {
@@ -673,22 +681,75 @@ function quoteDelivery(room, text, seq) {
   return { quoteText: text, quoteSeq: seq, quoteRoomId: room.id }
 }
 
+function quoteForLogged(room, text) {
+  const log = Array.isArray(room?.log) ? room.log : []
+  for (let index = log.length - 1; index >= 0; index -= 1) {
+    const row = log[index]
+    if (isUserLogRow(row) && row.text === text) return quoteDelivery(room, text, row.seq)
+  }
+  return {}
+}
+
+function citeOfHeld(item) {
+  if (item == null || typeof item !== 'object') return {}
+  return {
+    ...(typeof item.quoteText === 'string' && item.quoteText !== '' ? { quoteText: item.quoteText } : {}),
+    ...(typeof item.quoteSeq === 'number' && Number.isFinite(item.quoteSeq) ? { quoteSeq: item.quoteSeq } : {}),
+    ...(typeof item.quoteRoomId === 'string' && item.quoteRoomId !== '' ? { quoteRoomId: item.quoteRoomId } : {}),
+  }
+}
+
+function steerBatch(decision, text, cite, messageId, files, room) {
+  if (Array.isArray(decision?.held) && decision.held.length > 0) {
+    return decision.held
+      .filter(item => typeof item?.text === 'string' && item.text !== '')
+      .map(item => ({
+        text: item.text,
+        files: [],
+        cite: citeOfHeld(item),
+        messageId: typeof item.messageId === 'string' && item.messageId !== '' ? item.messageId : undefined,
+      }))
+  }
+  const resolved = typeof cite?.quoteText === 'string' && cite.quoteText !== '' ? cite : { ...cite, ...quoteForLogged(room, text) }
+  return [{ text, files, cite: resolved, messageId }]
+}
+
 function logsThisAction(action) {
   return action === 'ask' || action === 'steer' || action === 'continue' || action === 'create' || action === 'queue'
+}
+
+function keepHeld(rt, room, text, messageId) {
+  const card = pendingTable(rt.state)[room.id]
+  if (card == null || typeof text !== 'string' || text === '') return false
+  const known = Array.isArray(card.texts) ? card.texts : (typeof card.text === 'string' && card.text !== '' ? [card.text] : [])
+  if (known.includes(text)) return true
+  const heldSeq = logInboundSentence(rt, room, text, messageId)
+  const heldCite = quoteDelivery(room, text, heldSeq)
+  card.texts = [...known, text]
+  card.held = [...(Array.isArray(card.held) ? card.held : []), {
+    text,
+    ...heldCite,
+    ...(messageId !== undefined ? { messageId } : {}),
+  }]
+  return true
 }
 
 export async function applyRouteDecision(rt, room, decision, message = {}) {
   const text = typeof decision?.text === 'string' ? decision.text : String(message.text ?? '')
   const files = message.files ?? []
   const action = decision?.action
-  // A second ask that loses the race keeps the card already stored.
-  if (action === 'ask' && pendingTable(rt.state)[room.id] != null) return decision
-  // Ask, steer, continue, create, and a non-relay queue log this sentence once.
-  // Hold does not. Confirm sends the stored sentence, so the last-row check
-  // does not append it again. effectsOf still reports writeLog false: the relay
-  // must not write a second row or copy another room.
   const messageId = typeof message?.id === 'string' && message.id !== '' ? message.id : undefined
-  const seq = logsThisAction(action) ? logInboundSentence(rt, room, text, messageId) : undefined
+  // A second ask that loses the race keeps the card, and keeps this sentence on it.
+  if (action === 'ask' && pendingTable(rt.state)[room.id] != null) {
+    if (keepHeld(rt, room, text, messageId)) await persistRoute(rt)
+    return decision
+  }
+  // Ask, steer, continue, create, and a non-relay queue log this sentence once.
+  // A sentence that arrives while the card is open is logged too, and kept on
+  // the card. Confirm already logged every sentence, so it does not append again.
+  // effectsOf still reports writeLog false: the relay must not write a second
+  // row or copy another room.
+  const seq = logsThisAction(action) && decision?.logged !== true ? logInboundSentence(rt, room, text, messageId) : undefined
   const cite = quoteDelivery(room, text, seq)
   // Every leaving action must hit disk before deliver, because a later load
   // would put the card back.
@@ -697,13 +758,18 @@ export async function applyRouteDecision(rt, room, decision, message = {}) {
     await persistRoute(rt)
   }
   switch (action) {
-    case 'hold':
+    case 'hold': {
+      if (keepHeld(rt, room, text, messageId)) await persistRoute(rt)
+      return decision
+    }
     case 'legacy':
       return decision
     case 'ask': {
       pendingTable(rt.state)[room.id] = {
         botId: decision.botId,
         text,
+        texts: [text],
+        held: [{ text, ...cite, ...(messageId !== undefined ? { messageId } : {}) }],
         highlight: decision.highlight,
         choices: decision.choices ?? [],
         at: Date.now(),
@@ -714,51 +780,72 @@ export async function applyRouteDecision(rt, room, decision, message = {}) {
       return decision
     }
     case 'steer': {
-      repairQuote(rt, room, decision, seq)
+      const batch = steerBatch(decision, text, cite, messageId, files, room)
       if (decision.crossRoom === true) {
-        await deliverAcrossRooms(rt, room, decision, text, files, cite)
+        for (const item of batch) {
+          repairQuote(rt, room, decision, item.cite.quoteSeq)
+          await deliverAcrossRooms(rt, room, decision, item.text, item.files, item.cite)
+        }
         return decision
       }
       const member = memberFrom(room, decision)
       if (member != null && typeof rt.acceptRoomSteer === 'function') {
-        await rt.acceptRoomSteer(room, member, { text, files, ...cite, ...(messageId !== undefined ? { messageId } : {}) })
+        for (const item of batch) {
+          repairQuote(rt, room, decision, item.cite.quoteSeq)
+          const itemId = item.messageId
+          await rt.acceptRoomSteer(room, member, {
+            text: item.text,
+            files: item.files,
+            ...item.cite,
+            ...(itemId !== undefined ? { messageId: itemId } : {}),
+          })
+        }
         return decision
       }
       if (decision.sessionId != null && typeof rt.deliver === 'function') {
+        for (const item of batch) {
+          repairQuote(rt, room, decision, item.cite.quoteSeq)
+          await rt.deliver({
+            toId: decision.botId,
+            sessionId: decision.sessionId,
+            role: 'room',
+            roomId: room.id,
+            note: 'the user said',
+            text: item.text,
+            files: item.files,
+            steer: true,
+            userSteer: true,
+            ...item.cite,
+          })
+        }
+      }
+      return decision
+    }
+    case 'continue':
+    case 'queue': {
+      const batch = action === 'continue' ? steerBatch(decision, text, cite, messageId, files, room) : [{ text, files, cite, messageId }]
+      if (action === 'continue' && decision.crossRoom === true) {
+        for (const item of batch) {
+          repairQuote(rt, room, decision, item.cite?.quoteSeq)
+          await deliverAcrossRooms(rt, room, decision, item.text, item.files, item.cite)
+        }
+        return decision
+      }
+      if (decision.sessionId == null || typeof rt.deliver !== 'function') return decision
+      for (const item of batch) {
+        repairQuote(rt, room, decision, item.cite?.quoteSeq ?? seq)
         await rt.deliver({
           toId: decision.botId,
           sessionId: decision.sessionId,
           role: 'room',
           roomId: room.id,
           note: 'the user said',
-          text,
-          files,
-          steer: true,
-          userSteer: true,
-          ...cite,
+          text: item.text,
+          files: item.files,
+          steer: false,
+          ...item.cite,
         })
       }
-      return decision
-    }
-    case 'continue':
-    case 'queue': {
-      repairQuote(rt, room, decision, seq)
-      if (action === 'continue' && decision.crossRoom === true) {
-        await deliverAcrossRooms(rt, room, decision, text, files, cite)
-        return decision
-      }
-      if (decision.sessionId == null || typeof rt.deliver !== 'function') return decision
-      await rt.deliver({
-        toId: decision.botId,
-        sessionId: decision.sessionId,
-        role: 'room',
-        roomId: room.id,
-        note: 'the user said',
-        text,
-        files,
-        steer: false,
-        ...cite,
-      })
       return decision
     }
     case 'create': {

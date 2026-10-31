@@ -1,4 +1,4 @@
-# 群聊询问与引用（G1–G9）
+# 群聊询问与引用（G1–G10）
 
 Web 群聊里，入站路由需要选工作线时要留下一张可确认的卡，并且用户原句进 `room.log`。迟回复引用的是这句用户原句，不是后来的机器人行。机器人的气泡不能画成用户的原问题。
 
@@ -15,6 +15,7 @@ Web 群聊里，入站路由需要选工作线时要留下一张可确认的卡�
 | G7 | 一个格子里只有 alice 的评分，没有这条工作线的锚 | bob 的完成不进这个格子。有 bob 的 `working` 行才留下。两条 `working` 仍按 `completedAt` 排 |
 | G8 | 迟回复的引用 | 用户 seq 取到原句；机器人 seq 不是原句。`groups.js` 用 `lateCite`，`acceptRoomSteer` 把 `quoteText` 交给投递，投递源带上 `quoteText` |
 | G9 | 跨房间 continue | 当前房间只多这一句 User；另一间房不变；旧句子不出现在这里 |
+| G10 | Web 客户端 | 状态仍发布 `pendingRoutes`。房间 dock 读这张卡。`completion-quote` 只有 `who === 'User'` 才用 `bt-urow`。迟回复用带字的引用。路由器仍没有 `ask_user` 和定时器 |
 
 `node --test acceptance-cases/group-ask-quote/group-ask-quote.test.js`
 

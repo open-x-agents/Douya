@@ -15,6 +15,15 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  * Stage 1: Fetch data from all active sources (UNCAPPED pagination)
  * Paginate through ALL items in the 24-48h window, no fixed caps
  */
+/** Last authenticated GitHub identity seen during aggregation ({ login, name }). */
+export let lastGithubIdentity = null;
+
+/** Resolve a display name: explicit profile name, else GitHub name/login. 'User' is the legacy placeholder. */
+export function resolveDisplayName(profileName, identity = lastGithubIdentity) {
+  if (profileName && profileName !== 'User') return profileName;
+  return identity?.name || identity?.login || '';
+}
+
 export async function fetchFromSources(composioClient, activeSources) {
   const sourceData = {};
   
@@ -27,6 +36,7 @@ export async function fetchFromSources(composioClient, activeSources) {
         console.log('[GitHub] Fetching authenticated user...');
         const userResult = await composioClient.executeAction('GITHUB_GET_THE_AUTHENTICATED_USER', {});
         const username = userResult?.data?.login;
+        if (username) lastGithubIdentity = { login: username, name: userResult?.data?.name || '' };
         
         if (!username) {
           console.warn('[GitHub] Could not fetch username, skipping');
@@ -1150,7 +1160,7 @@ export function groupAndRank(classified) {
  * Stage 6: Generate brief with LLM using clustered data
  * Generates rich project-themed cards with stats, charts, and action buttons
  */
-export async function writeBrief(grouped, llmClient) {
+export async function writeBrief(grouped, llmClient, profileContext) {
   const promptTemplate = await readFile(join(__dirname, 'prompts/write-brief.md'), 'utf-8');
   
   // Build clusters summary for LLM
@@ -1191,7 +1201,7 @@ export async function writeBrief(grouped, llmClient) {
   
   const prompt = promptTemplate
     .replace('{{items}}', JSON.stringify(clustersSummary, null, 2))
-    .replace('{{userName}}', 'User')
+    .replace('{{userName}}', resolveDisplayName(profileContext?.name) || '你')
     .replace('{{userRole}}', 'Developer')
     .replace('{{currentTime}}', new Date().toLocaleString('zh-CN'));
   
@@ -1245,28 +1255,47 @@ function generateClusterCards(grouped) {
       updatedAt: cluster.updatedAt,
     };
     
-    // Add status pill for project clusters
+    // Add status pill for project clusters (Chinese, waiting-on-you vs others)
     if (cluster.type === 'project-cluster') {
-      const statusText = cluster.metadata.reviewCount > 0 ? 'Needs Review' : 
-                        cluster.metadata.myPRCount > 0 ? 'In Progress' : 'Active';
+      const reviewCount = cluster.metadata.reviewCount || 0;
+      const myPRCount = cluster.metadata.myPRCount || 0;
+      const openPRs = cluster.items.filter(i => i.type?.includes('pr') && i.metadata?.state === 'open').length
+        || cluster.metadata.prCount || 0;
+      const mergedPRs = cluster.items.filter(i => i.metadata?.state === 'closed' && i.metadata?.merged_at).length
+        || cluster.metadata.mergedCount || 0;
+      const openIssues = cluster.metadata.issueCount || 0;
+      const waitingOnYou = reviewCount + (cluster.metadata.assignedIssueCount || 0);
+      const waitingOnOthers = Math.max(0, (myPRCount || openPRs) - reviewCount);
+
+      const statusText = reviewCount > 0 ? '待你审' :
+                        myPRCount > 0 ? '你开的' : '进行中';
       card.blocks.push({
         type: 'tags',
-        tags: [{ text: statusText, color: cluster.metadata.reviewCount > 0 ? 'red' : 'blue' }],
+        tags: [
+          { text: statusText, color: reviewCount > 0 ? 'red' : 'blue' },
+          ...(waitingOnYou ? [{ text: `${waitingOnYou} 件等你`, color: 'orange' }] : []),
+          ...(waitingOnOthers ? [{ text: `${waitingOnOthers} 件等别人`, color: 'gray' }] : []),
+        ],
       });
-      
-      // Add stat row (open/merged/issues) with clear Chinese labels
-      const openPRs = cluster.items.filter(i => i.type?.includes('pr') && i.metadata?.state === 'open').length;
-      const mergedPRs = cluster.items.filter(i => i.metadata?.state === 'closed' && i.metadata?.merged_at).length;
-      const openIssues = cluster.metadata.issueCount || 0;
-      
-      if (openPRs > 0 || mergedPRs > 0 || openIssues > 0) {
+
+      // Dense Chinese-labeled stats
+      const stats = [
+        { label: '待你审', value: reviewCount, color: '#e2667a', hint: '别人在等你 review' },
+        { label: '你开的 PR', value: myPRCount || openPRs, color: '#22a898', hint: '你发起、待推进' },
+        { label: '已合并 24h', value: mergedPRs, color: '#00d084', hint: '过去一天合入' },
+        { label: '待解决 issue', value: openIssues, color: '#8a74d0', hint: '仍开着的 issue' },
+      ].filter(s => s.value > 0);
+      if (stats.length) {
+        card.blocks.push({ type: 'stat-row', stats });
+      }
+      // Stacked bar: waiting on you vs others
+      if (waitingOnYou || waitingOnOthers) {
         card.blocks.push({
-          type: 'stat-row',
-          stats: [
-            { label: '待处理 PR', value: openPRs, color: '#4a6cf7' },
-            { label: '已合并（24h）', value: mergedPRs, color: '#00d084' },
-            { label: '待解决 issue', value: openIssues, color: '#ffa600' },
-          ].filter(s => s.value > 0), // Only show non-zero stats
+          type: 'chart',
+          chartType: 'bar',
+          data: [waitingOnYou, waitingOnOthers],
+          labels: ['等你', '等别人'],
+          color: 'blue',
         });
       }
       
@@ -1308,68 +1337,62 @@ function generateClusterCards(grouped) {
         });
       }
       
-      // Add top 3 items as links
-      const topLinks = cluster.topItems.slice(0, 3).map(item => ({
+      // Deep links: up to 5 real items (tile shows 1–3; zoom shows all)
+      const topLinks = (cluster.topItems || cluster.items || []).slice(0, 5).map(item => ({
         title: item.title,
         url: item.url,
         type: item.type,
-      }));
-      
+      })).filter(l => l.url);
       if (topLinks.length > 0) {
-        card.blocks.push({
-          type: 'link-list',
-          links: topLinks,
-        });
+        card.blocks.push({ type: 'link-list', links: topLinks });
       }
-      
-      // Add specific action buttons with deep links (1-3 concrete actions)
+
+      // Concrete next action + 1–3 deep-link buttons (never invent URLs)
       const actions = [];
-      
-      // If there are PRs needing review, add specific review actions
-      const reviewPRs = cluster.topItems.filter(i => i.type === 'pr-review').slice(0, 2);
+      const reviewPRs = (cluster.topItems || []).filter(i => i.type === 'pr-review' && i.url).slice(0, 2);
       if (reviewPRs.length > 0) {
         reviewPRs.forEach(pr => {
           const prNumber = pr.url.match(/\/pull\/(\d+)/)?.[1];
           actions.push({
-            label: `去 review #${prNumber}`,
-            value: pr.url.replace(/\/pull\//, '/pull/') + '/files', // Deep link to files tab
+            label: prNumber ? `先审 #${prNumber}` : '去 review',
+            value: pr.url.includes('/files') ? pr.url : pr.url.replace(/\/?$/, '') + '/files',
             primary: true,
           });
         });
+        card.nextAction = actions[0].label + (reviewPRs[0].title ? `：${String(reviewPRs[0].title).slice(0, 36)}` : '');
       }
-      
-      // If there are assigned issues, add issue action
-      const assignedIssues = cluster.topItems.filter(i => i.type === 'issue-assigned').slice(0, 1);
+      const assignedIssues = (cluster.topItems || []).filter(i => i.type === 'issue-assigned' && i.url).slice(0, 1);
       if (assignedIssues.length > 0 && actions.length < 2) {
         const issue = assignedIssues[0];
         const issueNumber = issue.url.match(/\/issues\/(\d+)/)?.[1];
         actions.push({
-          label: `处理 issue #${issueNumber}`,
+          label: issueNumber ? `处理 issue #${issueNumber}` : '处理 issue',
           value: issue.url,
           primary: false,
         });
+        if (!card.nextAction) card.nextAction = actions[actions.length - 1].label;
       }
-      
-      // If there are multiple PRs but not specifically for review, add batch action
-      if (actions.length === 0 && cluster.metadata.prCount > 1) {
-        const repo = cluster.metadata.repo;
+      const myOpen = (cluster.topItems || []).filter(i => (i.type === 'pr-mine' || i.type === 'pr-mine-recent') && i.url).slice(0, 1);
+      if (actions.length === 0 && myOpen.length) {
+        const pr = myOpen[0];
+        const n = pr.url.match(/\/pull\/(\d+)/)?.[1];
+        actions.push({ label: n ? `推进 #${n}` : '推进我的 PR', value: pr.url, primary: true });
+        card.nextAction = `先推进「${String(pr.title).slice(0, 36)}」，催 review 或合并`;
+      }
+      if (actions.length === 0 && cluster.metadata.prCount > 1 && cluster.metadata.repo) {
         actions.push({
           label: `查看 ${cluster.metadata.prCount} 个 PR`,
-          value: `https://github.com/${repo}/pulls`,
+          value: `https://github.com/${cluster.metadata.repo}/pulls`,
           primary: true,
         });
+        card.nextAction = `逐个推进 ${cluster.metadata.prCount} 个 PR 的 review 与合并`;
       }
-      
-      // Fallback: single action to repo
-      if (actions.length === 0) {
-        actions.push({
-          label: '打开仓库',
-          value: cluster.url,
-          primary: true,
-        });
+      if (actions.length === 0 && cluster.url) {
+        actions.push({ label: '打开仓库', value: cluster.url, primary: true });
+        card.nextAction = card.nextAction || '打开仓库查看最新进展';
       }
-      
-      card.actions.push(...actions.slice(0, 3)); // Max 3 actions
+      if (!card.nextAction && actions[0]) card.nextAction = actions[0].label;
+      card.actions.push(...actions.slice(0, 3));
     }
     
     // Email clusters
@@ -1600,7 +1623,8 @@ JSON: {"headline": "英文标题", "summary": "中文摘要"}`;
 /**
  * Main aggregation pipeline
  */
-export async function runAggregationPipeline(composioClient, activeSources, llmClient, profileContext) {
+export async function runAggregationPipeline(composioClient, activeSources, llmClient, profileContextIn) {
+  const profileContext = profileContextIn ? { ...profileContextIn } : {};
   console.log('[Aggregation] Stage 1: Fetching from sources...');
   const sourceData = await fetchFromSources(composioClient, activeSources);
   
@@ -1627,6 +1651,7 @@ export async function runAggregationPipeline(composioClient, activeSources, llmC
   await generateProjectHeadlinesAndSummaries(grouped, llmClient);
   
   console.log('[Aggregation] Stage 6: Writing brief with LLM...');
+  profileContext.name = resolveDisplayName(profileContext.name) || '你';
   const brief = await writeBrief(grouped, llmClient, profileContext);
   
   console.log('[Aggregation] Stage 7: Generating hero card...');
@@ -1696,7 +1721,7 @@ async function generateHeroCard(grouped, sourceData, llmClient, profileContext) 
 - ${emails} 封未读邮件
 
 **用户信息**:
-- 姓名: ${profileContext?.name || 'User'}
+- 姓名: ${profileContext?.name || '你'}
 - 常用仓库: ${profileContext?.favoriteRepos?.join('、') || '暂无'}
 - 常联系人: ${profileContext?.frequentContacts?.join('、') || '暂无'}
 - 最近话题: ${profileContext?.recentTopics?.join('、') || '暂无'}
@@ -1733,7 +1758,7 @@ JSON: {"narrative": "你的 1-2 句叙述"}`;
     id: `card_hero_${Date.now()}`,
     type: 'hero',
     title: `${date} · ${timeOfDay}`,
-    body: `${greeting}, ${profileContext?.name || 'User'}`,
+    body: `${greeting}, ${profileContext?.name || '你'}`,
     source: 'system',
     sourceId: `hero:${new Date().toISOString().split('T')[0]}`,
     priority: 'high',
@@ -1791,7 +1816,7 @@ ${topCards.map((c, i) => `${i + 1}. ${c.title} (${c.classification.reasoning})`)
 
 **User Habits**:
 - Typical active hours: ${profileContext?.typicalActiveHours?.join(', ') || 'unknown'}
-- Name: ${profileContext?.name || 'User'}
+- Name: ${profileContext?.name || '你'}
 
 **Generate suggested blocks** (JSON array):
 - Focus blocks for top tasks (1-2h each, during active hours, avoid fixed events)

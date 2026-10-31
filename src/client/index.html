@@ -574,6 +574,242 @@
   @media (max-width:620px){
     .dockPanel{width:calc(100vw - 32px);right:16px;left:16px;bottom:10px;max-height:60%}
   }
+
+
+  .tt-now{overflow:visible}
+  .tt-track{overflow:hidden}
+  .load-rows{overflow:hidden;min-width:0;width:100%}
+  .load-bar{min-width:0}
+  .load-val{min-width:0;overflow:hidden}
+  .w-links{overflow:hidden;min-width:0}
+  .lk{overflow:hidden}
+  .lk-t{min-width:0}
+  .myday,.grid2 .tile{overflow:hidden}
+  .focus-b span,.w-desc,.w-next-v{overflow:hidden}
+  .load-row{overflow:hidden}
+  .tt-bar span{max-width:100%}
+
+
+  .load-row{grid-template-columns:minmax(0,110px) minmax(0,1fr) 56px}
+  .load-name,.w-repo,.lk-t,.focus-b span,.w-next-v,.w-desc,.w-head,.tt-bar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .w-desc,.w-next-v,.w-head{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical}
+  .w-links{width:100%;max-width:100%}
+  .lk{width:100%}
+  .grid2 .tile,.myday,.load-rows,.tt{max-width:100%}
+
+  .av-row{display:flex;gap:4px;margin:0 0 10px}
+  .av.sm{width:22px;height:22px;border-radius:7px}
+  .mini-bars{display:flex;gap:14px;align-items:flex-end;height:52px;margin:0 0 12px;padding:0 4px}
+  .mini-bars .mb{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:36px}
+  .mini-bars .mb i{display:block;width:18px;border-radius:6px 6px 3px 3px}
+  .mini-bars .mb span{font-size:10.5px;color:var(--ink3);display:flex;flex-direction:column;align-items:center;line-height:1.2}
+  .mini-bars .mb b{color:var(--ink);font-weight:650;font-size:12px}
+  .w-tags{display:flex;flex-wrap:wrap;gap:4px}
+  .pill-red,.pill-orange{background:var(--rose-soft);color:var(--rose)}
+  .pill-blue{background:var(--sky-soft);color:var(--sky)}
+  .pill-gray{background:#eef0f4;color:var(--ink3)}
+  .pill-green{background:var(--teal-soft);color:var(--teal)}
+  .w-top .w-tags{margin-left:8px}
+  .size-normal .metrics .m b{font-size:22px}
+  .w-links .lk:nth-child(n+4){display:none}
+
+  /* ===== v2 visual system (Muse / Today inspired) ===== */
+  :root{
+    --ink:#1c1d21; --ink2:#5a5e68; --ink3:#9296a0; --line:rgba(28,29,33,.07);
+    --teal:#22a898; --teal-soft:#e3f6f3; --violet:#8a74d0; --violet-soft:#efebfa;
+    --sky:#4f9de8; --sky-soft:#e7f1fc; --rose:#e2667a; --rose-soft:#fdecef; --peach:#f0a35e; --peach-soft:#fdf0e3;
+    --r-lg:22px; --r-md:14px;
+    --shadow:0 1px 2px rgba(30,40,80,.04),0 6px 24px -6px rgba(30,40,80,.08);
+    --shadow-hi:0 2px 4px rgba(30,40,80,.05),0 18px 40px -10px rgba(30,40,80,.18);
+  }
+  body{background:radial-gradient(1200px 600px at 85% -10%,#e4ecfb 0%,transparent 60%),radial-gradient(900px 500px at -10% 110%,#f6ecdf 0%,transparent 55%),#f3f4f7;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
+  .app{grid-template-columns:208px 1fr}
+  .side{background:rgba(255,255,255,.45);backdrop-filter:blur(20px);border-right:1px solid rgba(255,255,255,.7);padding:20px 14px}
+  .side .who{padding:4px 10px 22px}
+  .side .who b{font-size:15px;letter-spacing:.02em}
+  .nav{padding:9px 12px;border-radius:12px;font-size:13.5px}
+  .nav.on{background:#fff;box-shadow:0 1px 2px rgba(30,40,80,.06),0 4px 12px -4px rgba(30,40,80,.08)}
+  .views{background:transparent}
+  #v-today{padding:36px 44px 0}
+  .c-teal{color:var(--teal)} .c-violet{color:var(--violet)} .c-blue{color:var(--sky)} .c-rose{color:var(--rose)}
+
+  .day-head{display:flex;align-items:flex-end;justify-content:space-between;gap:32px;margin-bottom:22px}
+  .day-date{font-size:12.5px;color:var(--ink3);letter-spacing:.02em;margin-bottom:6px}
+  .day-title{font-size:34px;line-height:1.15;font-weight:650;letter-spacing:-.025em;margin:0}
+  .day-sum{margin:8px 0 0;font-size:14px;color:var(--ink2)}
+  .day-side{display:flex;align-items:center;gap:22px;flex-shrink:0}
+  .kpis{display:flex;gap:6px;background:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.9);border-radius:18px;padding:8px 6px;box-shadow:var(--shadow)}
+  .kpi{min-width:74px;padding:2px 14px;text-align:center;border-right:1px solid var(--line)}
+  .kpi:last-child{border-right:0}
+  .kpi b{display:block;font-size:24px;font-weight:650;letter-spacing:-.02em;line-height:1.2;font-variant-numeric:tabular-nums}
+  .kpi span{font-size:11.5px;color:var(--ink3)}
+  .day-actions{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+  .digest-status{font-size:11.5px;color:var(--teal);min-height:16px}
+  .btn-glow{border:0;cursor:pointer;font:600 13.5px/1 inherit;color:#fff;padding:12px 20px;border-radius:999px;background:linear-gradient(135deg,#6f8df5,#8a74d0);box-shadow:0 6px 18px -6px rgba(110,110,230,.6);transition:.2s var(--ease)}
+  .btn-glow:hover{transform:translateY(-1px);box-shadow:0 10px 24px -8px rgba(110,110,230,.7)}
+  .btn-glow:disabled{opacity:.6;cursor:default;transform:none}
+
+  .eyebrow{font-size:11px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+
+  /* My Day */
+  .myday{background:rgba(255,255,255,.72);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.9);border-radius:var(--r-lg);padding:18px 22px 14px;box-shadow:var(--shadow);margin-bottom:18px;cursor:pointer;transition:.25s var(--ease)}
+  .myday:hover{box-shadow:var(--shadow-hi)}
+  .myday-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:14px}
+  .myday-note{font-size:15px;font-weight:550;margin-top:4px}
+  .myday-meta{display:flex;gap:16px;font-size:12px;color:var(--ink3);white-space:nowrap}
+  .myday-meta b{color:var(--ink);font-weight:650}
+  .tt{position:relative;padding:0 4px}
+  .tt-track{position:relative;height:46px;border-radius:12px;background:repeating-linear-gradient(90deg,rgba(30,40,80,.035) 0 1px,transparent 1px calc(100%/14)),#f6f7fa;overflow:hidden}
+  .tt-bar{position:absolute;top:5px;bottom:5px;border-radius:9px;padding:5px 10px;overflow:hidden;white-space:nowrap;display:flex;flex-direction:column;justify-content:center;min-width:6px}
+  .tt-bar b{font-size:11px;font-weight:650;line-height:1.2}
+  .tt-bar span{font-size:11px;opacity:.8;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
+  .tt-bar.c-meal{background:var(--peach-soft);color:#b8692a;box-shadow:inset 3px 0 0 var(--peach)}
+  .tt-bar.c-focus{background:var(--teal-soft);color:#16786d;box-shadow:inset 3px 0 0 var(--teal)}
+  .tt-bar.c-meeting{background:var(--sky-soft);color:#2d6cb0;box-shadow:inset 3px 0 0 var(--sky)}
+  .tt-bar.c-break,.tt-bar.c-exercise,.tt-bar.c-personal{background:var(--violet-soft);color:#6450a8;box-shadow:inset 3px 0 0 var(--violet)}
+  .tt-bar.past{opacity:.45;filter:saturate(.6)}
+  .tt-bar.live{box-shadow:inset 3px 0 0 currentColor,0 0 0 2px rgba(34,168,152,.25)}
+  .tt-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--ink3)}
+  .tt-now{position:absolute;top:0;bottom:0;width:2px;background:var(--rose);border-radius:2px;transform:translateX(-1px)}
+  .tt-now::before{content:"";position:absolute;top:-1px;left:-3px;width:8px;height:8px;border-radius:50%;background:var(--rose)}
+  .tt-now em{position:absolute;bottom:3px;right:6px;font:600 10.5px/1 inherit;font-style:normal;color:var(--rose);background:rgba(255,255,255,.9);padding:3px 5px;border-radius:6px}
+  .tt-axis{position:relative;height:18px;margin-top:4px}
+  .tt-tick{position:absolute;top:0;transform:translateX(-50%)}
+  .tt-tick:first-child{transform:none}
+  .tt-tick:last-child{transform:translateX(-100%)}
+  .tt-tick i{font-style:normal;font-size:10.5px;color:var(--ink3);font-variant-numeric:tabular-nums}
+
+  /* Grid */
+  .grid2{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-flow:row dense;gap:16px;padding-bottom:120px}
+  .grid2 .tile{background:rgba(255,255,255,.82);backdrop-filter:blur(18px) saturate(160%);border:1px solid rgba(255,255,255,.95);border-radius:var(--r-lg);padding:20px 20px 16px;box-shadow:var(--shadow);color:var(--ink);transform:none;display:flex;flex-direction:column;min-width:0;overflow:hidden;cursor:pointer;transition:transform .25s var(--ease),box-shadow .25s var(--ease)}
+  .grid2 .tile:hover{transform:translateY(-2px);box-shadow:var(--shadow-hi)}
+  .size-hero{grid-column:span 2;grid-row:span 2}
+  .size-load{grid-column:span 2;grid-row:span 2}
+  .size-wide{grid-column:span 2}
+  .size-normal{grid-column:span 1}
+  @media (max-width:1180px){.grid2{grid-template-columns:repeat(3,minmax(0,1fr))}.size-hero,.size-load{grid-column:span 3;grid-row:auto}}
+  @media (max-width:860px){.grid2{grid-template-columns:repeat(2,minmax(0,1fr))}.size-hero,.size-load,.size-wide{grid-column:span 2}}
+
+  /* Hero */
+  .grid2 .hero2{background:linear-gradient(160deg,rgba(255,255,255,.95) 0%,rgba(241,237,252,.92) 55%,rgba(228,240,252,.92) 100%);cursor:default}
+  .grid2 .hero2:hover{transform:none}
+  .hero-lead{font-size:19px;line-height:1.5;font-weight:600;letter-spacing:-.01em;margin:10px 0 16px}
+  .focus{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+  .focus li{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--r-md);background:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.95);cursor:pointer;transition:.2s var(--ease)}
+  .focus li:hover{background:#fff;box-shadow:0 4px 14px -6px rgba(30,40,80,.18)}
+  .focus-n{width:24px;height:24px;flex-shrink:0;border-radius:8px;background:var(--violet-soft);color:var(--violet);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .focus-b{flex:1;min-width:0;display:flex;flex-direction:column}
+  .focus-b b{font-size:13.5px;font-weight:650}
+  .focus-b span{font-size:12.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .focus-go{color:var(--ink3);font-size:14px}
+  .hero-foot{margin-top:auto;padding-top:16px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .hero-kpi b{display:block;font-size:26px;font-weight:650;letter-spacing:-.02em;line-height:1.1}
+  .hero-kpi span,.hero-ring span{font-size:11.5px;color:var(--ink3)}
+  .hero-kpi:first-child b{color:var(--teal)} .hero-kpi:nth-child(2) b{color:var(--violet)}
+  .hero-ring{display:flex;align-items:center;gap:8px}
+  .hero-ring b{display:block;font-size:15px;font-weight:650;line-height:1.1}
+  .hero-ring small{font-size:11px;color:var(--ink3);font-weight:500}
+  .hero-ring span{display:block;white-space:nowrap}
+
+  /* Load */
+  .grid2 .load{cursor:default}
+  .grid2 .load:hover{transform:none}
+  .load-desc{font-size:12.5px;color:var(--ink2);margin:6px 0 14px;line-height:1.55}
+  .load-rows{display:flex;flex-direction:column;gap:9px}
+  .load-row{display:grid;grid-template-columns:120px 1fr 64px;align-items:center;gap:12px;padding:3px 6px;margin:0 -6px;border-radius:8px;cursor:pointer}
+  .load-row:hover{background:rgba(30,40,80,.04)}
+  .load-name{font-size:12.5px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .load-bar{display:flex;height:10px;border-radius:6px;background:#f0f1f5;overflow:hidden}
+  .load-bar i{display:block;height:100%}
+  .b-pr{background:linear-gradient(90deg,#5ccfc0,var(--teal))}
+  .b-iss{background:linear-gradient(90deg,#b3a3e6,var(--violet))}
+  .load-val{display:flex;gap:6px;justify-content:flex-end;font-size:12px;font-variant-numeric:tabular-nums}
+  .load-val em{font-style:normal;font-weight:650}
+  .v-pr{color:var(--teal)} .v-iss{color:var(--violet)}
+  .legend{margin-top:auto;padding-top:12px;display:flex;gap:14px;font-size:11.5px;color:var(--ink3)}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+
+  /* Work tile */
+  .w-top{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .av{width:30px;height:30px;border-radius:9px;flex-shrink:0;object-fit:cover;background:#eef0f4;box-shadow:0 0 0 1px rgba(30,40,80,.06)}
+  .av-f{display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--ink2)}
+  .w-src{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+  .w-label{font-size:10.5px;font-weight:650;letter-spacing:.06em;color:var(--ink3);text-transform:uppercase}
+  .w-repo{font-size:12.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pill{font-size:11px;font-weight:650;padding:3px 9px;border-radius:999px;flex-shrink:0}
+  .pill-hot{background:var(--rose-soft);color:var(--rose)}
+  .w-head{font-size:17px;line-height:1.35;font-weight:650;letter-spacing:-.01em;margin:0 0 6px}
+  .size-normal .w-head{font-size:16px}
+  .w-desc{font-size:13px;line-height:1.6;color:var(--ink2);margin:0 0 12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .size-normal .w-desc{-webkit-line-clamp:3}
+  .metrics{display:flex;align-items:center;gap:20px;margin:2px 0 14px}
+  .metrics .m b{display:block;font-size:28px;font-weight:650;letter-spacing:-.02em;line-height:1.05;font-variant-numeric:tabular-nums}
+  .metrics .m span{font-size:11.5px;color:var(--ink3)}
+  .m-bar{flex:1;display:flex;height:8px;border-radius:5px;overflow:hidden;gap:2px;background:#f0f1f5;min-width:60px}
+  .m-bar i{display:block;height:100%;min-width:0}
+  .spark{width:100%;height:28px;color:var(--teal);margin-bottom:10px}
+  .w-next{margin-top:auto;display:flex;gap:8px;align-items:baseline;padding:9px 11px;border-radius:12px;background:rgba(34,168,152,.07);margin-bottom:10px}
+  .w-next-k{font-size:11px;font-weight:700;color:var(--teal);flex-shrink:0;letter-spacing:.04em}
+  .w-next-v{font-size:12.5px;line-height:1.5;color:var(--ink);min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .w-links{display:flex;flex-direction:column;gap:2px}
+  .lk{display:flex;align-items:center;gap:8px;padding:5px 6px;margin:0 -6px;border-radius:8px;color:var(--ink2);text-decoration:none;font-size:12.5px;min-width:0;transition:.15s}
+  .lk:hover{background:rgba(30,40,80,.05);color:var(--ink)}
+  .lk-ic{display:inline-flex;width:20px;height:20px;border-radius:6px;align-items:center;justify-content:center;flex-shrink:0}
+  .lk-pr .lk-ic,.lk-ic.lk-pr{background:var(--teal-soft);color:var(--teal)}
+  .lk-issue .lk-ic,.lk-ic.lk-issue{background:var(--violet-soft);color:var(--violet)}
+  .lk-mail .lk-ic,.lk-ic.lk-mail{background:var(--peach-soft);color:var(--peach)}
+  .lk-repo .lk-ic,.lk-link .lk-ic,.lk-ic.lk-link{background:#eef0f4;color:var(--ink2)}
+  .lk-t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lk-arrow{color:var(--ink3);font-size:11px;opacity:0;transition:.15s}
+  .lk:hover .lk-arrow{opacity:1}
+
+  /* Bottom ask bar */
+  #v-today .today-chat-input{position:sticky;bottom:0;margin:0 -44px;padding:18px 44px 22px;background:linear-gradient(to bottom,rgba(243,244,247,0),rgba(243,244,247,.92) 40%);border:0;box-shadow:none;z-index:5}
+  #v-today .today-chat-input .input-wrap{max-width:640px;margin:0 auto;background:rgba(255,255,255,.92);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.95);border-radius:999px;box-shadow:var(--shadow-hi);padding:6px 6px 6px 20px}
+  #v-today .today-chat-input .send-btn{border-radius:50%;background:linear-gradient(135deg,#6f8df5,#8a74d0)}
+  .grid2{padding-bottom:12px}
+  .dockBtn{background:linear-gradient(135deg,#6f8df5,#8a74d0)!important;box-shadow:0 10px 24px -8px rgba(110,110,230,.7)!important}
+
+  /* Zoom modal */
+  .tile-zoom-overlay{background:rgba(28,30,40,.28)!important;backdrop-filter:blur(10px)}
+  .tile-zoom-modal{border-radius:26px!important;max-width:760px!important;width:min(760px,92vw)!important;padding:30px 32px 24px!important;background:rgba(255,255,255,.96)!important;box-shadow:0 30px 80px -20px rgba(30,40,80,.35)!important}
+  .tile-zoom-title{font-size:24px!important;font-weight:650!important;letter-spacing:-.02em;margin:0 40px 6px 0!important;color:var(--ink)!important}
+  .tile-zoom-subtitle{font-size:13px!important;color:var(--ink3)!important;margin:0 0 16px!important;-webkit-line-clamp:unset!important;display:block!important}
+  .tile-zoom-subtitle a{color:var(--ink2);text-decoration:none;border-bottom:1px solid var(--line)}
+  .z-src{font-weight:650;letter-spacing:.04em}
+  .z-body{font-size:14.5px;line-height:1.75;color:var(--ink);margin:0 0 8px}
+  .z-orig{font-size:12px;color:var(--ink3);margin:0 0 14px}
+  .z-kpis{display:flex;gap:28px;margin:4px 0 16px}
+  .z-kpis b{display:block;font-size:30px;font-weight:650;line-height:1.1}
+  .z-kpis span{font-size:12px;color:var(--ink3)}
+  .z-next{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border-radius:16px;background:linear-gradient(135deg,rgba(34,168,152,.09),rgba(79,157,232,.08));margin-bottom:18px}
+  .z-next b{display:block;font-size:14.5px;margin-top:2px}
+  .z-btn{flex-shrink:0;text-decoration:none;color:#fff;font-size:13px;font-weight:600;padding:9px 16px;border-radius:999px;background:var(--teal)}
+  .z-sec h4,.z-chat h4{font-size:11.5px;font-weight:650;letter-spacing:.06em;color:var(--ink3);margin:0 0 8px}
+  .z-items{display:flex;flex-direction:column;gap:6px;margin-bottom:18px}
+  .z-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:#f6f7fa;transition:.2s}
+  .z-item.is-done{opacity:.5}.z-item.is-dismissed{opacity:.3}
+  .z-time{font-size:12.5px;font-weight:650;color:var(--teal);font-variant-numeric:tabular-nums;min-width:88px}
+  .z-item-b{flex:1;min-width:0;display:flex;flex-direction:column}
+  .z-item-b b{font-size:13.5px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .z-item-b span{font-size:11.5px;color:var(--ink3)}
+  .z-acts{display:flex;gap:4px;flex-shrink:0}
+  .z-act{border:0;background:#fff;color:var(--ink2);font:500 12px/1 inherit;padding:7px 10px;border-radius:8px;cursor:pointer;text-decoration:none;box-shadow:0 0 0 1px var(--line)}
+  .z-act:hover{color:var(--ink);box-shadow:0 0 0 1px rgba(30,40,80,.15)}
+  .z-act.done:hover{color:var(--teal)}
+  .z-chat{border-top:1px solid var(--line);padding-top:16px}
+  .z-msgs{display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto;margin-bottom:8px}
+  .z-msgs:empty{display:none}
+  .z-msg{max-width:85%;padding:9px 13px;border-radius:14px;font-size:13.5px;line-height:1.6;white-space:pre-wrap}
+  .z-msg.me{align-self:flex-end;background:linear-gradient(135deg,#6f8df5,#8a74d0);color:#fff;border-bottom-right-radius:4px}
+  .z-msg.bot{align-self:flex-start;background:#f3f4f8;border-bottom-left-radius:4px}
+  .z-msg.typing{color:var(--ink3)}
+  .z-sugg{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+  .z-chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font:12.5px/1.2 inherit;color:var(--ink2);cursor:pointer}
+  .z-chip:hover{border-color:rgba(138,116,208,.4);color:var(--violet)}
+  .z-input{display:flex;gap:8px;background:#f6f7fa;border-radius:999px;padding:5px 5px 5px 16px}
+  .z-input input{flex:1;border:0;background:transparent;font:14px inherit;outline:none;min-width:0}
+  .z-input button{border:0;border-radius:999px;padding:8px 16px;font:600 13px inherit;color:#fff;background:linear-gradient(135deg,#6f8df5,#8a74d0);cursor:pointer}
 </style>
 </head>
 <body>
@@ -600,31 +836,24 @@
   <div class="views">
         <!-- 今天视图 -->
         <section class="view on" id="v-today">
-          <h3 class="concl" id="conclText">正在加载...</h3>
-          <div class="stamp a in" id="stamp">—</div>
-
-          <div class="stats">
-            <div class="stat a in">
-              <b id="nOpen">0</b>
-              <span>件在手</span>
+          <header class="day-head">
+            <div class="day-hello">
+              <div class="day-date" id="stamp">—</div>
+              <h1 class="day-title" id="conclText">正在加载…</h1>
+              <p class="day-sum" id="daySummary"></p>
             </div>
-            <div class="stat a in">
-              <b id="nMeet">0</b>
-              <span>会议</span>
+            <div class="day-side">
+              <div class="kpis">
+                <div class="kpi"><b id="nOpen">0</b><span>件在手</span></div>
+                <div class="kpi"><b id="nUrgent" class="c-rose">0</b><span>件优先</span></div>
+                <div class="kpi"><b id="nMeet">0</b><span>个会议</span></div>
+              </div>
+              <div class="day-actions">
+                <span id="digestStatus" class="digest-status"></span>
+                <button id="generateDigestBtn" class="btn-glow">立即汇聚</button>
+              </div>
             </div>
-            <div class="stat a in">
-              <b id="nWait">0</b>
-              <span>件在等别人</span>
-            </div>
-          </div>
-
-          <div style="margin:16px 0;text-align:center">
-            <button id="generateDigestBtn" class="btn primary" style="font-size:14px;padding:8px 24px">
-              ⚡ 立即汇聚
-            </button>
-            <span id="digestStatus" style="margin-left:12px;font-size:12px;color:var(--ink3)"></span>
-          </div>
-
+          </header>
           <div id="cardList"></div>
         </section>
 
@@ -1013,19 +1242,17 @@
     try {
       const res = await fetch('/api/today');
       const data = await res.json();
-      
-      $('conclText').textContent = data.summary || '今天没有待办事项';
-      $('stamp').innerHTML = `${data.date} · ${data.sources || '数据源已连接'}`;
+      lastToday = data;
+      const name = data.userName || '';
+      $('conclText').textContent = `${greetingWord()}${name ? '，' + name : ''}`;
+      $('stamp').textContent = `${data.date || ''}${data.sources ? ' · 来自 ' + data.sources : ''}`;
       $('nOpen').textContent = data.openCount || 0;
-      $('nMeet').textContent = (data.meetingHours || 0).toFixed(1) + 'h';
-      $('nWait').textContent = data.waitingCount || 0;
-
+      $('nUrgent').textContent = data.urgentCount || 0;
+      $('nMeet').textContent = data.meetingCount || 0;
+      $('daySummary').textContent = data.summary || '';
       renderCardList(data.cards || []);
-      
-      // Update digest status
       if (data.hasDigest) {
-        $('digestStatus').textContent = '已汇聚';
-        $('digestStatus').style.color = 'var(--green)';
+        $('digestStatus').textContent = data.lastDigestAt ? `已汇聚 · ${new Date(data.lastDigestAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}` : '已汇聚';
       } else {
         $('digestStatus').textContent = '';
       }
@@ -1035,340 +1262,305 @@
     }
   }
 
+  // ===== v2 tile renderer (Muse/Today-inspired) =====
+  const SYS_TYPES = new Set(['hero', 'timetable']);
+  let lastCards = [];
+  let lastToday = {};
+  const CAT_ZH = { meal: '用餐', focus: '专注', break: '休息', exercise: '运动', meeting: '会议', review: '复盘', admin: '杂务', learning: '学习', personal: '个人' };
+  const TAG_ZH = { 'In Progress': '进行中', Active: '活跃', 'Needs Review': '待你审', Waiting: '等待中', Done: '已完成' };
+  const TITLE_ZH = { 'Lunch break': '午餐休息', 'Focus time': '专注时段', Breakfast: '早餐', Dinner: '晚餐', 'Evening walk': '晚间散步' };
+  const SRC_ZH = { github: 'GitHub · 代码协作', gmail: 'Gmail · 邮件', googlecalendar: '日历 · 日程', slack: 'Slack · 消息', manual: '手动 · 待办' };
+
+  function repoOf(card) {
+    const m = String(card.url || '').match(/github\.com\/([^/]+)\/([^/#?]+)/);
+    return m ? { owner: m[1], name: m[2] } : null;
+  }
+  function statOf(card, key) {
+    for (const b of card.blocks || []) {
+      if (b.type !== 'stat-row') continue;
+      for (const s of b.stats || []) if (String(s.label).includes(key)) return Number(s.value) || 0;
+    }
+    return 0;
+  }
+  function linksOf(card) {
+    const ll = (card.blocks || []).find(b => b.type === 'link-list');
+    return ((ll && ll.links) || []).filter(l => l && l.url);
+  }
+  function blockOf(card, type) { return (card.blocks || []).find(b => b.type === type); }
+  function clip(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+  function linkKind(l) {
+    const t = String(l.type || '');
+    if (t.startsWith('email') || /mail\.google/.test(l.url)) return { k: 'mail', zh: '邮件' };
+    if (/\/issues\//.test(l.url) || t.includes('issue')) return { k: 'issue', zh: 'Issue' };
+    if (/\/pull\//.test(l.url) || t.includes('pr')) return { k: 'pr', zh: 'PR' };
+    return { k: 'link', zh: '链接' };
+  }
+  function explain(card) {
+    const r = repoOf(card);
+    let t = String(card.body || '').trim();
+    if (r) {
+      t = t.replace(new RegExp('^' + r.owner.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/' + r.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*'), '');
+      t = t.replace(new RegExp('^' + r.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*', 'i'), '');
+    }
+    t = t.replace(/^过去\s*24\s*(h|小时)\s*(内)?\s*(无|没有)[^，,。]*[，,]\s*/, '');
+    if (!/[\u4e00-\u9fa5]/.test(t)) return '';
+    const parts = t.split(/(?<=[。！？；])/);
+    let out = '';
+    for (const p of parts) { if (out && (out + p).length > 78) break; out += p; }
+    return clip(out, 96);
+  }
+  function headline(card) {
+    if (SYS_TYPES.has(card.type)) return card.title || '';
+    const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
+    const parts = [];
+    if (pr) parts.push(`${pr} 个 PR 待推进`);
+    if (iss) parts.push(`${iss} 个 issue 待处理`);
+    return parts.length ? parts.join(' · ') : (card.title || '');
+  }
+  function nextAction(card) {
+    if (card.nextAction) return card.nextAction;
+    const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
+    const review = statOf(card, '待你审') || statOf(card, '审');
+    const links = linksOf(card);
+    const first = links[0];
+    if (review && first) return `先审「${clip(first.title, 30)}」`;
+    if (first && linkKind(first).k === 'mail') return `先回复邮件「${clip(first.title.replace(/^Re:\s*/i, ''), 30)}」`;
+    if (pr && first) return `先推进「${clip(first.title, 30)}」，催 review 或合并`;
+    if (pr) return `逐个推进 ${pr} 个 PR 的 review 与合并`;
+    if (iss) return `分拣 ${iss} 个 issue，挑出今天要回复的 1–2 个`;
+    return (card.actions && card.actions[0] && card.actions[0].label) || '打开查看最新进展';
+  }
+
+  function deepLinks(card) {
+    const out = [], seen = new Set();
+    for (const l of linksOf(card)) {
+      if (seen.has(l.url)) continue; seen.add(l.url);
+      const kind = linkKind(l);
+      out.push({ url: l.url, title: l.title, kind });
+      if (out.length >= 2) break;
+    }
+    const a = (card.actions || []).find(x => x.value && /^https?:/.test(x.value));
+    const r = repoOf(card);
+    if (a && !seen.has(a.value)) {
+      let label = a.label;
+      if (r && /\/pulls$/.test(a.value)) { const pr = statOf(card, 'PR'); label = pr ? `全部 ${pr} 个待处理 PR` : '全部 PR'; }
+      out.push({ url: a.value, title: label, kind: { k: 'repo', zh: '仓库' } });
+    } else if (r && !seen.has(card.url)) {
+      out.push({ url: card.url, title: '打开仓库', kind: { k: 'repo', zh: '仓库' } });
+    }
+    return out.slice(0, 3);
+  }
+  const ICON = {
+    pr: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm0 2.122a2.25 2.25 0 1 0-1.5 0v5.256a2.25 2.25 0 1 0 1.5 0Zm7.5 5.256V6.25A2.75 2.75 0 0 0 9.75 3.5H8.56l1.22-1.22-1.06-1.06L5.69 4.25l3.03 3.03 1.06-1.06L8.56 5h1.19c.69 0 1.25.56 1.25 1.25v4.378a2.25 2.25 0 1 0 1.5 0ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm7.5 0a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z"/></svg>',
+    issue: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/><path fill="currentColor" d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"/></svg>',
+    mail: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M1.75 2h12.5c.97 0 1.75.78 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 14H1.75A1.75 1.75 0 0 1 0 12.25v-8.5C0 2.78.78 2 1.75 2ZM1.5 5.06v7.19c0 .14.11.25.25.25h12.5c.14 0 .25-.11.25-.25V5.06L8.4 9.2a.75.75 0 0 1-.8 0Zm13-1.31v-.02c0-.13-.11-.23-.25-.23H1.75c-.14 0-.25.1-.25.23v.02L8 7.67Z"/></svg>',
+    repo: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.71 1.71.75.75 0 0 1-1.07 1.05A2.5 2.5 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.71A2.5 2.5 0 0 1 4.5 9h8Z"/></svg>',
+    link: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M7.78 4.72a.75.75 0 0 1 0 1.06L5.06 8.5a1.75 1.75 0 1 0 2.47 2.47l.5-.5a.75.75 0 1 1 1.06 1.06l-.5.5a3.25 3.25 0 1 1-4.6-4.6l2.73-2.72a.75.75 0 0 1 1.06 0Zm1.44-1.44a3.25 3.25 0 0 1 4.6 4.6l-.5.5a.75.75 0 0 1-1.06-1.06l.5-.5a1.75 1.75 0 1 0-2.47-2.47L7.56 7.08A.75.75 0 1 1 6.5 6.02Z"/></svg>',
+  };
+  function linkRow(l) {
+    return `<a class="lk lk-${l.kind.k}" href="${escapeHtml(l.url)}" target="_blank" rel="noopener" title="${escapeHtml(l.title)}"><span class="lk-ic">${ICON[l.kind.k] || ICON.link}</span><span class="lk-t">${escapeHtml(l.title)}</span><span class="lk-arrow">↗</span></a>`;
+  }
+  function toMin(t) {
+    if (typeof t === 'string' && /^\d{1,2}:\d{2}$/.test(t)) { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
+    const d = new Date(t); return isNaN(d) ? null : d.getHours() * 60 + d.getMinutes();
+  }
+  function fmtMin(m) { return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
+  function greetingWord() {
+    const h = new Date().getHours();
+    return h < 5 ? '夜深了' : h < 11 ? '早上好' : h < 13 ? '中午好' : h < 18 ? '下午好' : '晚上好';
+  }
+
+  function renderTimetable(card) {
+    const tt = blockOf(card, 'timetable') || {};
+    const blocks = [...(tt.fixedBlocks || []).map(b => ({ ...b, fixed: true })), ...(tt.suggestedBlocks || [])]
+      .map(b => ({ ...b, s: toMin(b.start), e: toMin(b.end) }))
+      .filter(b => b.s != null && b.e != null && b.e > b.s)
+      .sort((a, b) => a.s - b.s);
+    const now = new Date(); const nowM = now.getHours() * 60 + now.getMinutes();
+    let lo = 8 * 60, hi = 22 * 60;
+    for (const b of blocks) { lo = Math.min(lo, Math.floor(b.s / 60) * 60); hi = Math.max(hi, Math.ceil(b.e / 60) * 60); }
+    lo = Math.min(lo, Math.floor(nowM / 60) * 60); hi = Math.max(hi, Math.ceil((nowM + 1) / 60) * 60);
+    hi = Math.min(hi, 24 * 60);
+    const pct = m => ((m - lo) / (hi - lo)) * 100;
+    let ticks = '';
+    for (let h = lo / 60; h <= hi / 60; h += 2) ticks += `<span class="tt-tick" style="left:${pct(h * 60)}%"><i>${String(h).padStart(2, '0')}:00</i></span>`;
+    const bars = blocks.map(b => {
+      const state = b.e <= nowM ? 'past' : b.s <= nowM ? 'live' : 'next';
+      const cat = CAT_ZH[b.category] || (b.fixed ? '日程' : '建议');
+      return `<div class="tt-bar c-${escapeHtml(b.category || (b.fixed ? 'meeting' : 'focus'))} ${state}" style="left:${pct(b.s)}%;width:${pct(b.e) - pct(b.s)}%" title="${escapeHtml(b.start + '–' + b.end + ' ' + (TITLE_ZH[b.title] || b.title))}"><b>${escapeHtml(cat)}</b><span>${escapeHtml(b.start)}–${escapeHtml(b.end)} · ${escapeHtml(TITLE_ZH[b.title] || b.title)}</span></div>`;
+    }).join('');
+    const upcoming = blocks.find(b => b.e > nowM);
+    const fixedN = blocks.filter(b => b.fixed).length;
+    const freeMin = Math.max(0, (Math.min(hi, 23 * 60) - nowM) - blocks.filter(b => b.e > nowM).reduce((s, b) => s + (b.e - Math.max(b.s, nowM)), 0));
+    const note = upcoming
+      ? `接下来 ${escapeHtml(upcoming.start)} ${escapeHtml(CAT_ZH[upcoming.category] || '')}：${escapeHtml(upcoming.title)}`
+      : `今天的安排都已过去，剩余约 ${(freeMin / 60).toFixed(1)} 小时空闲，适合收尾或复盘。`;
+    return `
+      <section class="myday" data-sys="timetable">
+        <div class="myday-head">
+          <div>
+            <div class="eyebrow c-teal">我的一天 · MY DAY</div>
+            <div class="myday-note">${note}</div>
+          </div>
+          <div class="myday-meta"><span><b>${fixedN}</b> 个固定日程</span><span><b>${blocks.length - fixedN}</b> 个建议时段</span><span>现在 <b>${fmtMin(nowM)}</b></span></div>
+        </div>
+        <div class="tt">
+          <div class="tt-track">${bars || '<div class="tt-empty">今天还没有日程，连接日历后会自动排进来</div>'}
+            ${nowM >= lo && nowM <= hi ? `<div class="tt-now" style="left:${pct(nowM)}%"><em>${fmtMin(nowM)}</em></div>` : ''}
+          </div>
+          <div class="tt-axis">${ticks}</div>
+        </div>
+      </section>`;
+  }
+
+  function ringSvg(value, max, color, size = 64, stroke = 7) {
+    const r = (size - stroke) / 2, c = 2 * Math.PI * r;
+    const p = max > 0 ? Math.min(value / max, 1) : 0;
+    return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="rgba(30,40,80,.08)" stroke-width="${stroke}"/><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c - p * c}" transform="rotate(-90 ${size / 2} ${size / 2})"/></svg>`;
+  }
+
+  function renderHero(hero, work) {
+    const urgent = work.filter(c => c.priority === 'urgent' || c.priority === 'high');
+    const totPR = work.reduce((s, c) => s + statOf(c, 'PR'), 0);
+    const totIss = work.reduce((s, c) => s + statOf(c, 'issue'), 0);
+    const focus = [...work].sort((a, b) => (b.priority === 'high') - (a.priority === 'high') || (statOf(b, 'PR') + statOf(b, 'issue')) - (statOf(a, 'PR') + statOf(a, 'issue'))).slice(0, 3);
+    const rings = (blockOf(hero || {}, 'achievement-rings') || {}).rings || [];
+    const lead = work.length
+      ? `${work.length} 个项目在推进，其中 ${urgent.length} 个需要优先关注。按下面的顺序来，一件件收掉。`
+      : '今天没有待推进的事项，点「立即汇聚」拉取最新动态。';
+    return `
+      <div class="tile hero2 size-hero" data-sys="hero">
+        <div class="eyebrow c-violet">今日焦点 · 豆芽建议</div>
+        <p class="hero-lead">${escapeHtml(lead)}</p>
+        <ol class="focus">
+          ${focus.map((c, i) => {
+            const r = repoOf(c);
+            return `<li data-focus="${escapeHtml(c.id)}"><span class="focus-n">${i + 1}</span><div class="focus-b"><b>${escapeHtml(r ? r.name : clip(c.title, 24))}</b><span>${escapeHtml(nextAction(c))}</span></div><span class="focus-go">→</span></li>`;
+          }).join('')}
+        </ol>
+        <div class="hero-foot">
+          <div class="hero-kpi"><b>${totPR}</b><span>PR 待推进</span></div>
+          <div class="hero-kpi"><b>${totIss}</b><span>issue 待处理</span></div>
+          ${rings.map(r => `<div class="hero-ring" title="${escapeHtml(r.label)} ${r.value}/${r.max}">${ringSvg(r.value, r.max, r.color, 44, 5)}<div><b>${r.value}<small>/${r.max}</small></b><span>${escapeHtml(r.label)}</span></div></div>`).join('')}
+        </div>
+      </div>`;
+  }
+
+  function renderLoad(work) {
+    const rows = work.map(c => ({ c, r: repoOf(c), pr: statOf(c, 'PR'), iss: statOf(c, 'issue') }))
+      .filter(x => x.pr + x.iss > 0)
+      .sort((a, b) => (b.pr + b.iss) - (a.pr + a.iss)).slice(0, 7);
+    if (!rows.length) return '';
+    const max = Math.max(...rows.map(x => x.pr + x.iss), 1);
+    const scale = v => { const a=Math.log10(v+1), b=Math.log10(max+1); return Math.max(6, (a/b)*100); };
+    return `
+      <div class="tile load size-load" data-sys="load">
+        <div class="eyebrow c-blue">工作负载 · 按项目</div>
+        <p class="load-desc">每个项目还挂着多少 PR 和 issue（长度按平方根缩放，避免大仓库压扁小仓库）。点一行看详情。</p>
+        <div class="load-rows">
+          ${rows.map(x => `
+            <div class="load-row" data-focus="${escapeHtml(x.c.id)}">
+              <span class="load-name" title="${escapeHtml(x.r ? x.r.owner + '/' + x.r.name : x.c.title)}">${escapeHtml(x.r ? x.r.name : clip(x.c.title, 18))}</span>
+              <span class="load-bar"><i class="b-pr" style="width:${scale(x.pr + x.iss) * (x.pr / (x.pr + x.iss))}%"></i><i class="b-iss" style="width:${scale(x.pr + x.iss) * (x.iss / (x.pr + x.iss))}%"></i></span>
+              <span class="load-val">${x.pr ? `<em class="v-pr">${x.pr}</em>` : ''}${x.iss ? `<em class="v-iss">${x.iss}</em>` : ''}</span>
+            </div>`).join('')}
+        </div>
+        <div class="legend"><span><i class="b-pr"></i>你开的 / 待推进 PR</span><span><i class="b-iss"></i>待处理 issue</span><span style="margin-left:auto;opacity:.7">长度按对数缩放</span></div>
+      </div>`;
+  }
+
+  function renderWorkTile(card, idx) {
+    const r = repoOf(card);
+    const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
+    const big = card.priority === 'high' || card.priority === 'urgent';
+    const desc = explain(card);
+    const links = deepLinks(card);
+    const spark = blockOf(card, 'sparkline');
+    const hasSpark = spark && (spark.data || []).some(v => v > 0);
+    const label = SRC_ZH[card.source] || (card.source || '动态');
+    const av = r ? `<img class="av" src="https://github.com/${encodeURIComponent(r.owner)}.png?size=80" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'av av-f',textContent:'${escapeHtml(r.owner.slice(0, 1).toUpperCase())}'}))">` : `<span class="av av-f">${escapeHtml((card.source || '?').slice(0, 1).toUpperCase())}</span>`;
+    const review = statOf(card, '待你审') || statOf(card, '审');
+    const mine = statOf(card, '你开的') || pr;
+    let metrics = '';
+    if (review || mine || iss) {
+      metrics = `<div class="metrics">
+        ${review ? `<div class="m"><b class="c-rose">${review}</b><span>待你审</span></div>` : ''}
+        ${mine ? `<div class="m"><b class="c-teal">${mine}</b><span>你开的 PR</span></div>` : ''}
+        ${iss ? `<div class="m"><b class="c-violet">${iss}</b><span>待处理 issue</span></div>` : ''}
+        <div class="m-bar"><i class="b-pr" style="flex:${Math.max(mine||pr,0)}"></i><i class="b-iss" style="flex:${Math.max(iss,0)}"></i></div>
+      </div>`;
+    }
+    const bar = (card.blocks || []).find(b => b.type === 'chart' && b.chartType === 'bar');
+    if (bar && (bar.data || []).some(v => v > 0)) {
+      const mx = Math.max(...bar.data, 1);
+      metrics += `<div class="mini-bars" title="等你 vs 等别人">${(bar.data||[]).map((v,i)=>`<div class="mb"><i style="height:${Math.max(8,(v/mx)*36)}px" class="${i===0?'b-pr':'b-iss'}"></i><span>${escapeHtml((bar.labels||[])[i]||'')}<b>${v}</b></span></div>`).join('')}</div>`;
+    }
+    const tags = ((card.blocks || []).find(b => b.type === 'tags') || {}).tags || [];
+    const avatars = (blockOf(card, 'avatars') || {}).urls || [];
+    const avRow = avatars.length ? `<div class="av-row">${avatars.slice(0,5).map(u=>`<img class="av sm" src="${escapeHtml(u)}" alt="" loading="lazy" onerror="this.style.display='none'"/>`).join('')}</div>` : '';
+    const tagHtml = tags.length ? `<div class="w-tags">${tags.map(t=>{const tx=TAG_ZH[t.text]||t.text; return `<span class="pill pill-${escapeHtml(t.color||'gray')}">${escapeHtml(tx)}</span>`;}).join('')}</div>` : '';
+    if (hasSpark) {
+      const d = spark.data, mx = Math.max(...d, 1);
+      const pts = d.map((v, i) => `${(i / (d.length - 1)) * 100},${30 - (v / mx) * 26}`).join(' ');
+      metrics += `<svg class="spark" viewBox="0 0 100 32" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
+    }
+    return `
+      <article class="tile work ${big ? 'size-wide' : 'size-normal'}" data-idx="${idx}">
+        <header class="w-top">
+          ${av}
+          <div class="w-src"><span class="w-label">${escapeHtml(label)}</span><span class="w-repo">${escapeHtml(r ? `${r.owner} / ${r.name}` : (card.subtitle || ''))}</span></div>
+          ${big ? '<span class="pill pill-hot">优先</span>' : ''}${tagHtml}
+        </header>
+        <h3 class="w-head">${escapeHtml(headline(card))}</h3>
+        ${desc ? `<p class="w-desc">${escapeHtml(desc)}</p>` : ''}
+        ${metrics}${avRow}
+        <div class="w-next"><span class="w-next-k">下一步</span><span class="w-next-v">${escapeHtml(nextAction(card))}</span></div>
+        <div class="w-links">${links.map(linkRow).join('')}</div>
+      </article>`;
+  }
+
   function renderCardList(cards) {
     const container = $('cardList');
-    
-    if (cards.length === 0) {
-      container.innerHTML = `
-        <div class="cards-grid">
-          <div class="tile normal" style="text-align:center;padding:32px 16px;background:var(--gray-soft);grid-column:span 2">
-            <p style="color:var(--ink3);margin:0 0 8px">暂无待办卡片</p>
-            <p style="font-size:12px;color:var(--ink3);margin:0">点击上方「立即汇聚」从数据源获取最新动态</p>
-          </div>
-        </div>
-        <div class="today-chat-input">
-          <div class="input-wrap">
-            <input type="text" id="todayChatInput" placeholder="Make sense of Today..." />
-            <button class="send-btn" id="todayChatSend">↑</button>
-          </div>
-        </div>
-      `;
-      setupTodayChatInput();
-      return;
-    }
-    
-    // Render tiles in grid
-    const tilesHtml = cards.map(card => {
-      const size = card.size || 'normal';
-      const type = card.type || '';
-      const priority = card.priority || '';
-      let tileClass = `tile ${size} ${type}`;
-      if (priority === 'urgent') tileClass += ' urgent';
-      
-      let tileHtml = `<div class="${tileClass}" data-card-id="${escapeHtml(card.id)}" data-url="${escapeHtml(card.url || '')}">`;
-      
-      // Header with title and subtitle
-      tileHtml += '<div class="tile-header">';
-      tileHtml += `<div style="flex:1;min-width:0">`;
-      if (card.subtitle) {
-        tileHtml += `<div class="tile-subtitle">${escapeHtml(card.subtitle)}</div>`;
-      }
-      tileHtml += `<h3 class="tile-title">${escapeHtml(card.title)}</h3>`;
-      tileHtml += `</div>`;
-      tileHtml += '</div>';
-      
-      // Body text
-      if (card.body && type !== 'hero' && type !== 'timetable') {
-        tileHtml += `<div class="tile-body">${escapeHtml(card.body)}</div>`;
-      }
-      
-      // Visual blocks
-      if (card.blocks && card.blocks.length > 0) {
-        tileHtml += '<div class="tile-blocks">';
-        
-        for (const block of card.blocks) {
-          if (block.type === 'narrative') {
-            // Hero narrative
-            tileHtml += `<div style="font-size:13.5px;line-height:1.5;margin:8px 0;opacity:.95">${escapeHtml(block.text)}</div>`;
-          } else if (block.type === 'stat') {
-            tileHtml += `
-              <div class="stat-block">
-                <div class="value">${escapeHtml(String(block.value))}</div>
-                <div class="label">${escapeHtml(block.label)}</div>
-              </div>
-            `;
-          } else if (block.type === 'tags') {
-            tileHtml += '<div class="tags">';
-            for (const tag of block.tags || []) {
-              const color = tag.color || 'gray';
-              tileHtml += `<span class="tag ${color}">${escapeHtml(tag.text)}</span>`;
-            }
-            tileHtml += '</div>';
-          } else if (block.type === 'chart' && block.chartType === 'donut') {
-            // Donut chart
-            const data = block.data || [];
-            const labels = block.labels || [];
-            const total = data.reduce((s, v) => s + v, 0);
-            const pct = total > 0 ? (data[0] / total * 100).toFixed(0) : 0;
-            const circumference = 2 * Math.PI * 18;
-            const offset = circumference - (pct / 100 * circumference);
-            
-            tileHtml += `
-              <div class="donut-chart">
-                <svg viewBox="0 0 40 40" style="width:60px;height:60px">
-                  <circle cx="20" cy="20" r="18" fill="none" stroke="rgba(0,0,0,.08)" stroke-width="4"/>
-                  <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="4"
-                          stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"
-                          transform="rotate(-90 20 20)" stroke-linecap="round" opacity=".8"/>
-                  <text x="20" y="24" font-size="10" font-weight="700" text-anchor="middle" fill="currentColor">${pct}%</text>
-                </svg>
-              </div>
-            `;
-          } else if (block.type === 'chart' && block.chartType === 'bar') {
-            // Bar chart
-            const data = block.data || [];
-            const labels = block.labels || [];
-            const max = Math.max(...data, 1);
-            
-            tileHtml += '<svg class="tile-chart" viewBox="0 0 100 50">';
-            data.forEach((value, i) => {
-              const height = (value / max) * 35;
-              const x = (i / data.length) * 100 + 2;
-              const width = (100 / data.length) * 0.7;
-              tileHtml += `
-                <rect x="${x}" y="${40 - height}" width="${width}" height="${height}" 
-                      fill="currentColor" opacity=".7" rx="1"/>
-                <text x="${x + width / 2}" y="49" font-size="6" text-anchor="middle" fill="currentColor" opacity=".6">${escapeHtml(labels[i] || '')}</text>
-              `;
-            });
-            tileHtml += '</svg>';
-          } else if (block.type === 'timeline') {
-            tileHtml += '<div class="tile-timeline">';
-            for (const item of (block.items || []).slice(0, 4)) {
-              tileHtml += `
-                <div class="timeline-event">
-                  <span class="time">${escapeHtml(item.time)}</span>
-                  <span class="event-title">${escapeHtml(item.title)}</span>
-                </div>
-              `;
-            }
-            tileHtml += '</div>';
-          } else if (block.type === 'achievement-rings') {
-            // SVG achievement rings
-            tileHtml += '<div class="achievement-rings">';
-            for (const ring of (block.rings || [])) {
-              const pct = ring.max > 0 ? (ring.value / ring.max) : 0;
-              const circumference = 2 * Math.PI * 28;
-              const offset = circumference - (pct * circumference);
-              tileHtml += `
-                <div class="achievement-ring">
-                  <svg viewBox="0 0 64 64">
-                    <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="6"/>
-                    <circle cx="32" cy="32" r="28" fill="none" stroke="${ring.color}" stroke-width="6"
-                            stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"
-                            transform="rotate(-90 32 32)" stroke-linecap="round"/>
-                    <text x="32" y="38" font-size="18" font-weight="800" text-anchor="middle" fill="currentColor">${ring.value}</text>
-                  </svg>
-                  <div class="label">${escapeHtml(ring.label)}</div>
-                </div>
-              `;
-            }
-            tileHtml += '</div>';
-          } else if (block.type === 'stat-row') {
-            // Stat row with colored values
-            tileHtml += '<div class="stat-row">';
-            for (const stat of (block.stats || [])) {
-              tileHtml += `
-                <div class="stat-row-item" style="color:${stat.color}">
-                  <div class="value">${stat.value}</div>
-                  <div class="label">${escapeHtml(stat.label)}</div>
-                </div>
-              `;
-            }
-            tileHtml += '</div>';
-          } else if (block.type === 'sparkline') {
-            // 7-day activity sparkline
-            const data = block.data || [];
-            const max = Math.max(...data, 1);
-            const points = data.map((v, i) => {
-              const x = (i / (data.length - 1)) * 100;
-              const y = 28 - ((v / max) * 24);
-              return `${x},${y}`;
-            }).join(' ');
-            tileHtml += `
-              <div class="sparkline-container">
-                <div class="label">${escapeHtml(block.label)}</div>
-                <svg viewBox="0 0 100 32">
-                  <polyline points="${points}" fill="none" stroke="currentColor" stroke-width="2" 
-                            opacity=".7" stroke-linecap="round" stroke-linejoin="round"/>
-                  ${data.map((v, i) => {
-                    const x = (i / (data.length - 1)) * 100;
-                    const y = 28 - ((v / max) * 24);
-                    return `<circle cx="${x}" cy="${y}" r="2.5" fill="currentColor" opacity=".8"/>`;
-                  }).join('')}
-                </svg>
-              </div>
-            `;
-          } else if (block.type === 'avatars') {
-            // Contributor avatars
-            tileHtml += '<div class="avatars">';
-            for (const url of (block.urls || []).slice(0, 5)) {
-              tileHtml += `<div class="avatar"><img src="${escapeHtml(url)}" alt="avatar" loading="lazy" onerror="this.style.display='none'"/></div>`;
-            }
-            tileHtml += '</div>';
-          } else if (block.type === 'link-list') {
-            // Top 3 item links
-            tileHtml += '<div class="link-list">';
-            for (const link of (block.links || []).slice(0, 3)) {
-              tileHtml += `
-                <a href="${escapeHtml(link.url)}" target="_blank" class="link-list-item" title="${escapeHtml(link.title)}">
-                  ${escapeHtml(link.title)}
-                </a>
-              `;
-            }
-            tileHtml += '</div>';
-          } else if (block.type === 'heatmap') {
-            // GitHub-style contribution heatmap
-            const heatmapData = block.data || [];
-            tileHtml += `
-              <div style="margin:8px 0">
-                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;opacity:.75;margin-bottom:6px">${escapeHtml(block.label || '贡献')}</div>
-                <svg viewBox="0 0 ${heatmapData.length * 14} 96" style="width:100%;height:96px">
-                  ${heatmapData.map((week, weekIdx) => 
-                    week.map((day, dayIdx) => {
-                      const x = weekIdx * 14 + 1;
-                      const y = dayIdx * 14 + 1;
-                      const opacity = day.count === 0 ? 0.1 : Math.min(day.count / 5, 1) * 0.8 + 0.2;
-                      return `<rect x="${x}" y="${y}" width="12" height="12" rx="2" fill="currentColor" opacity="${opacity}"/>`;
-                    }).join('')
-                  ).join('')}
-                </svg>
-              </div>
-            `;
-          } else if (block.type === 'timetable') {
-            // Timetable strip
-            const allBlocks = [...(block.fixedBlocks || []), ...(block.suggestedBlocks || [])].sort((a, b) => {
-              const getMinutes = (t) => {
-                if (typeof t === 'string' && t.includes(':')) {
-                  const [h, m] = t.split(':').map(Number);
-                  return h * 60 + m;
-                }
-                return new Date(t).getHours() * 60 + new Date(t).getMinutes();
-              };
-              return getMinutes(a.start) - getMinutes(b.end);
-            });
-            
-            tileHtml += '<div class="timetable-strip">';
-            allBlocks.forEach(tb => {
-              const duration = 60; // simplified: 1 hour each
-              tileHtml += `
-                <div class="timetable-block ${tb.type}" title="${escapeHtml(tb.title)}" style="flex:${duration}">
-                  ${escapeHtml(tb.title.substring(0, 12))}
-                </div>
-              `;
-            });
-            
-            // Now indicator
-            const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
-            const dayStart = 8 * 60;
-            const dayEnd = 22 * 60;
-            const nowPct = ((nowMinutes - dayStart) / (dayEnd - dayStart)) * 100;
-            if (nowPct >= 0 && nowPct <= 100) {
-              tileHtml += `<div class="timetable-now" style="left:${nowPct}%"></div>`;
-            }
-            
-            tileHtml += '</div>';
-          }
-        }
-        
-        tileHtml += '</div>';
-      }
-      
-      // Actions
-      if (card.actions && card.actions.length > 0) {
-        tileHtml += '<div class="tile-actions">';
-        for (const action of card.actions.slice(0, 2)) {
-          const isPrimary = action.primary ? 'primary' : '';
-          tileHtml += `<button class="tile-action ${isPrimary}" data-action-url="${escapeHtml(action.value || card.url)}">${escapeHtml(action.label)}</button>`;
-        }
-        tileHtml += '</div>';
-      }
-      
-      tileHtml += '</div>';
-      return tileHtml;
-    }).join('');
-    
-    container.innerHTML = `
-      <div class="cards-grid">${tilesHtml}</div>
-      <div class="today-chat-input">
-        <div class="input-wrap">
-          <input type="text" id="todayChatInput" placeholder="Make sense of Today..." />
-          <button class="send-btn" id="todayChatSend">↑</button>
-        </div>
-      </div>
-    `;
-    
-    // Add click handlers
-    container.querySelectorAll('.tile').forEach((tile, idx) => {
-      const cardId = tile.getAttribute('data-card-id');
-      const url = tile.getAttribute('data-url');
-      const card = cards[idx]; // Get the full card object
-      
-      tile.addEventListener('click', async (e) => {
-        // Don't trigger if clicking an action button
-        if (e.target.classList.contains('tile-action')) return;
-        
-        // Track interaction
-        if (cardId) {
-          try {
-            await fetch(`/api/cards/${cardId}/interact`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'open' }),
-            });
-          } catch (err) {
-            console.warn('[Interaction] Track failed:', err);
-          }
-        }
-        
-        // Open zoom modal instead of direct URL
-        if (card) {
-          openTileZoom(card);
-        } else if (url && url !== 'undefined' && url !== '') {
-          window.open(url, '_blank');
-        }
+    lastCards = cards;
+    const hero = cards.find(c => c.type === 'hero');
+    const tt = cards.find(c => c.type === 'timetable');
+    const work = cards.filter(c => !SYS_TYPES.has(c.type));
+    const order = [...work].sort((a, b) => ((b.priority === 'high') - (a.priority === 'high')));
+    let html = tt ? renderTimetable(tt) : '';
+    html += '<div class="grid2">';
+    html += renderHero(hero, work);
+    html += renderLoad(work);
+    html += order.map(c => renderWorkTile(c, cards.indexOf(c))).join('');
+    if (!work.length) html += `<div class="tile empty size-wide"><div class="eyebrow">还没有卡片</div><p class="w-desc">点击右上角「立即汇聚」，豆芽会从已连接的数据源拉取最新动态。</p></div>`;
+    html += '</div>';
+    html += `<div class="today-chat-input"><div class="input-wrap"><input type="text" id="todayChatInput" placeholder="问豆芽：今天先做哪件？帮我总结一下…" /><button class="send-btn" id="todayChatSend">↑</button></div></div>`;
+    container.innerHTML = html;
+
+    const track = async (card, action) => {
+      if (!card || !card.id) return;
+      try { await fetch(`/api/cards/${card.id}/interact`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) }); } catch (e) { console.warn('[Interaction] Track failed:', e); }
+    };
+    container.querySelectorAll('.tile.work').forEach(tile => {
+      const card = cards[Number(tile.getAttribute('data-idx'))];
+      tile.addEventListener('click', e => {
+        if (e.target.closest('a')) { track(card, 'open'); return; }
+        track(card, 'open');
+        openTileZoom(card);
       });
     });
-    
-    container.querySelectorAll('.tile-action').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
+    container.querySelectorAll('[data-focus]').forEach(el => {
+      el.addEventListener('click', e => {
         e.stopPropagation();
-        const tile = btn.closest('.tile');
-        const cardId = tile?.getAttribute('data-card-id');
-        const actionUrl = btn.getAttribute('data-action-url');
-        
-        // Track interaction
-        if (cardId) {
-          try {
-            await fetch(`/api/cards/${cardId}/interact`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'open' }),
-            });
-          } catch (err) {
-            console.warn('[Interaction] Track failed:', err);
-          }
-        }
-        
-        if (actionUrl && actionUrl !== 'undefined' && actionUrl !== '') {
-          window.open(actionUrl, '_blank');
-        }
+        const card = cards.find(c => c.id === el.getAttribute('data-focus'));
+        if (card) { track(card, 'open'); openTileZoom(card); }
       });
     });
-    
+    const myday = container.querySelector('.myday');
+    if (myday && tt) myday.addEventListener('click', () => openTileZoom(tt));
     setupTodayChatInput();
   }
-  
+
+
   function setupTodayChatInput() {
     const input = $('todayChatInput');
     const sendBtn = $('todayChatSend');
@@ -1842,116 +2034,87 @@
     const title = $('zoomTitle');
     const subtitle = $('zoomSubtitle');
     const content = $('zoomContent');
-    
     if (!overlay || !title || !subtitle || !content) return;
-    
-    // Set header
-    title.textContent = card.title || '';
-    subtitle.textContent = card.body || '';
-    
-    // Build content
+    const r = repoOf(card);
+    const isTT = card.type === 'timetable';
+    title.textContent = isTT ? '我的一天' : headline(card);
+    subtitle.innerHTML = isTT ? '今天的固定日程与豆芽建议的时段' :
+      `<span class="z-src">${escapeHtml(SRC_ZH[card.source] || card.source || '')}</span>${r ? ` · <a href="${escapeHtml(card.url)}" target="_blank" rel="noopener">${escapeHtml(r.owner + ' / ' + r.name)}</a>` : ''}`;
     let html = '';
-    
-    // Items section
-    if (card.blocks) {
-      const linkList = card.blocks.find(b => b.type === 'link-list');
-      if (linkList && linkList.links) {
-        html += '<div class="tile-zoom-section"><h3>相关项目</h3><div class="tile-zoom-items">';
-        linkList.links.forEach(link => {
-          html += `
-            <div class="tile-zoom-item">
-              <div class="tile-zoom-item-content">
-                <div class="tile-zoom-item-title">${escapeHtml(link.title)}</div>
-                <div class="tile-zoom-item-meta">${escapeHtml(link.type || '')}</div>
-              </div>
-              <div class="tile-zoom-actions">
-                <button class="tile-zoom-action" onclick="window.open('${escapeHtml(link.url)}', '_blank')">打开</button>
-                <button class="tile-zoom-action done" data-item-url="${escapeHtml(link.url)}">完成</button>
-                <button class="tile-zoom-action dismiss" data-item-url="${escapeHtml(link.url)}">忽略</button>
-              </div>
-            </div>
-          `;
+    if (isTT) {
+      const tt = blockOf(card, 'timetable') || {};
+      const all = [...(tt.fixedBlocks || []), ...(tt.suggestedBlocks || [])].sort((a, b) => (toMin(a.start) || 0) - (toMin(b.start) || 0));
+      html += `<div class="z-sec"><h4>时间表</h4><div class="z-items">${all.map(b => `<div class="z-item"><span class="z-time">${escapeHtml(b.start)}–${escapeHtml(b.end)}</span><div class="z-item-b"><b>${escapeHtml(b.title)}</b><span>${escapeHtml(CAT_ZH[b.category] || (b.type === 'suggested' ? '建议' : '日程'))}</span></div></div>`).join('') || '<p class="w-desc">暂无日程</p>'}</div></div>`;
+    } else {
+      if (card.body) html += `<p class="z-body">${escapeHtml(card.body)}</p>`;
+      if (card.title && card.title !== headline(card)) html += `<p class="z-orig">原始摘要：${escapeHtml(card.title)}</p>`;
+      const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
+      if (pr || iss) html += `<div class="z-kpis">${pr ? `<div><b class="c-teal">${pr}</b><span>待推进 PR</span></div>` : ''}${iss ? `<div><b class="c-violet">${iss}</b><span>待处理 issue</span></div>` : ''}</div>`;
+      const dl = deepLinks(card);
+      html += `<div class="z-next"><div><span class="w-next-k">下一步</span><b>${escapeHtml(nextAction(card))}</b></div>${dl[0] ? `<a class="z-btn" href="${escapeHtml(dl[0].url)}" target="_blank" rel="noopener">去处理 ↗</a>` : ''}</div>`;
+      const links = linksOf(card);
+      if (links.length) {
+        html += `<div class="z-sec"><h4>相关条目 · ${links.length}</h4><div class="z-items">`;
+        links.forEach(link => {
+          const k = linkKind(link);
+          html += `<div class="z-item"><span class="lk-ic lk-${k.k}">${ICON[k.k] || ICON.link}</span><div class="z-item-b"><b title="${escapeHtml(link.title)}">${escapeHtml(link.title)}</b><span>${k.zh}</span></div>
+            <div class="z-acts"><a class="z-act" href="${escapeHtml(link.url)}" target="_blank" rel="noopener">打开</a><button class="z-act done" data-item-url="${escapeHtml(link.url)}">完成</button><button class="z-act dismiss" data-item-url="${escapeHtml(link.url)}">忽略</button></div></div>`;
         });
         html += '</div></div>';
       }
     }
-    
-    // Chat section
+    const name = r ? r.name : (isTT ? '今天的安排' : clip(card.title, 20));
+    const sugg = isTT ? ['帮我把今晚剩下的时间排一下', '明天上午留两小时专注，放哪里？'] :
+      ['这些 PR 现在卡在哪？', '帮我起草一条催 review 的评论', '今天只做一件事的话，做哪件？'];
     html += `
-      <div class="tile-zoom-chat">
-        <h3>💬 问问豆芽</h3>
-        <div class="tile-zoom-chat-input">
-          <input type="text" id="zoomChatInput" placeholder="关于这个项目，问我任何问题..." />
-          <button id="zoomChatSend">发送</button>
-        </div>
-      </div>
-    `;
-    
+      <div class="z-chat">
+        <h4>继续这个任务 · 和豆芽聊「${escapeHtml(name)}」</h4>
+        <div class="z-msgs" id="zoomMsgs"></div>
+        <div class="z-sugg">${sugg.map(s => `<button class="z-chip">${escapeHtml(s)}</button>`).join('')}</div>
+        <div class="z-input"><input type="text" id="zoomChatInput" placeholder="关于「${escapeHtml(name)}」，问我或让我去做…" /><button id="zoomChatSend">发送</button></div>
+      </div>`;
     content.innerHTML = html;
-    
-    // Wire up chat
+
+    const msgs = $('zoomMsgs');
     const chatInput = $('zoomChatInput');
-    const chatSend = $('zoomChatSend');
-    if (chatInput && chatSend) {
-      const sendZoomChat = () => {
-        const msg = chatInput.value.trim();
-        if (!msg) return;
-        
-        // Prepend card context to message
-        const contextMsg = `关于 "${card.title}": ${msg}`;
-        openDock();
-        $('dockInput').value = contextMsg;
-        sendMessage();
-        chatInput.value = '';
-        closeTileZoom();
-      };
-      
-      chatSend.onclick = sendZoomChat;
-      chatInput.onkeydown = (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          sendZoomChat();
-        }
-      };
-    }
-    
-    // Wire up action buttons
-    document.querySelectorAll('.tile-zoom-action.done').forEach(btn => {
-      btn.onclick = async () => {
-        const url = btn.getAttribute('data-item-url');
-        if (card.id) {
-          await fetch(`/api/cards/${card.id}/interact`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'done', itemUrl: url }),
-          });
-          btn.textContent = '✓ 已完成';
-          btn.disabled = true;
-          btn.style.opacity = '0.5';
-        }
-      };
-    });
-    
-    document.querySelectorAll('.tile-zoom-action.dismiss').forEach(btn => {
-      btn.onclick = async () => {
-        const url = btn.getAttribute('data-item-url');
-        if (card.id) {
-          await fetch(`/api/cards/${card.id}/interact`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'dismiss', itemUrl: url }),
-          });
-          btn.closest('.tile-zoom-item').style.opacity = '0.3';
-          btn.textContent = '✓ 已忽略';
-          btn.disabled = true;
-        }
-      };
-    });
-    
-    // Show overlay
+    const ctx = isTT ? '【上下文：我今天的时间表】' : `【上下文：${r ? r.owner + '/' + r.name : ''} — ${card.title}。${card.body || ''} 相关链接：${linksOf(card).map(l => l.title + ' ' + l.url).join('；')}】`;
+    let first = true;
+    const push = (cls, text) => { const d = document.createElement('div'); d.className = 'z-msg ' + cls; d.textContent = text; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; return d; };
+    const sendZoomChat = async (preset) => {
+      const msg = (preset || chatInput.value).trim();
+      if (!msg) return;
+      chatInput.value = '';
+      push('me', msg);
+      const typing = push('bot typing', '豆芽正在想…');
+      try {
+        const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: first ? `${ctx}\n${msg}` : msg, sessionId: `card-${card.id || 'x'}` }) });
+        first = false;
+        const data = await res.json();
+        typing.remove();
+        push('bot', data.text || data.error || '收到了，但模型没有返回内容。');
+      } catch (err) {
+        typing.remove();
+        push('bot', '发送失败了，请稍后再试。');
+      }
+    };
+    $('zoomChatSend').onclick = () => sendZoomChat();
+    chatInput.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendZoomChat(); } };
+    content.querySelectorAll('.z-chip').forEach(b => { b.onclick = () => sendZoomChat(b.textContent); });
+
+    const mark = async (btn, action) => {
+      if (!card.id) return;
+      try { await fetch(`/api/cards/${card.id}/interact`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, itemUrl: btn.getAttribute('data-item-url') }) }); } catch (e) { return; }
+      btn.closest('.z-item').classList.add(action === 'done' ? 'is-done' : 'is-dismissed');
+      btn.textContent = action === 'done' ? '✓ 已完成' : '已忽略';
+      btn.disabled = true;
+    };
+    content.querySelectorAll('.z-act.done').forEach(b => { b.onclick = () => mark(b, 'done'); });
+    content.querySelectorAll('.z-act.dismiss').forEach(b => { b.onclick = () => mark(b, 'dismiss'); });
     overlay.classList.add('open');
+    setTimeout(() => chatInput && chatInput.focus({ preventScroll: true }), 50);
   }
-  
+
+
   function closeTileZoom() {
     const overlay = $('tileZoomOverlay');
     if (overlay) overlay.classList.remove('open');

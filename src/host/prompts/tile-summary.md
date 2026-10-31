@@ -51,7 +51,8 @@ Based on Superhuman, Motion, Linear, Sunsama:
    - "openDigitalMate 有 2 个 PR 正在进行中，主要是 UI 重构；#42 阻塞了下周的 demo，建议优先 review。"
    - "AgentDescent 今天没有新 PR，有 2 个 issue 待处理，包括内存泄漏问题（高优先级）。"
 
-JSON: {"headline": "英文标题", "summary": "中文摘要"}
+JSON: {"headline": "英文标题", "summary": "中文摘要",
+  "nextAction": "先审 #N …", "nextAction": "动词+对象的下一步（中文）"}
 ```
 
 ## Expected Output

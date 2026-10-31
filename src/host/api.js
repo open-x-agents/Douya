@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { generateDailyDigest, getSourcesStatus, pushDailyDigest, createComposioClient } from './composio.js';
 import { reminderCard } from './cards.js';
 import { createProfileManager } from './profile.js';
+import { resolveDisplayName, lastGithubIdentity } from './aggregation.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -590,15 +591,14 @@ export function createApiRouter(ctx) {
           return sum + (match ? parseFloat(match[1]) : 1);
         }, 0);
         
-        // Count actionable items (tasks, actions, high-priority)
-        const actionable = activeCards.filter(c => 
-          c.type === 'task' || 
-          c.type === 'action' || 
-          c.priority === 'high'
-        );
+        // Work items = everything except system tiles (hero / timetable), so the
+        // header count always matches the cards rendered in the grid.
+        const SYSTEM_TYPES = new Set(['hero', 'timetable']);
+        const actionable = activeCards.filter(c => !SYSTEM_TYPES.has(c.type) && c.type !== 'event');
+        const urgent = actionable.filter(c => c.priority === 'urgent' || c.priority === 'high');
         
         // Build sources list
-        const sources = [...new Set(activeCards.map(c => c.source).filter(Boolean))];
+        const sources = [...new Set(activeCards.map(c => c.source).filter(Boolean))].filter(s => s !== 'system');
         const sourcesText = sources.length > 0 
           ? sources.map(s => {
               const map = { github: 'GitHub', gmail: 'Gmail', googlecalendar: '日历', slack: 'Slack', manual: '手动' };
@@ -606,15 +606,21 @@ export function createApiRouter(ctx) {
             }).join('、')
           : '暂无数据';
 
+        const userName = resolveDisplayName(profileManager.getPersonalizationContext().name);
+
         return {
           summary: activeCards.length === 0
-            ? '今天 0 个会，0 件事' 
-            : `今天 ${meetings.length} 个会，${actionable.length} 件在手`,
+            ? '今天还没有待办，点「立即汇聚」拉取最新动态'
+            : `今天 ${meetings.length} 个会，${actionable.length} 件在手，其中 ${urgent.length} 件优先`,
           date: today,
           sources: sourcesText,
+          userName,
           openCount: actionable.length,
+          urgentCount: urgent.length,
+          meetingCount: meetings.length,
           meetingHours: Math.round(meetingHours * 10) / 10,
           waitingCount: activeCards.filter(c => c.status === 'waiting').length,
+          lastDigestAt: state.lastDigest?.generatedAt || null,
           cards: activeCards,
           hasDigest: state.lastDigest !== null,
         };
@@ -712,6 +718,14 @@ export function createApiRouter(ctx) {
         
         // Learn from generated cards
         await profileManager.learnFromCards(brief.cards);
+        // Persist real display name when profile still has the legacy 'User' placeholder
+        {
+          const ctx = profileManager.getPersonalizationContext();
+          const resolvedName = resolveDisplayName(ctx.name);
+          if (resolvedName && (ctx.name === 'User' || !ctx.name)) {
+            await profileManager.save({ name: resolvedName });
+          }
+        }
         
         // Just pass the new cards to store.save()
         // Store will merge them with existing cards by sourceId

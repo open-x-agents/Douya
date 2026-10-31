@@ -33,7 +33,7 @@ Based on Sunsama, Motion, Superhuman:
 - {{emails}} 封未读邮件
 
 **用户信息**:
-- 姓名: {{userName}}
+- 姓名: {{userName}}（永远不要写成 User）
 - 常用仓库: {{favoriteRepos}}
 - 常联系人: {{frequentContacts}}
 - 最近话题: {{recentTopics}}

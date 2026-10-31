@@ -30,16 +30,44 @@ DSH（DeepSeek Harness）
 | `done` | `{ eventId: ISO }` |
 | `upcoming` | 最近一次 tick 算出的计划（面板读它） |
 | `deliveries` | 最近 200 条投递结果，成功和失败都在 |
+| `days` | `{ "YYYY-MM-DD": day }` —— 按**本地日**（不是 UTC 日）的一天；面板读 `state.days[today]` |
+| `sources` | `{ [源]: { connected, last_read_at, detail, error } }` —— 每个信源最后读到了什么；`connected` 三态：`true` 读了、`false` 没连上、`null`/缺失 = 还不知道 |
+| `week` | `[{ day, closed, dropped }]` —— 周结算用的每日减法，只放真有记录的本地日 |
+
+day 的形状（本仓库的中间契约；#9 合入后由事件派生，只改 `panelData()` 的映射，渲染函数不动）：
+
+```json
+{
+  "day": "2026-10-30",
+  "time_zone": "Asia/Shanghai",
+  "conclusion": "一句话结论；缺失/没读到就写「还没读到今天的结论」，不编",
+  "meeting_hours": 3,
+  "events": [{
+    "id": "evt_1", "kind": "thread", "title": "...", "state": "open | closed | waiting_other | unknown",
+    "due_at": "UTC 时刻或 null", "due_kind": "hard | soft | null",
+    "who": { "people": ["..."], "waiting_on": "name | null" },
+    "sources": [{ "ref": "...", "source": "gcal | gmail | feishu_doc | feishu_cal | feishu_msg | github", "at": "...", "excerpt": "..." }],
+    "defer": null, "closure": { "by": "...", "at": "...", "evidence_ref": "..." }
+  }],
+  "materials": {}
+}
+```
+
+面板只读 `state.days` / `state.sources` / `state.week`，不生产事：`panelData()` 把 store 里没有的字段一律标成 `null`（页面上写「未知」），从不补 0；`days[today]` 不存在或既无结论又无事时画空日（「今天没有必须今天的事」），首屏没有数字节点；当天存在但关掉 0 件时显示真的 `0`。事卡的 `sources` 里有一条落在 `sources.<源>.connected !== true`，这张卡就画虚线琥珀边，并写「<源>没连上，这条只有<其它>依据」；没有活源时写「这条没有依据」。抬头写同一件事：`已读：…；未连：…；未读到：… 的状态`。
 
 report 的形状：`{ date, memberId, memberName, schedule[], done[], plan[], notes, stats{meetings, meetingMinutes, done, planned} }`。
 
-## 三条流程
+## 四条流程
 
-**提醒**：`calendar()` 给事件 → `planFor()` 算 `fireAt = start - leadMinutes` → 每 60 秒 `tick()` 取 `due()` → 发卡片 → 成功才写进 `sent`。失败留在未发状态，下一次 tick 重试，投递记录进 `deliveries`。
+**提醒**：`calendar()` 给事件 → `planFor()` 算 `fireAt = start - leadMinutes` → `tick()` 取 `due()` → 发卡片 → 成功才写进 `sent`。失败留在未发状态，下一次 tick 重试，投递记录进 `deliveries`。定时器只在最近一个 `fireAt` 醒来，不是每分钟轮询。
 
-**日报**：`recordReport()` 存一条 → `dailyReportCard()` 出卡片 → `sendReportCard()` 推给本人或群。面板按 `memberId:date` 统计提交率。
+每次 `tick()` 也把这次日历读到什么写进 `state.sources.feishu_cal`：返回非数组、`null` 或抛错 = 没连上，页面据此降级，而不是画成「今天没有会」。
+
+**日报**：`recordReport()` 存一条 → `dailyReportCard()` 出卡片 → `sendReportCard()` 推给本人或群。面板按 `memberId:date` 统计提交率。日键取**本地日**（`localDay(now, timeZone)`），上海凌晨的早报不会落到昨天。
 
 **交互**：飞书把按钮回调 POST 到 `/api/opendigitalmate/card` → `readAction()` 只接受自己发的卡片（`k` ∈ {report, reminder}，`op` ∈ 已知 5 个）→ 改一条记录 → 返回 toast。
+
+**面板**：`/api/opendigitalmate/page` 读 `src/client/panel.html` 外壳，把 `<!--panel:body-->` 换成服务端渲染的七幕页面；页面不带脚本、不带外链、不发任何请求，只读本机 `state.json`，不写飞书 / 日历 / 文档。
 
 ## 归一化与去重（#13）
 
@@ -62,7 +90,7 @@ report 的形状：`{ date, memberId, memberName, schedule[], done[], plan[], no
 ## 与 ds-bot 的边界
 
 - 用 ds-bot 的 `ctx.connection.fetch.register` 挂路由，用 `ctx.effect` 管定时器和注销——插件卸载即清理。
-- 面板两条 Fetch 路由都在 `/api/...` 下：`PANEL_ROUTE=/api/opendigitalmate`（JSON 快照）、`PANEL_PAGE_ROUTE=/api/opendigitalmate/page`（HTML）。
+- 面板三条 Fetch 路由都在 `/api/...` 下：`PANEL_ROUTE=/api/opendigitalmate`（GET，JSON 快照）、`PANEL_PAGE_ROUTE=/api/opendigitalmate/page`（GET，服务端渲染的 HTML）、`CARD_ROUTE=/api/opendigitalmate/card`（POST，飞书按钮回调）。第②幕落地的 `POST /api/opendigitalmate/action` 与本条无关地共用同一无鉴权暴露面（和 `/card` 一样，上线前必须补验签，见「没解决的问题」）。
 - 不碰 ds-bot 的 Bot / 会话 / 群逻辑；要「让 Bot 说话」时，后续接 `deliver` 即可，那是下一版的事。
 - 所有业务模块不 import ds-bot，单测不需要 DSH 也不需要网络。
 
@@ -70,5 +98,5 @@ report 的形状：`{ date, memberId, memberName, schedule[], done[], plan[], no
 
 1. 日历数据源没接：`calendar()` 目前是注入点，要接 `calendar.v4.calendar_event.list`，并处理成员 OAuth 与刷新。
 2. 日报的填写入口还没做成卡片表单，只有 `recordReport()` 接口。
-3. 卡片回调的验签（`X-Lark-Signature` / `encrypt_key`）还没做——上线前必须补，否则任何人都能打这个地址。
+3. 卡片回调的验签（`X-Lark-Signature` / `encrypt_key`）还没做——上线前必须补，否则任何人都能打这个地址；面板的 `POST /api/opendigitalmate/action` 一旦落地同属这个缺口。
 4. 多租户、多应用没做，先按单租户内部用。

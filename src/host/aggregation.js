@@ -2,7 +2,7 @@
  * Multi-stage aggregation pipeline for daily digest
  * Inspired by Superhuman/Shortwave email triage, Linear inbox, GitHub notifications
  * 
- * Pipeline: Fetch -> Normalize -> Dedupe -> Classify -> Group -> Write Brief
+ * Pipeline: Fetch -> Normalize -> Dedupe -> Classify -> Group -> Write Brief + Hero
  */
 
 import { readFile } from 'node:fs/promises';
@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Stage 1: Fetch data from all active sources
+ * Stage 1: Fetch data from all active sources (EXPANDED for richer content)
  */
 export async function fetchFromSources(composioClient, activeSources) {
   const sourceData = {};
@@ -22,19 +22,27 @@ export async function fetchFromSources(composioClient, activeSources) {
     
     try {
       if (slug === 'github') {
-        // GitHub: prioritize review-requested > assigned > participating
-        const [myPRs, reviewRequested, assigned] = await Promise.all([
+        // Expanded GitHub: ~50 items from last 24-48h
+        const [myPRs, reviewRequested, assigned, recentActivity, mentions] = await Promise.all([
           composioClient.executeAction('GITHUB_SEARCH_ISSUES_AND_PULL_REQUESTS', {
             q: 'is:pr is:open author:@me',
-            per_page: 10,
+            per_page: 20,
           }),
           composioClient.executeAction('GITHUB_SEARCH_ISSUES_AND_PULL_REQUESTS', {
             q: 'is:pr is:open review-requested:@me',
-            per_page: 10,
+            per_page: 15,
           }),
           composioClient.executeAction('GITHUB_LIST_ISSUES_ASSIGNED_TO_THE_AUTHENTICATED_USER', {
-            per_page: 10,
+            per_page: 15,
             state: 'open',
+          }),
+          composioClient.executeAction('GITHUB_SEARCH_ISSUES_AND_PULL_REQUESTS', {
+            q: `involves:@me updated:>${new Date(Date.now() - 48*60*60*1000).toISOString().split('T')[0]}`,
+            per_page: 20,
+          }),
+          composioClient.executeAction('GITHUB_SEARCH_ISSUES_AND_PULL_REQUESTS', {
+            q: 'mentions:@me is:open',
+            per_page: 10,
           }),
         ]);
         
@@ -42,48 +50,71 @@ export async function fetchFromSources(composioClient, activeSources) {
           myPRs: myPRs?.data?.items || [],
           reviewRequested: reviewRequested?.data?.items || [],
           assigned: assigned?.data?.issues || [],
+          recentActivity: recentActivity?.data?.items || [],
+          mentions: mentions?.data?.items || [],
         };
+        
+        console.log(`[GitHub] Fetched ${sourceData.github.myPRs.length + sourceData.github.reviewRequested.length + sourceData.github.assigned.length + sourceData.github.recentActivity.length} items`);
       } else if (slug === 'gmail') {
-        // Gmail: unread important emails (from:VIP or to:me)
-        const [unread, important] = await Promise.all([
+        // Expanded Gmail: ~30 messages from last 24h
+        const yesterday = new Date(Date.now() - 24*60*60*1000).toISOString().split('T')[0].replace(/-/g, '/');
+        
+        const [unread, recent, important] = await Promise.all([
           composioClient.executeAction('GMAIL_FETCH_EMAILS', {
-            max_results: 20,
+            max_results: 15,
             query: 'in:inbox is:unread',
           }),
           composioClient.executeAction('GMAIL_FETCH_EMAILS', {
+            max_results: 20,
+            query: `in:inbox after:${yesterday}`,
+          }),
+          composioClient.executeAction('GMAIL_FETCH_EMAILS', {
             max_results: 10,
-            query: 'in:inbox is:important is:unread',
+            query: 'in:inbox is:important',
           }),
         ]);
         
         sourceData.gmail = {
           unread: unread?.data?.messages || [],
+          recent: recent?.data?.messages || [],
           important: important?.data?.messages || [],
         };
+        
+        console.log(`[Gmail] Fetched ${sourceData.gmail.recent.length} messages (${sourceData.gmail.unread.length} unread, ${sourceData.gmail.important.length} important)`);
       } else if (slug === 'googlecalendar') {
-        // Calendar: today's events + next 2 hours
+        // Expanded Calendar: today + tomorrow
         const now = new Date();
-        const startOfDay = new Date(now.setHours(0, 0, 0, 0)).toISOString();
-        const endOfDay = new Date(now.setHours(23, 59, 59, 999)).toISOString();
+        const startOfToday = new Date(now.setHours(0, 0, 0, 0)).toISOString();
+        const endOfTomorrow = new Date(now.setHours(47, 59, 59, 999)).toISOString();
         const next2h = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
         
-        const [today, upcoming] = await Promise.all([
+        const [todayAndTomorrow, upcoming] = await Promise.all([
           composioClient.executeAction('GOOGLECALENDAR_EVENTS_LIST', {
-            timeMin: startOfDay,
-            timeMax: endOfDay,
-            maxResults: 20,
+            timeMin: startOfToday,
+            timeMax: endOfTomorrow,
+            maxResults: 30,
           }),
           composioClient.executeAction('GOOGLECALENDAR_EVENTS_LIST', {
             timeMin: new Date().toISOString(),
             timeMax: next2h,
-            maxResults: 5,
+            maxResults: 10,
           }),
         ]);
         
         sourceData.googlecalendar = {
-          today: today?.data?.items || [],
+          today: todayAndTomorrow?.data?.items?.filter(e => {
+            const start = new Date(e.start?.dateTime || e.start?.date);
+            return start < new Date(Date.now() + 24*60*60*1000);
+          }) || [],
+          tomorrow: todayAndTomorrow?.data?.items?.filter(e => {
+            const start = new Date(e.start?.dateTime || e.start?.date);
+            return start >= new Date(Date.now() + 24*60*60*1000);
+          }) || [],
           upcoming: upcoming?.data?.items || [],
         };
+        
+        console.log(`[Calendar] Fetched ${sourceData.googlecalendar.today.length} today, ${sourceData.googlecalendar.tomorrow.length} tomorrow`);
+      }
       }
     } catch (err) {
       console.warn(`[fetchFromSources] Failed to fetch ${slug}:`, err.message);
@@ -686,7 +717,7 @@ function analyzeForCharts(grouped) {
 /**
  * Main aggregation pipeline
  */
-export async function runAggregationPipeline(composioClient, activeSources, llmClient) {
+export async function runAggregationPipeline(composioClient, activeSources, llmClient, profileContext) {
   console.log('[Aggregation] Stage 1: Fetching from sources...');
   const sourceData = await fetchFromSources(composioClient, activeSources);
   
@@ -706,7 +737,191 @@ export async function runAggregationPipeline(composioClient, activeSources, llmC
   console.log(`[Aggregation] ${grouped.urgent.length} urgent, ${grouped.action.length} action, ${grouped.fyi.length} fyi`);
   
   console.log('[Aggregation] Stage 6: Writing brief with LLM...');
-  const brief = await writeBrief(grouped, llmClient);
+  const brief = await writeBrief(grouped, llmClient, profileContext);
+  
+  console.log('[Aggregation] Stage 7: Generating hero card...');
+  const heroCard = await generateHeroCard(grouped, sourceData, llmClient, profileContext);
+  brief.cards.unshift(heroCard);
+  
+  console.log('[Aggregation] Stage 8: Generating timetable...');
+  const timetable = await generateTimetable(grouped, sourceData, llmClient, profileContext);
+  brief.cards.splice(1, 0, timetable);
   
   return brief;
+}
+
+/**
+ * Generate personalized hero greeting card
+ */
+async function generateHeroCard(grouped, sourceData, llmClient, profileContext) {
+  const now = new Date();
+  const hour = now.getHours();
+  const timeOfDay = hour < 12 ? 'MORNING' : hour < 17 ? 'AFTERNOON' : 'EVENING';
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  
+  const date = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
+  
+  // Build data summary for warm narrative
+  const urgentCount = grouped.urgent.length;
+  const actionCount = grouped.action.length;
+  const meetings = sourceData.googlecalendar?.today?.length || 0;
+  const emails = sourceData.gmail?.unread?.length || 0;
+  
+  const prompt = `Generate a warm, personalized daily narrative (1-2 sentences, max 120 chars) for ${profileContext?.name || 'the user'}.
+
+**Today's Data (REAL, do not fabricate)**:
+- ${urgentCount} urgent items (review-requested PRs, imminent meetings)
+- ${actionCount} actionable items (assigned tasks, today's meetings, emails)
+- ${meetings} calendar events today
+- ${emails} unread emails
+
+**User Context**:
+- Name: ${profileContext?.name || 'User'}
+- Favorite repos: ${profileContext?.favoriteRepos?.join(', ') || 'none yet'}
+- Frequent contacts: ${profileContext?.frequentContacts?.join(', ') || 'none yet'}
+- Recent topics: ${profileContext?.recentTopics?.join(', ') || 'none yet'}
+
+**Write a warm, honest narrative**:
+- Grounded ONLY in the real data above
+- Personal, encouraging tone
+- Mention specific counts if notable
+- No generic platitudes
+- Max 120 characters
+
+Example: "${actionCount} items need you today, including ${urgentCount} time-sensitive ones. Let's tackle them together!"
+
+JSON: {"narrative": "your 1-2 sentence narrative here"}`;
+
+  let narrative = 'Ready to make today count!';
+  try {
+    let fullText = '';
+    for await (const chunk of llmClient.stream({
+      messages: [{ role: 'user', content: prompt }],
+      maxTokens: 200,
+      responseFormat: { type: 'json_object' },
+    })) {
+      if (chunk.type === 'text' && chunk.text) fullText += chunk.text;
+    }
+    const parsed = JSON.parse(fullText);
+    narrative = parsed.narrative || narrative;
+  } catch (err) {
+    console.warn('[HeroCard] LLM failed, using fallback narrative');
+  }
+  
+  return {
+    id: `card_hero_${Date.now()}`,
+    type: 'hero',
+    title: `${date} · ${timeOfDay}`,
+    body: `${greeting}, ${profileContext?.name || 'there'}`,
+    source: 'system',
+    sourceId: 'hero',
+    priority: 'high',
+    status: 'active',
+    size: 'large',
+    blocks: [{
+      type: 'narrative',
+      text: narrative,
+    }],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Generate My Day timetable with real events + LLM suggestions
+ */
+async function generateTimetable(grouped, sourceData, llmClient, profileContext) {
+  const now = new Date();
+  const events = sourceData.googlecalendar?.today || [];
+  
+  // Build fixed blocks from real calendar events
+  const fixedBlocks = events.map(event => {
+    const start = event.start?.dateTime || event.start?.date;
+    const end = event.end?.dateTime || event.end?.date;
+    return {
+      type: 'fixed',
+      start,
+      end,
+      title: event.summary || 'Event',
+      color: 'blue',
+    };
+  });
+  
+  // Get top-priority cards for focus blocks
+  const topCards = [...grouped.urgent, ...grouped.action].slice(0, 3);
+  
+  const prompt = `Generate a suggested daily schedule filling gaps between fixed events.
+
+**Fixed Calendar Events** (REAL, do not modify):
+${fixedBlocks.map(b => `- ${b.start}: ${b.title}`).join('\n') || '(none)'}
+
+**Top Priority Tasks** (suggest focus blocks):
+${topCards.map((c, i) => `${i + 1}. ${c.title} (${c.classification.reasoning})`).join('\n') || '(none)'}
+
+**User Habits**:
+- Typical active hours: ${profileContext?.typicalActiveHours?.join(', ') || 'unknown'}
+- Name: ${profileContext?.name || 'User'}
+
+**Generate suggested blocks** (JSON array):
+- Focus blocks for top tasks (1-2h each, during active hours, avoid fixed events)
+- Meals: breakfast (8-9am), lunch (12-1pm), dinner (6-7pm) if gaps exist
+- Breaks: 15min breaks between long focus blocks
+- Exercise: 30-60min if afternoon/evening gap
+- Wind-down: 30min before typical sleep time
+
+RULES:
+- Start/end times in HH:MM format (24h, Asia/Shanghai timezone)
+- Never overlap with fixed events
+- Mark all as type: "suggested"
+- Realistic durations (focus 1-2h, meals 30-60min, breaks 15-30min)
+- Respect user's active hours
+- If no calendar: still build reasonable schedule from tasks
+
+JSON: {
+  "suggestedBlocks": [
+    {"type": "suggested", "category": "focus|meal|break|exercise|winddown", "start": "09:00", "end": "11:00", "title": "Focus: Review PR #42", "color": "green"},
+    ...
+  ]
+}`;
+
+  let suggestedBlocks = [];
+  try {
+    let fullText = '';
+    for await (const chunk of llmClient.stream({
+      messages: [{ role: 'user', content: prompt }],
+      maxTokens: 800,
+      responseFormat: { type: 'json_object' },
+    })) {
+      if (chunk.type === 'text' && chunk.text) fullText += chunk.text;
+    }
+    const parsed = JSON.parse(fullText);
+    suggestedBlocks = parsed.suggestedBlocks || [];
+  } catch (err) {
+    console.warn('[Timetable] LLM failed, using minimal fallback');
+    // Fallback: just add lunch and a focus block
+    suggestedBlocks = [
+      {type: 'suggested', category: 'meal', start: '12:00', end: '13:00', title: 'Lunch break', color: 'orange'},
+      {type: 'suggested', category: 'focus', start: '14:00', end: '16:00', title: 'Focus time', color: 'green'},
+    ];
+  }
+  
+  return {
+    id: `card_timetable_${Date.now()}`,
+    type: 'timetable',
+    title: 'My Day',
+    body: events.length > 0 ? `${events.length} events scheduled` : 'Plan your day',
+    source: 'system',
+    sourceId: 'timetable',
+    priority: 'high',
+    status: 'active',
+    size: 'wide',
+    blocks: [{
+      type: 'timetable',
+      fixedBlocks,
+      suggestedBlocks,
+      nowTime: now.toTimeString().substring(0, 5),
+    }],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
 }

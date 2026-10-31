@@ -626,12 +626,16 @@ function isUserLogRow(row) {
     && Number.isFinite(row.seq)
 }
 
-function logInboundSentence(rt, room, text) {
+function logInboundSentence(rt, room, text, messageId) {
   if (room == null || typeof text !== 'string' || text === '') return undefined
   const log = Array.isArray(room.log) ? room.log : []
   const last = log.at(-1)
-  if (isUserLogRow(last) && last.text === text) return last.seq
-  const line = { who: 'User', text }
+  const id = typeof messageId === 'string' && messageId !== '' ? messageId : undefined
+  if (isUserLogRow(last) && last.text === text) {
+    if (id !== undefined && last.messageId == null) last.messageId = id
+    return last.seq
+  }
+  const line = { who: 'User', text, ...(id !== undefined ? { messageId: id } : {}) }
   if (typeof rt.appendRoomLine === 'function') rt.appendRoomLine(room, line)
   else appendPlain(room, line)
   return typeof room.seq === 'number' ? room.seq : undefined
@@ -683,7 +687,8 @@ export async function applyRouteDecision(rt, room, decision, message = {}) {
   // Hold does not. Confirm sends the stored sentence, so the last-row check
   // does not append it again. effectsOf still reports writeLog false: the relay
   // must not write a second row or copy another room.
-  const seq = logsThisAction(action) ? logInboundSentence(rt, room, text) : undefined
+  const messageId = typeof message?.id === 'string' && message.id !== '' ? message.id : undefined
+  const seq = logsThisAction(action) ? logInboundSentence(rt, room, text, messageId) : undefined
   const cite = quoteDelivery(room, text, seq)
   // Every leaving action must hit disk before deliver, because a later load
   // would put the card back.

@@ -7,6 +7,7 @@ import { dateLocale, t } from './i18n.js'
 import { noHover } from './motion.js'
 import { clockLabel, messageClock } from './text.js'
 import { useFold } from './fold.js'
+import { hideCitedHistory } from '../shared/cite.js'
 
 // -------------------------------------------------------------------------
 // The user's own messages. DSH draws every "@word" in them as a file reference, and
@@ -107,6 +108,13 @@ export function UserMessageCell({ node, sessionId, useRoster, actions, renderMes
     if (!noHover() || event.target instanceof Element && event.target.closest('a,button,input,textarea,select,pre,code,[role=button],[role=link]')) return
     setToolsOpen(value => !value)
   }
+  const room = roster.roomsById?.[sessionId]
+  if (hideCitedHistory({
+    text,
+    messageId: typeof data.id === 'string' ? data.id : undefined,
+    citedTexts: room?.citedTexts,
+    citedIds: room?.citedIds,
+  })) return null
   return h('div', { ref: row, className: 'bt-umsg', 'data-steering': steering || undefined },
     h('div', { className: 'bt-ustack' },
       attachments.length > 0 ? h(Attachments, { attachments, renderMessageImages }) : null,

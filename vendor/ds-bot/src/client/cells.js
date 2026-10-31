@@ -21,6 +21,7 @@ import { partIndexOf, withBtwRows } from './btw-model.js'
 import { layoutOf, thinkingShown } from './themes.js'
 import { draftForDisplay } from '../shared/room-draft.js'
 import { anchoredCompletions, applyScroll, pinnedToBottom, projectRelay, scrollAction, scrollGroup } from '../shared/work-line-complete.js'
+import { citeTexts } from '../shared/cite.js'
 import { groupUserBubble } from '../host/group-steer.js'
 
 export { clockLabel }
@@ -313,7 +314,7 @@ function GroupMessage({ bot, text, texts = [text], room, roster, actions, msgKey
 
 // A member's messages in a row, as one block under its name: what it says while it
 // works comes one message at a time. A block carries the last message's time and run.
-const citedReply = (reply) => reply?.late === true && typeof reply.quoteText === 'string' && reply.quoteText !== ''
+const citedReply = (reply) => reply?.late === true && citeTexts(reply).length > 0
 
 export function stackReplies(replies) {
   const items = []
@@ -328,10 +329,14 @@ export function stackReplies(replies) {
   return items
 }
 
-function LateCite({ text }) {
+function LateCite({ text, texts }) {
+  const sentences = Array.isArray(texts) && texts.length > 0
+    ? texts.filter(sentence => typeof sentence === 'string' && sentence !== '')
+    : (typeof text === 'string' && text !== '' ? [text] : [])
   return h('div', { className: 'bt-route-cite', 'data-late-cite': '' },
     h('div', { className: 'bt-route-cite-label' }, t('Replying to what you wrote earlier')),
-    h('div', { className: 'bt-route-cite-text' }, text))
+    sentences.map((sentence, index) => h('div', { key: index, className: 'bt-urow' },
+      h('div', { className: 'bt-ububble' }, h(MarkdownText, { text: sentence, labels: mdLabels(), variant: 'compact' })))))
 }
 
 // A centered event line that names a group chat and opens it.
@@ -621,8 +626,9 @@ export function TriggerCell({ node, sessionId, useRoster, useSessions, useTurnCl
           bot: poster, text: file ? stripLongNote(text) : text, room, roster, actions, msgKey: `${sessionId}:post:${data.seq ?? node.key}`, useUi, time: data.time,
           whole: file ? { length: source.length, load: () => actions.fileText(file) } : undefined,
         })
-        if (source.late === true && typeof source.quoteText === 'string' && source.quoteText !== '') {
-          return h(Fragment, null, h(LateCite, { text: source.quoteText }), message)
+        const sentences = citeTexts(source)
+        if (source.late === true && sentences.length > 0) {
+          return h(Fragment, null, h(LateCite, { texts: sentences }), message)
         }
         return message
       }
@@ -991,6 +997,8 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
       const bot = roster.byId[reply.botId] ?? { id: reply.botId, name: reply.name, color: reply.color ?? 'gray' }
       const userBubble = groupUserBubble(reply)
       if (reply.kind === 'completion-quote') {
+        const covered = projected.replies.some(other => other?.late === true && citeTexts(other).includes(reply.text))
+        if (covered) return null
         return h('div', {
           key: `complete-q-${reply.exchangeId}-${index}`,
           className: reply.who === 'User' ? 'bt-urow' : 'bt-route-cite',
@@ -1058,7 +1066,7 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
         return h('div', { key: `${reply.botId}-${index}`, className: 'bt-event' }, t('{name} finished its work', { name: bot.name }))
       }
       const message = h(GroupMessage, { key: `${reply.botId}-${index}`, bot, texts, room, roster, actions, msgKey: callId ? `${sessionId}:${callId}:${index}` : undefined, useUi, time, duration })
-      if (citedReply(reply)) return h(Fragment, { key: `late-${reply.botId}-${index}` }, h(LateCite, { text: reply.quoteText }), message)
+      if (citedReply(reply)) return h(Fragment, { key: `late-${reply.botId}-${index}` }, h(LateCite, { texts: citeTexts(reply) }), message)
       return message
     }),
     draft?.text ? (() => {

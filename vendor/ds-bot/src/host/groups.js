@@ -32,6 +32,7 @@ import { routeTakesEffect } from './route-inbound.js'
 import { createRoomHalt, dropLoggedRelays, haltDelivery } from './room-halt.js'
 import { applyRoomStreamFrame, clearDraftIfPosted } from '../shared/room-draft.js'
 import { lateCite } from '../shared/work-line-complete.js'
+import { logQuotes } from '../shared/cite.js'
 
 const ROOM_LOG_MAX = 60
 const ROOM_FIRST_LOOK = 12
@@ -287,11 +288,18 @@ export function install(rt) {
 
   // A member's message in the round: in the log, for the members after it, and in the
   // round's replies, for the user.
-  const postInRound = (room, round, member, text, duration, cite = {}) => {
-    const named = lateCite(cite)
+  // The first sentence stays the single `quote` pointer. A steered follow-up adds `quotes`.
+  const loggedQuote = (room, named) => {
     const pointer = typeof named.quoteSeq === 'number'
       ? { quote: { roomId: named.quoteRoomId ?? room.id, seq: named.quoteSeq } }
       : {}
+    const quotes = logQuotes(named, named.quoteRoomId ?? room.id)
+    return quotes.length > 1 ? { ...pointer, quotes } : pointer
+  }
+
+  const postInRound = (room, round, member, text, duration, cite = {}) => {
+    const named = lateCite(cite)
+    const pointer = loggedQuote(room, named)
     appendRoom(room, { who: member.name, botId: member.id, text, ...pointer })
     round.replies.push({ botId: member.id, name: member.name, color: member.color, text, time: Date.now(), ...(duration === undefined ? {} : { duration }), ...named })
     // Final (or step) text is in replies now: drop the live draft so the UI does not
@@ -1017,9 +1025,7 @@ export function install(rt) {
     const line = [text, ...files.map(fileLine)].filter(Boolean).join('\n')
     if (line === '') return undefined
     const cite = extra.late === true ? lateCite(extra) : {}
-    const pointer = typeof cite.quoteSeq === 'number'
-      ? { quote: { roomId: cite.quoteRoomId ?? room.id, seq: cite.quoteSeq } }
-      : {}
+    const pointer = loggedQuote(room, cite)
     appendRoom(room, {
       who: sender.name,
       botId: sender.id,
@@ -1053,9 +1059,7 @@ export function install(rt) {
       } else {
         const line = [text, ...files.map(fileLine)].filter(Boolean).join('\n')
         const cite = extra.late === true ? lateCite(extra) : {}
-        const pointer = typeof cite.quoteSeq === 'number'
-          ? { quote: { roomId: cite.quoteRoomId ?? room.id, seq: cite.quoteSeq } }
-          : {}
+        const pointer = loggedQuote(room, cite)
         appendRoom(room, { who: sender.name, botId: sender.id, text: line, ...(files.length > 0 ? { files } : {}), ...pointer })
         running.replies.push({
           botId: sender.id,

@@ -3672,7 +3672,7 @@ div:has(> nav [class*="_marks"]){display:none!important}
 .bt-route-choice[data-highlight]{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--bt-accent) 45%,transparent)}
 .bt-route-choice-state{flex:none;color:var(--bt-ink-3);font-size:12px}
 .bt-route-miss{margin:8px 0 0;color:var(--bt-ink-3);font-size:12px;line-height:16px}
-.bt-route-cite{display:flex;flex-direction:column;gap:2px;max-width:min(550px,86%);margin:6px 0}
+.bt-route-cite{display:flex;flex-direction:column;align-items:flex-end;gap:8px;width:100%;margin:6px 0}
 .bt-route-cite-label{color:var(--bt-ink-3);font-size:12px;line-height:16px}
 .bt-route-cite-text{color:var(--bt-ink);font-size:14px;line-height:22px}
 `;
@@ -7873,6 +7873,115 @@ function draftForDisplay(draft, replies = []) {
   return kept;
 }
 
+// src/shared/cite.js
+function asCite(item) {
+  if (typeof item === "string") return item === "" ? void 0 : { text: item };
+  if (item == null || typeof item !== "object") return void 0;
+  const text = typeof item.quoteText === "string" && item.quoteText !== "" ? item.quoteText : typeof item.text === "string" && item.text !== "" ? item.text : "";
+  if (text === "") return void 0;
+  const seq = typeof item.quoteSeq === "number" && Number.isFinite(item.quoteSeq) ? item.quoteSeq : typeof item.seq === "number" && Number.isFinite(item.seq) ? item.seq : void 0;
+  const roomId = typeof item.quoteRoomId === "string" && item.quoteRoomId !== "" ? item.quoteRoomId : typeof item.roomId === "string" && item.roomId !== "" ? item.roomId : void 0;
+  return {
+    text,
+    ...seq !== void 0 ? { seq } : {},
+    ...roomId !== void 0 ? { roomId } : {}
+  };
+}
+function citeItem(source) {
+  return asCite(source);
+}
+function sameCite(left, right) {
+  const leftSeq = typeof left.seq === "number";
+  const rightSeq = typeof right.seq === "number";
+  if (leftSeq && rightSeq) return left.seq === right.seq && (left.roomId ?? "") === (right.roomId ?? "");
+  return left.text === right.text;
+}
+function appendCite(list, item) {
+  const cite = asCite(item);
+  const base = Array.isArray(list) ? list.filter((other) => other != null) : [];
+  if (cite === void 0) return base.slice();
+  if (base.some((other) => sameCite(asCite(other) ?? { text: "" }, cite))) return base.slice();
+  return [...base, cite];
+}
+function mergeCites(left, right) {
+  let out = [];
+  for (const item of [...Array.isArray(left) ? left : [], ...Array.isArray(right) ? right : []]) {
+    out = appendCite(out, item);
+  }
+  return out;
+}
+function citesOf(info) {
+  if (info == null || typeof info !== "object") return [];
+  const listed = Array.isArray(info.quotes) ? info.quotes : [];
+  const flat = asCite({ quoteText: info.quoteText, quoteSeq: info.quoteSeq, quoteRoomId: info.quoteRoomId });
+  return mergeCites(listed, flat === void 0 ? [] : [flat]);
+}
+function lateCite(info) {
+  const list = citesOf(info);
+  if (list.length === 0) return {};
+  const first = list[0];
+  const cite = { quoteText: first.text };
+  if (typeof first.seq === "number") cite.quoteSeq = first.seq;
+  if (typeof first.roomId === "string") cite.quoteRoomId = first.roomId;
+  if (list.length > 1) cite.quotes = list;
+  return cite;
+}
+function citeTexts(source) {
+  if (Array.isArray(source?.quotes) && source.quotes.length > 0) {
+    return source.quotes.map((item) => typeof item === "string" ? item : item?.text).filter((text) => typeof text === "string" && text !== "");
+  }
+  return typeof source?.quoteText === "string" && source.quoteText !== "" ? [source.quoteText] : [];
+}
+function logQuotes(named, roomId) {
+  const list = Array.isArray(named?.quotes) ? named.quotes : [];
+  if (list.length <= 1) return [];
+  const fallback = typeof roomId === "string" && roomId !== "" ? roomId : void 0;
+  const out = [];
+  for (const item of list) {
+    if (typeof item?.seq !== "number" || !Number.isFinite(item.seq)) continue;
+    const where = typeof item.roomId === "string" && item.roomId !== "" ? item.roomId : fallback;
+    if (where === void 0) continue;
+    out.push({ roomId: where, seq: item.seq });
+  }
+  return out.length > 1 ? out : [];
+}
+function citedFromLog(log, roomId) {
+  const rows2 = Array.isArray(log) ? log : [];
+  const texts2 = [];
+  const ids = [];
+  const seenText = /* @__PURE__ */ new Set();
+  const seenId = /* @__PURE__ */ new Set();
+  const add = (row) => {
+    if (row == null || row.who !== "User" || row.kind != null) return;
+    if (typeof row.text === "string" && row.text !== "" && !seenText.has(row.text)) {
+      seenText.add(row.text);
+      texts2.push(row.text);
+    }
+    if (typeof row.messageId === "string" && row.messageId !== "" && !seenId.has(row.messageId)) {
+      seenId.add(row.messageId);
+      ids.push(row.messageId);
+    }
+  };
+  for (const line of rows2) {
+    const pointers = [];
+    if (line?.quote != null && typeof line.quote === "object") pointers.push(line.quote);
+    if (Array.isArray(line?.quotes)) pointers.push(...line.quotes);
+    for (const pointer of pointers) {
+      if (typeof pointer?.seq !== "number" || !Number.isFinite(pointer.seq)) continue;
+      if (typeof roomId === "string" && roomId !== "" && typeof pointer.roomId === "string" && pointer.roomId !== "" && pointer.roomId !== roomId) continue;
+      add(rows2.find((row) => row?.seq === pointer.seq));
+    }
+  }
+  return { texts: texts2, ids };
+}
+function hideCitedHistory({ text, messageId, citedTexts, citedIds } = {}) {
+  const cited = Array.isArray(citedIds) ? citedIds : [];
+  const sentences = Array.isArray(citedTexts) ? citedTexts : [];
+  if (typeof messageId === "string" && messageId !== "" && cited.includes(messageId)) return true;
+  if (typeof messageId === "string" && messageId !== "" && cited.length > 0) return false;
+  return typeof text === "string" && text !== "" && sentences.includes(text);
+}
+
 // src/shared/work-line-complete.js
 var PIN_GAP = 48;
 function pinnedToBottom({ scrollTop = 0, scrollHeight = 0, clientHeight = 0, threshold = PIN_GAP } = {}) {
@@ -7926,13 +8035,6 @@ function quoteSentence(quote, logs) {
   if (row == null || row.who !== "User" || row.kind != null) return "";
   return typeof row.text === "string" && row.text !== "" ? row.text : "";
 }
-function lateCite(info) {
-  if (typeof info?.quoteText !== "string" || info.quoteText === "") return {};
-  const cite = { quoteText: info.quoteText };
-  if (typeof info.quoteSeq === "number" && Number.isFinite(info.quoteSeq)) cite.quoteSeq = info.quoteSeq;
-  if (typeof info.quoteRoomId === "string" && info.quoteRoomId !== "") cite.quoteRoomId = info.quoteRoomId;
-  return cite;
-}
 var eventRoom = (event) => {
   if (hasId(event?.roomId)) return event.roomId;
   if (hasId(event?.quote?.roomId)) return event.quote.roomId;
@@ -7949,6 +8051,11 @@ function orderedCompletions(events, { roomId, logs } = {}) {
     const fromLog = quoteSentence(event.quote, logs);
     const quoteText = fromLog !== "" ? fromLog : typeof event.quoteText === "string" ? event.quoteText : "";
     const replyText = typeof event.reply === "string" ? event.reply : typeof event.replyText === "string" ? event.replyText : "";
+    const quotes = Array.isArray(event.quotes) ? event.quotes.filter((item) => typeof item?.text === "string" && item.text !== "").map((item) => ({
+      text: item.text,
+      ...typeof item.seq === "number" && Number.isFinite(item.seq) ? { seq: item.seq } : {},
+      ...typeof item.roomId === "string" && item.roomId !== "" ? { roomId: item.roomId } : {}
+    })) : [];
     return {
       exchangeId: event.exchangeId,
       workLineId: event.workLineId,
@@ -7956,6 +8063,7 @@ function orderedCompletions(events, { roomId, logs } = {}) {
       roomId: eventRoom(event),
       completedAt: event.completedAt,
       quoteText,
+      ...quotes.length > 1 ? { quotes } : {},
       replyText
     };
   });
@@ -7997,17 +8105,20 @@ function scrollGroup({ replies = [], completions = [] } = {}) {
   const item = completions[0];
   return (Array.isArray(replies) ? replies : []).some((row) => row?.kind === "working" && !isWorkingRow(row, item, completions));
 }
-var quoteRow = (item) => {
-  if (item.quoteText === "") return void 0;
-  return {
-    kind: "completion-quote",
-    exchangeId: item.exchangeId,
-    workLineId: item.workLineId,
-    who: "User",
-    text: item.quoteText,
-    completedAt: item.completedAt
-  };
+var quoteTextsOf = (item) => {
+  if (Array.isArray(item?.quotes) && item.quotes.length > 1) {
+    return item.quotes.map((entry) => typeof entry === "string" ? entry : entry?.text).filter((text) => typeof text === "string" && text !== "");
+  }
+  return typeof item?.quoteText === "string" && item.quoteText !== "" ? [item.quoteText] : [];
 };
+var quoteRows = (item) => quoteTextsOf(item).map((text) => ({
+  kind: "completion-quote",
+  exchangeId: item.exchangeId,
+  workLineId: item.workLineId,
+  who: "User",
+  text,
+  completedAt: item.completedAt
+}));
 var replyRow = (item) => {
   if (item.replyText === "") return void 0;
   return {
@@ -8021,9 +8132,9 @@ var replyRow = (item) => {
 };
 var itemRows = (item, anchor) => {
   const rows2 = [];
-  const quote = quoteRow(item);
+  const quotes = quoteRows(item);
   const reply = replyRow(item);
-  if (quote !== void 0) rows2.push(quote);
+  if (quotes.length > 0) rows2.push(...quotes);
   if (reply !== void 0) rows2.push(reply);
   if (anchor && rows2[0] !== void 0) rows2[0].first = true;
   return rows2;
@@ -8047,10 +8158,10 @@ var projectSingle = (replies, draft, item) => {
     kept.push(reply);
   }
   if (postedAt >= 0) {
-    const quote = quoteRow(item);
-    if (quote !== void 0) {
-      quote.first = true;
-      kept.splice(postedAt, 0, quote);
+    const quotes = quoteRows(item);
+    if (quotes.length > 0) {
+      quotes[0].first = true;
+      kept.splice(postedAt, 0, ...quotes);
     }
   } else {
     const at = workingAt < 0 ? kept.length : workingAt;
@@ -8521,7 +8632,7 @@ function GroupMessage({ bot, text, texts: texts2 = [text], room: room2, roster, 
     (0, import_react17.createElement)(Bubbles, { texts: texts2, roster, selfId: bot.id, actions, streaming, sessionId: room2?.id, msgKey, useUi, lead: flat ? null : lead, whole })
   );
 }
-var citedReply = (reply) => reply?.late === true && typeof reply.quoteText === "string" && reply.quoteText !== "";
+var citedReply = (reply) => reply?.late === true && citeTexts(reply).length > 0;
 function stackReplies(replies) {
   const items = [];
   replies.forEach((reply, index) => {
@@ -8534,12 +8645,17 @@ function stackReplies(replies) {
   });
   return items;
 }
-function LateCite({ text }) {
+function LateCite({ text, texts: texts2 }) {
+  const sentences = Array.isArray(texts2) && texts2.length > 0 ? texts2.filter((sentence) => typeof sentence === "string" && sentence !== "") : typeof text === "string" && text !== "" ? [text] : [];
   return (0, import_react17.createElement)(
     "div",
     { className: "bt-route-cite", "data-late-cite": "" },
     (0, import_react17.createElement)("div", { className: "bt-route-cite-label" }, t("Replying to what you wrote earlier")),
-    (0, import_react17.createElement)("div", { className: "bt-route-cite-text" }, text)
+    sentences.map((sentence, index) => (0, import_react17.createElement)(
+      "div",
+      { key: index, className: "bt-urow" },
+      (0, import_react17.createElement)("div", { className: "bt-ububble" }, (0, import_react17.createElement)(import_dsh_client_ui_primitives.MarkdownText, { text: sentence, labels: mdLabels3(), variant: "compact" }))
+    ))
   );
 }
 function GroupEvent({ prefix, room: room2, name, roster, actions }) {
@@ -8803,8 +8919,9 @@ function TriggerCell({ node, sessionId, useRoster, useSessions, useTurnClock, us
           time: data.time,
           whole: file ? { length: source.length, load: () => actions.fileText(file) } : void 0
         });
-        if (source.late === true && typeof source.quoteText === "string" && source.quoteText !== "") {
-          return (0, import_react17.createElement)(import_react17.Fragment, null, (0, import_react17.createElement)(LateCite, { text: source.quoteText }), message);
+        const sentences = citeTexts(source);
+        if (source.late === true && sentences.length > 0) {
+          return (0, import_react17.createElement)(import_react17.Fragment, null, (0, import_react17.createElement)(LateCite, { texts: sentences }), message);
         }
         return message;
       }
@@ -9152,6 +9269,8 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
       const bot = roster.byId[reply.botId] ?? { id: reply.botId, name: reply.name, color: reply.color ?? "gray" };
       const userBubble = groupUserBubble(reply);
       if (reply.kind === "completion-quote") {
+        const covered = projected.replies.some((other) => other?.late === true && citeTexts(other).includes(reply.text));
+        if (covered) return null;
         return (0, import_react17.createElement)("div", {
           key: `complete-q-${reply.exchangeId}-${index}`,
           className: reply.who === "User" ? "bt-urow" : "bt-route-cite",
@@ -9239,7 +9358,7 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
         return (0, import_react17.createElement)("div", { key: `${reply.botId}-${index}`, className: "bt-event" }, t("{name} finished its work", { name: bot.name }));
       }
       const message = (0, import_react17.createElement)(GroupMessage, { key: `${reply.botId}-${index}`, bot, texts: texts2, room: room2, roster, actions, msgKey: callId ? `${sessionId}:${callId}:${index}` : void 0, useUi, time, duration });
-      if (citedReply(reply)) return (0, import_react17.createElement)(import_react17.Fragment, { key: `late-${reply.botId}-${index}` }, (0, import_react17.createElement)(LateCite, { text: reply.quoteText }), message);
+      if (citedReply(reply)) return (0, import_react17.createElement)(import_react17.Fragment, { key: `late-${reply.botId}-${index}` }, (0, import_react17.createElement)(LateCite, { texts: citeTexts(reply) }), message);
       return message;
     }),
     draft?.text ? (() => {
@@ -20783,6 +20902,13 @@ function UserMessageCell({ node, sessionId, useRoster, actions, renderMessageIma
     if (!noHover() || event.target instanceof Element && event.target.closest("a,button,input,textarea,select,pre,code,[role=button],[role=link]")) return;
     setToolsOpen((value) => !value);
   };
+  const room2 = roster.roomsById?.[sessionId];
+  if (hideCitedHistory({
+    text,
+    messageId: typeof data.id === "string" ? data.id : void 0,
+    citedTexts: room2?.citedTexts,
+    citedIds: room2?.citedIds
+  })) return null;
   return (0, import_react52.createElement)(
     "div",
     { ref: row, className: "bt-umsg", "data-steering": steering || void 0 },

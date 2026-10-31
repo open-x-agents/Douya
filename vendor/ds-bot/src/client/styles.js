@@ -1182,7 +1182,7 @@ div:has(> nav [class*="_marks"]){display:none!important}
 .bt-route-choice[data-highlight]{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--bt-accent) 45%,transparent)}
 .bt-route-choice-state{flex:none;color:var(--bt-ink-3);font-size:12px}
 .bt-route-miss{margin:8px 0 0;color:var(--bt-ink-3);font-size:12px;line-height:16px}
-.bt-route-cite{display:flex;flex-direction:column;gap:2px;max-width:min(550px,86%);margin:6px 0}
+.bt-route-cite{display:flex;flex-direction:column;align-items:flex-end;gap:8px;width:100%;margin:6px 0}
 .bt-route-cite-label{color:var(--bt-ink-3);font-size:12px;line-height:16px}
 .bt-route-cite-text{color:var(--bt-ink);font-size:14px;line-height:22px}
 `

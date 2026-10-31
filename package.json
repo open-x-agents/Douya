@@ -19,6 +19,7 @@
   "scripts": {
     "test": "node --test test/*.test.js",
     "start": "node scripts/server.js",
+    "start:dsbot": "npx cordis start --config config.yml",
     "dev": "node scripts/server.js 7777",
     "demo": "node scripts/demo.mjs"
   },

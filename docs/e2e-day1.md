@@ -28,15 +28,16 @@ Status: 跑不通
 
 ## 面板数字
 
-还没有面板快照。真跑后这里写提交率与未交数两个值，以及各自的 `report:` / `member:` ref
-（`src/host/panel.js` 今天只有提交率、未交名单、近期日程、投递）。
+还没有面板快照。真跑后这里写提交率与未交数两个值，以及各自的 `report:` / `member:` ref；
+机器可读的那份放在 `run.json` 的 `panel`（`member_ids` / `report_keys` / `numbers`）里，
+判定器按它复算并核对这里写的值（`src/host/panel.js` 今天只有提交率、未交名单、近期日程、投递）。
 
 ## 时延四项
 
 | 项 | 预算 | 实测 | 口径 |
 | --- | --- | --- | --- |
 | 首屏 | 1000ms（浏览器） | `null` | 缺 #15 的面板 day 契约：首屏还没有能计时的形态 |
-| 追问首字 | 3000ms | `null` | 缺 #34：面板内追问入口不存在；只能用 `test/e2e/real-model.e2e.mjs` 同口径直连量，文档写明口径 ≠ 面板内追问 |
+| 追问首字 | 3000ms | `null` | 面板内追问入口还没有（#34 只合了引擎 `src/host/ask.js`，第五幕的常驻输入框未落）；只能按 `test/e2e/real-model.e2e.mjs` 同口径直连量，口径 ≠ 面板内追问 |
 | 提醒误差 | 30000ms | `null` | 今天就能算（`sent[eventId@fireAt]` 的投递时刻 − `fireAt`），但还没有真跑 |
 | 日报偏差 | 60000ms | `null` | 缺 #14 的投放记录：`deliveries` 里还没有 `kind=report` 的条目，日报本身也还不存在 |
 
@@ -82,5 +83,5 @@ node scripts/e2e-day1-check.mjs docs/e2e-day1.md                    # 现在：N
 - **#10 GitHub 只读适配器**：PR #39 仍是 draft，`sources_used` 里还没有可登记的真实信源。
 - **#11 Composio（日历 / 邮件）**：`needs-human`。
 - **#12 飞书应用**：要本人建应用并给凭证。
-- **#14 08:45 / 18:30 与日报投递记录**：`REPORT_HOUR = 18` 全仓只在一处，投递记录里还没有 `kind=report`；#43 / #40 未合。→ 日报 ±60s 无从实测。
+- **#14 08:45 / 18:30 与日报投递记录**：`REPORT_HOUR = 18` 全仓只在一处，投递记录里还没有 `kind=report`；#43 未合（#40 已合）。→ 日报 ±60s 无从实测。
 - **#15 面板 day 契约**：面板快照没有一条带 `evidence_ref` 的 fact。→ 抽样池为空。

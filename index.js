@@ -9,7 +9,15 @@ import { due, planFor, reminderKey, snooze } from './src/host/reminders.js'
 import { dailyReportCard, readAction, reminderCard } from './src/host/cards.js'
 import { installPanel, reportKey } from './src/host/panel.js'
 import { createFeishuSender } from './src/host/feishu.js'
-import { PANEL_ROUTE, SNOOZE_MINUTES, TICK_SECONDS } from './src/host/constants.js'
+import { defaultZone, nextWakeAt, runWithBudget } from './src/host/schedule.js'
+import {
+  CALENDAR_ATTEMPTS,
+  CALENDAR_REFRESH_MS,
+  CALENDAR_TIMEOUT_MS,
+  PANEL_ROUTE,
+  REMINDER_BUDGET_MS,
+  SNOOZE_MINUTES,
+} from './src/host/constants.js'
 
 export const name = 'opendigitalmate'
 // The panel and the card callback answer on the channel ds-bot already exposes; nothing
@@ -31,6 +39,12 @@ export function createRuntime(ctx, config = {}) {
   const sendCard = config.sendCard ?? sender.sendCard
   const calendar = config.calendar ?? (async () => [])
   const log = config.log ?? (() => {})
+  // The zone the two report slots are read in, and the two functions the single timer uses.
+  // Both are injected, so a test can watch the delay without waiting for it.
+  const timeZone = config.timeZone ?? defaultZone()
+  const schedule = config.schedule ?? setTimeout
+  const cancel = config.cancel ?? clearTimeout
+  let timer = null
 
   const rt = {
     ctx,
@@ -45,29 +59,48 @@ export function createRuntime(ctx, config = {}) {
     async tick() {
       const state = store.get()
       const moment = now().getTime()
-      const planned = planFor(await calendar(), { now: moment, leadMinutes: config.leadMinutes })
+      // A calendar that is down or slow costs the day's meeting lines, not the whole pass: the
+      // failures are kept so a late report can say "日历接口 3 次超时" instead of pretending.
+      const reading = await runWithBudget(calendar, {
+        attempts: CALENDAR_ATTEMPTS,
+        timeoutMs: CALENDAR_TIMEOUT_MS,
+        source: 'calendar',
+      })
+      const planned = planFor(reading.ok ? reading.value : [], { now: moment, leadMinutes: config.leadMinutes })
       const plan = [...planned, ...(state.manual ?? [])].sort((a, b) => a.fireAt.localeCompare(b.fireAt))
       const firing = due(plan, { now: moment, sent: Object.keys(state.sent ?? {}) })
       const deliveries = []
       const delivered = new Set()
       for (const reminder of firing) {
+        // The arrival time is read again for every reminder: a slow card must not make the next
+        // one look punctual.
+        const at = now().getTime()
+        const record = {
+          kind: 'reminder',
+          id: reminder.id,
+          at: new Date(at).toISOString(),
+          latency_ms: at - Date.parse(reminder.fireAt),
+          deadline_ms: REMINDER_BUDGET_MS,
+        }
+        record.over_budget = record.latency_ms > record.deadline_ms
         const target = reminder.owner || config.ownerOpenId
         if (target === undefined || target === '') {
-          deliveries.push({ kind: 'reminder', id: reminder.id, at: now().toISOString(), ok: false, error: 'no-target' })
+          deliveries.push({ ...record, ok: false, error: 'no-target' })
           continue
         }
         try {
           const messageId = await sendCard({ receiveId: target, card: reminderCard(reminder) })
           delivered.add(reminderKey(reminder))
-          deliveries.push({ kind: 'reminder', id: reminder.id, at: now().toISOString(), ok: true, messageId })
+          deliveries.push({ ...record, ok: true, messageId })
         } catch (error) {
           const reason = String(error?.message ?? error)
           log(`reminder ${reminder.id} not sent: ${reason}`)
-          deliveries.push({ kind: 'reminder', id: reminder.id, at: now().toISOString(), ok: false, error: reason })
+          deliveries.push({ ...record, ok: false, error: reason })
         }
       }
       const sent = { ...(state.sent ?? {}) }
       for (const key of delivered) sent[key] = now().toISOString()
+      const next = rt.nextWake({ plan, sent: Object.keys(sent), moment })
       await store.save({
         ...state,
         sent,
@@ -75,7 +108,39 @@ export function createRuntime(ctx, config = {}) {
         upcoming: plan.slice(0, 20),
         deliveries: [...(state.deliveries ?? []), ...deliveries].slice(-200),
       })
-      return { plan, firing, deliveries }
+      rt.arm(next)
+      return { plan, firing, deliveries, failures: reading.failures, nextWake: next }
+    },
+
+    // When to look again. With a plan, the next reminder is the wake. With nothing planned, the
+    // calendar is re-read on a five minute cadence, so a meeting added later still shows up.
+    nextWake({ plan = [], sent = [], moment = now().getTime() } = {}) {
+      return nextWakeAt({
+        now: moment,
+        plan,
+        sent,
+        nextPushAt: null,
+        calendarAt: plan.length === 0 ? moment + CALENDAR_REFRESH_MS : null,
+      })
+    },
+
+    // One timer, always for the exact next moment: the delay is the distance to a fireAt, not a
+    // number of whole minutes, so a warning lands inside its budget instead of on a grid.
+    arm(wake = rt.nextWake()) {
+      rt.stop()
+      if (!wake || wake.delayMs === null) return null
+      timer = schedule(() => {
+        timer = null
+        void rt.tick().catch(error => log(`tick failed: ${String(error?.message ?? error)}`))
+      }, Math.max(0, wake.delayMs))
+      if (typeof timer?.unref === 'function') timer.unref()
+      return timer
+    },
+
+    stop() {
+      if (timer === null) return
+      cancel(timer)
+      timer = null
     },
 
     // A button press changes one record. `snooze` re-plans the same event at a later fireAt,
@@ -139,12 +204,9 @@ export function createRuntime(ctx, config = {}) {
     }), 'opendigitalmate: card callback')
 
     ctx.effect(() => {
-      const timer = setInterval(() => {
-        void rt.tick().catch(error => log(`tick failed: ${String(error?.message ?? error)}`))
-      }, (config.tickSeconds ?? TICK_SECONDS) * 1000)
-      if (typeof timer.unref === 'function') timer.unref()
-      return () => clearInterval(timer)
-    }, 'opendigitalmate: reminder tick')
+      void rt.tick().catch(error => log(`tick failed: ${String(error?.message ?? error)}`))
+      return () => rt.stop()
+    }, 'opendigitalmate: precise tick')
   }
 
   return rt

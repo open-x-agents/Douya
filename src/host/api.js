@@ -44,6 +44,7 @@ const COMPOSIO_APPS = [
   },
   {
     key: 'calendar',
+    toolkitSlug: 'googlecalendar',
     name: 'Google Calendar',
     logo: 'https://ssl.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_31_2x.png',
     description: 'Calendar events',
@@ -1026,7 +1027,12 @@ export function mountApiRoutes(server, router) {
         res.end(JSON.stringify(data));
       } else if (url.pathname === '/' && req.method === 'GET') {
         const html = await router.serveIndex();
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.writeHead(200, { 
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        });
         res.end(html);
       } else {
         res.writeHead(404, { 'Content-Type': 'application/json' });

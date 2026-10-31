@@ -17,6 +17,16 @@ See `vendor/ds-bot/VENDOR_FROM`:
 This migration commit does **not** change ds-bot behavior. Functional fixes land in
 follow-up commits on top of this tree.
 
+## Patches
+
+This vendored tree carries fixes made in this repository on top of the commit above:
+
+- **#56 — a group-wide stop empties the group Session's inbox of its relays.** New
+  `src/host/group-stop.js` (`isRoomRelay` / `relayMessages` / `relayText` / `relayFiles` /
+  `postLine`) plus `dropRoomRelays` in `src/host/groups.js`, called at the end of
+  `stopRoomWork`. Spec and regression cases: issue #56,
+  `acceptance-cases/group-stop/`, `test/group-stop.test.js`.
+
 ## How DSH should depend on it
 
 In a DSH profile `package.json`:

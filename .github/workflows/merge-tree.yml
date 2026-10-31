@@ -23,6 +23,9 @@ permissions:
   contents: read
   # 手动入口要把结论写回 PR head 的 check run 上。
   checks: write
+  # 手动入口没有 pull_request payload，要现查 PR 拿 head sha（pulls.get），没有这条就是
+  # 「Resource not accessible by integration」，run 在第一步就红。
+  pull-requests: read
 
 concurrency:
   group: merge-tree-${{ github.event.inputs.pr || github.event.pull_request.number }}

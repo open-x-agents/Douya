@@ -341,6 +341,28 @@ async function callLLM(ctx, messages, sessionId = 'web-chat', composioClient = n
 }
 
 /**
+ * Parse model output as JSON. Tolerates code fences, leading noise, and
+ * native tool-call markup some providers emit (e.g. <invoke name="x"> … {args}).
+ */
+function parseModelJson(text, tools = []) {
+  const t = String(text || '').trim();
+  try { return JSON.parse(t); } catch {}
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) { try { return JSON.parse(fence[1]); } catch {} }
+  const names = new Set(tools.map(x => x.name));
+  const invokes = [...t.matchAll(/invoke\s+name\s*=\s*"([\w.-]+)"/g)].map(m => m[1]);
+  const named = invokes.find(n => names.has(n)) || [...names].find(n => t.includes(n));
+  const objs = t.match(/\{[\s\S]*\}/);
+  if (named) {
+    let args = {};
+    if (objs) { try { args = JSON.parse(objs[0]); } catch {} }
+    return { tool_calls: [{ name: named, arguments: args }] };
+  }
+  if (objs) { try { return JSON.parse(objs[0]); } catch {} }
+  return null;
+}
+
+/**
  * Call LLM with function calling and execute tools
  * @param {object} llm - LLM client with stream method
  * @param {Array} messages - Message history with system prompt
@@ -349,6 +371,31 @@ async function callLLM(ctx, messages, sessionId = 'web-chat', composioClient = n
  * @returns {Promise<{text: string, cards: Array}>}
  */
 async function callLLMWithTools(llm, messages, tools, sessionId) {
+  const { groupsToCards } = await import('./chat-groups.js');
+  const collectedGroups = [];
+
+  // Intent pre-fetch: for inbox / PR / issue questions, always pull fresh data and
+  // aggregate it, instead of letting the model answer from chat history.
+  const lastUser = [...messages].reverse().find(m => m.role === 'user')?.content || '';
+  const intents = [
+    [/邮件|邮箱|inbox|e-?mail|gmail/i, 'gmail_fetch_emails', {}],
+    [/\bPR\b|pull request|合并请求|review/i, 'github_search_my_prs', {}],
+    [/\bissue/i, 'github_list_my_issues', {}],
+  ];
+  const pre = [];
+  for (const [re, name, args] of intents) {
+    const tool = tools.find(t => t.name === name);
+    if (tool && re.test(lastUser)) {
+      try {
+        const result = await tool.execute(args);
+        if (Array.isArray(result?.groups)) collectedGroups.push(...result.groups);
+        pre.push({ tool: name, result });
+      } catch (e) { pre.push({ tool: name, error: e.message }); }
+    }
+  }
+  if (pre.length) {
+    messages = [...messages, { role: 'user', content: `系统已为这条消息实时拉取并预聚合了数据（不要再调用同名工具）：\n${JSON.stringify(pre)}\n\n请按「聚合原则」直接给出最终 JSON 回复。` }];
+  }
   const MAX_TOOL_ITERATIONS = 5;
   let iteration = 0;
   let currentMessages = [...messages];
@@ -361,7 +408,7 @@ async function callLLMWithTools(llm, messages, tools, sessionId) {
     // we would pass tools here. For now, we use JSON mode and parse tool calls manually
     let fullText = '';
     for await (const chunk of llm.stream({
-      messages: currentMessages,
+      messages: currentMessages.map(({ role, content }) => ({ role, content })),
       maxTokens: 2000,
       responseFormat: { type: 'json_object' },
     })) {
@@ -377,11 +424,13 @@ async function callLLMWithTools(llm, messages, tools, sessionId) {
     }
 
     // Try to parse as JSON
-    let parsed;
-    try {
-      parsed = JSON.parse(fullText);
-    } catch (err) {
+    let parsed = parseModelJson(fullText, tools);
+    if (!parsed) {
       console.error('[LLM] Failed to parse JSON:', fullText.substring(0, 200));
+      if (!currentMessages.some(m => m.__jsonRetry)) {
+        currentMessages.push({ role: 'user', content: '请只输出一个合法 JSON 对象（tool_calls 或 text+cards），不要输出其他标记。', __jsonRetry: true });
+        continue;
+      }
       throw new Error('模型返回的不是有效的 JSON 格式');
     }
 
@@ -404,6 +453,7 @@ async function callLLMWithTools(llm, messages, tools, sessionId) {
         try {
           console.log(`[LLM] Executing tool: ${toolCall.name}`);
           const result = await tool.execute(toolCall.arguments || {});
+          if (Array.isArray(result?.groups)) collectedGroups.push(...result.groups);
           toolResults.push({
             tool: toolCall.name,
             result,
@@ -433,6 +483,15 @@ async function callLLMWithTools(llm, messages, tools, sessionId) {
 
     // No tool calls, this is the final response
     const result = parseResponseToCards(fullText);
+    // Aggregation guarantee: when tools produced groups, reply with group cards
+    // (real links from the server), merging any richer why/nextAction from the model.
+    if (collectedGroups.length) {
+      const byKey = new Map((result.cards || []).filter(c => c && c.key).map(c => [c.key, c]));
+      result.cards = groupsToCards(collectedGroups).map(c => {
+        const m = byKey.get(c.key);
+        return m ? { ...c, why: m.why || c.why, description: m.why || c.description, nextAction: m.nextAction || c.nextAction } : c;
+      }).sort((a, b) => (a.waiting === 'fyi') - (b.waiting === 'fyi'));
+    }
     console.log(`[LLM] Final response: text=${result.text?.length || 0} chars, cards=${result.cards?.length || 0}`);
     return result;
   }

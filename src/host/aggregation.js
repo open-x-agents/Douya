@@ -1212,7 +1212,7 @@ export async function writeBrief(grouped, llmClient, profileContext) {
       { role: 'system', content: 'You are a daily briefing assistant. Generate concise, actionable project-themed cards with visual blocks and stats.' },
       { role: 'user', content: prompt },
     ],
-    maxTokens: 2000,
+    maxTokens: 6000,
     responseFormat: { type: 'json_object' },
   })) {
     if (chunk.type === 'text' && chunk.text) {

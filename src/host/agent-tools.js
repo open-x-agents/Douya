@@ -1,3 +1,4 @@
+import { normalizeEmail, groupEmails, groupPullRequests, groupIssues } from './chat-groups.js'
 // Composio-backed tools for ds-bot agent integration
 // Each tool wraps a Composio v3 tools/execute call
 
@@ -83,38 +84,31 @@ export function createComposioTools(composioClient) {
       },
       async execute({ state = 'open', query_type = 'involves_me' }) {
         try {
-          // Build query string based on type
-          let q = `is:pr is:${state}`;
-          if (query_type === 'involves_me') {
-            q += ' involves:@me';
-          } else if (query_type === 'review_requested') {
-            q += ' review-requested:@me';
-          } else if (query_type === 'authored_by_me') {
-            q += ' author:@me';
+          const search = async q => {
+            const r = await composioClient.executeAction('GITHUB_SEARCH_ISSUES_AND_PULL_REQUESTS', { q, per_page: 30 })
+            return r.data?.items || r.data?.data?.items || []
           }
-          
-          const result = await composioClient.executeAction(
-            'GITHUB_SEARCH_ISSUES_AND_PULL_REQUESTS',
-            { q, per_page: 10 }
-          )
-          
-          if (!result.data?.items || result.data.items.length === 0) {
-            return { pullRequests: [], count: 0 }
-          }
-
-          return {
-            pullRequests: result.data.items.map(pr => ({
-              number: pr.number,
-              title: pr.title,
-              state: pr.state,
-              url: pr.html_url,
-              repo: pr.repository_url?.split('/').slice(-2).join('/') || 'unknown',
-              author: pr.user?.login || 'unknown',
-              createdAt: pr.created_at,
-              updatedAt: pr.updated_at,
-            })),
-            count: result.data.items.length,
-          }
+          const base = `is:pr is:${state}`
+          const mainQ = query_type === 'review_requested' ? `${base} review-requested:@me`
+            : query_type === 'authored_by_me' ? `${base} author:@me` : `${base} involves:@me`
+          const [items, reviewItems] = await Promise.all([
+            search(mainQ),
+            query_type === 'review_requested' ? Promise.resolve([]) : search(`${base} review-requested:@me`).catch(() => []),
+          ])
+          const reviewIds = new Set(reviewItems.map(i => i.id))
+          const all = [...items, ...reviewItems.filter(i => !items.some(x => x.id === i.id))]
+          const pullRequests = all.map(pr => ({
+            number: pr.number,
+            title: pr.title,
+            state: pr.state,
+            url: pr.html_url,
+            repo: pr.repository_url?.split('/').slice(-2).join('/') || (pr.html_url?.match(/github\.com\/([^/]+\/[^/]+)/) || [])[1] || 'unknown',
+            author: pr.user?.login || 'unknown',
+            reviewRequested: query_type === 'review_requested' || reviewIds.has(pr.id),
+            createdAt: pr.created_at,
+            updatedAt: pr.updated_at,
+          }))
+          return { count: pullRequests.length, groups: groupPullRequests(pullRequests), pullRequests: pullRequests.slice(0, 15) }
         } catch (error) {
           return { error: error.message, pullRequests: [], count: 0 }
         }
@@ -139,26 +133,24 @@ export function createComposioTools(composioClient) {
         try {
           const result = await composioClient.executeAction(
             'GITHUB_LIST_ISSUES_ASSIGNED_TO_THE_AUTHENTICATED_USER',
-            { state, per_page: 10 }
+            { state, per_page: 30 }
           )
           
           if (!result.data?.issues || result.data.issues.length === 0) {
             return { issues: [], count: 0 }
           }
 
-          return {
-            issues: result.data.issues.map(issue => ({
+          const issues = result.data.issues.map(issue => ({
               number: issue.number,
               title: issue.title,
               state: issue.state,
               url: issue.html_url,
-              repo: issue.repository_url?.split('/').slice(-2).join('/') || 'unknown',
+              repo: issue.repository_url?.split('/').slice(-2).join('/') || (issue.html_url?.match(/github\.com\/([^/]+\/[^/]+)/) || [])[1] || 'unknown',
               labels: (issue.labels || []).map(l => l.name),
               createdAt: issue.created_at,
               updatedAt: issue.updated_at,
-            })),
-            count: result.data.issues.length,
-          }
+            }))
+          return { issues, count: issues.length, groups: groupIssues(issues) }
         } catch (error) {
           return { error: error.message, issues: [], count: 0 }
         }
@@ -183,27 +175,22 @@ export function createComposioTools(composioClient) {
           },
         },
       },
-      async execute({ max_results = 5, query = 'in:inbox' }) {
+      async execute({ max_results = 40, query = 'in:inbox newer_than:2d' }) {
         try {
+          const n = Math.min(Math.max(Number(max_results) || 40, 30), 50)
           const result = await composioClient.executeAction(
             'GMAIL_FETCH_EMAILS',
-            { max_results, query }
+            { max_results: n, query, include_payload: false, verbose: false }
           )
-          
-          if (!result.data?.messages || result.data.messages.length === 0) {
-            return { messages: [], count: 0 }
-          }
-
+          const raw = result.data?.messages || result.data?.data?.messages || []
+          if (raw.length === 0) return { messages: [], count: 0, groups: [] }
+          const messages = raw.map(normalizeEmail)
           return {
-            messages: result.data.messages.map(msg => ({
-              id: msg.id,
-              threadId: msg.threadId,
-              subject: msg.subject || '(无主题)',
-              from: msg.from || 'unknown',
-              snippet: msg.snippet || '',
-              date: msg.internalDate || msg.date,
-            })),
-            count: result.data.messages.length,
+            count: messages.length,
+            unread: messages.filter(m => m.labels.includes('UNREAD')).length,
+            groups: groupEmails(messages),
+            // compact sample only; the reply must summarize groups, not list these
+            sample: messages.slice(0, 8).map(m => ({ subject: m.subject, from: m.from })),
           }
         } catch (error) {
           return { error: error.message, messages: [], count: 0 }
@@ -295,8 +282,8 @@ export const AGENT_SYSTEM_PROMPT = `你是「豆芽」（Open Digital Mate），
 3. **github_list_my_issues** - 列出 Issues
    参数: { state?: 'open'|'closed'|'all', per_page?: number }
    
-4. **gmail_fetch_emails** - 获取最近的邮件
-   参数: { max_results?: number, query?: string }
+4. **gmail_fetch_emails** - 获取最近的邮件（默认 40 封、newer_than:2d，系统已预先聚合为 groups）
+   参数: { max_results?: number(30-50), query?: string }
    
 5. **calendar_list_events** - 获取日历事件
    参数: { timeMin?: string, timeMax?: string, maxResults?: number }
@@ -326,6 +313,21 @@ export const AGENT_SYSTEM_PROMPT = `你是「豆芽」（Open Digital Mate），
 2. **不使用工具 ID 作为按钮值**：
    - ❌ 错误：{label: "查看 PR", value: "github_pull_requests"}
    - ✅ 正确：{label: "查看我的 GitHub PR", value: "查看我的 GitHub PR"}
+
+
+## 聚合原则（最重要，Muse / today.ai 风格）
+工具结果里如果有 \`groups\`（系统已按类别预聚合：需要你回复的人 / CI 失败 / PR 讨论·仓库 / 等你 review / 服务通知 / 营销 等），你必须：
+1. **按组回复，绝不逐条列举邮件或 PR**。不要为单封邮件或单个 PR 生成卡片。
+2. text = 1–2 句按优先级的总结：先说等你处理的（waiting="you"）有几组几件、最该先做什么，再一句带过 FYI。
+3. cards 每组一张，type="group"，字段：key（照抄 groups[].key）、title（组名）、count、waiting（you|others|fyi）、why（为什么重要，可改写得更具体）、nextAction（一个具体动作，动词+对象）、links（照抄 groups[].links，最多 3 个，禁止编造链接）。
+4. 顺序：waiting=you 在前，FYI（营销、订阅、社交）放最后，可合并成一张。
+5. GitHub 查询同理：问 PR 时调用 github_search_my_prs（系统会同时取等你 review 的 PR 并按仓库分组）；问 issue 调用 github_list_my_issues。
+
+示例：
+\`\`\`json
+{"text":"38 封新邮件里有 2 组需要你：CI 在 2 个仓库失败了 3 次，先修 pr-guard；其余是 PR 通知和促销。",
+ "cards":[{"type":"group","key":"ci","title":"CI 失败","count":3,"waiting":"you","why":"…","nextAction":"先看 owner/repo 最近一次失败日志","links":[{"title":"…","url":"…"}]}]}
+\`\`\`
 
 ## 最终回复格式
 当你收到工具结果后，必须返回 JSON：

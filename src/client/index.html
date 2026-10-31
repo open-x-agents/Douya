@@ -847,6 +847,26 @@
   .src-auth{font-size:11px;color:var(--ink3)}
   .src-btn{border:0;cursor:pointer;font:600 12.5px/1 inherit;color:#fff;padding:8px 14px;border-radius:999px;background:linear-gradient(135deg,#6f8df5,#8a74d0)}
   .src-btn.ghost{background:#fff;color:var(--ink2);box-shadow:0 0 0 1px var(--line)}
+
+  .dockPanel{width:420px;max-height:min(680px,calc(100vh - 32px))}
+  .gcard{flex-shrink:0;max-width:100%;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:8px 0;box-shadow:0 1px 2px rgba(30,40,80,.04);position:relative;overflow:hidden}
+  .gcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:#d7dbe3}
+  .gcard.g-you::before{background:var(--rose)} .gcard.g-others::before{background:var(--sky)}
+  .gc-top{display:flex;align-items:center;gap:10px}
+  .gc-count{flex-shrink:0;min-width:34px;height:34px;padding:0 8px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;background:#f1f2f6;color:var(--ink)}
+  .g-you .gc-count{background:var(--rose-soft);color:var(--rose)} .g-others .gc-count{background:var(--sky-soft);color:var(--sky)}
+  .gc-h{display:flex;flex-direction:column;min-width:0}
+  .gc-h b{font-size:14px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gc-w{font-size:11px;color:var(--ink3)} .gc-w.you{color:var(--rose)} .gc-w.others{color:var(--sky)}
+  .gc-why{margin:8px 0 0;font-size:12.5px;line-height:1.55;color:var(--ink2)}
+  .gc-bd{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .gc-bd span{font-size:11.5px;background:#f4f5f8;border-radius:999px;padding:3px 9px;color:var(--ink2)}
+  .gc-next{margin-top:8px;font-size:12.5px;line-height:1.5;background:rgba(34,168,152,.08);border-radius:10px;padding:7px 10px}
+  .gc-next span{font-size:11px;font-weight:700;color:var(--teal);margin-right:6px}
+  .gc-links{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+  .gc-links a{font-size:12px;color:var(--ink2);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:3px 0}
+  .gc-links a::before{content:"↗ ";color:var(--ink3)}
+  .gc-links a:hover{color:var(--ink)}
 </style>
 </head>
 <body>
@@ -1155,6 +1175,21 @@
     }
   }
 
+  function renderGroupCard(card) {
+    const el = document.createElement('div');
+    const w = card.waiting === 'you' ? ['you', '等你处理'] : card.waiting === 'others' ? ['others', '等别人'] : ['fyi', '仅供参考'];
+    const links = (card.links || []).filter(l => l && /^https?:/.test(l.url)).slice(0, 3);
+    el.className = `gcard g-${w[0]}`;
+    el.innerHTML = `
+      <div class="gc-top"><span class="gc-count">${Number(card.count) || 0}</span>
+        <div class="gc-h"><b>${escapeHtml(card.title || card.label || '')}</b><span class="gc-w ${w[0]}">${w[1]}</span></div></div>
+      ${card.why || card.description ? `<p class="gc-why">${escapeHtml(card.why || card.description)}</p>` : ''}
+      ${Array.isArray(card.breakdown) && card.breakdown.length > 1 ? `<div class="gc-bd">${card.breakdown.slice(0, 4).map(b => `<span>${escapeHtml(String(b.label).split('/').pop())} <b>×${b.count}</b></span>`).join('')}</div>` : ''}
+      ${card.nextAction ? `<div class="gc-next"><span>下一步</span>${escapeHtml(card.nextAction)}</div>` : ''}
+      ${links.length ? `<div class="gc-links">${links.map(l => `<a href="${escapeHtml(l.url)}" target="_blank" rel="noopener" title="${escapeHtml(l.title || '')}">${escapeHtml(l.title || l.url)}</a>`).join('')}</div>` : ''}`;
+    return el;
+  }
+
   function addBotMessage(text, time, cards) {
     const body = $('dockBody');
     
@@ -1170,6 +1205,7 @@
     if (cards && cards.length > 0) {
       cards.forEach(card => {
         try {
+          if (card && card.type === 'group') { body.appendChild(renderGroupCard(card)); return; }
           const cardEl = document.createElement('div');
           cardEl.className = 'chat-card';
           cardEl.style.cssText = 'background:#f8f9fa;border:1px solid #e0e0e0;border-radius:8px;padding:12px;margin:8px 0;max-width:400px;';

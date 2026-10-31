@@ -1234,7 +1234,7 @@ function generateClusterCards(grouped) {
       type: cluster.type,
       title: cluster.title,
       subtitle: cluster.subtitle,
-      body: cluster.body,
+      body: cluster.summary || cluster.body, // Use LLM summary if available
       url: cluster.url,
       priority: cluster.priority,
       status: cluster.status || 'active',
@@ -1254,31 +1254,77 @@ function generateClusterCards(grouped) {
         tags: [{ text: statusText, color: cluster.metadata.reviewCount > 0 ? 'red' : 'blue' }],
       });
       
-      // Add stat row
-      const stats = [];
-      if (cluster.metadata.prCount > 0) stats.push({ label: 'PRs', value: cluster.metadata.prCount });
-      if (cluster.metadata.issueCount > 0) stats.push({ label: 'Issues', value: cluster.metadata.issueCount });
-      if (cluster.metadata.reviewCount > 0) stats.push({ label: 'Reviews', value: cluster.metadata.reviewCount });
+      // Add stat row (open/merged/issues) with clear Chinese labels
+      const openPRs = cluster.items.filter(i => i.type?.includes('pr') && i.metadata?.state === 'open').length;
+      const mergedPRs = cluster.items.filter(i => i.metadata?.state === 'closed' && i.metadata?.merged_at).length;
+      const openIssues = cluster.metadata.issueCount || 0;
       
-      if (stats.length > 0) {
-        stats.forEach(stat => {
-          card.blocks.push({ type: 'stat', value: stat.value, label: stat.label });
+      if (openPRs > 0 || mergedPRs > 0 || openIssues > 0) {
+        card.blocks.push({
+          type: 'stat-row',
+          stats: [
+            { label: '待处理 PR', value: openPRs, color: '#4a6cf7' },
+            { label: '已合并（24h）', value: mergedPRs, color: '#00d084' },
+            { label: '待解决 issue', value: openIssues, color: '#ffa600' },
+          ].filter(s => s.value > 0), // Only show non-zero stats
         });
       }
       
-      // Add chart for repos with multiple types
-      if (cluster.metadata.prCount > 0 && cluster.metadata.issueCount > 0) {
+      // Add 7-day activity sparkline from updated_at dates
+      const last7Days = [];
+      const now = new Date();
+      for (let i = 6; i >= 0; i--) {
+        const day = new Date(now);
+        day.setDate(day.getDate() - i);
+        day.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(day);
+        dayEnd.setHours(23, 59, 59, 999);
+        
+        const count = cluster.items.filter(item => {
+          const date = item.metadata?.updated_at ? new Date(item.metadata.updated_at) : null;
+          return date && date >= day && date <= dayEnd;
+        }).length;
+        
+        last7Days.push(count);
+      }
+      
+      card.blocks.push({
+        type: 'sparkline',
+        data: last7Days,
+        label: '最近 7 天活动',
+      });
+      
+      // Add contributor avatars (first 5 unique)
+      const contributors = [...new Set(
+        cluster.items
+          .filter(i => i.metadata?.user?.avatar_url)
+          .map(i => i.metadata.user.avatar_url)
+      )].slice(0, 5);
+      
+      if (contributors.length > 0) {
         card.blocks.push({
-          type: 'chart',
-          chartType: 'donut',
-          data: [cluster.metadata.prCount, cluster.metadata.issueCount],
-          labels: ['PRs', 'Issues'],
+          type: 'avatars',
+          urls: contributors,
+        });
+      }
+      
+      // Add top 3 items as links
+      const topLinks = cluster.topItems.slice(0, 3).map(item => ({
+        title: item.title,
+        url: item.url,
+        type: item.type,
+      }));
+      
+      if (topLinks.length > 0) {
+        card.blocks.push({
+          type: 'link-list',
+          links: topLinks,
         });
       }
       
       // Add action button
       card.actions.push({
-        label: cluster.metadata.reviewCount > 0 ? 'Review PRs' : 'View Repository',
+        label: cluster.metadata.reviewCount > 0 ? '查看待 Review PR' : '打开仓库',
         value: cluster.url,
         primary: true,
       });
@@ -1289,18 +1335,18 @@ function generateClusterCards(grouped) {
       card.blocks.push({
         type: 'stat',
         value: cluster.clusterSize,
-        label: 'Messages',
+        label: '封邮件',
       });
       
       if (cluster.metadata.unreadCount > 0) {
         card.blocks.push({
           type: 'tags',
-          tags: [{ text: `${cluster.metadata.unreadCount} Unread`, color: 'orange' }],
+          tags: [{ text: `${cluster.metadata.unreadCount} 封未读`, color: 'orange' }],
         });
       }
       
       card.actions.push({
-        label: 'Open in Gmail',
+        label: '在 Gmail 中打开',
         value: cluster.url,
         primary: true,
       });
@@ -1311,7 +1357,7 @@ function generateClusterCards(grouped) {
       card.blocks.push({
         type: 'stat',
         value: cluster.clusterSize,
-        label: 'Newsletters',
+        label: '封Newsletter',
       });
       
       // Show sources as tags
@@ -1323,7 +1369,7 @@ function generateClusterCards(grouped) {
       }
       
       card.actions.push({
-        label: 'Review',
+        label: '查看',
         value: cluster.url,
         primary: false,
       });
@@ -1340,11 +1386,11 @@ function generateClusterCards(grouped) {
       card.blocks.push({
         type: 'stat',
         value: cluster.clusterSize,
-        label: 'Total Emails',
+        label: '封邮件总数',
       });
       
       card.actions.push({
-        label: 'Open Inbox',
+        label: '打开收件箱',
         value: cluster.url,
         primary: false,
       });
@@ -1355,13 +1401,13 @@ function generateClusterCards(grouped) {
       card.blocks.push({
         type: 'stat',
         value: cluster.metadata.todayCount,
-        label: 'Events',
+        label: '个日程',
       });
       
       if (cluster.metadata.upcomingCount > 0) {
         card.blocks.push({
           type: 'tags',
-          tags: [{ text: `${cluster.metadata.upcomingCount} Soon`, color: 'red' }],
+          tags: [{ text: `${cluster.metadata.upcomingCount} 个即将开始`, color: 'red' }],
         });
       }
       
@@ -1380,7 +1426,7 @@ function generateClusterCards(grouped) {
       }
       
       card.actions.push({
-        label: 'Open Calendar',
+        label: '打开日历',
         value: cluster.url,
         primary: true,
       });
@@ -1408,11 +1454,10 @@ function generateClusterCards(grouped) {
 }
 
 /**
- * Generate LLM headlines for project clusters
- * Style: "v0.2.14 shipped with ... across 17 PRs"
- * Keep eyebrow label: "FLYBOT · RELEASE"
+ * Generate LLM headlines and summaries for project clusters
+ * Style: headline in English, summary in Chinese with clear context
  */
-async function generateProjectHeadlines(grouped, llmClient) {
+async function generateProjectHeadlinesAndSummaries(grouped, llmClient) {
   const projectClusters = [
     ...grouped.urgent.filter(c => c.type === 'project-cluster'),
     ...grouped.action.filter(c => c.type === 'project-cluster'),
@@ -1421,48 +1466,66 @@ async function generateProjectHeadlines(grouped, llmClient) {
   
   if (projectClusters.length === 0) return;
   
-  // Generate headlines in batch
+  // Generate headlines and summaries in batch
   for (const cluster of projectClusters.slice(0, 10)) { // Limit to 10 for performance
     try {
       const repoName = cluster.metadata.repo;
-      const prCount = cluster.metadata.prCount || 0;
-      const issueCount = cluster.metadata.issueCount || 0;
+      const openPRs = cluster.items.filter(i => i.type?.includes('pr') && i.metadata?.state === 'open').length;
+      const mergedPRs = cluster.items.filter(i => i.metadata?.state === 'closed' && i.metadata?.merged_at).length;
+      const openIssues = cluster.metadata.issueCount || 0;
       const reviewCount = cluster.metadata.reviewCount || 0;
       
       // Get top items for context
-      const topTitles = cluster.topItems.slice(0, 3).map(i => i.title).join('; ');
+      const topTitles = cluster.topItems.slice(0, 3).map(i => `"${i.title}"`).join(', ');
       
-      const prompt = `Generate a very short project activity headline (max 60 chars) for repository ${repoName}.
+      const prompt = `为代码仓库 ${repoName} 生成一个英文标题和中文摘要。
 
-Activity summary:
-- ${prCount} PRs, ${issueCount} issues, ${reviewCount} reviews needed
-- Top items: ${topTitles}
+**活动数据（真实数据，不要编造）**:
+- ${openPRs} 个 PR 待处理
+- ${mergedPRs} 个 PR 已合并（最近 24h）
+- ${openIssues} 个 issue
+- ${reviewCount} 个 PR 需要 review
+- 热点项目: ${topTitles}
 
-Style examples:
-- "v0.2.14 shipped with new features across 17 PRs"
-- "Major refactor in progress, 5 reviews pending"
-- "Bug fixes and improvements merged this week"
-- "New auth system deployed, monitoring stability"
+**生成两部分**:
+1. **headline**（英文，最多 60 字符）: 简洁描述活动重点
+   - 风格示例: "v0.2.14 shipped with new features across 17 PRs"
+   - 风格示例: "Major refactor in progress, 5 reviews pending"
+   - 风格示例: "Bug fixes merged, 3 critical issues remain open"
 
-Return ONLY the headline, no quotes, no explanation.`;
+2. **summary**（中文，1-2 句话，最多 100 字）: 说明发生了什么、为什么重要
+   - 必须基于真实数据（数字、PR 标题）
+   - 说明具体工作内容（如果有热点项目名称就提）
+   - 说明需要的行动（如果有待 review 的）
+   - 示例: "FlyBot 过去 24h 合并了 17 个 PR，主要是 task-read-model 重构工作；还有 3 个 PR 等待 review。"
+   - 示例: "openDigitalMate 今天没有新 PR，有 2 个 issue 待处理，包括 UI 性能优化。"
+
+JSON: {"headline": "英文标题", "summary": "中文摘要"}`;
       
-      let headline = cluster.title; // Fallback to original
+      let headline = cluster.title; // Fallback
+      let summary = `${openPRs} 个 PR 待处理，${openIssues} 个 issue。`;
+      
       try {
         let fullText = '';
         for await (const chunk of llmClient.stream({
           messages: [{ role: 'user', content: prompt }],
-          maxTokens: 50,
+          maxTokens: 200,
+          responseFormat: { type: 'json_object' },
         })) {
           if (chunk.type === 'text' && chunk.text) fullText += chunk.text;
         }
-        headline = fullText.trim().replace(/^["']|["']$/g, '').substring(0, 60);
+        const parsed = JSON.parse(fullText);
+        headline = (parsed.headline || headline).substring(0, 60);
+        summary = parsed.summary || summary;
       } catch (err) {
-        console.warn(`[Headlines] LLM failed for ${repoName}, using original`);
+        console.warn(`[Headlines] LLM failed for ${repoName}, using fallback`);
       }
       
-      // Update cluster title
+      // Update cluster
       cluster.title = headline;
+      cluster.summary = summary;
       console.log(`  [Headlines] ${repoName} -> "${headline}"`);
+      console.log(`             -> ${summary}`);
       
     } catch (err) {
       console.warn(`[Headlines] Failed for cluster:`, err.message);
@@ -1496,8 +1559,8 @@ export async function runAggregationPipeline(composioClient, activeSources, llmC
   const grouped = groupAndRank(classified);
   console.log(`[Aggregation] ${grouped.urgent.length} urgent, ${grouped.action.length} action, ${grouped.fyi.length} fyi clusters`);
   
-  console.log('[Aggregation] Stage 5.5: Generating project headlines...');
-  await generateProjectHeadlines(grouped, llmClient);
+  console.log('[Aggregation] Stage 5.5: Generating project headlines and summaries...');
+  await generateProjectHeadlinesAndSummaries(grouped, llmClient);
   
   console.log('[Aggregation] Stage 6: Writing brief with LLM...');
   const brief = await writeBrief(grouped, llmClient, profileContext);
@@ -1510,13 +1573,21 @@ export async function runAggregationPipeline(composioClient, activeSources, llmC
   const timetable = await generateTimetable(grouped, sourceData, llmClient, profileContext);
   brief.cards.splice(1, 0, timetable);
   
+  console.log('[Aggregation] Stage 9: Generating achievements tile...');
+  const achievements = generateAchievementsTile(sourceData, items);
+  if (achievements) brief.cards.push(achievements);
+  
+  console.log('[Aggregation] Stage 10: Generating inbox overview...');
+  const inbox = generateInboxOverview(sourceData);
+  if (inbox) brief.cards.push(inbox);
+  
   console.log(`[Aggregation] Complete: ${brief.cards.length} cards generated`);
   
   return brief;
 }
 
 /**
- * Generate personalized hero greeting card
+ * Generate personalized hero greeting card with achievement rings
  */
 async function generateHeroCard(grouped, sourceData, llmClient, profileContext) {
   const now = new Date();
@@ -1526,38 +1597,59 @@ async function generateHeroCard(grouped, sourceData, llmClient, profileContext) 
   
   const date = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
   
+  // Calculate today's achievements
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const githubItems = sourceData.github?.all || [];
+  
+  const prsMergedToday = githubItems.filter(item => 
+    item.state === 'closed' && 
+    item.merged_at && 
+    new Date(item.merged_at) >= todayStart
+  ).length;
+  
+  const issuesClosedToday = githubItems.filter(item => 
+    item.closed_at && 
+    new Date(item.closed_at) >= todayStart &&
+    !item.pull_request
+  ).length;
+  
+  const emailsProcessed = (sourceData.gmail?.all || []).filter(email => 
+    !email.labelIds?.includes('UNREAD')
+  ).length;
+  
   // Build data summary for warm narrative
   const urgentCount = grouped.urgent.length;
   const actionCount = grouped.action.length;
   const meetings = sourceData.googlecalendar?.today?.length || 0;
   const emails = sourceData.gmail?.unread?.length || 0;
   
-  const prompt = `Generate a warm, personalized daily narrative (1-2 sentences, max 120 chars) for ${profileContext?.name || 'the user'}.
+  const prompt = `为用户生成一条温暖的、个性化的每日叙述（1-2 句话，最多 120 字符）。
 
-**Today's Data (REAL, do not fabricate)**:
-- ${urgentCount} urgent items (review-requested PRs, imminent meetings)
-- ${actionCount} actionable items (assigned tasks, today's meetings, emails)
-- ${meetings} calendar events today
-- ${emails} unread emails
+**今日数据（真实数据，不要编造）**:
+- ${urgentCount} 个紧急事项（需要 review 的 PR、即将开始的会议）
+- ${actionCount} 个待处理事项（分配的任务、今天的会议、邮件）
+- ${meetings} 个日历事件
+- ${emails} 封未读邮件
 
-**User Context**:
-- Name: ${profileContext?.name || 'User'}
-- Favorite repos: ${profileContext?.favoriteRepos?.join(', ') || 'none yet'}
-- Frequent contacts: ${profileContext?.frequentContacts?.join(', ') || 'none yet'}
-- Recent topics: ${profileContext?.recentTopics?.join(', ') || 'none yet'}
+**用户信息**:
+- 姓名: ${profileContext?.name || 'User'}
+- 常用仓库: ${profileContext?.favoriteRepos?.join('、') || '暂无'}
+- 常联系人: ${profileContext?.frequentContacts?.join('、') || '暂无'}
+- 最近话题: ${profileContext?.recentTopics?.join('、') || '暂无'}
 
-**Write a warm, honest narrative**:
-- Grounded ONLY in the real data above
-- Personal, encouraging tone
-- Mention specific counts if notable
-- No generic platitudes
-- Max 120 characters
+**要求**:
+- 仅基于上述真实数据
+- 温暖、鼓励的语气
+- 提及具体数字（如果显著）
+- 不要空泛的套话
+- 最多 120 字符
+- 用中文
 
-Example: "${actionCount} items need you today, including ${urgentCount} time-sensitive ones. Let's tackle them together!"
+示例: "今天有 ${actionCount} 件事需要你处理，其中 ${urgentCount} 件比较紧急。让我们一起搞定它们！"
 
-JSON: {"narrative": "your 1-2 sentence narrative here"}`;
+JSON: {"narrative": "你的 1-2 句叙述"}`;
 
-  let narrative = 'Ready to make today count!';
+  let narrative = '准备好开启美好的一天！';
   try {
     let fullText = '';
     for await (const chunk of llmClient.stream({
@@ -1577,16 +1669,26 @@ JSON: {"narrative": "your 1-2 sentence narrative here"}`;
     id: `card_hero_${Date.now()}`,
     type: 'hero',
     title: `${date} · ${timeOfDay}`,
-    body: `${greeting}, ${profileContext?.name || 'there'}`,
+    body: `${greeting}, ${profileContext?.name || 'User'}`,
     source: 'system',
     sourceId: `hero:${new Date().toISOString().split('T')[0]}`,
     priority: 'high',
     status: 'active',
     size: 'large',
-    blocks: [{
-      type: 'narrative',
-      text: narrative,
-    }],
+    blocks: [
+      {
+        type: 'narrative',
+        text: narrative,
+      },
+      {
+        type: 'achievement-rings',
+        rings: [
+          { label: '今日合并 PR', value: prsMergedToday, max: 5, color: '#00d084' },
+          { label: '今日关闭 issue', value: issuesClosedToday, max: 3, color: '#4a6cf7' },
+          { label: '已读邮件', value: Math.min(emailsProcessed, 10), max: 10, color: '#ffa600' },
+        ],
+      },
+    ],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -1673,8 +1775,8 @@ JSON: {
   return {
     id: `card_timetable_${Date.now()}`,
     type: 'timetable',
-    title: 'My Day',
-    body: events.length > 0 ? `${events.length} events scheduled` : 'Plan your day',
+    title: '我的一天',
+    body: events.length > 0 ? `已安排 ${events.length} 个日程` : '规划你的一天',
     source: 'system',
     sourceId: `timetable:${new Date().toISOString().split('T')[0]}`,
     priority: 'high',

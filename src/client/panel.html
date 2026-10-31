@@ -5,78 +5,52 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Open Digital Mate · 面板</title>
 <style>
-  :root { color-scheme: light dark; --line: #d8d8de; --muted: #6b6b76; }
+  :root { color-scheme: light dark; --line: #d8d8de; --muted: #6b6b76; --ink: #1b1b1f; --amber: #b7791f; --amber-soft: #fff8ea; --ok: #1a7f37; --bad: #cf222e; }
   * { box-sizing: border-box; }
-  body { margin: 0; padding: 32px; font: 14px/1.55 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+  html, body { margin: 0; }
+  body { padding: 32px; font: 14px/1.55 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; color: var(--ink); }
+  .page { max-width: 880px; margin: 0 auto; }
   h1 { font-size: 18px; margin: 0 0 4px; }
   .muted { color: var(--muted); }
-  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); margin-top: 24px; }
-  section { border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
-  h2 { font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; }
+  section { margin-top: 26px; }
+  h2 { font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+  h3 { font-size: 12.5px; font-weight: 600; color: var(--muted); margin: 0 0 8px; }
+  h4 { font-size: 15px; font-weight: 600; margin: 0 0 6px; }
+  .stamp { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
+  .concl { font-size: 22px; line-height: 1.35; font-weight: 600; margin: 0 0 4px; color: var(--ink); letter-spacing: 0; text-transform: none; }
+  .stats { display: flex; gap: 12px; margin: 16px 0 0; }
+  .stat { flex: 1; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .stat b { display: block; font-size: 28px; line-height: 1.2; }
+  .stat span { color: var(--muted); font-size: 12.5px; }
+  .item { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 12px 0; }
+  /* A card whose sentence can only rest on a source that is not connected gets the dashed amber
+     edge: the claim itself is weaker, so the card has to look weaker. */
+  .item.srcless { border: 1.5px dashed var(--amber); background: var(--amber-soft); }
+  .item .why { margin: 0 0 8px; color: var(--muted); }
+  .item .advice { margin: 0; color: var(--ink); }
+  .src-note { margin: 6px 0 0; font-size: 12.5px; color: var(--amber); }
+  .wait-list { margin: 0; padding-left: 18px; }
+  .wait-list li { margin: 6px 0; }
+  .wait-list em { color: var(--muted); font-style: normal; margin-left: 8px; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); color: var(--muted); }
+  .pill.ok { color: var(--ok); border-color: #c7e5cf; }
+  .pill.no { color: var(--amber); border-color: #e8d3a8; }
+  .src-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .src-table th { text-align: left; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .src-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
   .big { font-size: 30px; font-weight: 600; }
   ul { margin: 0; padding-left: 18px; }
   li { margin: 4px 0; }
-  .ok { color: #1a7f37; }
-  .bad { color: #cf222e; }
-  code { font-size: 12px; }
+  .ok { color: var(--ok); }
+  .bad { color: var(--bad); }
 </style>
 </head>
 <body>
+<div class="page">
   <h1>Open Digital Mate</h1>
-  <div class="muted" id="day">读取中…</div>
-
-  <div class="grid">
-    <section>
-      <h2>日报提交率</h2>
-      <div class="big" id="rate">–</div>
-      <div class="muted" id="rate-note">今天</div>
-    </section>
-    <section>
-      <h2>还没交</h2>
-      <ul id="missing"><li class="muted">—</li></ul>
-    </section>
-    <section>
-      <h2>近期日程</h2>
-      <ul id="upcoming"><li class="muted">—</li></ul>
-    </section>
-    <section>
-      <h2>最近投递</h2>
-      <ul id="deliveries"><li class="muted">—</li></ul>
-    </section>
-  </div>
-
-<script>
-const escapeHtml = value => String(value ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]))
-const list = (el, items, render, empty) => {
-  el.innerHTML = items.length === 0 ? `<li class="muted">${empty}</li>` : items.map(render).join('')
-}
-const clock = iso => String(iso ?? '').slice(11, 16) || '—'
-
-async function refresh() {
-  try {
-    const response = await fetch('/api/opendigitalmate', { headers: { accept: 'application/json' } })
-    if (!response.ok) throw new Error(`${response.status}`)
-    const data = await response.json()
-    document.getElementById('day').textContent = `更新于 ${new Date().toLocaleTimeString()}`
-    const rate = data.total === 0 ? 0 : Math.round((data.submitted / data.total) * 100)
-    const rateEl = document.getElementById('rate')
-    rateEl.textContent = `${data.submitted}/${data.total}`
-    rateEl.className = `big ${rate === 100 ? 'ok' : 'bad'}`
-    document.getElementById('rate-note').textContent = `${data.today} · ${rate}%`
-    list(document.getElementById('missing'), data.missing, name => `<li>${escapeHtml(name)}</li>`, '都交了')
-    list(document.getElementById('upcoming'), data.upcoming,
-      item => `<li>${escapeHtml(clock(item.startAt))} ${escapeHtml(item.title)}<br><span class="muted">提醒 ${escapeHtml(clock(item.fireAt))}</span></li>`,
-      '没有待提醒的日程')
-    list(document.getElementById('deliveries'), data.deliveries,
-      item => `<li>${escapeHtml(clock(item.at.slice(11, 16)))} ${item.ok ? '<span class="ok">已送达</span>' : `<span class="bad">失败</span> ${escapeHtml(item.error ?? '')}`}</li>`,
-      '还没有投递记录')
-  } catch (error) {
-    document.getElementById('day').textContent = `读不到面板数据：${error.message}`
-  }
-}
-
-void refresh()
-setInterval(refresh, 30000)
-</script>
+  <!--panel:body-->
+</div>
 </body>
 </html>

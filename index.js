@@ -7,7 +7,7 @@ import { createStore } from './src/host/store.js'
 import { buildDailyReport } from './src/host/report.js'
 import { due, planFor, reminderKey, snooze } from './src/host/reminders.js'
 import { dailyReportCard, readAction, reminderCard } from './src/host/cards.js'
-import { installPanel, reportKey } from './src/host/panel.js'
+import { dayKey, installPanel, reportKey } from './src/host/panel.js'
 import { createFeishuSender } from './src/host/feishu.js'
 import { PANEL_ROUTE, SNOOZE_MINUTES, TICK_SECONDS } from './src/host/constants.js'
 
@@ -25,7 +25,9 @@ export function apply(ctx, config = {}) {
 export function createRuntime(ctx, config = {}) {
   const home = config.home ?? join(process.env.DSH_HOME ?? '.', 'opendigitalmate')
   const now = config.now ?? (() => new Date())
-  const today = config.today ?? (() => now().toISOString().slice(0, 10))
+  const timeZone = config.timeZone
+  // Reports and the panel are keyed on the day the person lives in, never the UTC day.
+  const today = config.today ?? (() => dayKey(now(), timeZone))
   const store = createStore(join(home, 'state.json'))
   const sender = createFeishuSender({ credentials: config.credentials, log: config.log })
   const sendCard = config.sendCard ?? sender.sendCard
@@ -45,7 +47,23 @@ export function createRuntime(ctx, config = {}) {
     async tick() {
       const state = store.get()
       const moment = now().getTime()
-      const planned = planFor(await calendar(), { now: moment, leadMinutes: config.leadMinutes })
+      const readAt = now().toISOString()
+      // What the calendar did this pass is part of the state the panel reads: a source that
+      // returned null or threw is not "no meetings", it is "not read", and the page must say so.
+      let events = null
+      let readError = null
+      try {
+        events = await calendar()
+      } catch (error) {
+        readError = String(error?.message ?? error)
+      }
+      const connected = Array.isArray(events)
+      const calendarSource = {
+        connected,
+        last_read_at: readAt,
+        detail: connected ? `读到 ${events.length} 个日程` : (readError ?? '日历没有返回数据'),
+      }
+      const planned = planFor(events, { now: moment, leadMinutes: config.leadMinutes })
       const plan = [...planned, ...(state.manual ?? [])].sort((a, b) => a.fireAt.localeCompare(b.fireAt))
       const firing = due(plan, { now: moment, sent: Object.keys(state.sent ?? {}) })
       const deliveries = []
@@ -70,6 +88,7 @@ export function createRuntime(ctx, config = {}) {
       for (const key of delivered) sent[key] = now().toISOString()
       await store.save({
         ...state,
+        sources: { ...(state.sources ?? {}), calendar: calendarSource },
         sent,
         manual: (state.manual ?? []).filter(item => Date.parse(item.fireAt) > moment),
         upcoming: plan.slice(0, 20),

@@ -1,0 +1,115 @@
+{
+  "revision": 7,
+  "members": {
+    "m1": { "id": "m1", "name": "小王" },
+    "m2": { "id": "m2", "name": "小李" },
+    "m3": { "id": "m3", "name": "已经离职", "active": false }
+  },
+  "reports": {
+    "m1:2026-10-30": {
+      "date": "2026-10-30",
+      "memberId": "m1",
+      "memberName": "小王",
+      "events": [],
+      "done": ["把报价单数字核完"],
+      "plan": ["等张伟回复"],
+      "notes": "",
+      "stats": { "meetings": 3, "meetingMinutes": 180, "done": 1, "planned": 1 }
+    }
+  },
+  "sent": {},
+  "manual": [],
+  "deliveries": [],
+  "upcoming": [],
+  "days": {
+    "2026-10-30": {
+      "conclusion": "今天 3 个会，只有 1 件必须今天推完。",
+      "meetings": [
+        { "id": "mtg_1", "title": "报价单评审", "startAt": "2026-10-30T10:00:00+08:00", "endAt": "2026-10-30T10:30:00+08:00" },
+        { "id": "mtg_2", "title": "供应商对齐", "startAt": "2026-10-30T15:30:00+08:00", "endAt": "2026-10-30T16:00:00+08:00" },
+        { "id": "mtg_3", "title": "评审会", "startAt": "2026-10-30T16:00:00+08:00", "endAt": "2026-10-30T18:00:00+08:00" }
+      ],
+      "items": [
+        {
+          "id": "evt_1",
+          "title": "报价单发给张伟",
+          "state": "open",
+          "dueAt": "2026-10-30T10:00:00+08:00",
+          "why": "他昨天问了两次，卡着周四签约。",
+          "advice": "10:00 前发，先发数字后补附件。",
+          "sources": [{ "type": "feishu" }, { "type": "mail" }],
+          "evidence": [
+            { "ref": "feishu:zhangwei:2026-10-29T21:14:00+08:00", "at": "2026-10-29T21:14:00+08:00" }
+          ]
+        },
+        {
+          "id": "evt_2",
+          "title": "评审会材料定稿",
+          "state": "open",
+          "dueAt": "2026-10-30T13:00:00+08:00",
+          "why": "会从 14:00 挪到 16:00，多出两小时，够定稿。",
+          "advice": "13:00 前只留一页结论页。",
+          "sources": [{ "type": "calendar" }, { "type": "feishu" }],
+          "evidence": [
+            { "ref": "calendar:mtg_3:2026-10-29T18:02:00+08:00", "at": "2026-10-29T18:02:00+08:00" }
+          ]
+        },
+        {
+          "id": "evt_3",
+          "title": "回李静那封邮件",
+          "state": "open",
+          "dueAt": "2026-10-30T12:00:00+08:00",
+          "why": "她等了两天，一句话就能关掉。",
+          "advice": "回一句「收到，周五给」。",
+          "sources": [{ "type": "mail" }],
+          "evidence": [
+            { "ref": "mail:lijing:2026-10-28T14:30:00+08:00", "at": "2026-10-28T14:30:00+08:00" }
+          ]
+        },
+        {
+          "id": "evt_4",
+          "title": "合同盖章",
+          "state": "waiting",
+          "sources": [{ "type": "feishu" }],
+          "note": "昨天 17:40 已提交，她说明天给你。"
+        },
+        {
+          "id": "evt_5",
+          "title": "张伟签字",
+          "state": "waiting",
+          "sources": [{ "type": "feishu" }],
+          "note": "卡在报价单，发出去才轮到他。"
+        },
+        {
+          "id": "evt_6",
+          "title": "供应商比价表",
+          "state": "dropped",
+          "sources": [{ "type": "mail" }],
+          "note": "下周一才要，别今天排。"
+        }
+      ]
+    }
+  },
+  "sources": {
+    "feishu": {
+      "connected": true,
+      "last_read_at": "2026-10-30T08:42:00+08:00",
+      "detail": "214 条 · 3 个会话"
+    },
+    "calendar": {
+      "connected": true,
+      "last_read_at": "2026-10-30T08:42:00+08:00",
+      "detail": "12 个日程"
+    },
+    "mail": {
+      "connected": true,
+      "last_read_at": "2026-10-30T08:40:00+08:00",
+      "detail": "38 封 · 仅主题与收发关系"
+    },
+    "doc": {
+      "connected": false,
+      "last_read_at": null,
+      "detail": "没有接入"
+    }
+  }
+}

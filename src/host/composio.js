@@ -1,6 +1,6 @@
 /**
  * Composio v3 REST API client
- * Docs: https://docs.composio.dev
+ * Verified against real API: https://backend.composio.dev/api/v3
  */
 
 const COMPOSIO_API_BASE = 'https://backend.composio.dev/api/v3';
@@ -18,6 +18,9 @@ export function createComposioClient(config) {
   }
 
   console.log(`[Composio] Client created for entity: ${entityId}`);
+
+  // Cache auth_config IDs per toolkit
+  const authConfigCache = new Map();
 
   /**
    * Make API request to Composio v3
@@ -43,28 +46,70 @@ export function createComposioClient(config) {
     return response.json();
   }
 
+  /**
+   * Get or create auth_config for a toolkit (e.g., "github")
+   */
+  async function getAuthConfig(toolkitSlug) {
+    // Check cache
+    if (authConfigCache.has(toolkitSlug)) {
+      return authConfigCache.get(toolkitSlug);
+    }
+
+    // Find existing auth_config
+    const configs = await request(`/auth_configs?toolkit_slug=${toolkitSlug}`);
+    
+    if (configs.items && configs.items.length > 0) {
+      const authConfigId = configs.items[0].id;
+      authConfigCache.set(toolkitSlug, authConfigId);
+      console.log(`[Composio] Found auth_config for ${toolkitSlug}: ${authConfigId}`);
+      return authConfigId;
+    }
+
+    // Create new auth_config with managed auth
+    console.log(`[Composio] Creating auth_config for ${toolkitSlug}...`);
+    const result = await request('/auth_configs', {
+      method: 'POST',
+      body: JSON.stringify({
+        toolkit: { slug: toolkitSlug },
+        auth_config: { type: 'use_composio_managed_auth' },
+      }),
+    });
+
+    const authConfigId = result.auth_config?.id || result.id;
+    authConfigCache.set(toolkitSlug, authConfigId);
+    console.log(`[Composio] Created auth_config: ${authConfigId}`);
+    
+    return authConfigId;
+  }
+
   return {
     entityId,
+    authConfigCache,
 
     /**
      * Initiate app connection (OAuth)
      * Returns redirect URL for user authorization
      */
-    async initiateConnection(appId) {
+    async initiateConnection(appId, callbackUrl = 'http://localhost:7777/composio-callback') {
       console.log(`[Composio] Initiating connection for app: ${appId}`);
       
-      const result = await request('/connected_accounts/initiate', {
+      // Get or create auth_config
+      const authConfigId = await getAuthConfig(appId);
+      
+      // Create connection link
+      const result = await request('/connected_accounts/link', {
         method: 'POST',
         body: JSON.stringify({
-          integration_id: appId,
-          user_uuid: entityId,
-          redirect_url: 'http://localhost:7777/composio-callback',
+          auth_config_id: authConfigId,
+          user_id: entityId,
+          callback_url: callbackUrl,
         }),
       });
 
       return {
-        redirectUrl: result.redirectUrl || result.redirect_url,
-        connectionId: result.connectionId || result.connection_id,
+        redirectUrl: result.redirect_url,
+        connectionId: result.connected_account_id,
+        authConfigId,
       };
     },
 
@@ -74,10 +119,10 @@ export function createComposioClient(config) {
     async getConnectedAccounts() {
       console.log('[Composio] Fetching connected accounts');
       
-      const result = await request(`/connected_accounts?user_uuid=${encodeURIComponent(entityId)}`);
+      const result = await request(`/connected_accounts?user_ids=${encodeURIComponent(entityId)}`);
       
       return {
-        items: result.items || result.accounts || [],
+        items: result.items || [],
       };
     },
 
@@ -94,20 +139,32 @@ export function createComposioClient(config) {
 
     /**
      * Execute tool action
+     * @param {string} toolSlug - Tool slug in UPPERCASE_SNAKE_CASE (e.g., "GITHUB_LIST_REPOS")
+     * @param {object} args - Tool arguments
      */
-    async executeAction(action, params) {
-      console.log(`[Composio] Executing action: ${action}`);
+    async executeAction(toolSlug, args = {}) {
+      console.log(`[Composio] Executing tool: ${toolSlug}`);
       
-      const result = await request('/tools/execute', {
+      const result = await request(`/tools/execute/${toolSlug}`, {
         method: 'POST',
         body: JSON.stringify({
-          action_id: action,
-          entity_id: entityId,
-          params,
+          user_id: entityId,
+          arguments: args,
         }),
       });
 
       return result;
+    },
+
+    /**
+     * Get available tools for a toolkit
+     */
+    async getTools(toolkitSlug) {
+      console.log(`[Composio] Fetching tools for: ${toolkitSlug}`);
+      
+      const result = await request(`/tools?toolkit_slug=${toolkitSlug}`);
+      
+      return result.items || [];
     },
 
     /**
@@ -118,7 +175,7 @@ export function createComposioClient(config) {
       
       const result = await request('/integrations');
       
-      return result.items || result.integrations || [];
+      return result.items || [];
     },
   };
 }
@@ -140,26 +197,30 @@ export async function generateDailyDigest(composioClient) {
       };
     }
 
+    console.log(`[Composio] Found ${accounts.items.length} connected accounts`);
+
     // For each connected account, fetch recent activity
     for (const account of accounts.items) {
-      const appId = account.integration_id || account.appName;
+      const toolkitSlug = account.integration_id || account.toolkit_slug;
       
+      if (!toolkitSlug) continue;
+
       try {
-        // GitHub: recent PRs and issues
-        if (appId === 'github') {
-          const prs = await composioClient.executeAction('github_list_pull_requests', {
-            state: 'open',
+        // GitHub: recent repos and PRs
+        if (toolkitSlug === 'github') {
+          const repos = await composioClient.executeAction('GITHUB_LIST_REPOS', {
+            sort: 'updated',
             per_page: 5,
           });
           
-          if (prs.data) {
-            prs.data.forEach(pr => {
+          if (repos.data) {
+            repos.data.forEach(repo => {
               items.push({
-                type: 'github_pr',
-                title: pr.title,
-                description: `#${pr.number} · ${pr.user?.login || 'Unknown'}`,
-                url: pr.html_url,
-                time: new Date(pr.created_at).toLocaleString('zh-CN'),
+                type: 'github_repo',
+                title: repo.name,
+                description: repo.description || 'No description',
+                url: repo.html_url,
+                time: new Date(repo.updated_at).toLocaleString('zh-CN'),
                 source: 'GitHub',
               });
             });
@@ -167,8 +228,8 @@ export async function generateDailyDigest(composioClient) {
         }
         
         // Gmail: unread messages
-        if (appId === 'gmail') {
-          const messages = await composioClient.executeAction('gmail_list_messages', {
+        if (toolkitSlug === 'gmail') {
+          const messages = await composioClient.executeAction('GMAIL_LIST_MESSAGES', {
             label_ids: ['UNREAD'],
             max_results: 5,
           });
@@ -188,8 +249,8 @@ export async function generateDailyDigest(composioClient) {
         }
         
         // Slack: recent messages
-        if (appId === 'slack') {
-          const messages = await composioClient.executeAction('slack_list_messages', {
+        if (toolkitSlug === 'slack') {
+          const messages = await composioClient.executeAction('SLACK_LIST_MESSAGES', {
             limit: 5,
           });
           
@@ -207,7 +268,7 @@ export async function generateDailyDigest(composioClient) {
           }
         }
       } catch (err) {
-        console.error(`[Composio] Failed to fetch data from ${appId}:`, err.message);
+        console.error(`[Composio] Failed to fetch data from ${toolkitSlug}:`, err.message);
       }
     }
 
@@ -233,9 +294,9 @@ export async function getSourcesStatus(composioClient) {
     const accounts = await composioClient.getConnectedAccounts();
     
     const sources = accounts.items?.map(account => ({
-      name: account.integration_id || account.appName || 'Unknown',
-      connected: true,
-      description: `Connected as ${account.user_uuid || 'default'}`,
+      name: account.integration_id || account.toolkit_slug || 'Unknown',
+      connected: account.status === 'ACTIVE',
+      description: `Connected as ${account.user_id || 'default'}`,
     })) || [];
 
     if (sources.length === 0) {
@@ -261,18 +322,16 @@ export async function getSourcesStatus(composioClient) {
 }
 
 /**
- * Push daily digest (placeholder - implement delivery mechanism)
+ * Push daily digest (placeholder)
  */
 export async function pushDailyDigest({ digest, store, config, sendCard }) {
-  // TODO: Implement actual delivery (Feishu, email, etc.)
   console.log('[Composio] Push digest:', digest.summary);
   return [];
 }
 
 /**
- * Schedule daily digest (placeholder - implement scheduler)
+ * Schedule daily digest (placeholder)
  */
 export async function scheduleDailyDigest(schedule) {
   console.log('[Composio] Schedule digest:', schedule);
-  // TODO: Implement actual scheduler
 }

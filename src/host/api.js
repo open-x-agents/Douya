@@ -758,13 +758,15 @@ export function createApiRouter(ctx) {
           return { error: '未知应用' };
         }
 
-        // Create connection link
-        const redirectUrl = `${config?.baseUrl || 'http://localhost:7777'}/composio-callback`;
-        const result = await client.createConnection(appId, redirectUrl);
+        // Initiate connection (returns OAuth redirect URL)
+        const callbackUrl = `${config?.baseUrl || 'http://localhost:7777'}/composio-callback`;
+        const result = await client.initiateConnection(app.key || appId, callbackUrl);
 
         return {
           success: true,
-          connectionUrl: result.connectionUrl || result.redirectUrl,
+          redirectUrl: result.redirectUrl,
+          connectionId: result.connectionId,
+          authConfigId: result.authConfigId,
           appName: app.name,
         };
       } catch (err) {

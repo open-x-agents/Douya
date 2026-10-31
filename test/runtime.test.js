@@ -119,3 +119,54 @@ test('a recorded report is stored and becomes the card sent back', async () => {
   assert.equal(sent[0].card.header.title.content, '小王 · 2026-10-30')
   assert.deepEqual(rt.store.get().reports['m1:2026-10-30'].plan, ['联调'])
 })
+
+// The 60 second interval is gone: the wake is the distance to the reminder's own fireAt, so a
+// warning is not rounded onto a minute grid and the test can see the exact delay.
+test("the timer is armed for the reminder's fireAt, not on a one-minute grid", async () => {
+  const delays = []
+  const { rt } = await runtime({
+    calendar: async () => [{ id: 'e1', summary: '周会', start: '2026-10-30T09:22:00Z', end: '2026-10-30T09:52:00Z' }],
+    schedule: (fn, delay) => {
+      delays.push(delay)
+      return { unref() {} }
+    },
+    cancel: () => {},
+  })
+  await rt.tick()
+  assert.deepEqual(delays, [720000])
+})
+
+const meetingAt0922 = [{ id: 'e1', summary: '周会', start: '2026-10-30T09:22:00Z', end: '2026-10-30T09:52:00Z' }]
+
+test('a reminder fired thirty seconds late is still inside the budget', async () => {
+  const { rt, setClock } = await runtime({ calendar: async () => meetingAt0922 })
+  setClock('2026-10-30T09:12:30Z')
+  const result = await rt.tick()
+  assert.equal(result.deliveries[0].latency_ms, 30_000)
+  assert.equal(result.deliveries[0].deadline_ms, 30_000)
+  assert.equal(result.deliveries[0].over_budget, false)
+})
+
+test('a reminder fired thirty-one seconds late is recorded over budget', async () => {
+  const { rt, setClock } = await runtime({ calendar: async () => meetingAt0922 })
+  setClock('2026-10-30T09:12:31Z')
+  const result = await rt.tick()
+  assert.equal(result.deliveries[0].latency_ms, 31_000)
+  assert.equal(result.deliveries[0].deadline_ms, 30_000)
+  assert.equal(result.deliveries[0].over_budget, true)
+})
+
+test('a calendar that throws does not break the pass, and every attempt is recorded', async () => {
+  const { rt } = await runtime({
+    calendar: async () => {
+      throw new Error('calendar down')
+    },
+  })
+  const result = await rt.tick()
+  assert.deepEqual(result.plan, [])
+  assert.deepEqual(result.failures.map(failure => [failure.source, failure.reason, failure.attempt]), [
+    ['calendar', 'error', 1],
+    ['calendar', 'error', 2],
+    ['calendar', 'error', 3],
+  ])
+})

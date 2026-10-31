@@ -1,7 +1,7 @@
 {
   "name": "opendigitalmate",
   "version": "0.1.0",
-  "description": "Open Digital Mate: a Feishu-native teammate on top of ds-bot \u2014 daily reports, calendar reminders, interactive cards and one panel",
+  "description": "Open Digital Mate: a Feishu-native teammate on top of ds-bot — daily reports, calendar reminders, interactive cards and one panel",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -41,5 +41,8 @@
   "optionalDependencies": {
     "@larksuiteoapi/node-sdk": "^1.40.0"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "playwright": "^1.64.1"
+  }
 }

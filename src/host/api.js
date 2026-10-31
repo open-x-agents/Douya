@@ -15,38 +15,38 @@ const COMPOSIO_APPS = [
   {
     key: 'github',
     name: 'GitHub',
-    logo: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+    logo: 'https://logos.composio.dev/api/github',
     description: 'Repositories and issues',
   },
   {
     key: 'slack',
     name: 'Slack',
-    logo: 'https://a.slack-edge.com/80588/marketing/img/icons/icon_slack_hash_colored.png',
+    logo: 'https://logos.composio.dev/api/slack',
     description: 'Team messages',
   },
   {
     key: 'gmail',
     name: 'Gmail',
-    logo: 'https://www.google.com/gmail/about/static/images/logo-gmail.png',
+    logo: 'https://logos.composio.dev/api/gmail',
     description: 'Email access',
   },
   {
     key: 'notion',
     name: 'Notion',
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/4/45/Notion_app_logo.png',
+    logo: 'https://logos.composio.dev/api/notion',
     description: 'Workspace docs',
   },
   {
     key: 'linear',
     name: 'Linear',
-    logo: 'https://asset.brandfetch.io/idAnDTFapY/idG_TlAMjQ.png',
+    logo: 'https://logos.composio.dev/api/linear',
     description: 'Issue tracking',
   },
   {
     key: 'calendar',
     toolkitSlug: 'googlecalendar',
     name: 'Google Calendar',
-    logo: 'https://ssl.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_31_2x.png',
+    logo: 'https://logos.composio.dev/api/googlecalendar',
     description: 'Calendar events',
   },
 ];
@@ -899,18 +899,24 @@ export function createApiRouter(ctx) {
           const accounts = await client.getConnectedAccounts();
           const connectedApps = new Map();
           
-          accounts.items?.forEach(account => {
-            const appId = account.appName?.toLowerCase();
-            if (appId) {
-              connectedApps.set(appId, {
-                connectionId: account.id,
-                connectedAt: account.createdAt,
-              });
-            }
-          });
+          // v3 API response: array of items with {id, status, toolkit: {slug}, ...}
+          // NOT accounts.items - it's a direct array
+          if (accounts && Array.isArray(accounts)) {
+            accounts.forEach(account => {
+              // Only count ACTIVE connections, skip INITIATED (pending OAuth)
+              if (account.status === 'ACTIVE' && account.toolkit?.slug) {
+                connectedApps.set(account.toolkit.slug, {
+                  connectionId: account.id,
+                  connectedAt: account.createdAt,
+                });
+              }
+            });
+          }
 
+          // Match apps by toolkitSlug (calendar->googlecalendar) or key
           apps.forEach(app => {
-            const conn = connectedApps.get(app.id || app.key);
+            const toolkitSlug = app.toolkitSlug || app.key;
+            const conn = connectedApps.get(toolkitSlug);
             if (conn) {
               app.connected = true;
               app.connectionId = conn.connectionId;

@@ -12,7 +12,8 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Stage 1: Fetch data from all active sources (EXPANDED for richer content)
+ * Stage 1: Fetch data from all active sources (UNCAPPED pagination)
+ * Paginate through ALL items in the 24-48h window, no fixed caps
  */
 export async function fetchFromSources(composioClient, activeSources) {
   const sourceData = {};
@@ -22,94 +23,64 @@ export async function fetchFromSources(composioClient, activeSources) {
     
     try {
       if (slug === 'github') {
-        // Expanded GitHub: ~50 items from last 24-48h
-        const [myPRs, reviewRequested, assigned, recentActivity, mentions] = await Promise.all([
-          composioClient.executeAction('GITHUB_SEARCH_ISSUES_AND_PULL_REQUESTS', {
-            q: 'is:pr is:open author:@me',
-            per_page: 20,
-          }),
-          composioClient.executeAction('GITHUB_SEARCH_ISSUES_AND_PULL_REQUESTS', {
-            q: 'is:pr is:open review-requested:@me',
-            per_page: 15,
-          }),
-          composioClient.executeAction('GITHUB_LIST_ISSUES_ASSIGNED_TO_THE_AUTHENTICATED_USER', {
-            per_page: 15,
-            state: 'open',
-          }),
-          composioClient.executeAction('GITHUB_SEARCH_ISSUES_AND_PULL_REQUESTS', {
-            q: `involves:@me updated:>${new Date(Date.now() - 48*60*60*1000).toISOString().split('T')[0]}`,
-            per_page: 20,
-          }),
-          composioClient.executeAction('GITHUB_SEARCH_ISSUES_AND_PULL_REQUESTS', {
-            q: 'mentions:@me is:open',
-            per_page: 10,
-          }),
-        ]);
+        // GitHub: paginate through ALL items in last 48h
+        const cutoff = new Date(Date.now() - 48*60*60*1000).toISOString().split('T')[0];
         
         sourceData.github = {
-          myPRs: myPRs?.data?.items || [],
-          reviewRequested: reviewRequested?.data?.items || [],
-          assigned: assigned?.data?.issues || [],
-          recentActivity: recentActivity?.data?.items || [],
-          mentions: mentions?.data?.items || [],
+          myPRs: await paginateGitHubSearch(composioClient, `is:pr is:open author:@me`),
+          reviewRequested: await paginateGitHubSearch(composioClient, `is:pr is:open review-requested:@me`),
+          assigned: await paginateGitHubIssues(composioClient),
+          recentActivity: await paginateGitHubSearch(composioClient, `involves:@me updated:>${cutoff}`),
+          mentions: await paginateGitHubSearch(composioClient, `mentions:@me is:open`),
         };
         
-        console.log(`[GitHub] Fetched ${sourceData.github.myPRs.length + sourceData.github.reviewRequested.length + sourceData.github.assigned.length + sourceData.github.recentActivity.length} items`);
+        const totalGithub = sourceData.github.myPRs.length + sourceData.github.reviewRequested.length + 
+                           sourceData.github.assigned.length + sourceData.github.recentActivity.length + 
+                           sourceData.github.mentions.length;
+        console.log(`[GitHub] Fetched ${totalGithub} items (myPRs:${sourceData.github.myPRs.length}, review:${sourceData.github.reviewRequested.length}, assigned:${sourceData.github.assigned.length}, activity:${sourceData.github.recentActivity.length}, mentions:${sourceData.github.mentions.length})`);
+        
       } else if (slug === 'gmail') {
-        // Expanded Gmail: ~30 messages from last 24h
+        // Gmail: paginate through ALL messages from last 24h
         const yesterday = new Date(Date.now() - 24*60*60*1000).toISOString().split('T')[0].replace(/-/g, '/');
         
-        const [unread, recent, important] = await Promise.all([
-          composioClient.executeAction('GMAIL_FETCH_EMAILS', {
-            max_results: 15,
-            query: 'in:inbox is:unread',
-          }),
-          composioClient.executeAction('GMAIL_FETCH_EMAILS', {
-            max_results: 20,
-            query: `in:inbox after:${yesterday}`,
-          }),
-          composioClient.executeAction('GMAIL_FETCH_EMAILS', {
-            max_results: 10,
-            query: 'in:inbox is:important',
-          }),
-        ]);
-        
         sourceData.gmail = {
-          unread: unread?.data?.messages || [],
-          recent: recent?.data?.messages || [],
-          important: important?.data?.messages || [],
+          unread: await paginateGmail(composioClient, 'in:inbox is:unread'),
+          recent: await paginateGmail(composioClient, `in:inbox after:${yesterday}`),
+          important: await paginateGmail(composioClient, 'in:inbox is:important'),
         };
         
-        console.log(`[Gmail] Fetched ${sourceData.gmail.recent.length} messages (${sourceData.gmail.unread.length} unread, ${sourceData.gmail.important.length} important)`);
+        console.log(`[Gmail] Fetched ${sourceData.gmail.recent.length} recent messages (${sourceData.gmail.unread.length} unread, ${sourceData.gmail.important.length} important)`);
+        
       } else if (slug === 'googlecalendar') {
-        // Expanded Calendar: today + tomorrow
+        // Calendar: today + tomorrow (typically small, no pagination needed)
         const now = new Date();
-        const startOfToday = new Date(now.setHours(0, 0, 0, 0)).toISOString();
-        const endOfTomorrow = new Date(now.setHours(47, 59, 59, 999)).toISOString();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+        const endOfTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2).toISOString();
         const next2h = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
         
         const [todayAndTomorrow, upcoming] = await Promise.all([
           composioClient.executeAction('GOOGLECALENDAR_EVENTS_LIST', {
             timeMin: startOfToday,
             timeMax: endOfTomorrow,
-            maxResults: 30,
+            maxResults: 100,
           }),
           composioClient.executeAction('GOOGLECALENDAR_EVENTS_LIST', {
             timeMin: new Date().toISOString(),
             timeMax: next2h,
-            maxResults: 10,
+            maxResults: 50,
           }),
         ]);
         
+        const allEvents = todayAndTomorrow?.data?.items || [];
         sourceData.googlecalendar = {
-          today: todayAndTomorrow?.data?.items?.filter(e => {
+          today: allEvents.filter(e => {
             const start = new Date(e.start?.dateTime || e.start?.date);
             return start < new Date(Date.now() + 24*60*60*1000);
-          }) || [],
-          tomorrow: todayAndTomorrow?.data?.items?.filter(e => {
+          }),
+          tomorrow: allEvents.filter(e => {
             const start = new Date(e.start?.dateTime || e.start?.date);
             return start >= new Date(Date.now() + 24*60*60*1000);
-          }) || [],
+          }),
           upcoming: upcoming?.data?.items || [],
         };
         
@@ -121,6 +92,123 @@ export async function fetchFromSources(composioClient, activeSources) {
   }
   
   return sourceData;
+}
+
+/**
+ * Helper: Paginate GitHub search (uncapped)
+ */
+async function paginateGitHubSearch(composioClient, query) {
+  const items = [];
+  let page = 1;
+  const perPage = 100; // GitHub max
+  
+  while (true) {
+    try {
+      const result = await composioClient.executeAction('GITHUB_SEARCH_ISSUES_AND_PULL_REQUESTS', {
+        q: query,
+        per_page: perPage,
+        page,
+      });
+      
+      const batch = result?.data?.items || [];
+      if (batch.length === 0) break;
+      
+      items.push(...batch);
+      
+      // Stop if we got less than a full page (last page)
+      if (batch.length < perPage) break;
+      
+      page++;
+      
+      // Safety: stop after 10 pages (1000 items) to avoid infinite loops
+      if (page > 10) {
+        console.warn(`[GitHub] Hit pagination limit (1000 items) for query: ${query}`);
+        break;
+      }
+    } catch (err) {
+      console.warn(`[GitHub] Pagination failed at page ${page}:`, err.message);
+      break;
+    }
+  }
+  
+  return items;
+}
+
+/**
+ * Helper: Paginate GitHub assigned issues (uncapped)
+ */
+async function paginateGitHubIssues(composioClient) {
+  const items = [];
+  let page = 1;
+  const perPage = 100;
+  
+  while (true) {
+    try {
+      const result = await composioClient.executeAction('GITHUB_LIST_ISSUES_ASSIGNED_TO_THE_AUTHENTICATED_USER', {
+        per_page: perPage,
+        page,
+        state: 'open',
+      });
+      
+      const batch = result?.data?.issues || result?.data?.items || [];
+      if (batch.length === 0) break;
+      
+      items.push(...batch);
+      
+      if (batch.length < perPage) break;
+      page++;
+      
+      if (page > 10) {
+        console.warn(`[GitHub] Hit pagination limit for assigned issues`);
+        break;
+      }
+    } catch (err) {
+      console.warn(`[GitHub] Issues pagination failed at page ${page}:`, err.message);
+      break;
+    }
+  }
+  
+  return items;
+}
+
+/**
+ * Helper: Paginate Gmail (uncapped)
+ */
+async function paginateGmail(composioClient, query) {
+  const messages = [];
+  let pageToken = null;
+  const maxResults = 100;
+  
+  while (true) {
+    try {
+      const params = {
+        max_results: maxResults,
+        query,
+      };
+      if (pageToken) params.page_token = pageToken;
+      
+      const result = await composioClient.executeAction('GMAIL_FETCH_EMAILS', params);
+      
+      const batch = result?.data?.messages || [];
+      if (batch.length === 0) break;
+      
+      messages.push(...batch);
+      
+      pageToken = result?.data?.nextPageToken;
+      if (!pageToken) break;
+      
+      // Safety: stop after 500 messages
+      if (messages.length >= 500) {
+        console.warn(`[Gmail] Hit pagination limit (500 messages) for query: ${query}`);
+        break;
+      }
+    } catch (err) {
+      console.warn(`[Gmail] Pagination failed:`, err.message);
+      break;
+    }
+  }
+  
+  return messages;
 }
 
 /**
@@ -312,67 +400,343 @@ export function dedupeItems(items) {
 }
 
 /**
- * Stage 4: Classify each item (needs-action-urgent/needs-action/fyi/noise)
- * Using a lightweight rule-based classifier for speed (can be enhanced with LLM later)
+ * Stage 3.5: Cluster items by project/theme (NEW)
+ * Groups items into themed tiles: e.g., "FLYBOT · RELEASE" with aggregated stats
  */
-export function classifyItems(items) {
-  const classified = items.map(item => {
+export function clusterByProjectTheme(items) {
+  const clusters = [];
+  
+  // Cluster GitHub items by repository
+  const githubByRepo = new Map();
+  items.filter(i => i.source === 'github').forEach(item => {
+    const repo = extractRepoFromItem(item);
+    if (!githubByRepo.has(repo)) {
+      githubByRepo.set(repo, []);
+    }
+    githubByRepo.get(repo).push(item);
+  });
+  
+  // Create a cluster card for each repo with multiple items
+  for (const [repo, repoItems] of githubByRepo) {
+    if (repoItems.length === 0) continue;
+    
+    const prCount = repoItems.filter(i => i.type.includes('pr')).length;
+    const issueCount = repoItems.filter(i => i.type.includes('issue')).length;
+    const reviewCount = repoItems.filter(i => i.type === 'pr-review').length;
+    const myPRCount = repoItems.filter(i => i.type === 'pr-mine').length;
+    
+    // Determine priority and status
+    const hasUrgent = repoItems.some(i => i.type === 'pr-review');
+    const priority = hasUrgent ? 'urgent' : prCount + issueCount > 3 ? 'high' : 'medium';
+    
+    // Pick top 3 items for highlights
+    const sortedItems = [...repoItems].sort((a, b) => {
+      const typeScore = { 'pr-review': 3, 'pr-assigned': 2, 'issue-assigned': 2, 'pr-mine': 1 };
+      return (typeScore[b.type] || 0) - (typeScore[a.type] || 0);
+    });
+    const topItems = sortedItems.slice(0, 3);
+    
+    // Extract repo name parts for title
+    const [owner, name] = repo.split('/');
+    const projectName = (name || repo).toUpperCase();
+    
+    clusters.push({
+      id: `cluster_github_${repo.replace(/\//g, '_')}`,
+      type: 'project-cluster',
+      source: 'github',
+      sourceId: `github:repo:${repo}`,
+      title: projectName,
+      subtitle: owner ? `${owner}` : '',
+      body: `${prCount} PRs, ${issueCount} issues`,
+      url: `https://github.com/${repo}`,
+      priority,
+      status: reviewCount > 0 ? 'needs-review' : 'active',
+      clusterSize: repoItems.length,
+      items: repoItems,
+      topItems,
+      metadata: {
+        repo,
+        prCount,
+        issueCount,
+        reviewCount,
+        myPRCount,
+        labels: [...new Set(repoItems.flatMap(i => i.metadata?.labels || []))],
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  
+  // Cluster Gmail by sender category
+  const emailItems = items.filter(i => i.source === 'gmail');
+  const emailBySender = new Map();
+  const newsletters = [];
+  
+  emailItems.forEach(item => {
+    const sender = item.metadata?.from || 'unknown';
+    const senderName = extractSenderName(sender);
+    
+    // Classify as newsletter if certain patterns
+    if (isNewsletter(sender, item.title)) {
+      newsletters.push(item);
+    } else {
+      if (!emailBySender.has(senderName)) {
+        emailBySender.set(senderName, []);
+      }
+      emailBySender.get(senderName).push(item);
+    }
+  });
+  
+  // Create clusters for senders with 2+ emails
+  for (const [sender, senderItems] of emailBySender) {
+    if (senderItems.length < 2) {
+      // Single emails remain as individual items (handled later)
+      continue;
+    }
+    
+    const unreadCount = senderItems.filter(i => i.type === 'email-unread').length;
+    const importantCount = senderItems.filter(i => i.type === 'email-important').length;
+    
+    clusters.push({
+      id: `cluster_gmail_${sender.replace(/[^a-z0-9]/gi, '_')}`,
+      type: 'email-cluster',
+      source: 'gmail',
+      sourceId: `gmail:sender:${sender}`,
+      title: `${sender}`,
+      subtitle: 'Emails',
+      body: `${senderItems.length} messages${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`,
+      url: `https://mail.google.com/mail/u/0/#search/from:${encodeURIComponent(sender)}`,
+      priority: importantCount > 0 ? 'high' : 'medium',
+      status: 'active',
+      clusterSize: senderItems.length,
+      items: senderItems,
+      topItems: senderItems.slice(0, 3),
+      metadata: {
+        sender,
+        unreadCount,
+        importantCount,
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  
+  // Newsletter cluster
+  if (newsletters.length > 1) {
+    clusters.push({
+      id: `cluster_gmail_newsletters`,
+      type: 'newsletter-cluster',
+      source: 'gmail',
+      sourceId: `gmail:newsletters`,
+      title: 'Newsletters & Updates',
+      subtitle: '',
+      body: `${newsletters.length} newsletters`,
+      url: `https://mail.google.com/mail/u/0/#inbox`,
+      priority: 'low',
+      status: 'active',
+      clusterSize: newsletters.length,
+      items: newsletters,
+      topItems: newsletters.slice(0, 3),
+      metadata: {
+        sources: [...new Set(newsletters.map(n => extractSenderName(n.metadata?.from || '')))],
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  
+  // Calendar events: cluster today's events
+  const calendarItems = items.filter(i => i.source === 'googlecalendar');
+  if (calendarItems.length > 0) {
+    const upcomingCount = calendarItems.filter(i => i.type === 'event-soon').length;
+    const todayCount = calendarItems.filter(i => i.type === 'event-today').length;
+    
+    clusters.push({
+      id: `cluster_calendar_today`,
+      type: 'calendar-cluster',
+      source: 'googlecalendar',
+      sourceId: `calendar:today`,
+      title: "Today's Schedule",
+      subtitle: '',
+      body: `${todayCount} events${upcomingCount > 0 ? `, ${upcomingCount} starting soon` : ''}`,
+      url: `https://calendar.google.com`,
+      priority: upcomingCount > 0 ? 'urgent' : 'medium',
+      status: 'active',
+      clusterSize: calendarItems.length,
+      items: calendarItems,
+      topItems: calendarItems.slice(0, 5),
+      metadata: {
+        upcomingCount,
+        todayCount,
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  
+  // Add remaining individual items that didn't cluster
+  const clusteredSourceIds = new Set(
+    clusters.flatMap(c => c.items.map(i => i.sourceId))
+  );
+  
+  items.forEach(item => {
+    if (!clusteredSourceIds.has(item.sourceId)) {
+      // Convert to cluster format for consistency
+      clusters.push({
+        id: `cluster_single_${item.sourceId}`,
+        type: 'single-item',
+        source: item.source,
+        sourceId: item.sourceId,
+        title: item.title,
+        subtitle: '',
+        body: item.body,
+        url: item.url,
+        priority: 'medium',
+        status: 'active',
+        clusterSize: 1,
+        items: [item],
+        topItems: [item],
+        metadata: item.metadata,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      });
+    }
+  });
+  
+  return clusters;
+}
+
+/**
+ * Helper: Extract repo name from GitHub item
+ */
+function extractRepoFromItem(item) {
+  // Try metadata first
+  if (item.metadata?.repository) return item.metadata.repository;
+  
+  // Extract from URL
+  const match = item.url?.match(/github\.com\/([^\/]+\/[^\/]+)/);
+  if (match) return match[1];
+  
+  // Extract from body (e.g., "#42 in owner/repo")
+  const bodyMatch = item.body?.match(/in ([^\/\s]+\/[^\/\s]+)/);
+  if (bodyMatch) return bodyMatch[1];
+  
+  return 'unknown';
+}
+
+/**
+ * Helper: Extract sender name from email address
+ */
+function extractSenderName(sender) {
+  // "John Doe <john@example.com>" -> "John Doe"
+  // "john@example.com" -> "john"
+  const nameMatch = sender.match(/^([^<]+)</);
+  if (nameMatch) return nameMatch[1].trim();
+  
+  const emailMatch = sender.match(/^([^@]+)@/);
+  if (emailMatch) return emailMatch[1].trim();
+  
+  return sender;
+}
+
+/**
+ * Helper: Detect newsletters
+ */
+function isNewsletter(sender, subject) {
+  const newsletterPatterns = [
+    /no-?reply@/i,
+    /newsletter/i,
+    /digest/i,
+    /updates@/i,
+    /notifications@/i,
+    /noreply/i,
+    /@substack\.com/i,
+    /@medium\.com/i,
+  ];
+  
+  return newsletterPatterns.some(p => p.test(sender) || p.test(subject));
+}
+
+/**
+ * Stage 4: Classify each cluster (needs-action-urgent/needs-action/fyi/noise)
+ * Classify based on cluster priority and content
+ */
+export function classifyClusters(clusters) {
+  const classified = clusters.map(cluster => {
     let category = 'fyi';
     let score = 50;
     let reasoning = '';
     
-    // GitHub review-requested: urgent action
-    if (item.type === 'pr-review') {
+    // Project clusters with reviews: urgent
+    if (cluster.type === 'project-cluster' && cluster.metadata?.reviewCount > 0) {
       category = 'needs-action-urgent';
       score = 95;
-      reasoning = 'Review requested on your PR';
+      reasoning = `${cluster.metadata.reviewCount} PR review${cluster.metadata.reviewCount > 1 ? 's' : ''} needed`;
     }
-    // Assigned issues: action needed
-    else if (item.type === 'issue-assigned' || item.type === 'pr-assigned') {
+    // Project clusters with assignments: action needed
+    else if (cluster.type === 'project-cluster' && (cluster.metadata?.prCount > 0 || cluster.metadata?.issueCount > 0)) {
       category = 'needs-action';
       score = 80;
-      reasoning = 'Assigned to you';
+      reasoning = `${cluster.metadata.prCount + cluster.metadata.issueCount} active items`;
     }
-    // My PRs: fyi (check status)
-    else if (item.type === 'pr-mine') {
-      category = 'fyi';
-      score = 60;
-      reasoning = 'Your open PR';
-    }
-    // Important emails: action needed
-    else if (item.type === 'email-important') {
+    // Email clusters with important: action needed
+    else if (cluster.type === 'email-cluster' && cluster.metadata?.importantCount > 0) {
       category = 'needs-action';
       score = 85;
-      reasoning = 'Important email';
+      reasoning = `${cluster.metadata.importantCount} important email${cluster.metadata.importantCount > 1 ? 's' : ''}`;
     }
-    // Unread emails: fyi
-    else if (item.type === 'email-unread') {
+    // Email clusters with unread: fyi
+    else if (cluster.type === 'email-cluster' && cluster.metadata?.unreadCount > 0) {
       category = 'fyi';
-      score = 55;
-      reasoning = 'Unread email';
+      score = 60;
+      reasoning = `${cluster.metadata.unreadCount} unread`;
     }
-    // Meeting <2h: urgent
-    else if (item.type === 'event-soon') {
-      const timeUntil = new Date(item.body).getTime() - Date.now();
-      if (timeUntil < 30 * 60 * 1000) {
+    // Newsletter cluster: low priority
+    else if (cluster.type === 'newsletter-cluster') {
+      category = 'fyi';
+      score = 40;
+      reasoning = 'Newsletters';
+    }
+    // Calendar cluster with upcoming: urgent
+    else if (cluster.type === 'calendar-cluster' && cluster.metadata?.upcomingCount > 0) {
+      category = 'needs-action-urgent';
+      score = 98;
+      reasoning = `${cluster.metadata.upcomingCount} event${cluster.metadata.upcomingCount > 1 ? 's' : ''} starting soon`;
+    }
+    // Calendar cluster today: action needed
+    else if (cluster.type === 'calendar-cluster') {
+      category = 'needs-action';
+      score = 75;
+      reasoning = "Today's events";
+    }
+    // Single items: classify based on original type
+    else if (cluster.type === 'single-item' && cluster.items[0]) {
+      const item = cluster.items[0];
+      if (item.type === 'pr-review') {
+        category = 'needs-action-urgent';
+        score = 95;
+        reasoning = 'Review requested';
+      } else if (item.type === 'issue-assigned' || item.type === 'pr-assigned') {
+        category = 'needs-action';
+        score = 80;
+        reasoning = 'Assigned to you';
+      } else if (item.type === 'email-important') {
+        category = 'needs-action';
+        score = 85;
+        reasoning = 'Important email';
+      } else if (item.type === 'event-soon') {
         category = 'needs-action-urgent';
         score = 98;
-        reasoning = 'Meeting in <30min';
+        reasoning = 'Starting soon';
       } else {
-        category = 'needs-action';
-        score = 90;
-        reasoning = 'Meeting soon';
+        category = 'fyi';
+        score = 55;
+        reasoning = 'For your information';
       }
-    }
-    // Meeting today: action needed
-    else if (item.type === 'event-today') {
-      category = 'needs-action';
-      score = 70;
-      reasoning = 'Meeting today';
     }
     
     return {
-      ...item,
+      ...cluster,
       classification: {
         category,
         score,
@@ -385,7 +749,7 @@ export function classifyItems(items) {
 }
 
 /**
- * Stage 5: Group and rank items
+ * Stage 5: Group and rank clusters
  */
 export function groupAndRank(classified) {
   // Sort by category priority then score
@@ -402,56 +766,61 @@ export function groupAndRank(classified) {
     return b.classification.score - a.classification.score;
   });
   
-  // Group by source for display
+  // Group by category for display
   const grouped = {
-    urgent: sorted.filter(i => i.classification.category === 'needs-action-urgent'),
-    action: sorted.filter(i => i.classification.category === 'needs-action'),
-    fyi: sorted.filter(i => i.classification.category === 'fyi'),
+    urgent: sorted.filter(c => c.classification.category === 'needs-action-urgent'),
+    action: sorted.filter(c => c.classification.category === 'needs-action'),
+    fyi: sorted.filter(c => c.classification.category === 'fyi'),
   };
   
   return grouped;
 }
 
 /**
- * Stage 6: Generate brief with LLM (using write-brief prompt)
+ * Stage 6: Generate brief with LLM using clustered data
+ * Generates rich project-themed cards with stats, charts, and action buttons
  */
 export async function writeBrief(grouped, llmClient) {
   const promptTemplate = await readFile(join(__dirname, 'prompts/write-brief.md'), 'utf-8');
   
-  // Analyze data for chart opportunities
-  const chartOpportunities = analyzeForCharts(grouped);
-  
-  // Build items summary with chart hints
-  const itemsSummary = {
-    urgent: grouped.urgent.map(i => ({
-      title: i.title,
-      body: i.body,
-      source: i.source,
-      url: i.url,
-      reasoning: i.classification.reasoning,
-      metadata: i.metadata,
+  // Build clusters summary for LLM
+  const clustersSummary = {
+    urgent: grouped.urgent.map(c => ({
+      title: c.title,
+      subtitle: c.subtitle,
+      body: c.body,
+      source: c.source,
+      url: c.url,
+      reasoning: c.classification.reasoning,
+      clusterSize: c.clusterSize,
+      metadata: c.metadata,
+      topItems: c.topItems.map(i => ({ title: i.title, url: i.url })),
     })),
-    action: grouped.action.map(i => ({
-      title: i.title,
-      body: i.body,
-      source: i.source,
-      url: i.url,
-      reasoning: i.classification.reasoning,
-      metadata: i.metadata,
+    action: grouped.action.map(c => ({
+      title: c.title,
+      subtitle: c.subtitle,
+      body: c.body,
+      source: c.source,
+      url: c.url,
+      reasoning: c.classification.reasoning,
+      clusterSize: c.clusterSize,
+      metadata: c.metadata,
+      topItems: c.topItems.map(i => ({ title: i.title, url: i.url })),
     })),
-    fyi: grouped.fyi.slice(0, 10).map(i => ({
-      title: i.title,
-      body: i.body,
-      source: i.source,
-      url: i.url,
-      reasoning: i.classification.reasoning,
-      metadata: i.metadata,
+    fyi: grouped.fyi.slice(0, 10).map(c => ({
+      title: c.title,
+      subtitle: c.subtitle,
+      body: c.body,
+      source: c.source,
+      url: c.url,
+      reasoning: c.classification.reasoning,
+      clusterSize: c.clusterSize,
+      metadata: c.metadata,
     })),
-    chartOpportunities,
   };
   
   const prompt = promptTemplate
-    .replace('{{items}}', JSON.stringify(itemsSummary, null, 2))
+    .replace('{{items}}', JSON.stringify(clustersSummary, null, 2))
     .replace('{{userName}}', 'User')
     .replace('{{userRole}}', 'Developer')
     .replace('{{currentTime}}', new Date().toLocaleString('zh-CN'));
@@ -460,10 +829,10 @@ export async function writeBrief(grouped, llmClient) {
   let fullText = '';
   for await (const chunk of llmClient.stream({
     messages: [
-      { role: 'system', content: 'You are a daily briefing assistant. Generate concise, actionable summaries with visual blocks.' },
+      { role: 'system', content: 'You are a daily briefing assistant. Generate concise, actionable project-themed cards with visual blocks and stats.' },
       { role: 'user', content: prompt },
     ],
-    maxTokens: 1500,
+    maxTokens: 2000,
     responseFormat: { type: 'json_object' },
   })) {
     if (chunk.type === 'text' && chunk.text) {
@@ -473,244 +842,178 @@ export async function writeBrief(grouped, llmClient) {
   
   const brief = JSON.parse(fullText);
   
-  // Deterministically add chart/timeline blocks (don't rely on LLM alone)
-  brief.cards = addDeterministicBlocks(brief.cards, grouped);
-  
-  // Add sourceId and metadata to cards
-  brief.cards = brief.cards.map((card, idx) => {
-    // Find corresponding item to get sourceId
-    const item = [...grouped.urgent, ...grouped.action, ...grouped.fyi].find(
-      i => i.url === card.url || i.title === card.title
-    );
-    
-    return {
-      ...card,
-      id: `card_${Date.now()}_${idx}`,
-      sourceId: item?.sourceId || `generated_${idx}`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  });
+  // Convert clusters to cards with deterministic visual blocks
+  brief.cards = generateClusterCards(grouped);
   
   return brief;
 }
 
 /**
- * Deterministically add chart/timeline blocks to cards when data exists
- * Don't rely on LLM alone - always add visual blocks when counts are available
+ * Generate rich visual cards from clusters
+ * Each card has: title, subtitle, status pill, stat row, mini chart, action button
  */
-function addDeterministicBlocks(cards, grouped) {
-  const allItems = [...grouped.urgent, ...grouped.action, ...grouped.fyi];
+function generateClusterCards(grouped) {
+  const cards = [];
+  const allClusters = [...grouped.urgent, ...grouped.action, ...grouped.fyi];
   
-  // Count items by source
-  const sourceCounts = {};
-  allItems.forEach(item => {
-    sourceCounts[item.source] = (sourceCounts[item.source] || 0) + 1;
-  });
-  
-  // If we have a summary card or first card, add source distribution chart
-  if (cards.length > 0 && Object.keys(sourceCounts).length > 1) {
-    const firstCard = cards[0];
+  allClusters.forEach((cluster, idx) => {
+    const card = {
+      id: cluster.id || `card_${Date.now()}_${idx}`,
+      sourceId: cluster.sourceId,
+      source: cluster.source,
+      type: cluster.type,
+      title: cluster.title,
+      subtitle: cluster.subtitle,
+      body: cluster.body,
+      url: cluster.url,
+      priority: cluster.priority,
+      status: cluster.status || 'active',
+      size: cluster.priority === 'urgent' ? 'large' : cluster.clusterSize > 3 ? 'wide' : 'normal',
+      blocks: [],
+      actions: [],
+      createdAt: cluster.createdAt,
+      updatedAt: cluster.updatedAt,
+    };
     
-    // Add chart block showing items by source
-    const sourceNames = {github: 'GitHub', gmail: 'Gmail', googlecalendar: 'Calendar', slack: 'Slack'};
-    const sourceData = Object.entries(sourceCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4);
-    
-    if (!firstCard.blocks) firstCard.blocks = [];
-    
-    // Add donut or bar chart
-    if (sourceData.length === 2) {
-      // Donut for 2 sources
-      firstCard.blocks.unshift({
-        type: 'chart',
-        chartType: 'donut',
-        data: sourceData.map(([_, count]) => count),
-        labels: sourceData.map(([source]) => sourceNames[source] || source),
+    // Add status pill for project clusters
+    if (cluster.type === 'project-cluster') {
+      const statusText = cluster.metadata.reviewCount > 0 ? 'Needs Review' : 
+                        cluster.metadata.myPRCount > 0 ? 'In Progress' : 'Active';
+      card.blocks.push({
+        type: 'tags',
+        tags: [{ text: statusText, color: cluster.metadata.reviewCount > 0 ? 'red' : 'blue' }],
       });
-    } else if (sourceData.length > 2) {
-      // Bar for 3+ sources
-      firstCard.blocks.unshift({
-        type: 'chart',
-        chartType: 'bar',
-        data: sourceData.map(([_, count]) => count),
-        labels: sourceData.map(([source]) => sourceNames[source] || source),
-        color: 'blue',
-      });
-    }
-  }
-  
-  // GitHub: Add repo distribution chart when multiple repos
-  const githubItems = allItems.filter(i => i.source === 'github');
-  if (githubItems.length > 2) {
-    const repoCount = {};
-    githubItems.forEach(item => {
-      const repo = item.metadata?.repository || item.url?.match(/github\.com\/([^\/]+\/[^\/]+)/)?.[1];
-      if (repo) {
-        const shortName = repo.split('/')[1] || repo;
-        repoCount[shortName] = (repoCount[shortName] || 0) + 1;
-      }
-    });
-    
-    const topRepos = Object.entries(repoCount)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
-    
-    if (topRepos.length > 1) {
-      // Find GitHub card and add chart
-      const githubCard = cards.find(c => c.source === 'github' || c.title?.toLowerCase().includes('github'));
-      if (githubCard) {
-        if (!githubCard.blocks) githubCard.blocks = [];
-        githubCard.blocks.push({
-          type: 'chart',
-          chartType: 'bar',
-          data: topRepos.map(([_, count]) => count),
-          labels: topRepos.map(([repo]) => repo.substring(0, 12)),
-          color: 'blue',
-        });
-      }
-    }
-  }
-  
-  // Gmail: Add sender distribution chart when multiple senders
-  const emailItems = allItems.filter(i => i.source === 'gmail');
-  if (emailItems.length > 3) {
-    const senderCount = {};
-    emailItems.forEach(item => {
-      const sender = item.metadata?.from || 'Unknown';
-      const senderName = sender.split('<')[0].trim() || sender.split('@')[0];
-      senderCount[senderName] = (senderCount[senderName] || 0) + 1;
-    });
-    
-    const topSenders = Object.entries(senderCount)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4);
-    
-    if (topSenders.length > 1) {
-      // Find Gmail card and add chart
-      const gmailCard = cards.find(c => c.source === 'gmail' || c.title?.toLowerCase().includes('email') || c.title?.toLowerCase().includes('邮件'));
-      if (gmailCard) {
-        if (!gmailCard.blocks) gmailCard.blocks = [];
-        gmailCard.blocks.push({
-          type: 'chart',
-          chartType: 'bar',
-          data: topSenders.map(([_, count]) => count),
-          labels: topSenders.map(([sender]) => sender.substring(0, 10)),
-          color: 'blue',
-        });
-      }
-    }
-  }
-  
-  // Calendar: Add timeline for today's events
-  const calendarItems = [...grouped.urgent, ...grouped.action].filter(i => i.source === 'googlecalendar');
-  if (calendarItems.length > 0) {
-    const timeline = calendarItems.map(item => {
-      const timeMatch = item.body?.match(/(\d{1,2}:\d{2})/);
-      const time = timeMatch ? timeMatch[1] : '';
-      return { time, title: item.title };
-    }).filter(t => t.time);
-    
-    if (timeline.length > 0) {
-      // Find Calendar card or create one if needed
-      let calendarCard = cards.find(c => c.source === 'googlecalendar' || c.title?.toLowerCase().includes('meeting') || c.title?.toLowerCase().includes('会议') || c.title?.toLowerCase().includes('日程'));
       
-      if (calendarCard) {
-        if (!calendarCard.blocks) calendarCard.blocks = [];
-        calendarCard.blocks.push({
+      // Add stat row
+      const stats = [];
+      if (cluster.metadata.prCount > 0) stats.push({ label: 'PRs', value: cluster.metadata.prCount });
+      if (cluster.metadata.issueCount > 0) stats.push({ label: 'Issues', value: cluster.metadata.issueCount });
+      if (cluster.metadata.reviewCount > 0) stats.push({ label: 'Reviews', value: cluster.metadata.reviewCount });
+      
+      if (stats.length > 0) {
+        stats.forEach(stat => {
+          card.blocks.push({ type: 'stat', value: stat.value, label: stat.label });
+        });
+      }
+      
+      // Add chart for repos with multiple types
+      if (cluster.metadata.prCount > 0 && cluster.metadata.issueCount > 0) {
+        card.blocks.push({
+          type: 'chart',
+          chartType: 'donut',
+          data: [cluster.metadata.prCount, cluster.metadata.issueCount],
+          labels: ['PRs', 'Issues'],
+        });
+      }
+      
+      // Add action button
+      card.actions.push({
+        label: cluster.metadata.reviewCount > 0 ? 'Review PRs' : 'View Repository',
+        value: cluster.url,
+        primary: true,
+      });
+    }
+    
+    // Email clusters
+    else if (cluster.type === 'email-cluster') {
+      card.blocks.push({
+        type: 'stat',
+        value: cluster.clusterSize,
+        label: 'Messages',
+      });
+      
+      if (cluster.metadata.unreadCount > 0) {
+        card.blocks.push({
+          type: 'tags',
+          tags: [{ text: `${cluster.metadata.unreadCount} Unread`, color: 'orange' }],
+        });
+      }
+      
+      card.actions.push({
+        label: 'Open in Gmail',
+        value: cluster.url,
+        primary: true,
+      });
+    }
+    
+    // Newsletter cluster
+    else if (cluster.type === 'newsletter-cluster') {
+      card.blocks.push({
+        type: 'stat',
+        value: cluster.clusterSize,
+        label: 'Newsletters',
+      });
+      
+      // Show sources as tags
+      if (cluster.metadata.sources && cluster.metadata.sources.length > 0) {
+        card.blocks.push({
+          type: 'tags',
+          tags: cluster.metadata.sources.slice(0, 3).map(s => ({ text: s, color: 'gray' })),
+        });
+      }
+      
+      card.actions.push({
+        label: 'Review',
+        value: cluster.url,
+        primary: false,
+      });
+    }
+    
+    // Calendar cluster
+    else if (cluster.type === 'calendar-cluster') {
+      card.blocks.push({
+        type: 'stat',
+        value: cluster.metadata.todayCount,
+        label: 'Events',
+      });
+      
+      if (cluster.metadata.upcomingCount > 0) {
+        card.blocks.push({
+          type: 'tags',
+          tags: [{ text: `${cluster.metadata.upcomingCount} Soon`, color: 'red' }],
+        });
+      }
+      
+      // Add timeline
+      const timeline = cluster.topItems.map(item => {
+        const timeMatch = item.body?.match(/T(\d{2}:\d{2})/);
+        const time = timeMatch ? timeMatch[1] : '';
+        return { time, title: item.title };
+      }).filter(t => t.time);
+      
+      if (timeline.length > 0) {
+        card.blocks.push({
           type: 'timeline',
           items: timeline,
         });
       }
+      
+      card.actions.push({
+        label: 'Open Calendar',
+        value: cluster.url,
+        primary: true,
+      });
     }
-  }
+    
+    // Single items: simpler card
+    else if (cluster.type === 'single-item' && cluster.items[0]) {
+      const item = cluster.items[0];
+      card.blocks.push({
+        type: 'tags',
+        tags: item.metadata?.labels?.slice(0, 3).map(l => ({ text: l, color: 'blue' })) || [],
+      });
+      
+      card.actions.push({
+        label: 'Open',
+        value: item.url,
+        primary: true,
+      });
+    }
+    
+    cards.push(card);
+  });
   
   return cards;
-}
-
-/**
- * Analyze grouped items for chart opportunities
- * Returns suggestions for the LLM to create chart blocks
- */
-function analyzeForCharts(grouped) {
-  const charts = [];
-  
-  // GitHub: PRs/issues per repo
-  const githubItems = [...grouped.urgent, ...grouped.action, ...grouped.fyi].filter(i => i.source === 'github');
-  if (githubItems.length > 2) {
-    const repoCount = {};
-    githubItems.forEach(item => {
-      // Extract repo from metadata or URL
-      const repo = item.metadata?.repository || item.url?.match(/github\.com\/([^\/]+\/[^\/]+)/)?.[1];
-      if (repo) {
-        repoCount[repo] = (repoCount[repo] || 0) + 1;
-      }
-    });
-    
-    const topRepos = Object.entries(repoCount)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
-    
-    if (topRepos.length > 1) {
-      charts.push({
-        type: 'chart',
-        title: 'GitHub items by repository',
-        chartType: 'bar',
-        data: topRepos.map(([_, count]) => count),
-        labels: topRepos.map(([repo]) => repo.split('/')[1] || repo),
-        suggestion: `Create a bar chart showing ${topRepos.map(([r, c]) => `${r}: ${c}`).join(', ')}`,
-      });
-    }
-  }
-  
-  // Gmail: Emails by sender
-  const emailItems = [...grouped.urgent, ...grouped.action, ...grouped.fyi].filter(i => i.source === 'gmail');
-  if (emailItems.length > 3) {
-    const senderCount = {};
-    emailItems.forEach(item => {
-      const sender = item.metadata?.from || 'Unknown';
-      // Extract name before email
-      const senderName = sender.split('<')[0].trim() || sender.split('@')[0];
-      senderCount[senderName] = (senderCount[senderName] || 0) + 1;
-    });
-    
-    const topSenders = Object.entries(senderCount)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4);
-    
-    if (topSenders.length > 1) {
-      charts.push({
-        type: 'chart',
-        title: 'Emails by sender',
-        chartType: 'bar',
-        data: topSenders.map(([_, count]) => count),
-        labels: topSenders.map(([sender]) => sender.substring(0, 12)),
-        suggestion: `Create a bar chart showing emails from ${topSenders.map(([s, c]) => `${s}: ${c}`).join(', ')}`,
-      });
-    }
-  }
-  
-  // Calendar: Timeline for today's events
-  const calendarItems = [...grouped.urgent, ...grouped.action].filter(i => i.source === 'googlecalendar');
-  if (calendarItems.length > 0) {
-    const timeline = calendarItems.map(item => {
-      const timeMatch = item.body?.match(/(\d{1,2}:\d{2})/);
-      const time = timeMatch ? timeMatch[1] : '';
-      return { time, title: item.title };
-    }).filter(t => t.time);
-    
-    if (timeline.length > 0) {
-      charts.push({
-        type: 'timeline',
-        title: "Today's schedule",
-        items: timeline,
-        suggestion: `Create a timeline block with events: ${timeline.map(t => `${t.time} ${t.title}`).join(', ')}`,
-      });
-    }
-  }
-  
-  return charts;
 }
 
 /**
@@ -728,12 +1031,16 @@ export async function runAggregationPipeline(composioClient, activeSources, llmC
   const deduped = dedupeItems(items);
   console.log(`[Aggregation] Deduped to ${deduped.length} items`);
   
-  console.log('[Aggregation] Stage 4: Classifying...');
-  const classified = classifyItems(deduped);
+  console.log('[Aggregation] Stage 3.5: Clustering by project/theme...');
+  const clusters = clusterByProjectTheme(deduped);
+  console.log(`[Aggregation] Clustered into ${clusters.length} themed tiles`);
+  
+  console.log('[Aggregation] Stage 4: Classifying clusters...');
+  const classified = classifyClusters(clusters);
   
   console.log('[Aggregation] Stage 5: Grouping and ranking...');
   const grouped = groupAndRank(classified);
-  console.log(`[Aggregation] ${grouped.urgent.length} urgent, ${grouped.action.length} action, ${grouped.fyi.length} fyi`);
+  console.log(`[Aggregation] ${grouped.urgent.length} urgent, ${grouped.action.length} action, ${grouped.fyi.length} fyi clusters`);
   
   console.log('[Aggregation] Stage 6: Writing brief with LLM...');
   const brief = await writeBrief(grouped, llmClient, profileContext);
@@ -745,6 +1052,8 @@ export async function runAggregationPipeline(composioClient, activeSources, llmC
   console.log('[Aggregation] Stage 8: Generating timetable...');
   const timetable = await generateTimetable(grouped, sourceData, llmClient, profileContext);
   brief.cards.splice(1, 0, timetable);
+  
+  console.log(`[Aggregation] Complete: ${brief.cards.length} cards generated`);
   
   return brief;
 }

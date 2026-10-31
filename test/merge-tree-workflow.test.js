@@ -52,7 +52,7 @@ test('合不上就红：冲突直接 exit 1，没有 continue-on-error', () => {
 });
 
 test('在合并结果上跑和 tests.yml 同一条命令', () => {
-  assert.match(workflow, /node --test test\/\*\.test\.js/);
+  assert.match(workflow, /test\/\*\*\/\*\.test\.js/);
 });
 
 test('准入守卫把 merge-tree 当成资格的一部分', () => {

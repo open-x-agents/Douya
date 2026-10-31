@@ -4,8 +4,8 @@
 
 | 层 | 跑在哪 | 拦什么 | 现在 |
 | --- | --- | --- | --- |
-| L0 单元 | 每 PR / 每 push（`tests.yml`） | 代码本身坏了 | **有**，99 条 |
-| L1 适配器契约 | 每 PR | 信源响应形状变了、只读适配器长出写方法 | 无（#10） |
+| L0 单元 | 每 PR / 每 push（`tests.yml`） | 代码本身坏了 | **有**，327 条 |
+| L1 适配器契约 | 每 PR | 信源响应形状变了、只读适配器长出写方法 | **部分**（`test/composio/*.test.js`：注册表与只读启动校验；适配器契约随 #32 S4） |
 | L2 归一化 / 去重 / 冲突 | 每 PR | 把两件事合成一件；`confidence<0.6` 被强行合并 | 无（#13） |
 | L3 一天真数据 e2e | 每晚 + 手动 | 「08:45 早报 → 关一件 → 18:30 晚报」这条路走不通 | 无（#16） |
 | L4 时延实测 | 随 L3 | 首屏 >1s、首字 >3s、提醒误差 >30s、日报偏差 >60s | 无 |
@@ -16,7 +16,7 @@
 ## 本地怎么跑
 
 ```sh
-node --test test/*.test.js 'acceptance-cases/**/*.test.js'   # L0：单元测试 + 验收用例（不联网，不需要 key）
+node --test 'test/**/*.test.js' 'acceptance-cases/**/*.test.js'   # L0：单元测试 + 验收用例（不联网，不需要 key）
 node scripts/pre-release.mjs        # L7 全跑：单元 → 干净安装 → 版本一致性 → 真实模型
 node scripts/pre-release.mjs --skip-version   # 版本号还没写出来时用这个（发版 workflow 就是这样调的）
 node scripts/pre-release.mjs --install-only   # 只跑干净安装：pack → 从 tgz 读 files 逐项核对仓库与 tgz → 空目录 import

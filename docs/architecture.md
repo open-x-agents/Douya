@@ -75,7 +75,7 @@ report 的形状：`{ date, memberId, memberName, schedule[], done[], plan[], no
 | 一件活源都没有 | 全部源都是死源 / 读失败 / 没有源 | 固定句式「这条我答不了，缺的是 X。」；不给动作按钮 |
 
 - 首屏的三种空态文案必须分开：空日（「今天没有必须今天的事」）、周末（「周末不打扰，今天不推」，偏好开 `weekend_send` 时写「周末也照常发」）、第一天（「这是第一天，还没有基线」）。空日不画数字节点（`data-numbers` 计数为 0）。
-- 「太长了」由 `state.prefs.brevity.since_day` 决定：`since_day <= 当天` 时 `badStates().brief === true`，下一张卡末尾回一行「已按你说的改了」。
+- 「太长了」由 `state.prefs.brevity.since_day` 决定：`since_day <= 当天` 时 `badStates().brief === true`。首屏按偏好变短、并在卡末回一行「已按你说的改了」的排版归 #15 的下一刀（`renderDay`），这一刀只出判定。
 - 数字与结论只认重算值：`closed` 是 0 就打印 `0`，不写「未知」；`renderNumbers()` 的三个数字带口径（件在手 / 会议 / 件在等别人），`renderConclusion()` 写「今天关掉 N 件，M 件在等别人」。
 - 每条卡片断言都带 `data-evidence="<ref>"`，`ref` 是来源自己的 id，形如 `<source>:<id>`（`gmail:thread/9`、`feishu_cal:event/77`、`github:pr/42`）；承载证据的 `<details class="evi" id="ev-<eventId>">` 可点开后追到同一条事件的 `sources[]`。一张卡最多一个 `data-act`。
 - 夹具：`test/fixtures/panel-five.json` 一份 `base_events`（8 条，覆盖 open / waiting_other / 改过时间 / 已关）+ `normal / empty / srcless / partial / weekend` 五场景 + 一个 brevity 对照日；用例在 `test/panel-states.test.js`。

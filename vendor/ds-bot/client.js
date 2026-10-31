@@ -7697,18 +7697,57 @@ function applyRoomStreamFrame(draft, frame, { botId } = {}) {
   }
   return draft;
 }
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function stripLeadingName(name, text) {
+  if (typeof name !== "string" || name === "") return text;
+  return text.replace(new RegExp(`^\\s*\\**${escapeRegExp(name)}\\**\\s*[:：]\\s*`), "").trim();
+}
+function postedCoversDraft(posted, text) {
+  if (posted === "" || text === "") return false;
+  const left = posted.trim();
+  const right = text.trim();
+  if (left === right || left.startsWith(right)) return true;
+  const leftFlat = left.replace(/\s+/g, "");
+  const rightFlat = right.replace(/\s+/g, "");
+  return leftFlat !== "" && (leftFlat === rightFlat || leftFlat.startsWith(rightFlat));
+}
+function replyBodies(reply) {
+  const raw = typeof reply?.text === "string" ? reply.text.trim() : "";
+  if (raw === "") return [];
+  const named = stripLeadingName(reply?.name ?? reply?.who, raw).trim();
+  return named === "" || named === raw ? [raw] : [raw, named];
+}
+function sliceCoversDraft(slice, text) {
+  const raw = slice.map((reply) => typeof reply?.text === "string" ? reply.text.trim() : "");
+  const named = slice.map((reply, index) => {
+    const body = stripLeadingName(reply?.name ?? reply?.who, raw[index]).trim();
+    return body === "" ? raw[index] : body;
+  });
+  for (const parts of [raw, named]) {
+    for (const gap of ["", "\n\n"]) {
+      if (postedCoversDraft(parts.join(gap), text)) return true;
+    }
+  }
+  return false;
+}
 function clearDraftIfPosted(draft, replies = []) {
   if (draft === void 0 || draft === null) return void 0;
   if (draft.botId === void 0) return void 0;
   const text = typeof draft.text === "string" ? draft.text : "";
   if (text === "") return draft.ended ? void 0 : draft;
-  for (let i = replies.length - 1; i >= 0; i -= 1) {
-    const reply = replies[i];
+  const candidates = [];
+  for (const reply of replies) {
     if (reply?.kind !== void 0) continue;
     if (reply?.botId !== draft.botId) continue;
-    const posted = typeof reply.text === "string" ? reply.text : "";
-    if (posted === text || posted.startsWith(text) || text.startsWith(posted)) return void 0;
-    break;
+    if (replyBodies(reply).length === 0) continue;
+    candidates.push(reply);
+  }
+  for (let start = 0; start < candidates.length; start += 1) {
+    for (let end = start + 1; end <= candidates.length; end += 1) {
+      if (sliceCoversDraft(candidates.slice(start, end), text)) return void 0;
+    }
   }
   return draft;
 }

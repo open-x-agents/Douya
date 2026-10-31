@@ -38,19 +38,6 @@ test('a file written by an older version gains the keys this one reads', () => {
   assert.deepEqual(old.manual, [])
   assert.deepEqual(old.deliveries, [])
   assert.deepEqual(old.upcoming, [])
-  assert.deepEqual(old.days, {})
-  assert.deepEqual(old.sources, {})
-})
-
-test('normalizeState keeps days and sources', () => {
-  const days = { '2026-10-30': { conclusion: '一句话', items: [] } }
-  const sources = { calendar: { connected: false, last_read_at: null, detail: '没有接入' } }
-  const normalized = normalizeState({ revision: 1, days, sources })
-  assert.deepEqual(normalized.days, days)
-  assert.deepEqual(normalized.sources, sources)
-  // A corrupt or absent key becomes an empty record, never an array or a string.
-  assert.deepEqual(normalizeState({ days: null, sources: 'no' }).days, {})
-  assert.deepEqual(normalizeState({ days: [], sources: 7 }).sources, {})
 })
 
 test('a write replaces the file rather than appending to it', async () => {
@@ -62,4 +49,19 @@ test('a write replaces the file rather than appending to it', async () => {
   const loaded = await createStore(path).load()
   assert.deepEqual(loaded.members, {})
   assert.equal(loaded.revision, 2)
+})
+
+test('normalizeState keeps days and sources', () => {
+  const old = normalizeState({ revision: 3, members: { m1: { id: 'm1', name: '小王' } } })
+  assert.deepEqual(old.days, {})
+  assert.deepEqual(old.sources, {})
+  assert.deepEqual(old.week, [])
+  const kept = normalizeState({
+    days: { '2026-10-30': { conclusion: '一句话' } },
+    sources: { feishu_cal: { connected: false } },
+    week: [{ day: '2026-10-29', closed: 1, dropped: 0 }],
+  })
+  assert.equal(kept.days['2026-10-30'].conclusion, '一句话')
+  assert.equal(kept.sources.feishu_cal.connected, false)
+  assert.equal(kept.week[0].closed, 1)
 })

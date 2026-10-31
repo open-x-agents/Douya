@@ -10,6 +10,7 @@
       "date": "2026-10-30",
       "memberId": "m1",
       "memberName": "小王",
+      "schedule": [],
       "events": [],
       "done": ["把报价单数字核完"],
       "plan": ["等张伟回复"],
@@ -23,93 +24,267 @@
   "upcoming": [],
   "days": {
     "2026-10-30": {
+      "day": "2026-10-30",
+      "time_zone": "Asia/Shanghai",
       "conclusion": "今天 3 个会，只有 1 件必须今天推完。",
-      "meetings": [
-        { "id": "mtg_1", "title": "报价单评审", "startAt": "2026-10-30T10:00:00+08:00", "endAt": "2026-10-30T10:30:00+08:00" },
-        { "id": "mtg_2", "title": "供应商对齐", "startAt": "2026-10-30T15:30:00+08:00", "endAt": "2026-10-30T16:00:00+08:00" },
-        { "id": "mtg_3", "title": "评审会", "startAt": "2026-10-30T16:00:00+08:00", "endAt": "2026-10-30T18:00:00+08:00" }
-      ],
-      "items": [
+      "meeting_hours": 3,
+      "events": [
         {
           "id": "evt_1",
+          "kind": "thread",
           "title": "报价单发给张伟",
           "state": "open",
-          "dueAt": "2026-10-30T10:00:00+08:00",
-          "why": "他昨天问了两次，卡着周四签约。",
-          "advice": "10:00 前发，先发数字后补附件。",
-          "sources": [{ "type": "feishu" }, { "type": "mail" }],
-          "evidence": [
-            { "ref": "feishu:zhangwei:2026-10-29T21:14:00+08:00", "at": "2026-10-29T21:14:00+08:00" }
-          ]
+          "due_at": "2026-10-30T02:00:00.000Z",
+          "due_kind": "hard",
+          "who": { "people": ["张伟"], "waiting_on": null },
+          "project": "quote",
+          "sources": [
+            {
+              "ref": "feishu_msg:chat/oc_demo/msg_2114",
+              "source": "feishu_msg",
+              "at": "2026-10-29T13:14:00.000Z",
+              "due_at": null,
+              "due_kind": null,
+              "amount": null,
+              "state": null,
+              "excerpt": "报价单今天能给吗？"
+            }
+          ],
+          "confidence": 0.95,
+          "maybe_same": [],
+          "defer": null
         },
         {
           "id": "evt_2",
+          "kind": "meeting",
           "title": "评审会材料定稿",
           "state": "open",
-          "dueAt": "2026-10-30T13:00:00+08:00",
-          "why": "会从 14:00 挪到 16:00，多出两小时，够定稿。",
-          "advice": "13:00 前只留一页结论页。",
-          "sources": [{ "type": "calendar" }, { "type": "feishu" }],
-          "evidence": [
-            { "ref": "calendar:mtg_3:2026-10-29T18:02:00+08:00", "at": "2026-10-29T18:02:00+08:00" }
-          ]
+          "due_at": "2026-10-30T05:00:00.000Z",
+          "due_kind": "soft",
+          "who": { "people": ["小王"], "waiting_on": null },
+          "project": "review",
+          "sources": [
+            {
+              "ref": "gmail:thread/18f2c1a0",
+              "source": "gmail",
+              "at": "2026-10-29T07:02:00.000Z",
+              "due_at": null,
+              "due_kind": null,
+              "amount": null,
+              "state": null,
+              "excerpt": "评审会从 14:00 挪到 16:00"
+            },
+            {
+              "ref": "feishu_cal:event/mtg_3",
+              "source": "feishu_cal",
+              "at": "2026-10-29T10:02:00.000Z",
+              "due_at": "2026-10-30T08:00:00.000Z",
+              "due_kind": "hard",
+              "amount": null,
+              "state": null,
+              "excerpt": null
+            }
+          ],
+          "confidence": 0.95,
+          "maybe_same": [],
+          "defer": null
         },
         {
           "id": "evt_3",
+          "kind": "thread",
           "title": "回李静那封邮件",
           "state": "open",
-          "dueAt": "2026-10-30T12:00:00+08:00",
-          "why": "她等了两天，一句话就能关掉。",
-          "advice": "回一句「收到，周五给」。",
-          "sources": [{ "type": "mail" }],
-          "evidence": [
-            { "ref": "mail:lijing:2026-10-28T14:30:00+08:00", "at": "2026-10-28T14:30:00+08:00" }
-          ]
+          "due_at": "2026-10-30T04:00:00.000Z",
+          "due_kind": "soft",
+          "who": { "people": ["李静"], "waiting_on": null },
+          "project": "mail",
+          "sources": [
+            {
+              "ref": "gmail:thread/18f1be22",
+              "source": "gmail",
+              "at": "2026-10-28T06:30:00.000Z",
+              "due_at": null,
+              "due_kind": null,
+              "amount": null,
+              "state": null,
+              "excerpt": "方便的话今天回我一句"
+            }
+          ],
+          "confidence": 0.8,
+          "maybe_same": [],
+          "defer": null
         },
         {
           "id": "evt_4",
+          "kind": "thread",
           "title": "合同盖章",
-          "state": "waiting",
-          "sources": [{ "type": "feishu" }],
-          "note": "昨天 17:40 已提交，她说明天给你。"
+          "state": "waiting_other",
+          "due_at": null,
+          "due_kind": null,
+          "who": { "people": ["周敏"], "waiting_on": "周敏" },
+          "project": "contract",
+          "sources": [
+            {
+              "ref": "feishu_msg:chat/oc_demo/msg_2051",
+              "source": "feishu_msg",
+              "at": "2026-10-29T09:40:00.000Z",
+              "due_at": null,
+              "due_kind": null,
+              "amount": null,
+              "state": null,
+              "excerpt": "明天上午给你"
+            }
+          ],
+          "confidence": 0.8,
+          "maybe_same": [],
+          "defer": null
         },
         {
           "id": "evt_5",
+          "kind": "thread",
           "title": "张伟签字",
-          "state": "waiting",
-          "sources": [{ "type": "feishu" }],
-          "note": "卡在报价单，发出去才轮到他。"
+          "state": "waiting_other",
+          "due_at": null,
+          "due_kind": null,
+          "who": { "people": ["张伟"], "waiting_on": "张伟" },
+          "project": "contract",
+          "sources": [
+            {
+              "ref": "feishu_msg:chat/oc_demo/msg_2114",
+              "source": "feishu_msg",
+              "at": "2026-10-29T13:14:00.000Z",
+              "due_at": null,
+              "due_kind": null,
+              "amount": null,
+              "state": null,
+              "excerpt": "收到报价单我就签"
+            }
+          ],
+          "confidence": 0.8,
+          "maybe_same": [],
+          "defer": null
         },
         {
           "id": "evt_6",
+          "kind": "thread",
           "title": "供应商比价表",
-          "state": "dropped",
-          "sources": [{ "type": "mail" }],
-          "note": "下周一才要，别今天排。"
+          "state": "open",
+          "due_at": "2026-10-30T09:00:00.000Z",
+          "due_kind": "soft",
+          "who": { "people": ["小王"], "waiting_on": null },
+          "project": "quote",
+          "sources": [
+            {
+              "ref": "gmail:thread/18f2d3c0",
+              "source": "gmail",
+              "at": "2026-10-29T11:20:00.000Z",
+              "due_at": null,
+              "due_kind": null,
+              "amount": null,
+              "state": null,
+              "excerpt": "下周一才要，别今天排"
+            }
+          ],
+          "confidence": 0.8,
+          "maybe_same": [],
+          "defer": { "moved_to": "2026-11-02" }
+        },
+        {
+          "id": "evt_7",
+          "kind": "thread",
+          "title": "报价单回执归档",
+          "state": "closed",
+          "due_at": "2026-10-30T00:30:00.000Z",
+          "due_kind": "hard",
+          "who": { "people": ["张伟"], "waiting_on": null },
+          "project": "quote",
+          "sources": [
+            {
+              "ref": "feishu_msg:chat/oc_demo/msg_1620",
+              "source": "feishu_msg",
+              "at": "2026-10-30T00:22:00.000Z",
+              "due_at": null,
+              "due_kind": null,
+              "amount": null,
+              "state": null,
+              "excerpt": "数字能接受，明天上午签。"
+            }
+          ],
+          "confidence": 0.95,
+          "maybe_same": [],
+          "defer": null,
+          "closure": { "by": "张伟", "at": "2026-10-30T00:22:00.000Z", "evidence_ref": "feishu_msg:chat/oc_demo/msg_1620" }
+        },
+        {
+          "id": "evt_8",
+          "kind": "document",
+          "title": "会前材料发出",
+          "state": "closed",
+          "due_at": "2026-10-30T01:00:00.000Z",
+          "due_kind": "hard",
+          "who": { "people": ["小王"], "waiting_on": null },
+          "project": "review",
+          "sources": [
+            {
+              "ref": "gmail:thread/18f2c1a0",
+              "source": "gmail",
+              "at": "2026-10-30T00:55:00.000Z",
+              "due_at": null,
+              "due_kind": null,
+              "amount": null,
+              "state": null,
+              "excerpt": "材料已发，请查收"
+            }
+          ],
+          "confidence": 0.95,
+          "maybe_same": [],
+          "defer": null,
+          "closure": { "by": "panel", "at": "2026-10-30T00:55:00.000Z", "evidence_ref": "gmail:thread/18f2c1a0" }
         }
-      ]
+      ],
+      "materials": {}
     }
   },
   "sources": {
-    "feishu": {
+    "feishu_msg": {
       "connected": true,
-      "last_read_at": "2026-10-30T08:42:00+08:00",
-      "detail": "214 条 · 3 个会话"
+      "last_read_at": "2026-10-30T00:42:00.000Z",
+      "detail": "214 条 · 3 个会话",
+      "error": null
     },
-    "calendar": {
+    "gmail": {
       "connected": true,
-      "last_read_at": "2026-10-30T08:42:00+08:00",
-      "detail": "12 个日程"
+      "last_read_at": "2026-10-30T00:40:00.000Z",
+      "detail": "38 封 · 仅主题",
+      "error": null
     },
-    "mail": {
+    "feishu_cal": {
       "connected": true,
-      "last_read_at": "2026-10-30T08:40:00+08:00",
-      "detail": "38 封 · 仅主题与收发关系"
+      "last_read_at": "2026-10-30T00:42:00.000Z",
+      "detail": "12 个日程",
+      "error": null
     },
-    "doc": {
+    "feishu_doc": {
       "connected": false,
       "last_read_at": null,
-      "detail": "没有接入"
+      "detail": "没有接入",
+      "error": null
     }
+  },
+  "week": [
+    { "day": "2026-10-24", "closed": 1, "dropped": 0 },
+    { "day": "2026-10-25", "closed": 0, "dropped": 1 },
+    { "day": "2026-10-26", "closed": 2, "dropped": 0 },
+    { "day": "2026-10-27", "closed": 1, "dropped": 1 },
+    { "day": "2026-10-28", "closed": 3, "dropped": 0 },
+    { "day": "2026-10-29", "closed": 2, "dropped": 1 }
+  ],
+  "expect": {
+    "open": 3,
+    "meeting_hours": 3,
+    "waiting": 2,
+    "closed": 2,
+    "dropped": 1,
+    "after_close": { "open": 2, "closed": 2, "dropped": 1, "waiting": 2 }
   }
 }

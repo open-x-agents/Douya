@@ -1,42 +1,28 @@
 // The panel: one page over the same store the cards are built from. Snapshot building and
 // rendering are pure functions, so what the page shows is exactly what a test asserts. The
-// page ships no script and no external resource — the server renders the whole body — and a
-// number the store does not carry is written as 未知 instead of being filled in with a zero.
+// page is rendered on the server, ships no script and no external resource, and a number the
+// store does not carry is written as 未知 instead of being filled in with a zero.
 
 import { readFile } from 'node:fs/promises'
 import { PANEL_PAGE_ROUTE, PANEL_ROUTE } from './constants.js'
+import { localClock } from './normalize.js'
 
 export const BODY_MARKER = '<!--panel:body-->'
 export const UNKNOWN = '未知'
 
 // One name per source type, so the page, the tests and the missing-source sentence agree.
+// The keys are #9's SOURCE_TYPES; `composio:<toolkit>` falls through to its own name.
 export const SOURCE_NAMES = {
-  feishu: '飞书消息',
-  calendar: '飞书日历',
-  mail: '邮箱',
-  doc: '云文档',
+  gcal: '谷歌日历',
+  gmail: '邮件',
+  feishu_doc: '云文档',
+  feishu_cal: '飞书日历',
+  feishu_msg: '飞书消息',
   github: 'GitHub',
 }
 
-const ITEM_STATES = ['open', 'closed', 'waiting', 'dropped']
-
 export function reportKey(memberId, date) {
   return `${memberId}:${date}`
-}
-
-// The day key is the date the person lives in, not the UTC date: at 00:30 in Shanghai the
-// UTC date is still yesterday, and a panel keyed on UTC would draw yesterday as today.
-export function dayKey(when = new Date(), timeZone) {
-  const at = when instanceof Date ? when : new Date(when)
-  if (Number.isNaN(at.getTime())) return null
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(at)
-  const part = type => parts.find(entry => entry.type === type)?.value ?? ''
-  return `${part('year')}-${part('month')}-${part('day')}`
 }
 
 export function panelSnapshot({ state, plan = [], today, now = Date.now() } = {}) {
@@ -44,7 +30,7 @@ export function panelSnapshot({ state, plan = [], today, now = Date.now() } = {}
   const submitted = new Set(
     Object.keys(state?.reports ?? {})
       .filter(key => key.endsWith(`:${today}`))
-      .map(key => key.slice(0, key.lastIndexOf(':')))
+      .map(key => key.slice(0, key.lastIndexOf(':'))),
   )
   const upcoming = plan
     .filter(reminder => Date.parse(reminder.fireAt) >= now)
@@ -68,6 +54,7 @@ export function snapshotOf(rt) {
   return {
     ...panelSnapshot({ state, plan: state.upcoming ?? [], today, now: rt.now().getTime() }),
     sources: state.sources ?? {},
+    panel: panelData(state, { today, timeZone: rt.timeZone, sources: state.sources }),
   }
 }
 
@@ -82,15 +69,20 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"]/g, ch => ({
 
 const sourceLabel = type => SOURCE_NAMES[type] ?? type
 
-const sourceType = source => (typeof source === 'string' ? source.trim() || null : asText(source?.type) || null)
+const sourceType = entry => (typeof entry === 'string'
+  ? entry.trim() || null
+  : asText(entry?.source) || asText(entry?.type) || null)
 
+const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value)
+
+// A source record the store never wrote is `null`, not `false`: "connected" is three-valued, so
+// "we read it", "it is down" and "we have not heard" stay three different sentences.
 function viewSources(raw) {
   const view = {}
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return view
+  if (!isRecord(raw)) return view
   for (const [type, record] of Object.entries(raw)) {
-    if (record === null || typeof record !== 'object') continue
+    if (!isRecord(record)) continue
     view[type] = {
-      // A source the store never spoke about stays unknown: not connected, not broken.
       connected: record.connected === true ? true : record.connected === false ? false : null,
       lastReadAt: asText(record.last_read_at) || null,
       detail: asText(record.detail) || null,
@@ -99,136 +91,80 @@ function viewSources(raw) {
   return view
 }
 
-function viewItem(raw, sources, index) {
-  const item = raw ?? {}
-  const types = Array.isArray(item.sources) ? item.sources.map(sourceType).filter(Boolean) : []
+function viewEvent(raw, sources, index) {
+  const event = raw ?? {}
+  const observations = Array.isArray(event.sources) ? event.sources : []
+  const types = [...new Set(observations.map(sourceType).filter(Boolean))]
+  const live = types.filter(type => sources[type]?.connected === true)
   const dead = types.filter(type => sources[type]?.connected === false)
-  const live = types.filter(type => sources[type]?.connected !== false)
+  const unread = types.filter(type => sources[type]?.connected !== true && sources[type]?.connected !== false)
+  // An event that rests on no live source cannot back its sentence today; it is drawn weaker
+  // and says so, never as a normal card.
+  const noEvidence = types.length === 0 || live.length === 0
   return {
-    id: asText(item.id) || `item-${index + 1}`,
-    title: asText(item.title) || UNKNOWN,
-    state: ITEM_STATES.includes(item.state) ? item.state : null,
-    why: asText(item.why),
-    advice: asText(item.advice),
-    note: asText(item.note),
-    dueAt: asText(item.dueAt) || null,
+    id: asText(event.id) || `event-${index + 1}`,
+    title: asText(event.title) || UNKNOWN,
+    state: asText(event.state) || null,
+    dueAt: asText(event.due_at) || null,
+    waitingOn: asText(event.who?.waiting_on) || null,
+    deferred: event.defer !== null && event.defer !== undefined,
+    closureEvidence: asText(event.closure?.evidence_ref) || null,
     sources: types,
-    deadSources: dead,
     liveSources: live,
-    // An item that rests on a dead source — or on no source at all — is drawn weaker, because
-    // the sentence behind it cannot be backed today. A source the store never mentioned does
-    // not make an item weaker: that would be inventing a gap.
-    srcless: types.length === 0 || dead.length > 0,
-    evidence: Array.isArray(item.evidence)
-      ? item.evidence
-        .map(entry => ({ ref: asText(entry?.ref) || null, at: asText(entry?.at) || null }))
-        .filter(entry => entry.ref || entry.at)
-      : [],
+    deadSources: dead,
+    unreadSources: unread,
+    srcless: types.length === 0 || live.length === 0 || dead.length > 0 || unread.length > 0,
+    noEvidence,
   }
-}
-
-function meetingMinutes(meetings) {
-  if (!Array.isArray(meetings)) return null
-  let minutes = 0
-  for (const meeting of meetings) {
-    const start = Date.parse(asText(meeting?.startAt))
-    const end = Date.parse(asText(meeting?.endAt))
-    // A meeting without readable times makes the whole sum unknown: a partial sum is a lie.
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null
-    minutes += (end - start) / 60000
-  }
-  return minutes
 }
 
 // The view model behind the page: every field the store does not carry is null, never 0.
-export function panelData(state, { today, sources } = {}) {
-  const day = today === undefined ? null : (state?.days?.[today] ?? null)
+// `today` is a local day key; `timeZone` is what makes a clock on the page local.
+export function panelData(state, { today, timeZone, sources } = {}) {
+  const rawDay = today === undefined || today === null ? null : (state?.days?.[today] ?? null)
+  const day = isRecord(rawDay) ? rawDay : null
   const sourceView = viewSources(sources ?? state?.sources)
-  const items = Array.isArray(day?.items) ? day.items.map((item, index) => viewItem(item, sourceView, index)) : null
+  const events = Array.isArray(day?.events) ? day.events.map((event, index) => viewEvent(event, sourceView, index)) : null
+  const conclusion = asText(day?.conclusion) || null
+  // A day the aggregate layer has not written — or one with neither a conclusion nor an event —
+  // is an unknown day: the page draws the bad state and no number nodes at all.
+  const known = day !== null && (conclusion !== null || (events !== null && events.length > 0))
+  const knownDay = known ? day : null
+  const knownEvents = known ? events : null
+  const meetingHours = knownDay !== null && Number.isFinite(knownDay.meeting_hours) ? knownDay.meeting_hours : null
+  const upcoming = Array.isArray(state?.upcoming) ? state.upcoming : []
   return {
     today: today ?? null,
-    day,
-    conclusion: asText(day?.conclusion) || null,
-    items,
+    timeZone: timeZone ?? null,
+    day: knownDay,
+    conclusion,
+    events: knownEvents,
+    open: knownEvents === null ? null : knownEvents.filter(event => event.state === 'open' && !event.deferred),
+    waiting: knownEvents === null ? null : knownEvents.filter(event => event.waitingOn !== null),
     stats: {
-      open: items ? items.filter(item => item.state === 'open').length : null,
-      waiting: items ? items.filter(item => item.state === 'waiting').length : null,
-      meetingMinutes: meetingMinutes(day?.meetings),
+      open: knownEvents === null ? null : knownEvents.filter(event => event.state === 'open' && !event.deferred).length,
+      waiting: knownEvents === null ? null : knownEvents.filter(event => event.waitingOn !== null).length,
+      closed: knownEvents === null ? null : knownEvents.filter(event => event.state === 'closed' && event.closureEvidence !== null).length,
+      dropped: knownEvents === null ? null : knownEvents.filter(event => event.deferred).length,
+      meetingHours,
     },
+    tomorrowTitle: asText(upcoming[0]?.title) || null,
     sources: sourceView,
   }
 }
 
-function renderHeadline(data) {
-  if (data.day === null) {
-    return `<section class="headline" data-section="headline">
-  <h2 class="concl">今天没有必须今天的事</h2>
-</section>`
-  }
-  const open = data.stats.open === null ? UNKNOWN : data.stats.open
-  const waiting = data.stats.waiting === null ? UNKNOWN : data.stats.waiting
-  const meetings = data.stats.meetingMinutes === null ? UNKNOWN : `${(data.stats.meetingMinutes / 60).toFixed(1)}h`
-  return `<section class="headline" data-section="headline">
-  <h2 class="concl">${escapeHtml(data.conclusion ?? '还没读到')}</h2>
-  <div class="stats">
-    <div class="stat"><b>${open}</b><span>件在手</span></div>
-    <div class="stat"><b>${meetings}</b><span>会议</span></div>
-    <div class="stat"><b>${waiting}</b><span>件在等别人</span></div>
-  </div>
-</section>`
-}
-
-function srclessNote(item) {
-  if (!item.srcless) return ''
-  if (item.sources.length === 0) return '这条没有依据'
-  const dead = item.deadSources.map(sourceLabel).join('、')
-  if (dead === '') return '这条没有依据'
-  if (item.liveSources.length === 0) return `${escapeHtml(dead)}没连上，这条没有依据`
-  return `${escapeHtml(dead)}没连上，这条只有${escapeHtml(item.liveSources.map(sourceLabel).join('、'))}依据`
-}
-
-function renderItemCard(item) {
-  const lines = [`<article class="item${item.srcless ? ' srcless' : ''}" id="item-${escapeHtml(item.id)}">`]
-  lines.push(`  <h4>${escapeHtml(item.title)}</h4>`)
-  if (item.why) lines.push(`  <p class="why">${escapeHtml(item.why)}</p>`)
-  const note = srclessNote(item)
-  if (note) lines.push(`  <p class="src-note">${note}</p>`)
-  if (item.advice) lines.push(`  <p class="advice">${escapeHtml(item.advice)}</p>`)
-  lines.push('</article>')
-  return lines.join('\n')
-}
-
-function renderItems(data) {
-  if (data.items === null) return `<section class="items" data-section="items">\n  <p class="muted">${UNKNOWN}</p>\n</section>`
-  const open = data.items.filter(item => item.state === 'open')
-  const body = open.length === 0 ? '<p class="muted">今天没有要推的事</p>' : open.map(renderItemCard).join('\n')
-  return `<section class="items" data-section="items">\n${body}\n</section>`
-}
-
-function renderWaiting(data) {
-  const waiting = (data.items ?? []).filter(item => item.state === 'waiting')
-  const count = data.stats.waiting === null ? UNKNOWN : data.stats.waiting
-  const body = data.items === null
-    ? `<p class="muted">${UNKNOWN}</p>`
-    : waiting.length === 0
-      ? '<p class="muted">没有在等别人的事</p>'
-      : `<ul class="wait-list">\n${waiting
-        .map(item => `  <li>${escapeHtml(item.title)}${item.note ? `<em>${escapeHtml(item.note)}</em>` : ''}</li>`)
-        .join('\n')}\n</ul>`
-  return `<section class="waiting" data-section="waiting">
-  <h2>在等别人 · ${count} 件</h2>
-${body}
-</section>`
-}
+const clockOf = (iso, timeZone) => (iso === null ? null : localClock(iso, timeZone) ?? null)
 
 function describeSources(sources) {
   const entries = Object.entries(sources)
   const read = entries.filter(([, source]) => source.connected === true).map(([type]) => sourceLabel(type))
   const dead = entries.filter(([, source]) => source.connected === false).map(([type]) => sourceLabel(type))
+  const unread = entries.filter(([, source]) => source.connected === null).map(([type]) => sourceLabel(type))
   const parts = []
-  if (read.length > 0) parts.push(`${read.join('、')}已读`)
-  if (dead.length > 0) parts.push(`${dead.join('、')}未接入`)
-  return parts.length > 0 ? parts.join('；') : '信源状态未知：还没读到任何信源'
+  if (read.length > 0) parts.push(`已读：${read.join('、')}`)
+  if (dead.length > 0) parts.push(`未连：${dead.join('、')}`)
+  if (unread.length > 0) parts.push(`未读到：${unread.join('、')} 的状态`)
+  return parts.length > 0 ? parts.join('；') : '还没读到信源状态'
 }
 
 function renderSources(data) {
@@ -256,7 +192,79 @@ ${rows}
 ${table}</section>`
 }
 
-const clock = iso => asText(iso).slice(11, 16) || '—'
+function renderHeadline(data) {
+  if (data.day === null) {
+    const tomorrow = data.tomorrowTitle === null
+      ? '明天还没有安排'
+      : `明天第一件事：${escapeHtml(data.tomorrowTitle)}`
+    return `<section class="headline" data-section="headline">
+  <h2 class="concl">今天没有必须今天的事</h2>
+  <p class="muted">${tomorrow}</p>
+</section>`
+  }
+  const open = data.stats.open === null ? UNKNOWN : data.stats.open
+  const waiting = data.stats.waiting === null ? UNKNOWN : data.stats.waiting
+  const meeting = data.stats.meetingHours === null ? UNKNOWN : `${data.stats.meetingHours.toFixed(1)}h`
+  const closed = data.stats.closed === null ? UNKNOWN : data.stats.closed
+  return `<section class="headline" data-section="headline">
+  <h2 class="concl">${escapeHtml(data.conclusion ?? '还没读到今天的结论')}</h2>
+  <p class="close-line">今天关掉 ${closed} 件</p>
+  <div class="stats" data-numbers>
+    <div class="stat"><b>${open}</b><span>件在手</span></div>
+    <div class="stat"><b>${meeting}</b><span>会议</span></div>
+    <div class="stat"><b>${waiting}</b><span>件在等别人</span></div>
+  </div>
+</section>`
+}
+
+function srclessNote(event) {
+  if (!event.srcless) return ''
+  if (event.sources.length === 0) return '这条没有依据：没有读到任何来源'
+  const dead = event.deadSources.map(sourceLabel).join('、')
+  if (event.liveSources.length === 0) {
+    return dead === '' ? '没有读到任何来源，这条没有依据' : `${escapeHtml(dead)}没连上，这条没有依据`
+  }
+  return `${escapeHtml(dead)}没连上，这条只有${escapeHtml(event.liveSources.map(sourceLabel).join('、'))}依据`
+}
+
+function renderItemCard(event, timeZone) {
+  const classes = ['item']
+  if (event.srcless) classes.push('srcless')
+  if (event.noEvidence) classes.push('no-evidence')
+  const lines = [`<article class="${classes.join(' ')}" id="item-${escapeHtml(event.id)}">`]
+  lines.push(`  <h4>${escapeHtml(event.title)}</h4>`)
+  const clock = clockOf(event.dueAt, timeZone)
+  lines.push(`  <p class="due">${clock === null ? '时刻未知' : `本地 ${escapeHtml(clock)}`}</p>`)
+  const note = srclessNote(event)
+  if (note) lines.push(`  <p class="src-note">${note}</p>`)
+  lines.push('</article>')
+  return lines.join('\n')
+}
+
+function renderItems(data) {
+  if (data.events === null) {
+    return `<section class="items" data-section="items">\n  <p class="muted">${UNKNOWN}</p>\n</section>`
+  }
+  const body = data.open.length === 0
+    ? '<p class="muted">今天没有要推的事</p>'
+    : data.open.map(event => renderItemCard(event, data.timeZone)).join('\n')
+  return `<section class="items" data-section="items">\n${body}\n</section>`
+}
+
+function renderWaiting(data) {
+  const count = data.stats.waiting === null ? UNKNOWN : data.stats.waiting
+  const body = data.waiting === null
+    ? `<p class="muted">${UNKNOWN}</p>`
+    : data.waiting.length === 0
+      ? '<p class="muted">没有在等别人的事</p>'
+      : `<ul class="wait-list">\n${data.waiting
+        .map(event => `  <li>${escapeHtml(event.title)}<em>在等 ${escapeHtml(event.waitingOn)}</em></li>`)
+        .join('\n')}\n</ul>`
+  return `<section class="waiting" data-section="waiting">
+  <h2>在等别人 · ${count} 件</h2>
+${body}
+</section>`
+}
 
 function renderTeam(snapshot = {}) {
   const total = Number.isFinite(snapshot.total) ? snapshot.total : null
@@ -277,14 +285,14 @@ function renderTeam(snapshot = {}) {
     : upcoming.length === 0
       ? '<li class="muted">没有待提醒的日程</li>'
       : upcoming
-        .map(item => `<li>${escapeHtml(clock(item.startAt))} ${escapeHtml(item.title)}<br><span class="muted">提醒 ${escapeHtml(clock(item.fireAt))}</span></li>`)
+        .map(item => `<li>${escapeHtml(String(item.startAt ?? '').slice(11, 16) || '—')} ${escapeHtml(item.title)}<br><span class="muted">提醒 ${escapeHtml(String(item.fireAt ?? '').slice(11, 16) || '—')}</span></li>`)
         .join('')
   const deliveryList = deliveries === null
     ? `<li class="muted">${UNKNOWN}</li>`
     : deliveries.length === 0
       ? '<li class="muted">还没有投递记录</li>'
       : deliveries
-        .map(item => `<li>${escapeHtml(clock(item.at))} ${item.ok ? '<span class="ok">已送达</span>' : `<span class="bad">失败</span> ${escapeHtml(item.error ?? '')}`}</li>`)
+        .map(item => `<li>${escapeHtml(String(item.at ?? '').slice(11, 16) || '—')} ${item.ok ? '<span class="ok">已送达</span>' : `<span class="bad">失败</span> ${escapeHtml(item.error ?? '')}`}</li>`)
         .join('')
 
   return `<section class="team" data-section="team">
@@ -298,8 +306,8 @@ function renderTeam(snapshot = {}) {
 </section>`
 }
 
-// The body is a list of anchored sections: the first screen (①) and the missing-source state
-// (⑥) live at the top, the old four statistics stay at the bottom as 团队日报.
+// The body is a list of anchored sections: the source header, the first screen (①), the day's
+// item cards, who is waiting, and the old four statistics as 团队日报 at the bottom.
 export function renderSections(data, snapshot = {}) {
   return [
     renderSources(data),
@@ -338,7 +346,7 @@ export function installPanel(ctx, rt) {
     fetch: async () => {
       const shell = await readFile(new URL('../client/panel.html', import.meta.url), 'utf8')
       const state = rt.store.get()
-      const data = panelData(state, { today: rt.today(), sources: state.sources })
+      const data = panelData(state, { today: rt.today(), timeZone: rt.timeZone, sources: state.sources })
       return new Response(renderPage(shell, renderSections(data, snapshotOf(rt))), {
         status: 200,
         headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' },

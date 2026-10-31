@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Fake OpenAI-compatible server for testing
- * Responds to POST /v1/chat/completions
+ * Responds to POST /v1/chat/completions with structured JSON
  */
 
 import { createServer } from 'node:http';
@@ -20,15 +20,40 @@ const server = createServer((req, res) => {
         console.log(`[FAKE SERVER] Received request:`);
         console.log(`  Authorization: ${authHeader}`);
         console.log(`  Model: ${data.model}`);
-        console.log(`  Messages: ${JSON.stringify(data.messages)}`);
+        console.log(`  Response format: ${data.response_format?.type || 'none'}`);
+        console.log(`  Messages: ${data.messages.length} messages`);
         
+        // Structured JSON response with cards
+        const structuredResponse = JSON.stringify({
+          text: '这是一条简短的回复',
+          cards: [
+            {
+              type: 'info',
+              title: '测试卡片',
+              description: '这是来自假服务器的结构化响应',
+              items: ['项目 1', '项目 2', '项目 3'],
+            },
+            {
+              type: 'action',
+              title: '可用操作',
+              actions: [
+                { label: '查看详情', value: 'view_details' },
+                { label: '关闭', value: 'close' },
+              ],
+            },
+          ],
+        });
+
         // Return fake streaming response
         if (data.stream) {
           res.writeHead(200, { 'Content-Type': 'text/event-stream' });
-          res.write('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n');
-          res.write('data: {"choices":[{"delta":{"content":" from"}}]}\n\n');
-          res.write('data: {"choices":[{"delta":{"content":" fake"}}]}\n\n');
-          res.write('data: {"choices":[{"delta":{"content":" server!"}}]}\n\n');
+          
+          // Split response into chunks for streaming
+          const chunks = structuredResponse.match(/.{1,20}/g) || [];
+          for (const chunk of chunks) {
+            res.write(`data: ${JSON.stringify({choices:[{delta:{content:chunk}}]})}\n\n`);
+          }
+          
           res.write('data: [DONE]\n\n');
           res.end();
         } else {
@@ -36,9 +61,7 @@ const server = createServer((req, res) => {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
             choices: [{
-              message: {
-                content: 'Hello from fake OpenAI server! ✓'
-              }
+              message: { content: structuredResponse }
             }]
           }));
         }

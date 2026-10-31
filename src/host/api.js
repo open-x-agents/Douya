@@ -54,16 +54,76 @@ const COMPOSIO_APPS = [
 const chatSessions = new Map();
 
 /**
+ * System prompt for card-based responses
+ */
+const CARD_SYSTEM_PROMPT = `你是「豆芽」，一个智能数字同事助手。你的回复必须简洁、结构化，以卡片形式呈现。
+
+**核心原则**：
+- 文本要简短（1-2 句话总结）
+- 交互通过卡片（info/action/choice/task/event）
+- 每次回复 1-3 张卡片
+
+**回复格式（JSON）**：
+{
+  "text": "简短总结（1-2句话）",
+  "cards": [
+    {
+      "type": "info|action|choice|task|event",
+      "title": "卡片标题",
+      "description": "详细说明（可选）",
+      "actions": [{"label": "按钮文字", "value": "action_id"}],
+      "items": ["列表项1", "列表项2"],
+      "time": "时间（可选）",
+      "status": "状态（可选）"
+    }
+  ]
+}
+
+**卡片类型**：
+- info: 信息展示（带 items 列表）
+- action: 操作建议（带 actions 按钮）
+- choice: 多选项（带 actions 按钮）
+- task: 任务卡片（title, description, status）
+- event: 日程卡片（title, time, description）
+
+**示例**：
+用户："今天有什么安排？"
+{
+  "text": "今天有 2 个会议，3 件待办",
+  "cards": [
+    {"type":"event","title":"团队周会","time":"14:00"},
+    {"type":"task","title":"完成设计稿","status":"进行中"}
+  ]
+}
+
+用户："帮我查一下项目进度"
+{
+  "text": "以下是可用的操作",
+  "cards": [
+    {"type":"action","title":"查询项目进度","actions":[{"label":"查看详情","value":"view_project"}]}
+  ]
+}
+
+严格返回 JSON，不要 markdown 格式。`;
+
+/**
  * Call LLM - Build client from config store on-demand
  */
 async function callLLM(ctx, messages, sessionId = 'web-chat') {
+  // Prepend system prompt
+  const messagesWithSystem = [
+    { role: 'system', content: CARD_SYSTEM_PROMPT },
+    ...messages,
+  ];
+
   // Try to get LLM from context first (ds-bot mode)
   if (ctx?.llm?.stream) {
     try {
       let fullText = '';
       for await (const chunk of ctx.llm.stream({
-        messages,
+        messages: messagesWithSystem,
         maxTokens: 1000,
+        responseFormat: { type: 'json_object' },
       })) {
         if (chunk.type === 'text' && chunk.text) {
           fullText += chunk.text;
@@ -71,8 +131,7 @@ async function callLLM(ctx, messages, sessionId = 'web-chat') {
       }
 
       if (fullText.trim()) {
-        const cards = parseResponseToCards(fullText);
-        return { text: fullText, cards };
+        return parseResponseToCards(fullText);
       }
     } catch (error) {
       console.error('LLM error:', error);
@@ -96,8 +155,9 @@ async function callLLM(ctx, messages, sessionId = 'web-chat') {
 
         let fullText = '';
         for await (const chunk of client.stream({
-          messages,
+          messages: messagesWithSystem,
           maxTokens: 1000,
+          responseFormat: { type: 'json_object' },
         })) {
           if (chunk.type === 'text' && chunk.text) {
             fullText += chunk.text;
@@ -105,8 +165,7 @@ async function callLLM(ctx, messages, sessionId = 'web-chat') {
         }
 
         if (fullText.trim()) {
-          const cards = parseResponseToCards(fullText);
-          return { text: fullText, cards };
+          return parseResponseToCards(fullText);
         }
       } catch (error) {
         console.error('LLM error:', error);
@@ -393,8 +452,8 @@ export function createApiRouter(ctx) {
           time: new Date().toISOString(),
         });
 
-        // Get LLM response
-        const response = await callLLM(llmCtx, session.messages, sessionId);
+        // Get LLM response (pass full ctx, not just llmCtx)
+        const response = await callLLM({ llm: llmCtx?.llm }, session.messages, sessionId);
 
         // Add assistant message
         session.messages.push({ role: 'assistant', content: response.text });

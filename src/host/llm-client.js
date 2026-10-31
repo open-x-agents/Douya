@@ -18,7 +18,7 @@ export function createLLMClient(config) {
     log('LLM client created without API key - calls will fail');
   }
 
-  async function* stream({ messages, maxTokens = 1000, temperature = 0.7 }) {
+  async function* stream({ messages, maxTokens = 1000, temperature = 0.7, responseFormat = null }) {
     if (!apiKey) {
       throw new Error('LLM API key not configured');
     }
@@ -29,19 +29,24 @@ export function createLLMClient(config) {
       'Authorization': `Bearer ${apiKey}`,
     };
 
-    const body = JSON.stringify({
+    const body = {
       model,
       messages,
       max_tokens: maxTokens,
       temperature,
       stream: true,
-    });
+    };
+
+    // Add response_format if provided (OpenAI JSON mode)
+    if (responseFormat?.type === 'json_object') {
+      body.response_format = { type: 'json_object' };
+    }
 
     try {
       const response = await fetch(url, {
         method: 'POST',
         headers,
-        body,
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {

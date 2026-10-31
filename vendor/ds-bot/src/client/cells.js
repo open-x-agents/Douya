@@ -21,7 +21,7 @@ import { partIndexOf, withBtwRows } from './btw-model.js'
 import { layoutOf, thinkingShown } from './themes.js'
 import { draftForDisplay } from '../shared/room-draft.js'
 import { anchoredCompletions, applyScroll, pinnedToBottom, projectRelay, scrollAction, scrollGroup } from '../shared/work-line-complete.js'
-import { citeTexts, isPendingSteerCopy } from '../shared/cite.js'
+import { citeTexts, groupCitedQuotes, isPendingSteerCopy, lateCiteSentences } from '../shared/cite.js'
 import { groupUserBubble } from '../host/group-steer.js'
 
 export { clockLabel }
@@ -372,9 +372,7 @@ export function stackReplies(replies) {
 }
 
 function LateCite({ text, texts }) {
-  const sentences = Array.isArray(texts) && texts.length > 0
-    ? texts.filter(sentence => typeof sentence === 'string' && sentence !== '')
-    : (typeof text === 'string' && text !== '' ? [text] : [])
+  const sentences = lateCiteSentences(text, texts)
   return h('div', { className: 'bt-route-cite', 'data-late-cite': '' },
     h('div', { className: 'bt-route-cite-label' }, t('Replying to what you wrote earlier')),
     sentences.map((sentence, index) => h('div', { key: index, className: 'bt-urow' },
@@ -1040,9 +1038,17 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
   }
   const room = roster.roomsById[sessionId]
   return h('div', { className: 'bt-group-replies' },
-    stackReplies(projected.replies).map(({ reply, index, texts, time, duration }) => {
+    stackReplies(groupCitedQuotes(projected.replies)).map(({ reply, index, texts, time, duration }) => {
       const bot = roster.byId[reply.botId] ?? { id: reply.botId, name: reply.name, color: reply.color ?? 'gray' }
       const userBubble = groupUserBubble(reply)
+      if (reply.kind === 'completion-cite') {
+        const cited = Array.isArray(reply.texts) ? reply.texts : []
+        if (cited.length > 1 && cited.every(sentence => coveredByLateCite(projected.replies, sentence))) return null
+        return h('div', {
+          key: `complete-cite-${reply.exchangeId ?? index}`,
+          ...(reply.first === true ? { 'data-work-complete-first': '' } : {}),
+        }, h(LateCite, { texts: cited }))
+      }
       if (reply.kind === 'completion-quote') {
         if (coveredByLateCite(projected.replies, reply.text)) return null
         return h('div', {

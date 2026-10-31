@@ -52,6 +52,57 @@ export function mergeCites(left, right) {
   return out
 }
 
+function sameOpening(item, opening) {
+  if (item == null || opening == null || typeof opening !== 'object') return false
+  const seq = typeof opening.seq === 'number' && Number.isFinite(opening.seq) ? opening.seq
+    : (typeof opening.quoteSeq === 'number' && Number.isFinite(opening.quoteSeq) ? opening.quoteSeq : undefined)
+  const roomId = typeof opening.roomId === 'string' && opening.roomId !== '' ? opening.roomId
+    : (typeof opening.quoteRoomId === 'string' && opening.quoteRoomId !== '' ? opening.quoteRoomId : undefined)
+  if (seq === undefined || roomId === undefined) return false
+  return item.seq === seq && (item.roomId ?? '') === roomId
+}
+
+/**
+ * Sentences a late reply may show. Steered follow-ups stay in send order.
+ * The work line's opening sentence is the prompt already on screen, so it is not
+ * repeated in the cite once a follow-up has been steered in.
+ * With no follow-up, the trigger's own cite is unchanged.
+ * @param {unknown} info
+ * @param {unknown[] | undefined} steers
+ * @param {{ seq?: number, roomId?: string, quoteSeq?: number, quoteRoomId?: string } | undefined} opening
+ */
+export function visibleRoomCites(info, steers, opening) {
+  const follow = []
+  for (const item of Array.isArray(steers) ? steers : []) {
+    const cite = asCite(item)
+    if (cite !== undefined) follow.push(cite)
+  }
+  if (follow.length === 0) return citesOf(info)
+  const trigger = citesOf(info).filter(item => !sameOpening(item, opening))
+  return mergeCites(trigger, follow)
+}
+
+/**
+ * Cite fields for a late reply. Flat quote fields are removed so a prompt
+ * still sitting on the trigger cannot leak back in beside `quotes`.
+ * @param {Record<string, unknown> | undefined} info
+ * @param {unknown[] | undefined} quotes
+ */
+export function citeCarrier(info, quotes) {
+  const list = []
+  for (const item of Array.isArray(quotes) ? quotes : []) {
+    const cite = asCite(item)
+    if (cite !== undefined) list.push(cite)
+  }
+  if (list.length === 0) return info
+  const next = { ...(info ?? {}) }
+  delete next.quoteText
+  delete next.quoteSeq
+  delete next.quoteRoomId
+  next.quotes = list
+  return next
+}
+
 /** Sentences already stored on a trigger: its `quotes` list, then its flat quote. */
 export function citesOf(info) {
   if (info == null || typeof info !== 'object') return []
@@ -75,6 +126,87 @@ export function lateCite(info) {
   if (typeof first.roomId === 'string') cite.quoteRoomId = first.roomId
   if (list.length > 1) cite.quotes = list
   return cite
+}
+
+/** Sentences a late-cite row paints, in order. A list wins; otherwise the one flat sentence. */
+export function lateCiteSentences(text, texts) {
+  if (Array.isArray(texts) && texts.length > 0) {
+    return texts.filter(sentence => typeof sentence === 'string' && sentence !== '')
+  }
+  return typeof text === 'string' && text !== '' ? [text] : []
+}
+
+function escapeCiteText(text) {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+/**
+ * The late-cite row as HTML: one marker, then the user's bubbles in send order.
+ * The painter and the acceptance check share this shape.
+ * @param {unknown[] | undefined} texts
+ */
+export function lateCiteHtml(texts) {
+  const sentences = lateCiteSentences(undefined, texts)
+  const bubbles = sentences.map(sentence => `<div class="bt-urow"><div class="bt-ububble">${escapeCiteText(sentence)}</div></div>`).join('')
+  return `<div class="bt-route-cite" data-late-cite="">${bubbles}</div>`
+}
+
+/**
+ * Two or more completion quotes of one exchange become one late cite.
+ * A single quote stays a completion quote. Other rows are unchanged.
+ * @param {unknown[] | undefined} replies
+ */
+export function groupCitedQuotes(replies) {
+  const rows = Array.isArray(replies) ? replies : []
+  /** @type {unknown[]} */
+  const out = []
+  /** @type {any[]} */
+  let batch = []
+  const flush = () => {
+    if (batch.length === 0) return
+    if (batch.length === 1) out.push(batch[0])
+    else {
+      const first = batch[0]
+      out.push({
+        kind: 'completion-cite',
+        ...(first.exchangeId !== undefined ? { exchangeId: first.exchangeId } : {}),
+        ...(first.workLineId !== undefined ? { workLineId: first.workLineId } : {}),
+        texts: batch.map(row => row.text).filter(text => typeof text === 'string' && text !== ''),
+        ...(batch.some(row => row.first === true) ? { first: true } : {}),
+        ...(first.completedAt !== undefined ? { completedAt: first.completedAt } : {}),
+      })
+    }
+    batch = []
+  }
+  for (const reply of rows) {
+    if (reply?.kind === 'completion-quote' && reply.who === 'User') batch.push(reply)
+    else {
+      flush()
+      out.push(reply)
+    }
+  }
+  flush()
+  return out
+}
+
+/**
+ * Flags for a steered reply posted after the round has returned.
+ * Two or more sentences are one late cite. A later remainder of the same turn
+ * does not add a second cite. A post that does not @mention anyone stays quiet
+ * so it does not call a member.
+ * @param {{ cites?: unknown[], shown?: boolean, calls?: boolean }} [input]
+ */
+export function steeredReplyPost({ cites = [], shown = false, calls = false } = {}) {
+  const list = []
+  for (const item of Array.isArray(cites) ? cites : []) {
+    const cite = asCite(item)
+    if (cite !== undefined) list.push(cite)
+  }
+  const late = shown !== true && list.length > 1
+  return {
+    quiet: calls !== true,
+    ...(late ? { late: true, ...lateCite({ quotes: list }) } : {}),
+  }
 }
 
 /** Sentences to paint, in order. A `quotes` list wins; otherwise the one flat sentence. */

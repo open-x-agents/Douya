@@ -166,13 +166,32 @@ function matchIdle(text, idle, roomId, botId) {
   return createDecision(botId)
 }
 
+function isRoundLine(line) {
+  return line?.implicit === true || line?.round === true
+}
+
+function isTaskLine(line) {
+  return line != null && !isRoundLine(line)
+}
+
+// The primary group session is the round, not a second task. One local work
+// line still takes a follow-up while that session is also busy. Leftover lines
+// in other rooms do not raise a card during that round, and they do not steal
+// a follow-up from the one local busy task. An idle line in this room still can.
+function routePool(open, roomId) {
+  const localTaskBusy = open.some(line => line.busy === true && isTaskLine(line) && line.lastRoomId === roomId)
+  const roundBusy = open.some(line => line.busy === true && isRoundLine(line) && (line.lastRoomId === roomId || line.lastRoomId == null))
+  if (localTaskBusy) {
+    return open.filter(line => isTaskLine(line) && (line.lastRoomId === roomId || (line.busy === true && typeof line.lastRoomId === 'string' && line.lastRoomId !== '')))
+  }
+  if (roundBusy) return open.filter(line => line.lastRoomId === roomId || isRoundLine(line))
+  return open
+}
+
 function autoRoute(text, lines, roomId, botId) {
   const open = lines.filter(line => line?.closedAt == null)
   if (open.length === 0) return createDecision(botId)
-  // An implicit group session is the round, not a second task. One local work
-  // line still takes a follow-up while that session is also busy.
-  const realBusy = open.some(line => line.busy === true && line.implicit !== true)
-  const pool = realBusy ? open.filter(line => line.implicit !== true) : open
+  const pool = routePool(open, roomId)
   const busy = pool.filter(line => line.busy === true)
   const local = busy.filter(line => line.lastRoomId === roomId)
   const idle = pool.filter(line => line.busy !== true)
@@ -387,8 +406,14 @@ function emit(rt, room, members, decision, text, pending) {
 
 function linesFor(rt, botId, room) {
   const liveOf = sessionId => rt.live?.get(sessionId)
-  const indexed = listByBot(rt.state, botId, liveOf).map(line => ({ ...line, doc: lineDocument(rt, line) }))
   const primary = room?.sessions?.[botId]
+  const indexed = listByBot(rt.state, botId, liveOf).map(line => ({
+    ...line,
+    doc: lineDocument(rt, line),
+    // The indexed primary session is the round unless this line was opened as its
+    // own task (it has a label). ensureLegacy does not set a label.
+    ...(typeof primary === 'string' && primary !== '' && line.sessionId === primary && (typeof line.label !== 'string' || line.label === '') ? { round: true } : {}),
+  }))
   if (typeof primary === 'string' && primary !== '' && !indexed.some(line => line.sessionId === primary)) {
     const implicit = implicitLine(room, botId)
     if (implicit !== undefined) {

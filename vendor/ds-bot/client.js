@@ -7912,6 +7912,37 @@ function mergeCites(left, right) {
   }
   return out;
 }
+function sameOpening(item, opening) {
+  if (item == null || opening == null || typeof opening !== "object") return false;
+  const seq = typeof opening.seq === "number" && Number.isFinite(opening.seq) ? opening.seq : typeof opening.quoteSeq === "number" && Number.isFinite(opening.quoteSeq) ? opening.quoteSeq : void 0;
+  const roomId = typeof opening.roomId === "string" && opening.roomId !== "" ? opening.roomId : typeof opening.quoteRoomId === "string" && opening.quoteRoomId !== "" ? opening.quoteRoomId : void 0;
+  if (seq === void 0 || roomId === void 0) return false;
+  return item.seq === seq && (item.roomId ?? "") === roomId;
+}
+function visibleRoomCites(info, steers, opening) {
+  const follow = [];
+  for (const item of Array.isArray(steers) ? steers : []) {
+    const cite = asCite(item);
+    if (cite !== void 0) follow.push(cite);
+  }
+  if (follow.length === 0) return citesOf(info);
+  const trigger = citesOf(info).filter((item) => !sameOpening(item, opening));
+  return mergeCites(trigger, follow);
+}
+function citeCarrier(info, quotes) {
+  const list = [];
+  for (const item of Array.isArray(quotes) ? quotes : []) {
+    const cite = asCite(item);
+    if (cite !== void 0) list.push(cite);
+  }
+  if (list.length === 0) return info;
+  const next = { ...info ?? {} };
+  delete next.quoteText;
+  delete next.quoteSeq;
+  delete next.quoteRoomId;
+  next.quotes = list;
+  return next;
+}
 function citesOf(info) {
   if (info == null || typeof info !== "object") return [];
   const listed = Array.isArray(info.quotes) ? info.quotes : [];
@@ -7927,6 +7958,62 @@ function lateCite(info) {
   if (typeof first.roomId === "string") cite.quoteRoomId = first.roomId;
   if (list.length > 1) cite.quotes = list;
   return cite;
+}
+function lateCiteSentences(text, texts2) {
+  if (Array.isArray(texts2) && texts2.length > 0) {
+    return texts2.filter((sentence) => typeof sentence === "string" && sentence !== "");
+  }
+  return typeof text === "string" && text !== "" ? [text] : [];
+}
+function escapeCiteText(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function lateCiteHtml(texts2) {
+  const sentences = lateCiteSentences(void 0, texts2);
+  const bubbles = sentences.map((sentence) => `<div class="bt-urow"><div class="bt-ububble">${escapeCiteText(sentence)}</div></div>`).join("");
+  return `<div class="bt-route-cite" data-late-cite="">${bubbles}</div>`;
+}
+function groupCitedQuotes(replies) {
+  const rows2 = Array.isArray(replies) ? replies : [];
+  const out = [];
+  let batch = [];
+  const flush = () => {
+    if (batch.length === 0) return;
+    if (batch.length === 1) out.push(batch[0]);
+    else {
+      const first = batch[0];
+      out.push({
+        kind: "completion-cite",
+        ...first.exchangeId !== void 0 ? { exchangeId: first.exchangeId } : {},
+        ...first.workLineId !== void 0 ? { workLineId: first.workLineId } : {},
+        texts: batch.map((row) => row.text).filter((text) => typeof text === "string" && text !== ""),
+        ...batch.some((row) => row.first === true) ? { first: true } : {},
+        ...first.completedAt !== void 0 ? { completedAt: first.completedAt } : {}
+      });
+    }
+    batch = [];
+  };
+  for (const reply of rows2) {
+    if (reply?.kind === "completion-quote" && reply.who === "User") batch.push(reply);
+    else {
+      flush();
+      out.push(reply);
+    }
+  }
+  flush();
+  return out;
+}
+function steeredReplyPost({ cites = [], shown = false, calls = false } = {}) {
+  const list = [];
+  for (const item of Array.isArray(cites) ? cites : []) {
+    const cite = asCite(item);
+    if (cite !== void 0) list.push(cite);
+  }
+  const late = shown !== true && list.length > 1;
+  return {
+    quiet: calls !== true,
+    ...late ? { late: true, ...lateCite({ quotes: list }) } : {}
+  };
 }
 function citeTexts(source) {
   if (Array.isArray(source?.quotes) && source.quotes.length > 0) {
@@ -8773,7 +8860,7 @@ function stackReplies(replies) {
   return items;
 }
 function LateCite({ text, texts: texts2 }) {
-  const sentences = Array.isArray(texts2) && texts2.length > 0 ? texts2.filter((sentence) => typeof sentence === "string" && sentence !== "") : typeof text === "string" && text !== "" ? [text] : [];
+  const sentences = lateCiteSentences(text, texts2);
   return (0, import_react17.createElement)(
     "div",
     { className: "bt-route-cite", "data-late-cite": "" },
@@ -9395,9 +9482,17 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
   return (0, import_react17.createElement)(
     "div",
     { className: "bt-group-replies" },
-    stackReplies(projected.replies).map(({ reply, index, texts: texts2, time, duration }) => {
+    stackReplies(groupCitedQuotes(projected.replies)).map(({ reply, index, texts: texts2, time, duration }) => {
       const bot = roster.byId[reply.botId] ?? { id: reply.botId, name: reply.name, color: reply.color ?? "gray" };
       const userBubble = groupUserBubble(reply);
+      if (reply.kind === "completion-cite") {
+        const cited = Array.isArray(reply.texts) ? reply.texts : [];
+        if (cited.length > 1 && cited.every((sentence) => coveredByLateCite(projected.replies, sentence))) return null;
+        return (0, import_react17.createElement)("div", {
+          key: `complete-cite-${reply.exchangeId ?? index}`,
+          ...reply.first === true ? { "data-work-complete-first": "" } : {}
+        }, (0, import_react17.createElement)(LateCite, { texts: cited }));
+      }
       if (reply.kind === "completion-quote") {
         if (coveredByLateCite(projected.replies, reply.text)) return null;
         return (0, import_react17.createElement)("div", {

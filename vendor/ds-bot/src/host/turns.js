@@ -8,7 +8,8 @@ import { routeTakesEffect } from './route-inbound.js'
 import { absoluteLinks } from './links.js'
 import { textOf } from './text.js'
 import { reminderText } from './schedules.js'
-import { appendCite, citeItem, citesOf, mergeCites } from '../shared/cite.js'
+import { appendCite, citeCarrier, citeItem, citesOf, mergeCites, visibleRoomCites } from '../shared/cite.js'
+import { lineBySession } from './work-lines.js'
 
 // A failed turn's `LlmFailure`, kept to what can be shown and logged. Like DSH's own
 // error row, an AUTH failure loses its message: providers may echo part of the key.
@@ -474,6 +475,7 @@ export function install(rt) {
     if (entry.turn === undefined || source?.userSteer !== true) return
     const item = citeItem(source)
     if (item === undefined) return
+    entry.steers = appendCite(entry.steers, item)
     entry.cites = appendCite(mergeCites(citesOf(entry.info), entry.cites), item)
   }
 
@@ -529,6 +531,7 @@ export function install(rt) {
         entry.step = undefined
         entry.info = undefined
         entry.cites = undefined
+        entry.steers = undefined
         // A turn turned away before its first step may end without a turn/end.
         entry.switched = false
         entry.answers = false
@@ -581,6 +584,10 @@ export function install(rt) {
             ...(source.late ? { late: true } : {}),
             ...(source.progress ? { progress: true } : {}),
             ...(source.quiet ? { quiet: true } : {}),
+            ...(typeof source.quoteText === 'string' && source.quoteText !== '' ? { quoteText: source.quoteText } : {}),
+            ...(typeof source.quoteSeq === 'number' && Number.isFinite(source.quoteSeq) ? { quoteSeq: source.quoteSeq } : {}),
+            ...(typeof source.quoteRoomId === 'string' && source.quoteRoomId !== '' ? { quoteRoomId: source.quoteRoomId } : {}),
+            ...(Array.isArray(source.quotes) && source.quotes.length > 0 ? { quotes: source.quotes } : {}),
             ...(source.failed ? { failed: source.failed } : {}),
             ...(source.resumed ? { resumed: true } : {}),
             ...(source.again ? { again: true } : {}),
@@ -696,8 +703,11 @@ export function install(rt) {
         // in-memory completion only; the work line itself stays metadata.
         const reply = texts.join('\n\n').trim()
         // The opening sentence first, then any follow-up steered into this same turn.
-        const cites = mergeCites(entry.cites, citesOf(info))
-        const citedInfo = cites.length === 0 ? info : { ...(info ?? {}), quotes: cites }
+        // A follow-up into a line that already had a prompt cites the follow-ups only.
+        const steers = Array.isArray(entry.steers) ? entry.steers : []
+        const opening = lineBySession(rt.state, id)?.quote
+        const cites = steers.length > 0 ? visibleRoomCites(info, steers, opening) : mergeCites(entry.cites, citesOf(info))
+        const citedInfo = steers.length > 0 ? citeCarrier(info, cites) : (cites.length === 0 ? info : { ...(info ?? {}), quotes: cites })
         // Idle is the absence of this turn. A resume replay or a part switch does
         // not emit a second completion for the same exchange.
         rt.noteWorkTurnEnd?.({
@@ -713,6 +723,7 @@ export function install(rt) {
         entry.turn = undefined
         entry.info = undefined
         entry.cites = undefined
+        entry.steers = undefined
         entry.texts = []
         entry.shown = 0
         entry.step = undefined

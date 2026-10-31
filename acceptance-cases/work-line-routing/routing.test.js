@@ -295,8 +295,8 @@ test('R8 two busy lines steer only the one whose opening and draft hit', () => {
 
   const host = wireHost({
     workLines: {
-      a: stored({ id: 'a', sessionId: 'ga', quote: { roomId: 'r1', seq: 1 }, updatedAt: 1 }),
-      b: stored({ id: 'b', sessionId: 'ga2', quote: { roomId: 'r1', seq: 2 }, updatedAt: 2 }),
+      a: stored({ id: 'a', sessionId: 'ga', label: '周报', quote: { roomId: 'r1', seq: 1 }, updatedAt: 1 }),
+      b: stored({ id: 'b', sessionId: 'ga2', label: '海边', quote: { roomId: 'r1', seq: 2 }, updatedAt: 2 }),
     },
     logs: { r1: [{ seq: 1, who: 'User', text: POEM }, { seq: 2, who: 'User', text: BEACH }] },
   })

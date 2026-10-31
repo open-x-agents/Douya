@@ -19,12 +19,15 @@ import {
   citesOf,
   citeTexts,
   citedFromLog,
+  groupCitedQuotes,
   hideCitedHistory,
   isPendingSteerCopy,
+  lateCiteHtml,
   logPointer,
   logQuotes,
   markSteeredRow,
   steerSentence,
+  steeredReplyPost,
 } from '../../vendor/ds-bot/src/shared/cite.js'
 
 const root = dirname(dirname(dirname(fileURLToPath(import.meta.url))))
@@ -424,12 +427,18 @@ test('the late cite paints user bubbles and history hides a sentence that cite a
   assert.ok(postAt >= 0 && postEnd > postAt)
   const post = groups.slice(postAt, postEnd)
   assert.match(post, /citeForPost\(cite, round\?\.steerCites\)/)
-  assert.match(post, /explicit \? named/)
+  assert.match(post, /explicit \|\| multi \? named/)
+  assert.match(cells, /groupCitedQuotes/)
+  assert.match(cells, /lateCiteSentences/)
   const steerAt = groups.indexOf('async function acceptRoomSteer')
   const steerEnd = groups.indexOf('rt.appendRoomLine', steerAt)
   assert.match(groups.slice(steerAt, steerEnd), /steerCites/)
   assert.match(groups.slice(steerAt, steerEnd), /steerSentence/)
   assert.match(groups.slice(steerAt, steerEnd), /quoteText/)
+  assert.match(groups.slice(steerAt, steerEnd), /minSeq: sentence\.seq/)
+  assert.doesNotMatch(groups.slice(steerAt, steerEnd), /minSeq: round\.startSeq/)
+  assert.match(groups, /steeredReplyPost/)
+  assert.match(groups, /lateCite\(post\)/)
 })
 
 function focusRoom(lines) {
@@ -522,7 +531,17 @@ test('a busy essay line takes 你们是谁 then 在干嘛 while the group sessio
     updatedAt: 5,
     segments: [],
   }
-  const { rt, emit, steered, delivered, cited, created, rooms } = focusRoom({ essay })
+  // ensureLegacy indexes room.sessions.chief as its own line. That line is the
+  // round, and it is busy at the same time as the essay. It must not raise a card.
+  const group = {
+    id: 'group-line',
+    botId: 'chief',
+    sessionId: 'ga',
+    lastRoomId: 'r1',
+    updatedAt: 4,
+    segments: [],
+  }
+  const { rt, emit, steered, delivered, cited, created, rooms } = focusRoom({ essay, group })
   emit('work', userMessage('新开 请写一篇约900字散文《秋水》', { exchangeId: 'e0', quoteSeq: 1, quoteRoomId: 'r1' }))
   emit('work', { type: 'turn/start', data: { turn: 4 }, time: 1 })
   emit('ga', { type: 'turn/start', data: { turn: 1 }, time: 1 })
@@ -532,7 +551,7 @@ test('a busy essay line takes 你们是谁 then 在干嘛 while the group sessio
   assert.equal(rt.state.pendingRoutes.r1, undefined)
   assert.equal(created.length, 0)
   assert.equal(delivered.length, 0)
-  assert.equal(Object.keys(rt.state.workLines).length, 1)
+  assert.equal(Object.keys(rt.state.workLines).length, 2)
   assert.deepEqual(steered.map(item => item.message.text), [FIRST, FOLLOW])
   assert.deepEqual(steered.map(item => item.member.sessionId), ['work', 'work'])
   assert.deepEqual(steered.map(item => item.message.quoteSeq), [2, 3])
@@ -549,9 +568,10 @@ test('a busy essay line takes 你们是谁 then 在干嘛 while the group sessio
   emit('work', { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '秋水' }] } } })
   emit('work', { type: 'turn/end', data: { reason: { kind: 'completed' } }, time: 9 })
   const named = lateCite(cited.at(-1))
-  assert.deepEqual(citeTexts(named).slice(-2), [FIRST, FOLLOW])
-  assert.equal(named.quotes.at(-2).seq, 2)
-  assert.equal(named.quotes.at(-1).seq, 3)
+  assert.deepEqual(citeTexts(named), [FIRST, FOLLOW])
+  assert.equal(citeTexts(named).some(text => text.includes('秋水')), false)
+  assert.equal(named.quotes[0].seq, 2)
+  assert.equal(named.quotes[1].seq, 3)
   assert.equal(Object.hasOwn(named, 'late'), false)
   const posted = { ...named, late: citesOf(named).length > 1 }
   assert.equal(posted.late, true)
@@ -564,7 +584,118 @@ test('a busy essay line takes 你们是谁 then 在干嘛 while the group sessio
   assert.equal(hidden.ids.includes('m-do'), true)
   assert.equal(hideCitedHistory({ text: FIRST, messageId: 'm-who', citedTexts: hidden.texts, citedIds: hidden.ids }), true)
   assert.equal(hideCitedHistory({ text: FOLLOW, messageId: 'm-do', citedTexts: hidden.texts, citedIds: hidden.ids }), true)
+  const html = lateCiteHtml(citeTexts(named))
+  assert.equal(html.split('data-late-cite=').length - 1, 1)
+  assert.equal(html.split('bt-ububble').length - 1, 2)
+  assert.ok(html.indexOf(FIRST) >= 0 && html.indexOf(FIRST) < html.indexOf(FOLLOW))
+  assert.equal(html.includes('秋水'), false)
+  const grouped = groupCitedQuotes([
+    { kind: 'completion-quote', who: 'User', text: FIRST, exchangeId: 'e-essay' },
+    { kind: 'completion-quote', who: 'User', text: FOLLOW, exchangeId: 'e-essay' },
+    { kind: 'completion-reply', text: '秋水', exchangeId: 'e-essay' },
+  ])
+  assert.equal(grouped.length, 2)
+  assert.equal(grouped[0].kind, 'completion-cite')
+  assert.deepEqual(grouped[0].texts, [FIRST, FOLLOW])
+  assert.equal(grouped[1].kind, 'completion-reply')
+  assert.equal(groupCitedQuotes([{ kind: 'completion-quote', who: 'User', text: FIRST }])[0].kind, 'completion-quote')
+  const durable = steeredReplyPost({ cites: named.quotes })
+  assert.equal(durable.quiet, true)
+  assert.equal(durable.late, true)
+  assert.deepEqual(citeTexts(durable), [FIRST, FOLLOW])
+  const remainder = steeredReplyPost({ cites: named.quotes, shown: true })
+  assert.equal(remainder.late, undefined)
+  assert.equal(remainder.quiet, true)
+  assert.equal(steeredReplyPost({ cites: named.quotes, calls: true }).quiet, false)
   assert.match(source('vendor/ds-bot/src/host/groups.js'), /multi \? \{ late: true \}/)
+})
+
+test('leftover lines in other rooms do not ask while the round is busy', async () => {
+  const round = {
+    id: 'group-line',
+    botId: 'chief',
+    sessionId: 'ga',
+    lastRoomId: 'r1',
+    updatedAt: 3,
+    segments: [],
+  }
+  const hit = {
+    id: 'far-hit',
+    botId: 'chief',
+    sessionId: 'remote',
+    lastRoomId: 'r2',
+    quote: { roomId: 'r2', seq: 1 },
+    updatedAt: 2,
+    segments: [],
+  }
+  const other = {
+    id: 'far-other',
+    botId: 'chief',
+    sessionId: 'remote-2',
+    lastRoomId: 'r2',
+    quote: { roomId: 'r2', seq: 2 },
+    updatedAt: 1,
+    segments: [],
+  }
+  const own = {
+    id: 'own-line',
+    botId: 'chief',
+    sessionId: 'own',
+    updatedAt: 1,
+    segments: [],
+  }
+  const { rt, emit, steered, delivered, rooms } = focusRoom({ round, hit, other, own })
+  rooms.r2 = {
+    id: 'r2',
+    log: [
+      { seq: 1, who: 'User', text: FIRST },
+      { seq: 2, who: 'User', text: `${FIRST}呀` },
+    ],
+  }
+  emit('ga', { type: 'turn/start', data: { turn: 1 }, time: 1 })
+  emit('r1', roomSend(FIRST, 'm-who'))
+  await settle()
+  assert.equal(rt.state.pendingRoutes.r1, undefined)
+  assert.equal(delivered.length, 0)
+  assert.equal(steered.length, 1)
+  assert.equal(steered[0].member.sessionId, 'ga')
+  assert.equal(steered[0].message.text, FIRST)
+  assert.equal(rooms.r1.log.filter(row => row.who === 'User' && row.text === FIRST).length, 1)
+})
+
+test('confirming a busy line does not stamp the cite onto an earlier reply', () => {
+  const idiom = '好。秋高气爽，落叶归根'
+  const log = [
+    { seq: 1, who: 'User', text: '新开 帮我列3个秋天的成语' },
+    { seq: 2, who: 'Chief', botId: 'chief', text: idiom },
+    { seq: 3, who: 'User', text: '新开 请写一篇约900字散文《秋水》', messageId: 'm-essay' },
+    { seq: 4, who: 'User', text: FIRST, messageId: 'm-who' },
+    { seq: 5, who: 'User', text: FOLLOW, messageId: 'm-do' },
+  ]
+  const named = lateCite({
+    quotes: [
+      { text: FIRST, seq: 4, roomId: 'r1' },
+      { text: FOLLOW, seq: 5, roomId: 'r1' },
+    ],
+  })
+  const pointer = logPointer(named, 'r1')
+  assert.equal(applyLogPointer(log, pointer, { minSeq: 4 }), -1)
+  assert.equal(log[1].quotes, undefined)
+  assert.equal(log[1].quote, undefined)
+  assert.equal(log[1].text, idiom)
+  log.push({ seq: 6, who: 'Chief', botId: 'chief', text: '秋水正文', ...pointer })
+  const hidden = citedFromLog(log, 'r1')
+  assert.deepEqual(hidden.texts, [FIRST, FOLLOW])
+  assert.equal(hidden.ids.includes('m-who'), true)
+  assert.equal(hidden.ids.includes('m-do'), true)
+  assert.equal(hideCitedHistory({ text: FIRST, messageId: 'm-who', citedTexts: hidden.texts, citedIds: hidden.ids }), true)
+  assert.equal(hideCitedHistory({ text: FOLLOW, messageId: 'm-do', citedTexts: hidden.texts, citedIds: hidden.ids }), true)
+  assert.equal(hideCitedHistory({ text: '新开 帮我列3个秋天的成语', messageId: 'm-old', citedTexts: hidden.texts, citedIds: hidden.ids }), false)
+  const html = lateCiteHtml(citeTexts(named))
+  const bubbles = [...html.matchAll(/<div class="bt-ububble">([^<]*)<\/div>/g)].map(match => match[1])
+  assert.deepEqual(bubbles, [FIRST, FOLLOW])
+  assert.equal(html.includes(idiom), false)
+  assert.equal(html.includes('秋水正文'), false)
 })
 
 test('confirming the busy line after an ask still cites 你们是谁 and 在干嘛 in send order', async () => {

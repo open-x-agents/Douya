@@ -31,6 +31,7 @@ import { keepDraftOnSlotEnd, opensGroupRelay, roundForStream, steeringReply, ste
 import { routeTakesEffect } from './route-inbound.js'
 import { applyRoomStreamFrame, clearDraftIfPosted } from '../shared/room-draft.js'
 import { lateCite } from '../shared/work-line-complete.js'
+import { postLine, relayFiles, relayMessages, relayText } from './group-stop.js'
 
 const ROOM_LOG_MAX = 60
 const ROOM_FIRST_LOOK = 12
@@ -1158,6 +1159,38 @@ export function install(rt) {
     if (frame?.type === 'end') round.draft = clearDraftIfPosted(round.draft, round.replies)
   })
 
+  // A group-wide stop takes the relays waiting in the group Session's inbox with it: the
+  // UI reads that queue, so a relay left behind keeps the group shown as queued/waiting
+  // after the user stopped it. A post whose line never reached the log gets it first, so
+  // stopping loses no text; a notice, a Continue and an already-logged post are only
+  // dropped. Anything that arrives after this is not the stop's to drop.
+  async function dropRoomRelays(room) {
+    const agent = await rt.resolveAgent(room.id)
+    if (agent?.inbox === undefined) return 0
+    let dropped = 0
+    let written = false
+    for (const message of relayMessages(agent.inbox, room.id)) {
+      const source = message.source ?? {}
+      if (source.role === 'post' && source.logged === undefined) {
+        const line = postLine({
+          room,
+          sender: { id: source.senderSessionId, name: source.senderName },
+          text: relayText(message.content),
+          extra: source,
+          files: relayFiles(message.content),
+        })
+        if (line !== undefined) {
+          ensureRoomLog(room)
+          appendRoom(room, line)
+          written = true
+        }
+      }
+      if (agent.inbox.remove(message.id) === true) dropped += 1
+    }
+    if (written) await rt.save()
+    return dropped
+  }
+
   // The user stops a member's work in this group from the group's details. Messages
   // still waiting for that member here go with it.
   async function stopMemberWork(roomId, botId) {
@@ -1175,8 +1208,8 @@ export function install(rt) {
 
   // The user stops everything at work in this group at once: the round the group's own
   // Session runs, which takes the member turns it started with it, then each member's
-  // turn here. The round goes first, so it calls no one else meanwhile. Work the same
-  // Bots do in their own chats or other groups goes on.
+  // turn here, then the relays the stop itself queued. The round goes first, so it calls
+  // no one else meanwhile. Work the same Bots do in their own chats or other groups goes on.
   async function stopRoomWork(roomId) {
     await rt.load()
     const room = rt.roomOf(roomId)
@@ -1185,6 +1218,7 @@ export function install(rt) {
     if (round) (await rt.resolveAgent(room.id)).cancel({ kind: 'user' })
     let stopped = false
     for (const botId of room.members) stopped = (await stopMemberWork(room.id, botId)) || stopped
+    await dropRoomRelays(room)
     return round || stopped
   }
   rt.stopRoomWork = stopRoomWork

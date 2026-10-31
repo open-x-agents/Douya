@@ -20,7 +20,7 @@ import { BtwCardView } from './btw.js'
 import { partIndexOf, withBtwRows } from './btw-model.js'
 import { layoutOf, thinkingShown } from './themes.js'
 import { draftForDisplay } from '../shared/room-draft.js'
-import { applyScroll, pinnedToBottom, projectRelay, scrollAction, scrollGroup } from '../shared/work-line-complete.js'
+import { anchoredCompletions, applyScroll, pinnedToBottom, projectRelay, scrollAction, scrollGroup } from '../shared/work-line-complete.js'
 import { groupUserBubble } from '../host/group-steer.js'
 
 export { clockLabel }
@@ -313,17 +313,25 @@ function GroupMessage({ bot, text, texts = [text], room, roster, actions, msgKey
 
 // A member's messages in a row, as one block under its name: what it says while it
 // works comes one message at a time. A block carries the last message's time and run.
+const citedReply = (reply) => reply?.late === true && typeof reply.quoteText === 'string' && reply.quoteText !== ''
+
 export function stackReplies(replies) {
   const items = []
   replies.forEach((reply, index) => {
     const last = items.at(-1)
-    if (reply.kind === undefined && last?.reply.kind === undefined && last?.reply.botId === reply.botId) {
+    if (reply.kind === undefined && last?.reply.kind === undefined && last?.reply.botId === reply.botId && !citedReply(reply) && !citedReply(last.reply)) {
       last.texts.push(reply.text)
       last.time = reply.time
       last.duration = reply.duration
     } else items.push({ reply, index, texts: reply.kind === undefined ? [reply.text] : [], time: reply.time, duration: reply.duration })
   })
   return items
+}
+
+function LateCite({ text }) {
+  return h('div', { className: 'bt-route-cite', 'data-late-cite': '' },
+    h('div', { className: 'bt-route-cite-label' }, t('Replying to what you wrote earlier')),
+    h('div', { className: 'bt-route-cite-text' }, text))
 }
 
 // A centered event line that names a group chat and opens it.
@@ -609,10 +617,14 @@ export function TriggerCell({ node, sessionId, useRoster, useSessions, useTurnCl
         const file = source.length === undefined ? undefined : (data.content ?? []).find(block => block?.type === 'file')?.attachment
         const text = stripHeader(contentText(data.content))
         // A trigger's data carries no turn; its event seq is the one durable name of this post.
-        return h(GroupMessage, {
+        const message = h(GroupMessage, {
           bot: poster, text: file ? stripLongNote(text) : text, room, roster, actions, msgKey: `${sessionId}:post:${data.seq ?? node.key}`, useUi, time: data.time,
           whole: file ? { length: source.length, load: () => actions.fileText(file) } : undefined,
         })
+        if (source.late === true && typeof source.quoteText === 'string' && source.quoteText !== '') {
+          return h(Fragment, null, h(LateCite, { text: source.quoteText }), message)
+        }
+        return message
       }
       if (source.role === 'report') {
         return h(GroupEvent, { prefix: t('Replies from'), room: roster.roomsById[source.roomId], name: t('a group chat'), roster, actions })
@@ -918,7 +930,7 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
     broken = parsed.broken
   }
   const shownDraft = !done || follow ? live.draft : undefined
-  const projected = projectRelay({ replies, draft: shownDraft, completions: completions ?? [], roomId: sessionId })
+  const projected = projectRelay({ replies, draft: shownDraft, completions: anchoredCompletions(replies, completions ?? []), roomId: sessionId })
   const draft = draftForDisplay(projected.draft, projected.replies)
   if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
     const scroller = document.querySelector('[data-conversation-scroll]')
@@ -981,11 +993,12 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
       if (reply.kind === 'completion-quote') {
         return h('div', {
           key: `complete-q-${reply.exchangeId}-${index}`,
-          className: 'bt-urow',
+          className: reply.who === 'User' ? 'bt-urow' : 'bt-route-cite',
           'data-work-complete': reply.exchangeId,
           ...(reply.first === true ? { 'data-work-complete-first': '' } : {}),
-        }, h('div', { className: 'bt-ububble' },
-          h(MarkdownText, { text: reply.text, labels: mdLabels(), variant: 'compact' })))
+        }, reply.who === 'User'
+          ? h('div', { className: 'bt-ububble' }, h(MarkdownText, { text: reply.text, labels: mdLabels(), variant: 'compact' }))
+          : h(LateCite, { text: reply.text }))
       }
       if (reply.kind === 'completion-reply') {
         return h('div', {
@@ -1044,7 +1057,9 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
       if (reply.kind === 'done') {
         return h('div', { key: `${reply.botId}-${index}`, className: 'bt-event' }, t('{name} finished its work', { name: bot.name }))
       }
-      return h(GroupMessage, { key: `${reply.botId}-${index}`, bot, texts, room, roster, actions, msgKey: callId ? `${sessionId}:${callId}:${index}` : undefined, useUi, time, duration })
+      const message = h(GroupMessage, { key: `${reply.botId}-${index}`, bot, texts, room, roster, actions, msgKey: callId ? `${sessionId}:${callId}:${index}` : undefined, useUi, time, duration })
+      if (citedReply(reply)) return h(Fragment, { key: `late-${reply.botId}-${index}` }, h(LateCite, { text: reply.quoteText }), message)
+      return message
     }),
     draft?.text ? (() => {
       const bot = roster.byId[draft.botId] ?? { id: draft.botId, name: t('a Bot'), color: 'gray' }

@@ -121,8 +121,8 @@ test('D4 a room the user scrolled up keeps scrollTop while order and placeholder
   assert.equal(applied.lockedTop, null)
   const logs = {
     r1: [
-      { seq: 1, text: QUESTION_A },
-      { seq: 2, text: QUESTION_B },
+      { seq: 1, who: 'User', text: QUESTION_A },
+      { seq: 2, who: 'User', text: QUESTION_B },
     ],
   }
   const projected = projectRelay({
@@ -160,7 +160,7 @@ test('D5 one completion stays beside the messages around it', () => {
     replies,
     completions,
     roomId: 'r1',
-    logs: { r1: [{ seq: 1, text: '唯一的问题原句' }] },
+    logs: { r1: [{ seq: 1, who: 'User', text: '唯一的问题原句' }] },
   })
   assert.deepEqual(textsOf(projected.replies), ['先说的闲话', '无关的回复', '唯一的问题原句', '唯一的答案', '后来的闲话'])
   assert.equal(projected.replies.some(row => row.kind === 'working'), false)

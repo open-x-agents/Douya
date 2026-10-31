@@ -162,12 +162,14 @@ export function normalizeItems(sourceData) {
   // Important emails
   if (sourceData.gmail?.important) {
     for (const email of sourceData.gmail.important) {
+      // Gmail uses messageId or threadId, not id
+      const emailId = email.messageId || email.threadId || email.id;
       items.push({
         source: 'gmail',
         type: 'email-important',
-        sourceId: `gmail:${email.id}`,
+        sourceId: `gmail:${emailId}`,
         title: email.subject || '(no subject)',
-        url: `https://mail.google.com/mail/u/0/#inbox/${email.id}`,
+        url: `https://mail.google.com/mail/u/0/#inbox/${emailId}`,
         body: `From: ${email.from || 'unknown'}`,
         createdAt: email.internalDate ? new Date(parseInt(email.internalDate)).toISOString() : null,
         metadata: {
@@ -181,13 +183,14 @@ export function normalizeItems(sourceData) {
   // Unread emails (lower priority)
   if (sourceData.gmail?.unread) {
     for (const email of sourceData.gmail.unread.slice(0, 10)) {
-      if (!items.find(i => i.sourceId === `gmail:${email.id}`)) {
+      const emailId = email.messageId || email.threadId || email.id;
+      if (!items.find(i => i.sourceId === `gmail:${emailId}`)) {
         items.push({
           source: 'gmail',
           type: 'email-unread',
-          sourceId: `gmail:${email.id}`,
+          sourceId: `gmail:${emailId}`,
           title: email.subject || '(no subject)',
-          url: `https://mail.google.com/mail/u/0/#inbox/${email.id}`,
+          url: `https://mail.google.com/mail/u/0/#inbox/${emailId}`,
           body: `From: ${email.from || 'unknown'}`,
           createdAt: email.internalDate ? new Date(parseInt(email.internalDate)).toISOString() : null,
           metadata: {
@@ -385,7 +388,10 @@ export function groupAndRank(classified) {
 export async function writeBrief(grouped, llmClient) {
   const promptTemplate = await readFile(join(__dirname, 'prompts/write-brief.md'), 'utf-8');
   
-  // Build items summary
+  // Analyze data for chart opportunities
+  const chartOpportunities = analyzeForCharts(grouped);
+  
+  // Build items summary with chart hints
   const itemsSummary = {
     urgent: grouped.urgent.map(i => ({
       title: i.title,
@@ -393,6 +399,7 @@ export async function writeBrief(grouped, llmClient) {
       source: i.source,
       url: i.url,
       reasoning: i.classification.reasoning,
+      metadata: i.metadata,
     })),
     action: grouped.action.map(i => ({
       title: i.title,
@@ -400,6 +407,7 @@ export async function writeBrief(grouped, llmClient) {
       source: i.source,
       url: i.url,
       reasoning: i.classification.reasoning,
+      metadata: i.metadata,
     })),
     fyi: grouped.fyi.slice(0, 10).map(i => ({
       title: i.title,
@@ -407,7 +415,9 @@ export async function writeBrief(grouped, llmClient) {
       source: i.source,
       url: i.url,
       reasoning: i.classification.reasoning,
+      metadata: i.metadata,
     })),
+    chartOpportunities,
   };
   
   const prompt = promptTemplate
@@ -420,7 +430,7 @@ export async function writeBrief(grouped, llmClient) {
   let fullText = '';
   for await (const chunk of llmClient.stream({
     messages: [
-      { role: 'system', content: 'You are a daily briefing assistant. Generate concise, actionable summaries.' },
+      { role: 'system', content: 'You are a daily briefing assistant. Generate concise, actionable summaries with visual blocks.' },
       { role: 'user', content: prompt },
     ],
     maxTokens: 1500,
@@ -450,6 +460,90 @@ export async function writeBrief(grouped, llmClient) {
   });
   
   return brief;
+}
+
+/**
+ * Analyze grouped items for chart opportunities
+ * Returns suggestions for the LLM to create chart blocks
+ */
+function analyzeForCharts(grouped) {
+  const charts = [];
+  
+  // GitHub: PRs/issues per repo
+  const githubItems = [...grouped.urgent, ...grouped.action, ...grouped.fyi].filter(i => i.source === 'github');
+  if (githubItems.length > 2) {
+    const repoCount = {};
+    githubItems.forEach(item => {
+      // Extract repo from metadata or URL
+      const repo = item.metadata?.repository || item.url?.match(/github\.com\/([^\/]+\/[^\/]+)/)?.[1];
+      if (repo) {
+        repoCount[repo] = (repoCount[repo] || 0) + 1;
+      }
+    });
+    
+    const topRepos = Object.entries(repoCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    
+    if (topRepos.length > 1) {
+      charts.push({
+        type: 'chart',
+        title: 'GitHub items by repository',
+        chartType: 'bar',
+        data: topRepos.map(([_, count]) => count),
+        labels: topRepos.map(([repo]) => repo.split('/')[1] || repo),
+        suggestion: `Create a bar chart showing ${topRepos.map(([r, c]) => `${r}: ${c}`).join(', ')}`,
+      });
+    }
+  }
+  
+  // Gmail: Emails by sender
+  const emailItems = [...grouped.urgent, ...grouped.action, ...grouped.fyi].filter(i => i.source === 'gmail');
+  if (emailItems.length > 3) {
+    const senderCount = {};
+    emailItems.forEach(item => {
+      const sender = item.metadata?.from || 'Unknown';
+      // Extract name before email
+      const senderName = sender.split('<')[0].trim() || sender.split('@')[0];
+      senderCount[senderName] = (senderCount[senderName] || 0) + 1;
+    });
+    
+    const topSenders = Object.entries(senderCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4);
+    
+    if (topSenders.length > 1) {
+      charts.push({
+        type: 'chart',
+        title: 'Emails by sender',
+        chartType: 'bar',
+        data: topSenders.map(([_, count]) => count),
+        labels: topSenders.map(([sender]) => sender.substring(0, 12)),
+        suggestion: `Create a bar chart showing emails from ${topSenders.map(([s, c]) => `${s}: ${c}`).join(', ')}`,
+      });
+    }
+  }
+  
+  // Calendar: Timeline for today's events
+  const calendarItems = [...grouped.urgent, ...grouped.action].filter(i => i.source === 'googlecalendar');
+  if (calendarItems.length > 0) {
+    const timeline = calendarItems.map(item => {
+      const timeMatch = item.body?.match(/(\d{1,2}:\d{2})/);
+      const time = timeMatch ? timeMatch[1] : '';
+      return { time, title: item.title };
+    }).filter(t => t.time);
+    
+    if (timeline.length > 0) {
+      charts.push({
+        type: 'timeline',
+        title: "Today's schedule",
+        items: timeline,
+        suggestion: `Create a timeline block with events: ${timeline.map(t => `${t.time} ${t.title}`).join(', ')}`,
+      });
+    }
+  }
+  
+  return charts;
 }
 
 /**

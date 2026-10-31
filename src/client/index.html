@@ -647,10 +647,115 @@
         </div>
       `).join('') || '';
       
-      content.innerHTML = cards || '<div class="card a in"><p>暂无汇聚内容</p></div>';
+      if (!cards) {
+        // Show manual trigger button when no digest
+        content.innerHTML = `
+          <div class="card a in" style="text-align:center;padding:40px">
+            <p style="color:#94a3b8;margin-bottom:24px">暂无汇聚内容</p>
+            <button id="generateDigestBtn" class="btn primary" style="font-size:16px;padding:12px 32px">
+              立即汇聚
+            </button>
+          </div>
+        `;
+        
+        // Attach event listener
+        const btn = $('generateDigestBtn');
+        if (btn) {
+          btn.addEventListener('click', generateDigestManually);
+        }
+      } else {
+        content.innerHTML = cards;
+      }
     } catch (err) {
       console.error('Failed to load digest:', err);
       content.innerHTML = '<div class="error">加载失败，请检查 Composio 配置</div>';
+    }
+  }
+
+  // Manually trigger digest generation
+  async function generateDigestManually() {
+    const content = $('digestContent');
+    const btn = $('generateDigestBtn');
+    
+    // Show loading state
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '生成中...';
+    }
+    content.innerHTML = `
+      <div class="card a in" style="text-align:center;padding:40px">
+        <div class="loading">正在汇聚数据并生成摘要...</div>
+      </div>
+    `;
+    
+    try {
+      const res = await fetch('/api/digest/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      const result = await res.json();
+      
+      if (!result.success) {
+        content.innerHTML = `
+          <div class="card a in" style="text-align:center;padding:40px">
+            <p style="color:#ef4444;margin-bottom:16px">⚠️ ${escapeHtml(result.error || '生成失败')}</p>
+            <button id="generateDigestBtn" class="btn primary" onclick="generateDigestManually()">
+              重新尝试
+            </button>
+          </div>
+        `;
+        return;
+      }
+      
+      // Display generated digest
+      const digest = result.digest;
+      const timestamp = new Date(result.timestamp).toLocaleString('zh-CN', {
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      
+      const cards = digest.cards?.map(card => {
+        let cardHtml = `
+          <div class="card a in">
+            <h3>${escapeHtml(card.title)}</h3>
+        `;
+        
+        if (card.description) {
+          cardHtml += `<p>${escapeHtml(card.description)}</p>`;
+        }
+        
+        if (card.url) {
+          cardHtml += `<a href="${escapeHtml(card.url)}" target="_blank" style="color:#667eea;text-decoration:none">查看详情 →</a>`;
+        }
+        
+        cardHtml += `</div>`;
+        return cardHtml;
+      }).join('') || '';
+      
+      content.innerHTML = `
+        <div class="stamp a in" style="margin-bottom:16px;color:#64748b">
+          ${escapeHtml(digest.summary || '今日汇聚')} · 生成于 ${timestamp}
+        </div>
+        ${cards}
+        <div style="text-align:center;margin-top:24px">
+          <button id="refreshDigestBtn" class="btn" onclick="generateDigestManually()">
+            重新汇聚
+          </button>
+        </div>
+      `;
+    } catch (err) {
+      console.error('Failed to generate digest:', err);
+      content.innerHTML = `
+        <div class="card a in" style="text-align:center;padding:40px">
+          <p style="color:#ef4444;margin-bottom:16px">⚠️ 生成失败：${escapeHtml(err.message)}</p>
+          <button id="generateDigestBtn" class="btn primary" onclick="generateDigestManually()">
+            重新尝试
+          </button>
+        </div>
+      `;
     }
   }
 

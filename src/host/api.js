@@ -681,6 +681,215 @@ export function createApiRouter(ctx) {
     },
 
     /**
+     * POST /api/digest/generate - Manually trigger digest generation with LLM summary
+     */
+    async generateDigestNow() {
+      try {
+        const client = getComposioClient();
+        if (!client) {
+          return {
+            success: false,
+            error: 'Composio 未配置。请先设置 Composio API Key',
+          };
+        }
+
+        // Check LLM configuration
+        const llmConfig = configStore?.get()?.llm;
+        if (!llmConfig?.apiKey || !llmConfig?.provider) {
+          return {
+            success: false,
+            error: '模型未配置。请先在设置中配置 LLM 模型',
+          };
+        }
+
+        // Get ACTIVE connected accounts
+        const result = await client.getConnectedAccounts();
+        const accounts = result?.items || [];
+        const activeAccounts = accounts.filter(acc => acc.status === 'ACTIVE' && acc.toolkit?.slug);
+
+        if (activeAccounts.length === 0) {
+          return {
+            success: false,
+            error: '未连接任何数据源。请先连接 GitHub、Gmail 或 Calendar',
+          };
+        }
+
+        // Fetch data from each active source
+        const sourceData = {};
+        
+        for (const account of activeAccounts) {
+          const slug = account.toolkit.slug;
+          
+          try {
+            if (slug === 'github') {
+              // Fetch repos and PRs
+              const [repos, prs] = await Promise.all([
+                client.executeAction('GITHUB_LIST_REPOSITORIES_FOR_THE_AUTHENTICATED_USER', {
+                  per_page: 5,
+                  sort: 'updated',
+                }),
+                client.executeAction('GITHUB_SEARCH_ISSUES_AND_PULL_REQUESTS', {
+                  q: 'is:pr is:open involves:@me',
+                  per_page: 5,
+                }),
+              ]);
+              
+              sourceData.github = {
+                repos: repos?.data?.repositories?.slice(0, 5) || [],
+                prs: prs?.data?.items?.slice(0, 5) || [],
+              };
+            } else if (slug === 'gmail') {
+              const emails = await client.executeAction('GMAIL_FETCH_EMAILS', {
+                max_results: 5,
+                query: 'in:inbox is:unread',
+              });
+              
+              sourceData.gmail = {
+                unread: emails?.data?.messages || [],
+              };
+            } else if (slug === 'googlecalendar') {
+              const now = new Date();
+              const startOfDay = new Date(now.setHours(0, 0, 0, 0)).toISOString();
+              const endOfDay = new Date(now.setHours(23, 59, 59, 999)).toISOString();
+              
+              const events = await client.executeAction('GOOGLECALENDAR_EVENTS_LIST', {
+                timeMin: startOfDay,
+                timeMax: endOfDay,
+                maxResults: 10,
+              });
+              
+              sourceData.calendar = {
+                events: events?.data?.items || [],
+              };
+            }
+          } catch (err) {
+            console.warn(`[generateDigest] Failed to fetch ${slug}:`, err.message);
+          }
+        }
+
+        // Build context for LLM
+        let contextText = '请基于以下真实数据生成今日汇聚摘要：\n\n';
+        
+        if (sourceData.github) {
+          if (sourceData.github.repos.length > 0) {
+            contextText += '**GitHub 仓库（最近更新）：**\n';
+            sourceData.github.repos.forEach(repo => {
+              contextText += `- ${repo.full_name}: ${repo.description || '无描述'}\n`;
+            });
+            contextText += '\n';
+          }
+          
+          if (sourceData.github.prs.length > 0) {
+            contextText += '**GitHub 待处理 PR：**\n';
+            sourceData.github.prs.forEach(pr => {
+              contextText += `- #${pr.number} ${pr.title} (${pr.state})\n`;
+            });
+            contextText += '\n';
+          }
+        }
+        
+        if (sourceData.gmail?.unread.length > 0) {
+          contextText += `**Gmail 未读邮件：** ${sourceData.gmail.unread.length} 封\n`;
+          sourceData.gmail.unread.slice(0, 3).forEach(msg => {
+            contextText += `- ${msg.subject || '(无主题)'} from ${msg.from || 'unknown'}\n`;
+          });
+          contextText += '\n';
+        }
+        
+        if (sourceData.calendar?.events.length > 0) {
+          contextText += '**今日日程：**\n';
+          sourceData.calendar.events.forEach(event => {
+            const start = event.start?.dateTime || event.start?.date;
+            contextText += `- ${event.summary || '(无标题)'} (${start})\n`;
+          });
+          contextText += '\n';
+        }
+
+        // Call LLM to generate summary
+        const { createLLMClient } = await import('./llm-client.js');
+        const llm = createLLMClient({
+          provider: llmConfig.provider,
+          baseURL: llmConfig.baseURL,
+          apiKey: llmConfig.apiKey,
+          model: llmConfig.model,
+          log: console.log,
+        });
+
+        const prompt = contextText + `
+请生成一个简洁的今日汇聚摘要，格式为 JSON：
+{
+  "summary": "一句话总结（20字内）",
+  "cards": [
+    {"type": "info", "title": "卡片标题", "description": "简短描述", "url": "链接（如有）"}
+  ]
+}
+
+要求：
+1. 只使用上述真实数据，绝不编造
+2. cards 数组包含 3-5 张卡片
+3. 每张卡片突出一个重点（PR、邮件、日程等）
+4. 简洁专业，有行动价值`;
+
+        let fullText = '';
+        for await (const chunk of llm.stream({
+          messages: [
+            { role: 'system', content: '你是一个数据汇聚助手，专门生成简洁准确的每日摘要。' },
+            { role: 'user', content: prompt },
+          ],
+          maxTokens: 1000,
+          responseFormat: { type: 'json_object' },
+        })) {
+          if (chunk.type === 'text' && chunk.text) {
+            fullText += chunk.text;
+          }
+        }
+
+        // Parse LLM response
+        let digestData;
+        try {
+          digestData = JSON.parse(fullText);
+        } catch (err) {
+          console.error('[generateDigest] Failed to parse LLM response:', fullText.substring(0, 200));
+          return {
+            success: false,
+            error: '生成摘要失败：模型返回格式错误',
+          };
+        }
+
+        // Save to store
+        const timestamp = new Date().toISOString();
+        const digestRecord = {
+          summary: digestData.summary || '今日汇聚',
+          cards: digestData.cards || [],
+          sources: activeAccounts.map(a => a.toolkit.slug),
+          generatedAt: timestamp,
+          manual: true,
+        };
+
+        const state = store.get();
+        state.lastDigest = digestRecord;
+        state.digestHistory = state.digestHistory || [];
+        state.digestHistory.unshift(digestRecord);
+        state.digestHistory = state.digestHistory.slice(0, 30); // Keep last 30
+        await store.save(state);
+
+        console.log('[generateDigest] Generated and saved digest:', digestRecord.summary);
+
+        return {
+          success: true,
+          digest: digestRecord,
+          timestamp,
+        };
+      } catch (err) {
+        console.error('[generateDigest] Error:', err);
+        return {
+          success: false,
+          error: err.message || '生成汇聚失败',
+        };
+      }
+    },
+
+    /**
      * GET /api/sources - Get connected sources status
      */
     async getSources() {
@@ -1220,6 +1429,10 @@ export function mountApiRoutes(server, router) {
         res.end(JSON.stringify(data));
       } else if (url.pathname === '/api/digest' && req.method === 'GET') {
         const data = await router.getDigest();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
+      } else if (url.pathname === '/api/digest/generate' && req.method === 'POST') {
+        const data = await router.generateDigestNow();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(data));
       } else if (url.pathname === '/api/sources' && req.method === 'GET') {

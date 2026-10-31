@@ -135,15 +135,15 @@ async function callLLM(ctx, messages, sessionId = 'web-chat') {
         console.log(`[LLM] Response: text=${result.text?.length || 0} chars, cards=${result.cards?.length || 0}`);
         return result;
       } else {
-        console.warn('[LLM] Empty response from ds-bot LLM');
+        console.warn('[LLM] Empty response from ds-bot LLM - returning prompt');
         return {
-          text: '模型返回了空响应',
+          text: '我暂时没有想法，您可以换个问法试试',
           cards: [
             {
-              type: 'error',
-              title: '模型返回空白',
-              description: '请重试或检查模型配置',
-              actions: [{ label: '重试', value: 'retry' }],
+              type: 'action',
+              title: '换个方式问',
+              description: '可能是模型没有理解您的问题',
+              actions: [{ label: '重新提问', value: 'retry' }],
             },
           ],
         };
@@ -197,15 +197,15 @@ async function callLLM(ctx, messages, sessionId = 'web-chat') {
           console.log(`[LLM] Parsed: text=${result.text?.length || 0} chars, cards=${result.cards?.length || 0}`);
           return result;
         } else {
-          console.warn('[LLM] Empty response from model');
+          console.warn('[LLM] Empty response from model - returning prompt');
           return {
-            text: '模型返回了空响应',
+            text: '我暂时没有想法，您可以换个问法试试',
             cards: [
               {
-                type: 'error',
-                title: '模型返回空白',
-                description: '请重试或检查模型配置',
-                actions: [{ label: '重试', value: 'retry' }],
+                type: 'action',
+                title: '换个方式问',
+                description: '可能是模型没有理解您的问题',
+                actions: [{ label: '重新提问', value: 'retry' }],
               },
             ],
           };

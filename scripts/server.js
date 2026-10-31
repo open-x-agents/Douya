@@ -8,6 +8,7 @@ import { createServer } from 'node:http';
 import { createRuntime } from '../index.js';
 import { mountApiRoutes } from '../src/host/api.js';
 import { createLLMClient, PROVIDERS } from '../src/host/llm-client.js';
+import { createComposioClient } from '../src/host/composio.js';
 
 const PORT = process.env.PORT || process.argv[2] || 7777;
 
@@ -23,9 +24,27 @@ const config = {
 
 console.log('🚀 Starting Open Digital Mate server...');
 console.log(`📁 Data directory: ${config.home}`);
-console.log(`🔑 Composio configured: ${config.composioApiKey ? 'Yes' : 'No'}`);
 
 const runtime = createRuntime(null, config);
+
+// Build Composio client from saved config at startup
+const savedConfig = runtime.configStore?.get();
+if (savedConfig?.composio?.apiKey) {
+  try {
+    runtime.composioClient = createComposioClient({
+      apiKey: savedConfig.composio.apiKey,
+      entityId: savedConfig.composio.entityId || 'default',
+    });
+    console.log('🔑 Composio configured: Yes (from saved config)');
+  } catch (err) {
+    console.error('⚠️  Failed to build Composio client from config:', err.message);
+    console.log('🔑 Composio configured: No');
+  }
+} else if (config.composioApiKey) {
+  console.log('🔑 Composio configured: Yes (from environment)');
+} else {
+  console.log('🔑 Composio configured: No');
+}
 
 // Create mock ctx with LLM client
 const ctx = { llm: null };

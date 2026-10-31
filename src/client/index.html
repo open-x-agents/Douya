@@ -108,6 +108,16 @@
   .bubble{max-width:86%;background:#fff;border:1px solid var(--line);border-radius:11px;padding:9px 12px;font-size:13px;line-height:1.65}
   .bubble.me{margin-left:auto;background:#e9eeff;border-color:var(--blue-line)}
   .bubble small{display:block;font-size:10.5px;color:var(--ink3);margin-top:4px}
+  .typing{display:inline-block;animation:typing 1.5s infinite}
+  @keyframes typing{0%,100%{opacity:.3}50%{opacity:1}}
+
+  .chat-card{background:var(--gray-soft);border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:8px;max-width:92%}
+  .card-title{font-size:13px;font-weight:600;margin-bottom:8px;color:var(--ink)}
+  .card-actions,.card-choices{display:flex;gap:6px;flex-wrap:wrap}
+  .card-btn{border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 12px;font-size:12px;color:var(--ink);cursor:pointer;transition:.2s;font-family:inherit}
+  .card-btn:hover{border-color:var(--blue);color:var(--blue)}
+  .card-btn.choice{background:var(--blue-soft);border-color:var(--blue-line);color:var(--blue)}
+  
   .dockFoot{border-top:1px solid var(--line);padding:7px 10px;display:flex;gap:8px;align-items:center;background:#fff}
   .dockFoot input{flex:1;border:0;outline:none;font:inherit;font-size:12.5px;padding:5px 2px;color:var(--ink);background:none;min-width:0}
   .dockFoot .send{width:27px;height:27px;border-radius:8px;background:var(--blue);color:#fff;border:0;font-size:13px;cursor:pointer}
@@ -215,6 +225,10 @@
               <li><code>DIGEST_SCHEDULE</code> - 推送时间（格式：HH:MM，默认 08:00）</li>
             </ul>
             <p style="margin-top:12px">当前状态：<span id="configStatus">检查中...</span></p>
+            <p style="margin-top:8px;font-size:12px;color:var(--ink2)">LLM 聊天：<span id="llmStatus">检查中...</span></p>
+            <div class="actions" style="margin-top:12px">
+              <button class="btn primary" id="pushDigestBtn">手动推送汇聚</button>
+            </div>
           </div>
 
           <div class="card a in">
@@ -308,12 +322,14 @@
     if (e.key === 'Enter') sendMessage();
   });
 
-  function sendMessage() {
+  async function sendMessage() {
     const input = $('dockInput');
     const text = input.value.trim();
     if (!text) return;
 
     const body = $('dockBody');
+    
+    // Add user message
     const bubble = document.createElement('div');
     bubble.className = 'bubble me';
     bubble.innerHTML = `${escapeHtml(text)}<small>${new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'})}</small>`;
@@ -321,14 +337,82 @@
     body.scrollTop = body.scrollHeight;
     input.value = '';
 
-    // TODO: Send to backend
-    setTimeout(() => {
-      const reply = document.createElement('div');
-      reply.className = 'bubble';
-      reply.innerHTML = `收到你的消息，正在处理中...<small>${new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'})}</small>`;
-      body.appendChild(reply);
-      body.scrollTop = body.scrollHeight;
-    }, 500);
+    // Show typing indicator
+    const typing = document.createElement('div');
+    typing.className = 'bubble';
+    typing.innerHTML = '<span class="typing">⋯</span>';
+    body.appendChild(typing);
+    body.scrollTop = body.scrollHeight;
+
+    try {
+      // Send to backend
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, sessionId: 'web-default' }),
+      });
+      const data = await res.json();
+
+      // Remove typing indicator
+      typing.remove();
+
+      if (data.error) {
+        addBotMessage(data.error, data.time);
+      } else {
+        addBotMessage(data.text, data.time, data.cards);
+      }
+    } catch (err) {
+      typing.remove();
+      addBotMessage('抱歉，发送失败了。请稍后重试。', null);
+    }
+  }
+
+  function addBotMessage(text, time, cards) {
+    const body = $('dockBody');
+    
+    // Add text bubble
+    const reply = document.createElement('div');
+    reply.className = 'bubble';
+    reply.innerHTML = `${escapeHtml(text)}<small>${time || new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'})}</small>`;
+    body.appendChild(reply);
+
+    // Add interactive cards if present
+    if (cards && cards.length > 0) {
+      cards.forEach(card => {
+        const cardEl = document.createElement('div');
+        cardEl.className = 'chat-card';
+        
+        if (card.type === 'action') {
+          cardEl.innerHTML = `
+            <div class="card-title">${escapeHtml(card.title)}</div>
+            <div class="card-actions">
+              ${card.actions.map(a => `<button class="card-btn" data-value="${escapeHtml(a.value)}">${escapeHtml(a.label)}</button>`).join('')}
+            </div>
+          `;
+        } else if (card.type === 'choice') {
+          cardEl.innerHTML = `
+            <div class="card-title">${escapeHtml(card.title)}</div>
+            <div class="card-choices">
+              ${card.choices.map(c => `<button class="card-btn choice" data-value="${escapeHtml(c.value)}">${escapeHtml(c.label)}</button>`).join('')}
+            </div>
+          `;
+        }
+        
+        body.appendChild(cardEl);
+        
+        // Add click handlers to card buttons
+        cardEl.querySelectorAll('.card-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const value = btn.getAttribute('data-value');
+            const label = btn.textContent;
+            $('dockInput').value = label;
+            sendMessage();
+          });
+        });
+      });
+    }
+
+    body.scrollTop = body.scrollHeight;
   }
 
   function escapeHtml(text) {
@@ -440,14 +524,46 @@
       const res = await fetch('/api/config/check');
       const data = await res.json();
       const status = $('configStatus');
+      const llmStatus = $('llmStatus');
+      
       if (data.configured) {
         status.innerHTML = '<span style="color:var(--green)">✓ 已配置</span>';
       } else {
         status.innerHTML = '<span style="color:var(--amber)">⚠ 未配置或配置不完整</span>';
       }
+      
+      if (data.llmConfigured) {
+        llmStatus.innerHTML = '<span style="color:var(--green)">✓ 已配置</span>';
+      } else {
+        llmStatus.innerHTML = '<span style="color:var(--red)">✗ 未配置（聊天功能受限）</span>';
+      }
     } catch (err) {
       $('configStatus').innerHTML = '<span style="color:var(--red)">检查失败</span>';
+      $('llmStatus').innerHTML = '<span style="color:var(--red)">检查失败</span>';
     }
+  }
+
+  // Manual digest push
+  const pushBtn = $('pushDigestBtn');
+  if (pushBtn) {
+    pushBtn.addEventListener('click', async () => {
+      pushBtn.disabled = true;
+      pushBtn.textContent = '推送中...';
+      try {
+        const res = await fetch('/api/digest/push', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          alert(`推送成功！已发送 ${data.deliveries?.length || 0} 条消息`);
+        } else {
+          alert(`推送失败：${data.error}`);
+        }
+      } catch (err) {
+        alert('推送失败：' + err.message);
+      } finally {
+        pushBtn.disabled = false;
+        pushBtn.textContent = '手动推送汇聚';
+      }
+    });
   }
 
   // Initialize

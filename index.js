@@ -10,7 +10,7 @@ import { dailyReportCard, readAction, reminderCard } from './src/host/cards.js'
 import { installPanel, reportKey } from './src/host/panel.js'
 import { createFeishuSender } from './src/host/feishu.js'
 import { PANEL_ROUTE, SNOOZE_MINUTES, TICK_SECONDS } from './src/host/constants.js'
-import { createComposioClient, scheduleDailyDigest } from './src/host/composio.js'
+import { createComposioClient, scheduleDailyDigest, generateDailyDigest, pushDailyDigest } from './src/host/composio.js'
 import { createApiRouter } from './src/host/api.js'
 
 export const name = 'opendigitalmate'
@@ -145,9 +145,18 @@ export function createRuntime(ctx, config = {}) {
       { digestSchedule, runImmediately: false },
       async () => {
         log('Running scheduled daily digest...')
-        const digest = await apiRouter.getDigest()
-        // TODO: Send digest to configured recipients
-        log(`Digest generated with ${digest.items?.length || 0} items`)
+        try {
+          const digest = await generateDailyDigest(composioClient)
+          const results = await pushDailyDigest({
+            digest,
+            store,
+            config,
+            sendCard,
+          })
+          log(`Digest pushed: ${results.length} deliveries, ${results.filter(r => r.success).length} successful`)
+        } catch (err) {
+          log(`Digest push failed: ${err.message}`)
+        }
       }
     )
   }

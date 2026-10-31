@@ -184,9 +184,142 @@ export async function getSourcesStatus(composioClient) {
 }
 
 /**
- * Schedule daily digest push
+ * Push daily digest to configured channels
  */
-export function scheduleDailyDigest(config, callback) {
+export async function pushDailyDigest({ digest, store, config, sendCard }) {
+  const results = [];
+
+  try {
+    // Get members who should receive digest
+    const state = store?.get?.() || {};
+    const members = Object.values(state.members || {});
+
+    // Build digest card for Feishu
+    const digestCard = buildDigestCard(digest);
+
+    // Send to configured recipients
+    const recipients = config?.digestRecipients || [];
+    if (config?.ownerOpenId) {
+      recipients.push(config.ownerOpenId);
+    }
+
+    for (const recipientId of [...new Set(recipients)]) {
+      try {
+        if (sendCard && typeof sendCard === 'function') {
+          const messageId = await sendCard({
+            receiveId: recipientId,
+            card: digestCard,
+          });
+          results.push({
+            channel: 'feishu',
+            recipient: recipientId,
+            success: true,
+            messageId,
+          });
+        }
+      } catch (err) {
+        results.push({
+          channel: 'feishu',
+          recipient: recipientId,
+          success: false,
+          error: err.message,
+        });
+      }
+    }
+
+    // Store digest in state for web UI
+    if (store?.save) {
+      const newState = {
+        ...state,
+        lastDigest: {
+          ...digest,
+          pushedAt: new Date().toISOString(),
+        },
+      };
+      await store.save(newState);
+    }
+
+  } catch (err) {
+    console.error('Push daily digest failed:', err);
+    results.push({
+      channel: 'system',
+      success: false,
+      error: err.message,
+    });
+  }
+
+  return results;
+}
+
+/**
+ * Build Feishu card for daily digest
+ */
+function buildDigestCard(digest) {
+  const elements = [
+    {
+      tag: 'div',
+      text: {
+        tag: 'lark_md',
+        content: `**每日汇聚** · ${new Date().toLocaleDateString('zh-CN')}`,
+      },
+    },
+    {
+      tag: 'hr',
+    },
+  ];
+
+  // Add each source's items
+  if (digest.items && digest.items.length > 0) {
+    digest.items.forEach((item, index) => {
+      elements.push({
+        tag: 'div',
+        text: {
+          tag: 'lark_md',
+          content: `**${item.title}**\n${item.description}`,
+        },
+      });
+      
+      if (item.actions && item.actions.length > 0) {
+        elements.push({
+          tag: 'action',
+          actions: item.actions.map(action => ({
+            tag: 'button',
+            text: {
+              tag: 'plain_text',
+              content: action.label,
+            },
+            type: action.primary ? 'primary' : 'default',
+            value: { action: action.label, itemIndex: index },
+          })),
+        });
+      }
+
+      if (index < digest.items.length - 1) {
+        elements.push({ tag: 'hr' });
+      }
+    });
+  } else {
+    elements.push({
+      tag: 'div',
+      text: {
+        tag: 'plain_text',
+        content: '今日暂无更新',
+      },
+    });
+  }
+
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: {
+        tag: 'plain_text',
+        content: '📊 每日汇聚',
+      },
+      template: 'blue',
+    },
+    elements,
+  };
+}
   const [hour, minute] = (config.digestSchedule || '08:00').split(':').map(Number);
   
   function checkAndRun() {

@@ -5,15 +5,105 @@
 import { readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { generateDailyDigest, getSourcesStatus } from './composio.js';
+import { generateDailyDigest, getSourcesStatus, pushDailyDigest } from './composio.js';
+import { reminderCard } from './cards.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Simple in-memory chat history for demo
+const chatSessions = new Map();
+
+/**
+ * Call LLM and get response
+ */
+async function callLLM(ctx, messages, sessionId = 'web-chat') {
+  if (!ctx?.llm?.stream) {
+    return { text: '抱歉，LLM 未配置。这是一个简单的回复。', cards: null };
+  }
+
+  try {
+    const provider = 'deepseek';
+    const model = 'deepseek-chat';
+    
+    let fullText = '';
+    for await (const chunk of ctx.llm.stream({
+      provider,
+      model,
+      sessionId,
+      messages,
+      maxTokens: 1000,
+    })) {
+      if (chunk.type === 'text' && chunk.text) {
+        fullText += chunk.text;
+      }
+    }
+
+    // Generate action cards based on response
+    const cards = parseResponseToCards(fullText);
+    
+    return { text: fullText, cards };
+  } catch (error) {
+    console.error('LLM error:', error);
+    return { 
+      text: `处理失败: ${error.message}`,
+      cards: null,
+    };
+  }
+}
+
+/**
+ * Parse LLM response into interactive cards
+ */
+function parseResponseToCards(text) {
+  // Simple heuristic: if response contains suggestions or actions, create cards
+  const cards = [];
+  
+  // Check for action items
+  const actionPattern = /(?:建议|推荐|可以)[:：]?\s*(.+?)(?:\n|$)/gi;
+  let match;
+  let actionCount = 0;
+  
+  while ((match = actionPattern.exec(text)) && actionCount < 3) {
+    cards.push({
+      type: 'action',
+      title: match[1].trim(),
+      actions: [
+        { label: '执行', value: 'execute' },
+        { label: '稍后', value: 'later' },
+      ],
+    });
+    actionCount++;
+  }
+  
+  // Check for choices/options
+  const choicePattern = /(?:选择|选项)[:：]?\s*(?:1[\.、]|①)\s*(.+?)(?:\n|$)/gi;
+  if ((match = choicePattern.exec(text))) {
+    const choices = [];
+    const choiceLines = text.match(/(?:\d+[\.、]|[①②③④⑤])\s*(.+?)(?:\n|$)/g);
+    if (choiceLines) {
+      choiceLines.slice(0, 4).forEach((line, i) => {
+        const clean = line.replace(/^(?:\d+[\.、]|[①②③④⑤])\s*/, '').trim();
+        choices.push({ label: clean, value: `choice_${i}` });
+      });
+      if (choices.length > 0) {
+        cards.push({
+          type: 'choice',
+          title: '请选择',
+          choices,
+        });
+      }
+    }
+  }
+  
+  return cards.length > 0 ? cards : null;
+}
 
 /**
  * Create API router
  */
 export function createApiRouter(ctx) {
-  const { store, composioClient } = ctx;
+  const { store, composioClient, config } = ctx;
+  const llmContext = ctx.llmCtx || ctx.ctx;
 
   return {
     /**
@@ -28,33 +118,72 @@ export function createApiRouter(ctx) {
           weekday: 'long',
         });
 
-        const reports = await store.getRecentReports?.(1) || [];
-        const reminders = await store.getReminders?.() || [];
+        // Get real data from store
+        const state = store.get();
+        const upcoming = state.upcoming || [];
+        const reports = Object.values(state.reports || {});
+        const deliveries = state.deliveries || [];
         
-        // Mock data for now - integrate with actual store
-        const tasks = [
-          {
-            title: '报价单发给张伟',
-            reason: '他昨天问了两次，卡着周四签约',
-            evidence: '依据：飞书 · 张伟',
-            advice: '10:00 前发，先发数字后补附件',
+        // Extract today's meetings
+        const todayMeetings = upcoming.filter(item => {
+          const startDate = new Date(item.startAt).toLocaleDateString('zh-CN');
+          return startDate === new Date().toLocaleDateString('zh-CN');
+        });
+
+        // Build task list from upcoming events and reports
+        const tasks = [];
+        
+        // Add upcoming meetings as tasks
+        todayMeetings.slice(0, 5).forEach((meeting, i) => {
+          const startTime = new Date(meeting.startAt).toLocaleTimeString('zh-CN', {
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+          tasks.push({
+            title: meeting.title || '未命名会议',
+            reason: `${startTime} 开始，${meeting.leadMinutes || 10} 分钟前提醒`,
+            evidence: `依据：日历事件 ${meeting.id}`,
+            advice: meeting.location ? `地点：${meeting.location}` : '',
             closed: false,
-          },
-          {
-            title: '评审会材料定稿',
-            reason: '会从 14:00 挪到 16:00，多出两小时',
-            evidence: '依据：日历改动',
-            advice: '13:00 前只留一页结论页',
-            closed: false,
-          },
-        ];
+          });
+        });
+
+        // Add recent report items as tasks
+        const recentReport = reports
+          .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+          [0];
+        
+        if (recentReport?.plan) {
+          recentReport.plan.slice(0, 3).forEach(item => {
+            tasks.push({
+              title: item,
+              reason: '今日计划',
+              evidence: `依据：${recentReport.memberName || '成员'} 的日报`,
+              closed: false,
+            });
+          });
+        }
+
+        // Calculate stats
+        const meetingHours = todayMeetings.reduce((sum, m) => {
+          const duration = (new Date(m.endAt || m.startAt).getTime() - 
+                          new Date(m.startAt).getTime()) / (1000 * 60 * 60);
+          return sum + Math.max(0, duration);
+        }, 0);
+
+        const sources = [];
+        if (upcoming.length > 0) sources.push('日历');
+        if (reports.length > 0) sources.push('日报');
+        if (deliveries.length > 0) sources.push('提醒');
 
         return {
-          summary: `今天 ${reminders.length} 个会，${tasks.length} 件必须今天完成`,
+          summary: tasks.length === 0 
+            ? '今天暂无待办事项' 
+            : `今天 ${todayMeetings.length} 个会，${tasks.length} 件事`,
           date: today,
-          sources: '飞书、日历、邮件已读',
+          sources: sources.join('、') + (sources.length > 0 ? ' 已读' : '暂无数据'),
           openCount: tasks.filter(t => !t.closed).length,
-          meetingHours: reminders.length * 1.5, // Estimate
+          meetingHours: Math.round(meetingHours * 10) / 10,
           waitingCount: 0,
           tasks,
         };
@@ -125,10 +254,110 @@ export function createApiRouter(ctx) {
     async checkConfig() {
       return {
         configured: !!composioClient,
-        composioApiKey: !!ctx.config?.composioApiKey,
-        composioEntityId: ctx.config?.composioEntityId || 'default',
-        digestSchedule: ctx.config?.digestSchedule || '08:00',
+        composioApiKey: !!config?.composioApiKey,
+        composioEntityId: config?.composioEntityId || 'default',
+        digestSchedule: config?.digestSchedule || '08:00',
+        llmConfigured: !!(llmContext?.llm?.stream),
       };
+    },
+
+    /**
+     * POST /api/chat - Send a chat message and get LLM response with cards
+     */
+    async sendChatMessage(data) {
+      try {
+        const { message, sessionId = 'default' } = data;
+        if (!message || typeof message !== 'string') {
+          return { error: '消息不能为空' };
+        }
+
+        // Get or create chat session
+        let session = chatSessions.get(sessionId);
+        if (!session) {
+          session = {
+            messages: [
+              { role: 'system', content: '你是「豆芽」，一个智能数字同事助手。你帮助用户管理任务、日程和信息。回复要简洁、实用，重点是行动建议。如果有具体建议，使用「建议：」开头列出。如果需要用户选择，使用编号列出选项。' },
+            ],
+            history: [],
+          };
+          chatSessions.set(sessionId, session);
+        }
+
+        // Add user message
+        session.messages.push({ role: 'user', content: message });
+        session.history.push({
+          role: 'user',
+          content: message,
+          time: new Date().toISOString(),
+        });
+
+        // Get LLM response
+        const response = await callLLM(llmContext, session.messages, sessionId);
+
+        // Add assistant message
+        session.messages.push({ role: 'assistant', content: response.text });
+        session.history.push({
+          role: 'assistant',
+          content: response.text,
+          cards: response.cards,
+          time: new Date().toISOString(),
+        });
+
+        // Limit session size
+        if (session.messages.length > 20) {
+          session.messages = [
+            session.messages[0], // Keep system message
+            ...session.messages.slice(-19),
+          ];
+        }
+
+        return {
+          text: response.text,
+          cards: response.cards,
+          time: new Date().toLocaleTimeString('zh-CN', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        };
+      } catch (err) {
+        console.error('API /chat error:', err);
+        return {
+          error: `处理失败: ${err.message}`,
+          text: '抱歉，处理您的消息时出错了。',
+        };
+      }
+    },
+
+    /**
+     * POST /api/digest/push - Manually trigger daily digest push
+     */
+    async pushDigest() {
+      try {
+        if (!composioClient) {
+          return { error: 'Composio 未配置' };
+        }
+
+        const digest = await generateDailyDigest(composioClient);
+        
+        // Deliver via available channels
+        const results = await pushDailyDigest({
+          digest,
+          store,
+          config,
+          sendCard: ctx.sendCard,
+        });
+
+        return {
+          success: true,
+          digest,
+          deliveries: results,
+        };
+      } catch (err) {
+        console.error('API /digest/push error:', err);
+        return {
+          error: `推送失败: ${err.message}`,
+        };
+      }
     },
 
     /**
@@ -183,6 +412,25 @@ export function mountApiRoutes(server, router) {
         res.end(JSON.stringify(data));
       } else if (url.pathname === '/api/config/check' && req.method === 'GET') {
         const data = await router.checkConfig();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
+      } else if (url.pathname === '/api/chat' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const data = JSON.parse(body);
+            const response = await router.sendChatMessage(data);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid request' }));
+          }
+        });
+        return;
+      } else if (url.pathname === '/api/digest/push' && req.method === 'POST') {
+        const data = await router.pushDigest();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(data));
       } else if (url.pathname === '/' && req.method === 'GET') {

@@ -289,14 +289,14 @@ export const AGENT_SYSTEM_PROMPT = `你是「豆芽」（Open Digital Mate），
 1. **github_list_repos** - 列出用户的 GitHub 仓库
    参数: { per_page?: number, sort?: 'created'|'updated'|'pushed' }
    
-2. **github_list_pull_requests** - 列出 Pull Requests
+2. **github_search_my_prs** - 列出 Pull Requests
    参数: { state?: 'open'|'closed'|'all', per_page?: number }
    
-3. **github_list_issues** - 列出 Issues
+3. **github_list_my_issues** - 列出 Issues
    参数: { state?: 'open'|'closed'|'all', per_page?: number }
    
-4. **gmail_list_recent** - 获取最近的邮件
-   参数: { maxResults?: number }
+4. **gmail_fetch_emails** - 获取最近的邮件
+   参数: { max_results?: number, query?: string }
    
 5. **calendar_list_events** - 获取日历事件
    参数: { timeMin?: string, timeMax?: string, maxResults?: number }
@@ -308,7 +308,7 @@ export const AGENT_SYSTEM_PROMPT = `你是「豆芽」（Open Digital Mate），
 {
   "tool_calls": [
     {
-      "name": "github_list_pull_requests",
+      "name": "github_search_my_prs",
       "arguments": { "state": "open", "per_page": 10 }
     }
   ]
@@ -366,7 +366,7 @@ export const AGENT_SYSTEM_PROMPT = `你是「豆芽」（Open Digital Mate），
 \`\`\`json
 {
   "tool_calls": [{
-    "name": "github_list_pull_requests",
+    "name": "github_search_my_prs",
     "arguments": {"state": "open", "per_page": 5}
   }]
 }

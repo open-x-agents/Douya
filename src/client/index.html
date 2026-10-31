@@ -951,10 +951,25 @@
     
     // Add click handlers
     container.querySelectorAll('.tile').forEach(tile => {
+      const cardId = tile.getAttribute('data-card-id');
       const url = tile.getAttribute('data-url');
-      tile.addEventListener('click', (e) => {
+      tile.addEventListener('click', async (e) => {
         // Don't trigger if clicking an action button
         if (e.target.classList.contains('tile-action')) return;
+        
+        // Track interaction
+        if (cardId) {
+          try {
+            await fetch(`/api/cards/${cardId}/interact`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'open' }),
+            });
+          } catch (err) {
+            console.warn('[Interaction] Track failed:', err);
+          }
+        }
+        
         if (url && url !== 'undefined' && url !== '') {
           window.open(url, '_blank');
         }
@@ -962,9 +977,25 @@
     });
     
     container.querySelectorAll('.tile-action').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.stopPropagation();
+        const tile = btn.closest('.tile');
+        const cardId = tile?.getAttribute('data-card-id');
         const actionUrl = btn.getAttribute('data-action-url');
+        
+        // Track interaction
+        if (cardId) {
+          try {
+            await fetch(`/api/cards/${cardId}/interact`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'open' }),
+            });
+          } catch (err) {
+            console.warn('[Interaction] Track failed:', err);
+          }
+        }
+        
         if (actionUrl && actionUrl !== 'undefined' && actionUrl !== '') {
           window.open(actionUrl, '_blank');
         }

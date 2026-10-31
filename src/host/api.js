@@ -7,6 +7,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generateDailyDigest, getSourcesStatus, pushDailyDigest, createComposioClient } from './composio.js';
 import { reminderCard } from './cards.js';
+import { createProfileManager } from './profile.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -509,6 +510,15 @@ export function createApiRouter(ctx) {
 
   // Export configStore for callLLM to access
   callLLM.configStore = configStore;
+  
+  // Initialize profile manager
+  const profilePath = join(config?.dataDir || './.odm-data', 'profile.json');
+  const profileManager = createProfileManager(profilePath);
+  
+  // Load profile on startup
+  profileManager.load().catch(err => {
+    console.warn('[Profile] Failed to load:', err.message);
+  });
 
   /**
    * Get Composio client - builds lazily from saved config or env
@@ -691,13 +701,17 @@ export function createApiRouter(ctx) {
           log: console.log,
         });
 
-        // Run multi-stage aggregation pipeline
+        // Run multi-stage aggregation pipeline with profile context
         const { runAggregationPipeline } = await import('./aggregation.js');
-        const brief = await runAggregationPipeline(client, activeAccounts, llm);
+        const profileContext = profileManager.getPersonalizationContext();
+        const brief = await runAggregationPipeline(client, activeAccounts, llm, profileContext);
 
         // CRITICAL: Cards are append/merge-only, NEVER wiped
         // Store.save() now handles merging internally
         const state = store.get();
+        
+        // Learn from generated cards
+        await profileManager.learnFromCards(brief.cards);
         
         // Just pass the new cards to store.save()
         // Store will merge them with existing cards by sourceId
@@ -847,6 +861,41 @@ export function createApiRouter(ctx) {
         return { success: true };
       } catch (err) {
         console.error('[deleteCard] Error:', err);
+        return { success: false, error: err.message };
+      }
+    },
+    
+    /**
+     * POST /api/cards/:id/interact - Track card interaction
+     */
+    async trackCardInteraction(id, action) {
+      try {
+        const state = store.get();
+        const cards = state.cards || [];
+        const card = cards.find(c => c.id === id);
+        
+        if (!card) {
+          return { success: false, error: '卡片不存在' };
+        }
+        
+        // Track in profile
+        await profileManager.trackInteraction(card.sourceId, action);
+        
+        // Update card status if action implies it
+        if (action === 'done' && card.status !== 'done') {
+          card.status = 'done';
+          card.updatedAt = new Date().toISOString();
+          await store.save(state);
+        } else if (action === 'dismiss' && card.status !== 'dismissed') {
+          card.status = 'dismissed';
+          card.updatedAt = new Date().toISOString();
+          await store.save(state);
+        }
+        
+        console.log('[trackInteraction]', action, card.sourceId);
+        return { success: true };
+      } catch (err) {
+        console.error('[trackInteraction] Error:', err);
         return { success: false, error: err.message };
       }
     },
@@ -1442,6 +1491,22 @@ export function mountApiRoutes(server, router) {
         const data = await router.deleteCard(id);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(data));
+      } else if (url.pathname.match(/^\/api\/cards\/[^\/]+\/interact$/) && req.method === 'POST') {
+        const id = url.pathname.split('/api/cards/')[1].split('/interact')[0];
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const data = JSON.parse(body);
+            const response = await router.trackCardInteraction(id, data.action);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid request' }));
+          }
+        });
+        return;
       } else if (url.pathname === '/api/sources' && req.method === 'GET') {
         const data = await router.getSources();
         res.writeHead(200, { 'Content-Type': 'application/json' });

@@ -7720,6 +7720,296 @@ function draftForDisplay(draft, replies = []) {
   return kept;
 }
 
+// src/shared/work-line-complete.js
+var PIN_GAP = 48;
+function pinnedToBottom({ scrollTop = 0, scrollHeight = 0, clientHeight = 0, threshold = PIN_GAP } = {}) {
+  return scrollHeight - scrollTop - clientHeight < threshold;
+}
+function scrollAction({ pinned, roomMatches } = {}) {
+  if (pinned === true && roomMatches === true) return "hold-first";
+  return "leave";
+}
+function applyScroll({ action, scrollTop = 0, clientHeight = 0, firstOffset, firstHeight = 0, lockedTop = null } = {}) {
+  switch (action) {
+    case "hold-first": {
+      if (typeof lockedTop === "number") return { scrollTop: lockedTop, lockedTop };
+      let next = scrollTop;
+      if (typeof firstOffset === "number") {
+        const itemEnd = firstOffset + firstHeight;
+        const viewEnd = scrollTop + clientHeight;
+        if (firstOffset < scrollTop) next = firstOffset;
+        else if (itemEnd > viewEnd) next = Math.max(0, itemEnd - clientHeight);
+      }
+      return { scrollTop: next, lockedTop: next };
+    }
+    case "leave":
+    case void 0:
+      return { scrollTop, lockedTop: null };
+    default: {
+      const unexpected = action;
+      throw new Error(`Unknown scroll action ${String(unexpected)}`);
+    }
+  }
+}
+var hasId = (value) => typeof value === "string" && value !== "";
+function dedupeCompletions(events) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  const list = Array.isArray(events) ? events : [];
+  for (const event of list) {
+    const id = event?.exchangeId;
+    if (!hasId(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push(event);
+  }
+  return out;
+}
+function quoteSentence(quote, logs) {
+  if (quote == null || typeof quote !== "object") return "";
+  const rows2 = logs?.[quote.roomId];
+  if (!Array.isArray(rows2)) return "";
+  const row = rows2.find((line) => line?.seq === quote.seq);
+  return typeof row?.text === "string" ? row.text : "";
+}
+var eventRoom = (event) => {
+  if (hasId(event?.roomId)) return event.roomId;
+  if (hasId(event?.quote?.roomId)) return event.quote.roomId;
+  return void 0;
+};
+function orderedCompletions(events, { roomId, logs } = {}) {
+  const mine = dedupeCompletions(events).filter((event) => eventRoom(event) === roomId);
+  mine.sort((left, right) => {
+    const at = (left.completedAt ?? 0) - (right.completedAt ?? 0);
+    if (at !== 0) return at;
+    return String(left.exchangeId).localeCompare(String(right.exchangeId));
+  });
+  return mine.map((event) => {
+    const fromLog = quoteSentence(event.quote, logs);
+    const quoteText = fromLog !== "" ? fromLog : typeof event.quoteText === "string" ? event.quoteText : "";
+    const replyText = typeof event.reply === "string" ? event.reply : typeof event.replyText === "string" ? event.replyText : "";
+    return {
+      exchangeId: event.exchangeId,
+      workLineId: event.workLineId,
+      ...hasId(event.botId) ? { botId: event.botId } : {},
+      roomId: eventRoom(event),
+      completedAt: event.completedAt,
+      quoteText,
+      replyText
+    };
+  });
+}
+var sameId = (left, right) => hasId(left) && left === right;
+var isPostedReply = (reply, item) => {
+  if (reply == null || reply.kind !== void 0) return false;
+  const text = typeof reply.text === "string" ? reply.text : "";
+  if (text === "") return false;
+  if (sameId(reply.exchangeId, item.exchangeId)) return true;
+  if (item.replyText === "" || text !== item.replyText) return false;
+  if (hasId(reply.botId) && hasId(item.botId) && reply.botId !== item.botId) return false;
+  return true;
+};
+var isWorkingRow = (reply, item, items) => {
+  if (reply?.kind !== "working") return false;
+  if (hasId(reply.workLineId) || hasId(reply.exchangeId)) {
+    return sameId(reply.workLineId, item.workLineId) || sameId(reply.exchangeId, item.exchangeId);
+  }
+  if (hasId(reply.botId) && hasId(item.botId) && reply.botId !== item.botId) return false;
+  if (hasId(reply.botId)) {
+    const mates = items.filter((other) => !hasId(other.botId) || other.botId === reply.botId);
+    return mates.length === 1 && mates[0].exchangeId === item.exchangeId;
+  }
+  return items.length === 1;
+};
+function scrollGroup({ replies = [], completions = [] } = {}) {
+  if (!Array.isArray(completions) || completions.length === 0) return false;
+  if (completions.length >= 2) return true;
+  const item = completions[0];
+  return (Array.isArray(replies) ? replies : []).some((row) => row?.kind === "working" && !isWorkingRow(row, item, completions));
+}
+var quoteRow = (item) => {
+  if (item.quoteText === "") return void 0;
+  return {
+    kind: "completion-quote",
+    exchangeId: item.exchangeId,
+    workLineId: item.workLineId,
+    text: item.quoteText,
+    completedAt: item.completedAt
+  };
+};
+var replyRow = (item) => {
+  if (item.replyText === "") return void 0;
+  return {
+    kind: "completion-reply",
+    exchangeId: item.exchangeId,
+    workLineId: item.workLineId,
+    ...item.botId !== void 0 ? { botId: item.botId } : {},
+    text: item.replyText,
+    completedAt: item.completedAt
+  };
+};
+var itemRows = (item, anchor) => {
+  const rows2 = [];
+  const quote = quoteRow(item);
+  const reply = replyRow(item);
+  if (quote !== void 0) rows2.push(quote);
+  if (reply !== void 0) rows2.push(reply);
+  if (anchor && rows2[0] !== void 0) rows2[0].first = true;
+  return rows2;
+};
+var repliesForDraft = (rows2) => rows2.map((row) => row?.kind === "completion-reply" ? { botId: row.botId, text: row.text } : row);
+var pack = (replies, draft, completions) => ({
+  replies,
+  draft: clearDraftIfPosted(draft, repliesForDraft(replies)),
+  completions
+});
+var projectSingle = (replies, draft, item) => {
+  const kept = [];
+  let workingAt = -1;
+  let postedAt = -1;
+  for (const reply of replies) {
+    if (isWorkingRow(reply, item, [item])) {
+      if (workingAt < 0) workingAt = kept.length;
+      continue;
+    }
+    if (postedAt < 0 && isPostedReply(reply, item)) postedAt = kept.length;
+    kept.push(reply);
+  }
+  if (postedAt >= 0) {
+    const quote = quoteRow(item);
+    if (quote !== void 0) {
+      quote.first = true;
+      kept.splice(postedAt, 0, quote);
+    }
+  } else {
+    const at = workingAt < 0 ? kept.length : workingAt;
+    kept.splice(at, 0, ...itemRows(item, true));
+  }
+  return pack(kept, draft, [item]);
+};
+var projectMany = (replies, draft, ordered) => {
+  const kept = [];
+  let insertAt = -1;
+  for (const reply of replies) {
+    const drop = ordered.some((item) => isWorkingRow(reply, item, ordered) || isPostedReply(reply, item));
+    if (drop) {
+      if (insertAt < 0 && reply?.kind === "working") insertAt = kept.length;
+      continue;
+    }
+    kept.push(reply);
+  }
+  if (insertAt < 0) insertAt = kept.length;
+  const block = ordered.flatMap((item, index) => itemRows(item, index === 0));
+  kept.splice(insertAt, 0, ...block);
+  return pack(kept, draft, ordered);
+};
+function projectRelay({ replies = [], draft, completions = [], roomId, logs } = {}) {
+  const source = Array.isArray(replies) ? replies : [];
+  const ordered = orderedCompletions(completions, { roomId, logs });
+  if (ordered.length === 0) {
+    return { replies: source.slice(), draft: clearDraftIfPosted(draft, source), completions: [] };
+  }
+  if (ordered.length === 1) return projectSingle(source, draft, ordered[0]);
+  return projectMany(source, draft, ordered);
+}
+
+// src/host/group-steer.js
+function steerTarget({ memberLive, explicitQueue } = {}) {
+  if (explicitQueue === true) return "relay";
+  const turn = memberLive?.turn;
+  if (turn === void 0 || turn === null) return "relay";
+  return "steer";
+}
+function singleBusyMember(members = []) {
+  const busy = members.filter((member) => member?.sessionId && member.live?.turn !== void 0 && member.live?.turn !== null);
+  return busy.length === 1 ? busy[0] : void 0;
+}
+function decideRoomSteer({ members, explicitQueue = false, explicitNew = false, named = false, plain = true } = {}) {
+  const blocked = explicitQueue === true || explicitNew === true || named === true || plain === false;
+  const member = singleBusyMember(members);
+  const action = steerTarget({ memberLive: member?.live, explicitQueue: blocked });
+  return { action, member: action === "steer" ? member : void 0 };
+}
+function roomMembers(room2, liveOf, botOf) {
+  if (room2 == null) return [];
+  const live = typeof liveOf === "function" ? liveOf : () => void 0;
+  const bot = typeof botOf === "function" ? botOf : () => void 0;
+  const members = [];
+  for (const id of room2.members ?? []) {
+    const record = bot(id);
+    const sessionId = room2.sessions?.[id];
+    if (record == null || sessionId == null || sessionId === "") continue;
+    members.push({
+      id: record.id ?? id,
+      name: record.name,
+      sessionId,
+      live: live(sessionId)
+    });
+  }
+  return members;
+}
+function explicitSendFlags(source = {}, data = {}) {
+  const mode = source.mode ?? source.sendMode ?? source.admission ?? data.mode ?? data.sendMode;
+  return {
+    explicitQueue: source.explicitQueue === true || source.queue === true || mode === "queue",
+    explicitNew: source.explicitNew === true || mode === "new"
+  };
+}
+function textNamesMember(text, members) {
+  return mentionSpans(String(text ?? ""), members ?? []).length > 0;
+}
+function isJoinedFollowUp(source) {
+  return source?.userSteer !== true;
+}
+function steeringReply({ text, time = Date.now() } = {}) {
+  return { kind: "steering", text, time };
+}
+function groupUserBubble(reply) {
+  if (reply?.kind !== "user" && reply?.kind !== "steering") return void 0;
+  return { steering: reply.kind === "steering" };
+}
+function opensGroupRelay({ suppressed = false } = {}) {
+  return suppressed !== true;
+}
+function keepDraftOnSlotEnd({ draft, memberLive } = {}) {
+  if (draft == null) return void 0;
+  const turn = memberLive?.turn;
+  if (turn === void 0 || turn === null) return void 0;
+  return draft;
+}
+function roundForStream({ rounds, botId, memberLive } = {}) {
+  const list = Array.isArray(rounds) ? rounds : [];
+  const speaking = list.find((round) => round?.speaking === botId);
+  if (speaking) return speaking;
+  const turn = memberLive?.turn;
+  const busy = turn !== void 0 && turn !== null;
+  if (!busy) return void 0;
+  return list.find((round) => (round?.speaking == null || round.speaking === "") && (round.draft?.botId === botId || (round.slots ?? []).some((slot) => slot.id === botId && slot.status === "working")));
+}
+function stepRoute({ userSteered = false, calls = false, hasRound = false } = {}) {
+  if (calls) return "post";
+  if (userSteered) return "same";
+  if (hasRound) return "same";
+  return "post";
+}
+function takeSteeredLine(lines, text) {
+  const list = Array.isArray(lines) ? lines : [];
+  const index = list.indexOf(text);
+  if (index === -1) return { action: "open", lines: list };
+  return { action: "drop", lines: list.filter((_, at) => at !== index) };
+}
+function pairComposerEcho(pending, text, via) {
+  const list = (Array.isArray(pending) ? pending : []).map((item) => ({ text: item.text, via: item.via }));
+  const index = list.findIndex((item) => item.text === text && item.via !== via);
+  if (index === -1) return { role: "fresh", pending: list };
+  list.splice(index, 1);
+  return { role: "echo", pending: list };
+}
+function rememberComposerSteer(pending, text, via) {
+  const list = (Array.isArray(pending) ? pending : []).map((item) => ({ text: item.text, via: item.via }));
+  list.push({ text, via });
+  return list.length > 20 ? list.slice(-20) : list;
+}
+
 // src/client/cells.js
 var import_react16 = require("react");
 var import_react_dom = require("react-dom");
@@ -8576,20 +8866,31 @@ function scanReplies(text, start, replies) {
 }
 function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi, useWork }) {
   const [live, setLive] = (0, import_react16.useState)({ replies: [], speaking: null, draft: null });
+  const tailRef = (0, import_react16.useRef)(null);
+  const scrollSnap = (0, import_react16.useRef)(null);
+  const scrollLock = (0, import_react16.useRef)(null);
+  const roomBusy = useWork?.((work) => (work.rooms?.[sessionId]?.length ?? 0) > 0) ?? false;
+  const completions = useWork?.((work) => work.completions?.[sessionId]);
   (0, import_react16.useEffect)(() => {
-    if (done) return void 0;
+    if (done && !roomBusy && !tailRef.current?.live) return void 0;
     let stop = false;
     let timer;
     let seen = "";
     const tick = async () => {
       const result = await actions.roomProgress(sessionId);
       if (stop) return;
-      const entry = (result ?? []).find((item) => item.callId === callId) ?? (result ?? [])[0];
-      const key = entry ? JSON.stringify([entry.replies, entry.speaking, entry.draft]) : "";
+      const matched = (result ?? []).find((item) => item.callId === callId);
+      const entry = matched ?? (tailRef.current ? void 0 : (result ?? [])[0]);
+      const key = entry ? JSON.stringify([entry.replies, entry.speaking, entry.draft, entry.live]) : "";
       if (entry && key !== seen) {
         seen = key;
-        setLive({ replies: entry.replies ?? [], speaking: entry.speaking ?? null, draft: entry.draft ?? null });
+        const next = { replies: entry.replies ?? [], speaking: entry.speaking ?? null, draft: entry.draft ?? null };
+        if (entry.live) next.live = true;
+        setLive(next);
+        if (entry.live) tailRef.current = next;
       }
+      const keep = !done || roomBusy || Boolean(entry?.draft?.text);
+      if (!keep) return;
       timer = setTimeout(tick, document.hidden ? 5e3 : entry?.draft?.text ? 250 : 1e3);
     };
     void tick();
@@ -8597,29 +8898,103 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
       stop = true;
       clearTimeout(timer);
     };
-  }, [done, sessionId, callId]);
+  }, [done, sessionId, callId, roomBusy]);
+  const tail = tailRef.current;
+  const follow = live.live === true || tail?.live === true;
   let replies = live.replies;
   let broken = false;
-  if (done) {
+  if (done && !(follow && replies.length > 0)) {
     const parsed = parseReplies(contentText(content));
-    replies = parsed.replies.length ? parsed.replies : live.replies;
+    replies = parsed.replies.length ? parsed.replies : replies;
     broken = parsed.broken;
   }
-  const draft = done ? void 0 : draftForDisplay(live.draft, replies);
+  const shownDraft = !done || follow ? live.draft : void 0;
+  const projected = projectRelay({ replies, draft: shownDraft, completions: completions ?? [], roomId: sessionId });
+  const draft = draftForDisplay(projected.draft, projected.replies);
+  if (typeof document !== "undefined" && typeof document.querySelector === "function") {
+    const scroller = document.querySelector("[data-conversation-scroll]");
+    scrollSnap.current = scroller ? { scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight } : null;
+  } else scrollSnap.current = null;
+  const completeKey = projected.completions.map((item) => `${item.exchangeId}:${item.completedAt}`).join("\n");
+  const rawWorkingKey = replies.map((row) => row?.kind === "working" ? `${row.workLineId ?? ""}:${row.exchangeId ?? ""}:${row.botId ?? ""}` : "").join("\n");
+  (0, import_react16.useLayoutEffect)(() => {
+    if (typeof document === "undefined" || typeof document.querySelector !== "function") return void 0;
+    const scroller = document.querySelector("[data-conversation-scroll]");
+    const snapshot = scrollSnap.current;
+    if (!scroller || snapshot == null) return void 0;
+    const list = projected.completions;
+    if (!scrollGroup({ replies, completions: list })) return void 0;
+    let lockedTop = scrollLock.current;
+    if (typeof lockedTop === "number" && Math.abs(snapshot.scrollTop - lockedTop) > 2) {
+      lockedTop = null;
+      scrollLock.current = null;
+    }
+    const roomMatches = list.every((item) => item.roomId == null || item.roomId === sessionId);
+    const pinned = typeof lockedTop === "number" ? true : pinnedToBottom(snapshot);
+    const action = scrollAction({ pinned, roomMatches });
+    const node = scroller.querySelector("[data-work-complete-first]");
+    let firstOffset;
+    let firstHeight = 0;
+    if (typeof node?.getBoundingClientRect === "function" && typeof scroller.getBoundingClientRect === "function") {
+      const nodeRect = node.getBoundingClientRect();
+      const scrollerRect = scroller.getBoundingClientRect();
+      firstOffset = nodeRect.top - scrollerRect.top + scroller.scrollTop;
+      firstHeight = nodeRect.height;
+    }
+    const next = applyScroll({
+      action,
+      scrollTop: snapshot.scrollTop,
+      clientHeight: snapshot.clientHeight,
+      firstOffset,
+      firstHeight,
+      lockedTop
+    });
+    if (next.scrollTop !== scroller.scrollTop) scroller.scrollTop = next.scrollTop;
+    scrollLock.current = next.lockedTop;
+    return void 0;
+  }, [completeKey, rawWorkingKey, sessionId]);
   const pending = done || !live.speaking || draft?.text && draft.botId === live.speaking ? [] : [live.speaking];
   const speakerTool = useWork?.((work) => work.bots?.[live.speaking]?.tool) ?? void 0;
   const speakerDoing = useWork?.((work) => work.bots?.[live.speaking]?.tool ? workPhrase(work.bots[live.speaking]) : void 0) ?? void 0;
-  if (replies.length === 0 && pending.length === 0 && !draft?.text) {
+  if (projected.replies.length === 0 && pending.length === 0 && !draft?.text) {
     return broken ? (0, import_react16.createElement)("div", { className: "bt-group-replies" }, (0, import_react16.createElement)("div", { className: "bt-event" }, t("The group replies could not be shown"))) : null;
   }
   const room2 = roster.roomsById[sessionId];
   return (0, import_react16.createElement)(
     "div",
     { className: "bt-group-replies" },
-    stackReplies(replies).map(({ reply, index, texts: texts2, time, duration }) => {
+    stackReplies(projected.replies).map(({ reply, index, texts: texts2, time, duration }) => {
       const bot = roster.byId[reply.botId] ?? { id: reply.botId, name: reply.name, color: reply.color ?? "gray" };
-      if (reply.kind === "user") {
-        return (0, import_react16.createElement)("div", { key: `user-${index}`, className: "bt-urow" }, (0, import_react16.createElement)(
+      const userBubble = groupUserBubble(reply);
+      if (reply.kind === "completion-quote") {
+        return (0, import_react16.createElement)("div", {
+          key: `complete-q-${reply.exchangeId}-${index}`,
+          className: "bt-urow",
+          "data-work-complete": reply.exchangeId,
+          ...reply.first === true ? { "data-work-complete-first": "" } : {}
+        }, (0, import_react16.createElement)(
+          "div",
+          { className: "bt-ububble" },
+          (0, import_react16.createElement)(import_dsh_client_ui_primitives.MarkdownText, { text: reply.text, labels: mdLabels3(), variant: "compact" })
+        ));
+      }
+      if (reply.kind === "completion-reply") {
+        return (0, import_react16.createElement)("div", {
+          key: `complete-a-${reply.exchangeId}-${index}`,
+          "data-work-complete": reply.exchangeId,
+          ...reply.first === true ? { "data-work-complete-first": "" } : {}
+        }, (0, import_react16.createElement)(GroupMessage, {
+          bot,
+          texts: [reply.text],
+          room: room2,
+          roster,
+          actions,
+          msgKey: callId ? `${sessionId}:${callId}:complete:${reply.exchangeId}` : void 0,
+          useUi
+        }));
+      }
+      if (userBubble) {
+        return (0, import_react16.createElement)("div", { key: `user-${index}`, className: "bt-urow", ...userBubble.steering ? { "data-steering": true } : {} }, (0, import_react16.createElement)(
           "div",
           { className: "bt-ububble" },
           (0, import_react16.createElement)(import_dsh_client_ui_primitives.MarkdownText, { text: reply.text, labels: mdLabels3(), variant: "compact" }),

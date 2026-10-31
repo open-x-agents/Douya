@@ -54,4 +54,4 @@ jobs:
       # 和 tests.yml 同一条命令：这一层要证明的是「合起来也绿」，
       # 不是另起一套测试 —— 换一套就等于没测同一个东西。
       - name: 在合并结果上跑单元测试
-        run: node --test test/*.test.js
+        run: node --test test/*.test.js 'acceptance-cases/**/*.test.js'

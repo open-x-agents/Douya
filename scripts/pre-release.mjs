@@ -57,15 +57,12 @@ export function checkVersionConsistency({ version, tag = null, changelog = '', e
   return problems;
 }
 
-// 1. 单元测试：跟 tests.yml / release.yml 同一条命令。
+// 1. 单元测试：跟 tests.yml / merge-tree.yml 同一条命令。
 function stepUnitTests() {
-  const files = readdirSync(join(REPO_ROOT, 'test'))
-    .filter((f) => f.endsWith('.test.js'))
-    .map((f) => join('test', f))
-    .sort();
+  const args = ['--test', 'test/*.test.js', 'acceptance-cases/**/*.test.js'];
   try {
-    run('node', ['--test', ...files]);
-    return report('单元测试', true, `${files.length} 个文件`);
+    run('node', args);
+    return report('单元测试', true, args.slice(1).join(' '));
   } catch (error) {
     return report('单元测试', false, String(error.stdout || error.message).trim().split('\n').slice(-3).join(' | '));
   }

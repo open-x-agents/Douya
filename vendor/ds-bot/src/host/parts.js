@@ -958,6 +958,9 @@ export function install(rt) {
         delete state.views[agent.id]
       }
     }
+    // The line keeps its id and follows the fresh session. The handoff note stays
+    // on the archived segment, not in the index.
+    rt.followWorkLine?.({ fromSessionId: agent.id, toSessionId: freshId, segment, now: segment.endedAt })
     await rt.save()
     // A model the user picked until now went to the earlier part, which was still the
     // Bot's; from here on a change goes to the fresh one.

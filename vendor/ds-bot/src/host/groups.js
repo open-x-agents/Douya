@@ -29,6 +29,7 @@ import { GROUP_REF, output } from './tools.js'
 import { failureLine } from './turns.js'
 import { keepDraftOnSlotEnd, opensGroupRelay, roundForStream, steeringReply, stepRoute, takeSteeredLine } from './group-steer.js'
 import { routeTakesEffect } from './route-inbound.js'
+import { userLineFor } from './room-user-line.js'
 import { applyRoomStreamFrame, clearDraftIfPosted } from '../shared/room-draft.js'
 import { lateCite } from '../shared/work-line-complete.js'
 import { postLine, relayFiles, relayMessages, relayText } from './group-stop.js'
@@ -545,11 +546,12 @@ export function install(rt) {
       userSteer: true,
     })
   }
-  // One new line in the arrival room. The work-line session is not copied.
+  // One new line in the arrival room. The work-line session is not copied. The
+  // inbox id rides along, so the row this line already is can leave the Session.
   rt.appendRoomLine = (room, line) => {
     if (room == null || line == null || typeof line.text !== 'string' || line.text === '') return
     ensureRoomLog(room)
-    appendRoom(room, line)
+    appendRoom(room, { ...line, ...(typeof line.inboxId === 'string' && line.inboxId !== '' ? { inboxId: line.inboxId } : {}) })
   }
   rt.acceptRoomSteer = acceptRoomSteer
 
@@ -600,12 +602,15 @@ export function install(rt) {
       if (routeTakesEffect(routed)) {
         rt.suppressRelayText(room.id, line.text)
         rt.holdRoomRoute(room.id)
-        void rt.applyRouteDecision?.(room, routed, { text: routed.text ?? line.text }).catch(error => rt.warn('ds-bot: inbound route failed: %s', error))
+        // The row is already out of the inbox here; the id goes along so the routed
+        // line has the same shape as one written from the composer.
+        void rt.applyRouteDecision?.(room, routed, { text: routed.text ?? line.text, inboxId: line.id })
+          .catch(error => rt.warn('ds-bot: inbound route failed: %s', error))
         continue
       }
       rt.releaseRoomRoute(room.id)
       opened = true
-      appendRoom(room, { who: 'User', text: line.text })
+      appendRoom(room, userLineFor(line.id, line.text))
       round.replies.push({ kind: 'user', text: line.text, time: Date.now() })
       const { all, found } = mentionsIn(line.text, members)
       const note = all || found.length > 0 ? 'the user mentioned you' : 'new message from the user'
@@ -778,11 +783,12 @@ export function install(rt) {
         // A file stays with its line and reaches each member the line is shown to.
         const readings = post.images === undefined ? [] : await rt.imagesForGroup(post.images, room.id)
         const text = [post.text, ...readings, ...(post.files ?? []).map(fileLine)].filter(Boolean).join('\n')
-        appendRoom(room, {
-          ...(post.botId ? { who: rt.botOf(post.botId)?.name ?? post.name ?? 'Bot', botId: post.botId } : { who: 'User' }),
-          text,
-          ...(post.files === undefined ? {} : { files: post.files }),
-        })
+        // The user's line keeps the inbox id of the message it came from, so that
+        // row can leave the Session and never be posted here a second time.
+        const files = post.files === undefined ? {} : { files: post.files }
+        appendRoom(room, post.botId
+          ? { who: rt.botOf(post.botId)?.name ?? post.name ?? 'Bot', botId: post.botId, text, ...files }
+          : userLineFor(post.inboxId, text, files))
       }
       // The user wrote here — or pressed Continue, which opens the same round
       // without a line of its own — so Bot relays count afresh and the calls the

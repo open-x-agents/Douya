@@ -523,7 +523,8 @@ function memberFrom(room, decision) {
  * @param {any} rt
  * @param {any} room
  * @param {any} decision
- * @param {{ text?: string, files?: any[] }} [message]
+ * @param {{ text?: string, files?: any[], inboxId?: string }} [message] `inboxId` is the
+ *   group Session inbox row this sentence came from, which keeps one line per row.
  */
 async function persistRoute(rt) {
   if (typeof rt.save !== 'function') return
@@ -626,12 +627,20 @@ function isUserLogRow(row) {
     && Number.isFinite(row.seq)
 }
 
-function logInboundSentence(rt, room, text) {
+// A route body may already be a line of this room: the same message can reach the
+// route twice (a replay, a stop, the composer's deferred copy). Its inbox id finds
+// that line, so the sentence keeps the seq it has instead of being written again.
+function logInboundSentence(rt, room, text, inboxId) {
   if (room == null || typeof text !== 'string' || text === '') return undefined
   const log = Array.isArray(room.log) ? room.log : []
+  const id = typeof inboxId === 'string' && inboxId !== '' ? inboxId : undefined
+  if (id !== undefined) {
+    const known = log.find(row => isUserLogRow(row) && row.inboxId === id)
+    if (known !== undefined) return known.seq
+  }
   const last = log.at(-1)
   if (isUserLogRow(last) && last.text === text) return last.seq
-  const line = { who: 'User', text }
+  const line = { who: 'User', text, ...(id === undefined ? {} : { inboxId: id }) }
   if (typeof rt.appendRoomLine === 'function') rt.appendRoomLine(room, line)
   else appendPlain(room, line)
   return typeof room.seq === 'number' ? room.seq : undefined
@@ -683,7 +692,7 @@ export async function applyRouteDecision(rt, room, decision, message = {}) {
   // Hold does not. Confirm sends the stored sentence, so the last-row check
   // does not append it again. effectsOf still reports writeLog false: the relay
   // must not write a second row or copy another room.
-  const seq = logsThisAction(action) ? logInboundSentence(rt, room, text) : undefined
+  const seq = logsThisAction(action) ? logInboundSentence(rt, room, text, message.inboxId) : undefined
   const cite = quoteDelivery(room, text, seq)
   // Every leaving action must hit disk before deliver, because a later load
   // would put the card back.

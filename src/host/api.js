@@ -161,7 +161,7 @@ function parseResponseToCards(text) {
 }
 
 export function createApiRouter(ctx) {
-  const { store, composioClient, config } = ctx;
+  const { store, composioClient, config, configStore } = ctx;
   const llmContext = ctx.llmCtx || ctx.ctx;
 
   return {

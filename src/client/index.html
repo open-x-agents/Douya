@@ -833,20 +833,42 @@
       
       const grid = $('appsGrid');
       if (appsData.apps && appsData.apps.length > 0) {
-        grid.innerHTML = appsData.apps.map(app => `
-          <div class="app-card" style="border:1px solid var(--line);border-radius:8px;padding:16px;text-align:center">
-            <img src="${escapeHtml(app.logo)}" alt="${escapeHtml(app.name)}" style="width:48px;height:48px;margin:0 auto 8px" 
-              onerror="this.style.display='none'">
-            <h4 style="margin:0 0 4px;font-size:14px">${escapeHtml(app.name)}</h4>
-            <p style="font-size:12px;color:var(--ink3);margin:0 0 12px">${escapeHtml(app.description || '')}</p>
-            <button class="btn ${app.connected ? 'secondary' : 'primary'}" style="width:100%;font-size:12px"
-              onclick="handleAppAction('${escapeHtml(app.key)}', ${app.connected})">
-              ${app.connected ? '✓ 已连接' : '连接'}
-            </button>
+        grid.innerHTML = appsData.apps.map(app => {
+          const initial = app.name.charAt(0).toUpperCase();
+          const logoFallback = `data:image/svg+xml,${encodeURIComponent(`
+            <svg width="48" height="48" xmlns="http://www.w3.org/2000/svg">
+              <rect width="48" height="48" rx="8" fill="#667eea"/>
+              <text x="24" y="32" font-family="sans-serif" font-size="20" font-weight="600" fill="white" text-anchor="middle">${initial}</text>
+            </svg>
+          `)}`;
+          
+          return `
+          <div class="app-card" style="border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center;position:relative">
+            <img src="${escapeHtml(app.logo)}" 
+                 alt="${escapeHtml(app.name)}" 
+                 style="width:48px;height:48px;margin:0 auto 12px;display:block;border-radius:8px" 
+                 onerror="this.src='${logoFallback}'">
+            <h4 style="margin:0 0 4px;font-size:14px;font-weight:600">${escapeHtml(app.name)}</h4>
+            <p style="font-size:12px;color:var(--ink3);margin:0 0 12px;line-height:1.4">${escapeHtml(app.description || '')}</p>
+            ${app.connected ? `
+              <div style="margin-bottom:8px">
+                <span style="display:inline-block;padding:4px 10px;background:var(--green-soft);color:var(--green);border-radius:6px;font-size:12px;font-weight:600">✓ 已连接</span>
+              </div>
+              <button class="btn secondary" style="width:100%;font-size:12px"
+                onclick="handleAppAction('${escapeHtml(app.key)}', true)">
+                断开连接
+              </button>
+            ` : `
+              <button class="btn primary" style="width:100%;font-size:12px"
+                onclick="handleAppAction('${escapeHtml(app.key)}', false)">
+                连接
+              </button>
+            `}
           </div>
-        `).join('');
+        `;
+        }).join('');
       } else {
-        grid.innerHTML = '<p style="color:var(--ink3)">暂无可用应用</p>';
+        grid.innerHTML = '<p style="color:var(--ink3);padding:20px;text-align:center">暂无可用应用</p>';
       }
     } catch (error) {
       console.error('Failed to load Composio settings:', error);

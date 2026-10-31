@@ -23,11 +23,23 @@ export async function fetchFromSources(composioClient, activeSources) {
     
     try {
       if (slug === 'github') {
+        // First, fetch the authenticated user's login (since @me doesn't work in Composio)
+        console.log('[GitHub] Fetching authenticated user...');
+        const userResult = await composioClient.executeAction('GITHUB_GET_THE_AUTHENTICATED_USER', {});
+        const username = userResult?.data?.login;
+        
+        if (!username) {
+          console.warn('[GitHub] Could not fetch username, skipping');
+          continue;
+        }
+        
+        console.log(`[GitHub] Authenticated as: ${username}`);
+        
         // GitHub: paginate through ALL items in last 48h
         const yesterday = new Date(Date.now() - 24*60*60*1000).toISOString().split('T')[0];
         const twoDaysAgo = new Date(Date.now() - 48*60*60*1000).toISOString().split('T')[0];
         
-        // Gather multiple types of GitHub activity
+        // Gather multiple types of GitHub activity with real username
         const [
           myOpenPRs,
           myRecentPRs,
@@ -37,13 +49,13 @@ export async function fetchFromSources(composioClient, activeSources) {
           mentions,
           mergedPRs,
         ] = await Promise.all([
-          paginateGitHubSearch(composioClient, `is:pr is:open author:@me`),
-          paginateGitHubSearch(composioClient, `is:pr author:@me updated:>=${yesterday}`),
-          paginateGitHubSearch(composioClient, `is:pr is:open review-requested:@me`),
+          paginateGitHubSearch(composioClient, `is:pr is:open author:${username}`),
+          paginateGitHubSearch(composioClient, `is:pr author:${username} updated:>=${yesterday}`),
+          paginateGitHubSearch(composioClient, `is:pr is:open review-requested:${username}`),
           paginateGitHubIssues(composioClient),
-          paginateGitHubSearch(composioClient, `involves:@me updated:>=${twoDaysAgo}`),
-          paginateGitHubSearch(composioClient, `mentions:@me updated:>=${yesterday}`),
-          paginateGitHubSearch(composioClient, `is:pr is:merged author:@me merged:>=${yesterday}`),
+          paginateGitHubSearch(composioClient, `involves:${username} updated:>=${twoDaysAgo}`),
+          paginateGitHubSearch(composioClient, `mentions:${username} updated:>=${yesterday}`),
+          paginateGitHubSearch(composioClient, `is:pr is:merged author:${username} merged:>=${yesterday}`),
         ]);
         
         sourceData.github = {
@@ -69,15 +81,31 @@ export async function fetchFromSources(composioClient, activeSources) {
         
       } else if (slug === 'gmail') {
         // Gmail: paginate through ALL messages from last 24h
-        const yesterday = new Date(Date.now() - 24*60*60*1000).toISOString().split('T')[0].replace(/-/g, '/');
+        // Note: Gmail API query format, not search operators
+        const oneDayAgo = Math.floor(Date.now() / 1000) - (24 * 60 * 60);
+        
+        const [unread, recent, important] = await Promise.all([
+          paginateGmail(composioClient, 'in:inbox is:unread'),
+          paginateGmail(composioClient, `in:inbox after:${oneDayAgo}`), // Use timestamp instead of date
+          paginateGmail(composioClient, 'in:inbox is:important'),
+        ]);
         
         sourceData.gmail = {
-          unread: await paginateGmail(composioClient, 'in:inbox is:unread'),
-          recent: await paginateGmail(composioClient, `in:inbox after:${yesterday}`),
-          important: await paginateGmail(composioClient, 'in:inbox is:important'),
+          unread,
+          recent,
+          important,
         };
         
-        console.log(`[Gmail] Fetched ${sourceData.gmail.recent.length} recent messages (${sourceData.gmail.unread.length} unread, ${sourceData.gmail.important.length} important)`);
+        // Log actual unread count (check labelIds)
+        const actualUnread = recent.filter(m => {
+          const labels = m.labelIds || [];
+          return labels.includes('UNREAD');
+        }).length;
+        
+        console.log(`[Gmail] Fetched ${recent.length} recent messages`);
+        console.log(`  - Query 'is:unread' returned: ${unread.length}`);
+        console.log(`  - Actual UNREAD labels in recent: ${actualUnread}`);
+        console.log(`  - Important: ${important.length}`);
         
       } else if (slug === 'googlecalendar') {
         // Calendar: today + tomorrow (typically small, no pagination needed)
@@ -129,6 +157,7 @@ async function paginateGitHubSearch(composioClient, query) {
   const items = [];
   let page = 1;
   const perPage = 100; // GitHub max
+  let totalCount = null;
   
   while (true) {
     try {
@@ -137,6 +166,12 @@ async function paginateGitHubSearch(composioClient, query) {
         per_page: perPage,
         page,
       });
+      
+      // Log total_count on first page
+      if (page === 1 && result?.data?.total_count !== undefined) {
+        totalCount = result.data.total_count;
+        console.log(`  Query: "${query}" -> total_count: ${totalCount}`);
+      }
       
       const batch = result?.data?.items || [];
       if (batch.length === 0) break;
@@ -154,7 +189,7 @@ async function paginateGitHubSearch(composioClient, query) {
         break;
       }
     } catch (err) {
-      console.warn(`[GitHub] Pagination failed at page ${page}:`, err.message);
+      console.warn(`[GitHub] Pagination failed at page ${page} for "${query}":`, err.message);
       break;
     }
   }
@@ -207,14 +242,13 @@ async function paginateGmail(composioClient, query) {
   let pageToken = null;
   const maxResults = 20; // Smaller pages to avoid 413 Payload Too Large
   
-  // Add 'newer_than:1d' to query to limit scope
-  const enhancedQuery = query.includes('newer_than') ? query : `${query} newer_than:1d`;
+  // Don't add newer_than - use timestamp in the after: query instead
   
   while (true) {
     try {
       const params = {
         max_results: maxResults,
-        query: enhancedQuery,
+        query: query,
         include_payload: false,  // Metadata only, no body
         verbose: false,          // Minimal response
       };
@@ -232,14 +266,16 @@ async function paginateGmail(composioClient, query) {
       
       // Safety: stop after 25 pages (500 messages)
       if (messages.length >= 500) {
-        console.warn(`[Gmail] Hit pagination limit (500 messages) for query: ${enhancedQuery}`);
+        console.warn(`[Gmail] Hit pagination limit (500 messages) for query: ${query}`);
         break;
       }
     } catch (err) {
-      console.warn(`[Gmail] Pagination failed:`, err.message);
+      console.warn(`[Gmail] Pagination failed for "${query}":`, err.message);
       break;
     }
   }
+  
+  console.log(`  Gmail query "${query}" returned ${messages.length} messages`);
   
   return messages;
 }
@@ -407,8 +443,12 @@ export function normalizeItems(sourceData) {
   // Important emails
   if (sourceData.gmail?.important) {
     for (const email of sourceData.gmail.important) {
-      // Gmail uses messageId or threadId, not id
-      const emailId = email.messageId || email.threadId || email.id;
+      // Gmail uses id (from API response)
+      const emailId = email.id || email.messageId || email.threadId;
+      if (!emailId) {
+        console.warn('[normalizeItems] Gmail item missing ID:', Object.keys(email));
+        continue;
+      }
       items.push({
         source: 'gmail',
         type: 'email-important',
@@ -416,10 +456,11 @@ export function normalizeItems(sourceData) {
         title: email.subject || '(no subject)',
         url: `https://mail.google.com/mail/u/0/#inbox/${emailId}`,
         body: `From: ${email.from || 'unknown'}`,
-        createdAt: email.internalDate ? new Date(parseInt(email.internalDate)).toISOString() : null,
+        createdAt: email.internalDate ? new Date(parseInt(email.internalDate)).toISOString() : new Date().toISOString(),
         metadata: {
           from: email.from,
           snippet: email.snippet,
+          labelIds: email.labelIds || [],
         },
       });
     }
@@ -427,8 +468,10 @@ export function normalizeItems(sourceData) {
   
   // Unread emails (lower priority)
   if (sourceData.gmail?.unread) {
-    for (const email of sourceData.gmail.unread.slice(0, 10)) {
-      const emailId = email.messageId || email.threadId || email.id;
+    for (const email of sourceData.gmail.unread.slice(0, 20)) {
+      const emailId = email.id || email.messageId || email.threadId;
+      if (!emailId) continue;
+      
       if (!items.find(i => i.sourceId === `gmail:${emailId}`)) {
         items.push({
           source: 'gmail',
@@ -437,15 +480,44 @@ export function normalizeItems(sourceData) {
           title: email.subject || '(no subject)',
           url: `https://mail.google.com/mail/u/0/#inbox/${emailId}`,
           body: `From: ${email.from || 'unknown'}`,
-          createdAt: email.internalDate ? new Date(parseInt(email.internalDate)).toISOString() : null,
+          createdAt: email.internalDate ? new Date(parseInt(email.internalDate)).toISOString() : new Date().toISOString(),
           metadata: {
             from: email.from,
             snippet: email.snippet,
+            labelIds: email.labelIds || [],
           },
         });
       }
     }
   }
+  
+  // Recent emails (for clustering)
+  if (sourceData.gmail?.recent) {
+    for (const email of sourceData.gmail.recent) {
+      const emailId = email.id || email.messageId || email.threadId;
+      if (!emailId) continue;
+      
+      // Skip if already added as important/unread
+      if (items.find(i => i.sourceId === `gmail:${emailId}`)) continue;
+      
+      items.push({
+        source: 'gmail',
+        type: 'email-recent',
+        sourceId: `gmail:${emailId}`,
+        title: email.subject || '(no subject)',
+        url: `https://mail.google.com/mail/u/0/#inbox/${emailId}`,
+        body: `From: ${email.from || 'unknown'}`,
+        createdAt: email.internalDate ? new Date(parseInt(email.internalDate)).toISOString() : new Date().toISOString(),
+        metadata: {
+          from: email.from,
+          snippet: email.snippet,
+          labelIds: email.labelIds || [],
+        },
+      });
+    }
+  }
+  
+  console.log(`[normalizeItems] Gmail: ${items.filter(i => i.source === 'gmail').length} items created`);
   
   // Upcoming meetings (<2h)
   if (sourceData.googlecalendar?.upcoming) {
@@ -496,14 +568,31 @@ export function normalizeItems(sourceData) {
 export function dedupeItems(items) {
   const seen = new Map();
   const deduped = [];
+  let skippedCount = 0;
+  
+  // Log a sample of sourceIds
+  if (items.length > 0) {
+    console.log(`[dedupeItems] Sample sourceIds (first 3):`);
+    items.slice(0, 3).forEach(item => {
+      console.log(`  - ${item.sourceId} (${item.source}:${item.type})`);
+    });
+  }
   
   for (const item of items) {
     // Use sourceId as primary key, but also check URL for cross-source deduplication
     const key = item.sourceId;
+    
+    if (!key || key === 'undefined' || key.includes('undefined')) {
+      console.warn(`[dedupeItems] Item with invalid sourceId:`, item.sourceId, item.title?.substring(0, 50));
+      skippedCount++;
+      continue;
+    }
+    
     const urlKey = item.url ? new URL(item.url).pathname : null;
     
     if (seen.has(key)) {
       // Already seen, skip
+      skippedCount++;
       continue;
     }
     
@@ -515,6 +604,7 @@ export function dedupeItems(items) {
         ...item.metadata,
         sources: [...(existing.metadata.sources || [existing.source]), item.source],
       };
+      skippedCount++;
       continue;
     }
     
@@ -522,6 +612,8 @@ export function dedupeItems(items) {
     if (urlKey) seen.set(urlKey, item);
     deduped.push(item);
   }
+  
+  console.log(`[dedupeItems] ${items.length} -> ${deduped.length} (skipped ${skippedCount} duplicates/invalid)`);
   
   return deduped;
 }

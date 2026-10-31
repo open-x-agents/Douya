@@ -292,9 +292,12 @@ function buildContextMessage(context) {
  */
 async function callLLM(ctx, messages, sessionId = 'web-chat', composioClient = null) {
   const { createComposioTools, AGENT_SYSTEM_PROMPT } = await import('./agent-tools.js');
+  const { createTodayTools } = await import('./card-tools.js');
   
-  // Build tool definitions if Composio is available
-  const tools = composioClient ? createComposioTools(composioClient) : [];
+  // Build tool definitions
+  const composioTools = composioClient ? createComposioTools(composioClient) : [];
+  const cardTools = createTodayTools(callLLM.router); // Pass router for card operations
+  const tools = [...composioTools, ...cardTools];
   
   // Prepend system prompt
   const messagesWithSystem = [
@@ -548,7 +551,8 @@ export function createApiRouter(ctx) {
     return null;
   }
 
-  return {
+  
+  const router = {
     /**
      * GET /api/today - Get today's summary and tasks
      */
@@ -561,86 +565,48 @@ export function createApiRouter(ctx) {
           weekday: 'long',
         });
 
-        // Get real data from store
+        // Get cards from store
         const state = store.get();
-        const upcoming = state.upcoming || [];
-        const reports = Object.values(state.reports || {});
-        const deliveries = state.deliveries || [];
+        const cards = state.cards || [];
         
-        // Extract today's meetings
-        const todayMeetings = upcoming.filter(item => {
-          const startDate = new Date(item.startAt).toLocaleDateString('zh-CN');
-          return startDate === new Date().toLocaleDateString('zh-CN');
-        });
-
-        // Build task list from upcoming events and reports
-        const tasks = [];
+        // Filter active cards (not done/deleted/snoozed)
+        const activeCards = cards.filter(c => c.status === 'active' || !c.status);
         
-        // Add upcoming meetings as tasks
-        todayMeetings.slice(0, 5).forEach((meeting, i) => {
-          const startTime = new Date(meeting.startAt).toLocaleTimeString('zh-CN', {
-            hour: '2-digit',
-            minute: '2-digit',
-          });
-          tasks.push({
-            title: meeting.title || '未命名会议',
-            reason: `${startTime} 开始，${meeting.leadMinutes || 10} 分钟前提醒`,
-            evidence: `依据：日历事件 ${meeting.id}`,
-            advice: meeting.location ? `地点：${meeting.location}` : '',
-            closed: false,
-          });
-        });
-
-        // Add recent report items as tasks
-        const recentReport = reports
-          .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-          [0];
-        
-        if (recentReport?.plan) {
-          recentReport.plan.slice(0, 3).forEach(item => {
-            tasks.push({
-              title: item,
-              reason: '今日计划',
-              evidence: `依据：${recentReport.memberName || '成员'} 的日报`,
-              closed: false,
-            });
-          });
-        }
-
-        // If store is empty, show clear message  
-        const hasRealTasks = tasks.length > 0;
-        if (tasks.length === 0) {
-          tasks.push({
-            title: '暂无待办任务',
-            reason: '今天没有安排的会议或计划',
-            evidence: '数据来源：本地存储（当前为空）',
-            closed: false,
-          });
-        }
-        const meetingHours = todayMeetings.reduce((sum, m) => {
-          const duration = (new Date(m.endAt || m.startAt).getTime() - 
-                          new Date(m.startAt).getTime()) / (1000 * 60 * 60);
-          return sum + Math.max(0, duration);
+        // Count meetings (event-type cards)
+        const meetings = activeCards.filter(c => c.type === 'event');
+        const meetingHours = meetings.reduce((sum, m) => {
+          // Extract duration if available in body or default to 1h
+          const match = m.body?.match(/(\d+(\.\d+)?)\s*(h|小时|hour)/i);
+          return sum + (match ? parseFloat(match[1]) : 1);
         }, 0);
-
-        const sources = [];
-        if (upcoming.length > 0) sources.push('日历');
-        if (reports.length > 0) sources.push('日报');
-        if (deliveries.length > 0) sources.push('提醒');
-
-        // Count only real tasks (not the empty placeholder)
-        const realTaskCount = hasRealTasks ? tasks.length : 0;
+        
+        // Count actionable items (tasks, actions, high-priority)
+        const actionable = activeCards.filter(c => 
+          c.type === 'task' || 
+          c.type === 'action' || 
+          c.priority === 'high'
+        );
+        
+        // Build sources list
+        const sources = [...new Set(activeCards.map(c => c.source).filter(Boolean))];
+        const sourcesText = sources.length > 0 
+          ? sources.map(s => {
+              const map = { github: 'GitHub', gmail: 'Gmail', googlecalendar: '日历', slack: 'Slack', manual: '手动' };
+              return map[s] || s;
+            }).join('、')
+          : '暂无数据';
 
         return {
-          summary: realTaskCount === 0
+          summary: activeCards.length === 0
             ? '今天 0 个会，0 件事' 
-            : `今天 ${todayMeetings.length} 个会，${realTaskCount} 件事`,
+            : `今天 ${meetings.length} 个会，${actionable.length} 件在手`,
           date: today,
-          sources: sources.join('、') + (sources.length > 0 ? ' 已读' : '暂无数据'),
-          openCount: realTaskCount,
+          sources: sourcesText,
+          openCount: actionable.length,
           meetingHours: Math.round(meetingHours * 10) / 10,
-          waitingCount: 0,
-          tasks,
+          waitingCount: activeCards.filter(c => c.status === 'waiting').length,
+          cards: activeCards,
+          hasDigest: state.lastDigest !== null,
         };
       } catch (err) {
         console.error('API /today error:', err);
@@ -651,7 +617,8 @@ export function createApiRouter(ctx) {
           openCount: 0,
           meetingHours: 0,
           waitingCount: 0,
-          tasks: [],
+          cards: [],
+          hasDigest: false,
         };
       }
     },
@@ -714,98 +681,7 @@ export function createApiRouter(ctx) {
           };
         }
 
-        // Fetch data from each active source
-        const sourceData = {};
-        
-        for (const account of activeAccounts) {
-          const slug = account.toolkit.slug;
-          
-          try {
-            if (slug === 'github') {
-              // Fetch repos and PRs
-              const [repos, prs] = await Promise.all([
-                client.executeAction('GITHUB_LIST_REPOSITORIES_FOR_THE_AUTHENTICATED_USER', {
-                  per_page: 5,
-                  sort: 'updated',
-                }),
-                client.executeAction('GITHUB_SEARCH_ISSUES_AND_PULL_REQUESTS', {
-                  q: 'is:pr is:open involves:@me',
-                  per_page: 5,
-                }),
-              ]);
-              
-              sourceData.github = {
-                repos: repos?.data?.repositories?.slice(0, 5) || [],
-                prs: prs?.data?.items?.slice(0, 5) || [],
-              };
-            } else if (slug === 'gmail') {
-              const emails = await client.executeAction('GMAIL_FETCH_EMAILS', {
-                max_results: 5,
-                query: 'in:inbox is:unread',
-              });
-              
-              sourceData.gmail = {
-                unread: emails?.data?.messages || [],
-              };
-            } else if (slug === 'googlecalendar') {
-              const now = new Date();
-              const startOfDay = new Date(now.setHours(0, 0, 0, 0)).toISOString();
-              const endOfDay = new Date(now.setHours(23, 59, 59, 999)).toISOString();
-              
-              const events = await client.executeAction('GOOGLECALENDAR_EVENTS_LIST', {
-                timeMin: startOfDay,
-                timeMax: endOfDay,
-                maxResults: 10,
-              });
-              
-              sourceData.calendar = {
-                events: events?.data?.items || [],
-              };
-            }
-          } catch (err) {
-            console.warn(`[generateDigest] Failed to fetch ${slug}:`, err.message);
-          }
-        }
-
-        // Build context for LLM
-        let contextText = '请基于以下真实数据生成今日汇聚摘要：\n\n';
-        
-        if (sourceData.github) {
-          if (sourceData.github.repos.length > 0) {
-            contextText += '**GitHub 仓库（最近更新）：**\n';
-            sourceData.github.repos.forEach(repo => {
-              contextText += `- ${repo.full_name}: ${repo.description || '无描述'}\n`;
-            });
-            contextText += '\n';
-          }
-          
-          if (sourceData.github.prs.length > 0) {
-            contextText += '**GitHub 待处理 PR：**\n';
-            sourceData.github.prs.forEach(pr => {
-              contextText += `- #${pr.number} ${pr.title} (${pr.state})\n`;
-            });
-            contextText += '\n';
-          }
-        }
-        
-        if (sourceData.gmail?.unread.length > 0) {
-          contextText += `**Gmail 未读邮件：** ${sourceData.gmail.unread.length} 封\n`;
-          sourceData.gmail.unread.slice(0, 3).forEach(msg => {
-            contextText += `- ${msg.subject || '(无主题)'} from ${msg.from || 'unknown'}\n`;
-          });
-          contextText += '\n';
-        }
-        
-        if (sourceData.calendar?.events.length > 0) {
-          contextText += '**今日日程：**\n';
-          sourceData.calendar.events.forEach(event => {
-            const start = event.start?.dateTime || event.start?.date;
-            contextText += `- ${event.summary || '(无标题)'} (${start})\n`;
-          });
-          contextText += '\n';
-        }
-
-        // Call LLM to generate summary
+        // Create LLM client
         const { createLLMClient } = await import('./llm-client.js');
         const llm = createLLMClient({
           provider: llmConfig.provider,
@@ -815,70 +691,54 @@ export function createApiRouter(ctx) {
           log: console.log,
         });
 
-        const prompt = contextText + `
-请生成一个简洁的今日汇聚摘要，格式为 JSON：
-{
-  "summary": "一句话总结（20字内）",
-  "cards": [
-    {"type": "info", "title": "卡片标题", "description": "简短描述", "url": "链接（如有）"}
-  ]
-}
+        // Run multi-stage aggregation pipeline
+        const { runAggregationPipeline } = await import('./aggregation.js');
+        const brief = await runAggregationPipeline(client, activeAccounts, llm);
 
-要求：
-1. 只使用上述真实数据，绝不编造
-2. cards 数组包含 3-5 张卡片
-3. 每张卡片突出一个重点（PR、邮件、日程等）
-4. 简洁专业，有行动价值`;
-
-        let fullText = '';
-        for await (const chunk of llm.stream({
-          messages: [
-            { role: 'system', content: '你是一个数据汇聚助手，专门生成简洁准确的每日摘要。' },
-            { role: 'user', content: prompt },
-          ],
-          maxTokens: 1000,
-          responseFormat: { type: 'json_object' },
-        })) {
-          if (chunk.type === 'text' && chunk.text) {
-            fullText += chunk.text;
-          }
-        }
-
-        // Parse LLM response
-        let digestData;
-        try {
-          digestData = JSON.parse(fullText);
-        } catch (err) {
-          console.error('[generateDigest] Failed to parse LLM response:', fullText.substring(0, 200));
-          return {
-            success: false,
-            error: '生成摘要失败：模型返回格式错误',
-          };
-        }
-
-        // Save to store
-        const timestamp = new Date().toISOString();
-        const digestRecord = {
-          summary: digestData.summary || '今日汇聚',
-          cards: digestData.cards || [],
-          sources: activeAccounts.map(a => a.toolkit.slug),
-          generatedAt: timestamp,
-          manual: true,
-        };
-
+        // Merge/dedupe with existing cards in store
         const state = store.get();
-        state.lastDigest = digestRecord;
-        state.digestHistory = state.digestHistory || [];
-        state.digestHistory.unshift(digestRecord);
-        state.digestHistory = state.digestHistory.slice(0, 30); // Keep last 30
+        const existingCards = state.cards || [];
+        const existingIds = new Set(existingCards.map(c => c.sourceId).filter(Boolean));
+        
+        // Add new cards, skip duplicates
+        const newCards = brief.cards.filter(card => !existingIds.has(card.sourceId));
+        
+        // Update existing cards if content changed
+        const updatedCards = existingCards.map(existing => {
+          const match = brief.cards.find(c => c.sourceId === existing.sourceId);
+          if (match && (match.title !== existing.title || match.body !== existing.body)) {
+            return {
+              ...existing,
+              title: match.title,
+              body: match.body,
+              url: match.url,
+              priority: match.priority,
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return existing;
+        });
+        
+        state.cards = [...updatedCards, ...newCards];
+        state.lastDigest = {
+          summary: brief.summary,
+          generatedAt: new Date().toISOString(),
+          itemCount: brief.cards.length,
+          newCardCount: newCards.length,
+          sources: activeAccounts.map(a => a.toolkit.slug),
+        };
+        
         await store.save(state);
 
-        console.log('[generateDigest] Generated and saved digest:', digestRecord.summary);
+        console.log(`[generateDigest] Generated brief: ${brief.summary}`);
+        console.log(`[generateDigest] Added ${newCards.length} new cards, updated ${brief.cards.length - newCards.length} existing`);
 
         return {
           success: true,
-          digest: digestRecord,
-          timestamp,
+          summary: brief.summary,
+          newCardCount: newCards.length,
+          totalCardCount: state.cards.length,
+          timestamp: state.lastDigest.generatedAt,
         };
       } catch (err) {
         console.error('[generateDigest] Error:', err);
@@ -886,6 +746,124 @@ export function createApiRouter(ctx) {
           success: false,
           error: err.message || '生成汇聚失败',
         };
+      }
+    },
+
+    /**
+     * GET /api/cards - List all today cards
+     */
+    async listCards() {
+      try {
+        const state = store.get();
+        const cards = state.cards || [];
+        
+        // Sort by priority (high first) then by createdAt (newest first)
+        const priorityOrder = { high: 0, medium: 1, low: 2 };
+        const sorted = [...cards].sort((a, b) => {
+          const priorityDiff = (priorityOrder[a.priority] ?? 1) - (priorityOrder[b.priority] ?? 1);
+          if (priorityDiff !== 0) return priorityDiff;
+          return new Date(b.createdAt) - new Date(a.createdAt);
+        });
+        
+        return { cards: sorted };
+      } catch (err) {
+        console.error('[listCards] Error:', err);
+        return { cards: [] };
+      }
+    },
+
+    /**
+     * POST /api/cards - Create a new card
+     */
+    async createCard(data) {
+      try {
+        const { source, type, title, body, url, priority, status } = data;
+        
+        if (!title) {
+          return { success: false, error: '标题不能为空' };
+        }
+        
+        const now = new Date().toISOString();
+        const card = {
+          id: `card_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          source: source || 'manual',
+          type: type || 'info',
+          title,
+          body: body || '',
+          url: url || null,
+          priority: priority || 'medium',
+          status: status || 'active',
+          createdAt: now,
+          updatedAt: now,
+        };
+        
+        const state = store.get();
+        state.cards = state.cards || [];
+        state.cards.push(card);
+        await store.save(state);
+        
+        console.log('[createCard] Created:', card.id, card.title);
+        return { success: true, card };
+      } catch (err) {
+        console.error('[createCard] Error:', err);
+        return { success: false, error: err.message };
+      }
+    },
+
+    /**
+     * POST /api/cards/:id - Update an existing card
+     */
+    async updateCard(id, updates) {
+      try {
+        const state = store.get();
+        const cards = state.cards || [];
+        const index = cards.findIndex(c => c.id === id);
+        
+        if (index === -1) {
+          return { success: false, error: '卡片不存在' };
+        }
+        
+        const card = cards[index];
+        const updated = {
+          ...card,
+          ...updates,
+          id: card.id, // Prevent ID change
+          createdAt: card.createdAt, // Prevent createdAt change
+          updatedAt: new Date().toISOString(),
+        };
+        
+        cards[index] = updated;
+        await store.save(state);
+        
+        console.log('[updateCard] Updated:', id, updated.title);
+        return { success: true, card: updated };
+      } catch (err) {
+        console.error('[updateCard] Error:', err);
+        return { success: false, error: err.message };
+      }
+    },
+
+    /**
+     * DELETE /api/cards/:id - Delete a card
+     */
+    async deleteCard(id) {
+      try {
+        const state = store.get();
+        const cards = state.cards || [];
+        const index = cards.findIndex(c => c.id === id);
+        
+        if (index === -1) {
+          return { success: false, error: '卡片不存在' };
+        }
+        
+        const deleted = cards.splice(index, 1)[0];
+        await store.save(state);
+        
+        console.log('[deleteCard] Deleted:', id, deleted.title);
+        return { success: true };
+      } catch (err) {
+        console.error('[deleteCard] Error:', err);
+        return { success: false, error: err.message };
       }
     },
 
@@ -1396,6 +1374,11 @@ export function createApiRouter(ctx) {
       return html;
     },
   };
+  
+  // Set router reference for card tools
+  callLLM.router = router;
+  
+  return router;
 }
 
 /**
@@ -1433,6 +1416,46 @@ export function mountApiRoutes(server, router) {
         res.end(JSON.stringify(data));
       } else if (url.pathname === '/api/digest/generate' && req.method === 'POST') {
         const data = await router.generateDigestNow();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
+      } else if (url.pathname === '/api/cards' && req.method === 'GET') {
+        const data = await router.listCards();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
+      } else if (url.pathname === '/api/cards' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const data = JSON.parse(body);
+            const response = await router.createCard(data);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid request' }));
+          }
+        });
+        return;
+      } else if (url.pathname.startsWith('/api/cards/') && req.method === 'POST') {
+        const id = url.pathname.split('/api/cards/')[1];
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const data = JSON.parse(body);
+            const response = await router.updateCard(id, data);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid request' }));
+          }
+        });
+        return;
+      } else if (url.pathname.startsWith('/api/cards/') && req.method === 'DELETE') {
+        const id = url.pathname.split('/api/cards/')[1];
+        const data = await router.deleteCard(id);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(data));
       } else if (url.pathname === '/api/sources' && req.method === 'GET') {

@@ -19,6 +19,7 @@
 node --test test/*.test.js 'acceptance-cases/**/*.test.js'   # L0：单元测试 + 验收用例（不联网，不需要 key）
 node scripts/pre-release.mjs        # L7 全跑：单元 → 干净安装 → 版本一致性 → 真实模型
 node scripts/pre-release.mjs --skip-version   # 版本号还没写出来时用这个（发版 workflow 就是这样调的）
+node scripts/pre-release.mjs --install-only   # 只跑干净安装：pack → 从 tgz 读 files 逐项核对仓库与 tgz → 空目录 import
 node test/e2e/real-model.e2e.mjs    # 只跑真实模型那一段，需要 MODEL_API_KEY
 node scripts/enqueue-guard.mjs --pr 12        # L5：对一个真 PR 跑准入（需要 GITHUB_TOKEN）
 ```

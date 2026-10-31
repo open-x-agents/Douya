@@ -443,6 +443,9 @@ export async function writeBrief(grouped, llmClient) {
   
   const brief = JSON.parse(fullText);
   
+  // Deterministically add chart/timeline blocks (don't rely on LLM alone)
+  brief.cards = addDeterministicBlocks(brief.cards, grouped);
+  
   // Add sourceId and metadata to cards
   brief.cards = brief.cards.map((card, idx) => {
     // Find corresponding item to get sourceId
@@ -460,6 +463,140 @@ export async function writeBrief(grouped, llmClient) {
   });
   
   return brief;
+}
+
+/**
+ * Deterministically add chart/timeline blocks to cards when data exists
+ * Don't rely on LLM alone - always add visual blocks when counts are available
+ */
+function addDeterministicBlocks(cards, grouped) {
+  const allItems = [...grouped.urgent, ...grouped.action, ...grouped.fyi];
+  
+  // Count items by source
+  const sourceCounts = {};
+  allItems.forEach(item => {
+    sourceCounts[item.source] = (sourceCounts[item.source] || 0) + 1;
+  });
+  
+  // If we have a summary card or first card, add source distribution chart
+  if (cards.length > 0 && Object.keys(sourceCounts).length > 1) {
+    const firstCard = cards[0];
+    
+    // Add chart block showing items by source
+    const sourceNames = {github: 'GitHub', gmail: 'Gmail', googlecalendar: 'Calendar', slack: 'Slack'};
+    const sourceData = Object.entries(sourceCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4);
+    
+    if (!firstCard.blocks) firstCard.blocks = [];
+    
+    // Add donut or bar chart
+    if (sourceData.length === 2) {
+      // Donut for 2 sources
+      firstCard.blocks.unshift({
+        type: 'chart',
+        chartType: 'donut',
+        data: sourceData.map(([_, count]) => count),
+        labels: sourceData.map(([source]) => sourceNames[source] || source),
+      });
+    } else if (sourceData.length > 2) {
+      // Bar for 3+ sources
+      firstCard.blocks.unshift({
+        type: 'chart',
+        chartType: 'bar',
+        data: sourceData.map(([_, count]) => count),
+        labels: sourceData.map(([source]) => sourceNames[source] || source),
+        color: 'blue',
+      });
+    }
+  }
+  
+  // GitHub: Add repo distribution chart when multiple repos
+  const githubItems = allItems.filter(i => i.source === 'github');
+  if (githubItems.length > 2) {
+    const repoCount = {};
+    githubItems.forEach(item => {
+      const repo = item.metadata?.repository || item.url?.match(/github\.com\/([^\/]+\/[^\/]+)/)?.[1];
+      if (repo) {
+        const shortName = repo.split('/')[1] || repo;
+        repoCount[shortName] = (repoCount[shortName] || 0) + 1;
+      }
+    });
+    
+    const topRepos = Object.entries(repoCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    
+    if (topRepos.length > 1) {
+      // Find GitHub card and add chart
+      const githubCard = cards.find(c => c.source === 'github' || c.title?.toLowerCase().includes('github'));
+      if (githubCard) {
+        if (!githubCard.blocks) githubCard.blocks = [];
+        githubCard.blocks.push({
+          type: 'chart',
+          chartType: 'bar',
+          data: topRepos.map(([_, count]) => count),
+          labels: topRepos.map(([repo]) => repo.substring(0, 12)),
+          color: 'blue',
+        });
+      }
+    }
+  }
+  
+  // Gmail: Add sender distribution chart when multiple senders
+  const emailItems = allItems.filter(i => i.source === 'gmail');
+  if (emailItems.length > 3) {
+    const senderCount = {};
+    emailItems.forEach(item => {
+      const sender = item.metadata?.from || 'Unknown';
+      const senderName = sender.split('<')[0].trim() || sender.split('@')[0];
+      senderCount[senderName] = (senderCount[senderName] || 0) + 1;
+    });
+    
+    const topSenders = Object.entries(senderCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4);
+    
+    if (topSenders.length > 1) {
+      // Find Gmail card and add chart
+      const gmailCard = cards.find(c => c.source === 'gmail' || c.title?.toLowerCase().includes('email') || c.title?.toLowerCase().includes('邮件'));
+      if (gmailCard) {
+        if (!gmailCard.blocks) gmailCard.blocks = [];
+        gmailCard.blocks.push({
+          type: 'chart',
+          chartType: 'bar',
+          data: topSenders.map(([_, count]) => count),
+          labels: topSenders.map(([sender]) => sender.substring(0, 10)),
+          color: 'blue',
+        });
+      }
+    }
+  }
+  
+  // Calendar: Add timeline for today's events
+  const calendarItems = [...grouped.urgent, ...grouped.action].filter(i => i.source === 'googlecalendar');
+  if (calendarItems.length > 0) {
+    const timeline = calendarItems.map(item => {
+      const timeMatch = item.body?.match(/(\d{1,2}:\d{2})/);
+      const time = timeMatch ? timeMatch[1] : '';
+      return { time, title: item.title };
+    }).filter(t => t.time);
+    
+    if (timeline.length > 0) {
+      // Find Calendar card or create one if needed
+      let calendarCard = cards.find(c => c.source === 'googlecalendar' || c.title?.toLowerCase().includes('meeting') || c.title?.toLowerCase().includes('会议') || c.title?.toLowerCase().includes('日程'));
+      
+      if (calendarCard) {
+        if (!calendarCard.blocks) calendarCard.blocks = [];
+        calendarCard.blocks.push({
+          type: 'timeline',
+          items: timeline,
+        });
+      }
+    }
+  }
+  
+  return cards;
 }
 
 /**

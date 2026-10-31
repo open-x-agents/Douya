@@ -34,16 +34,16 @@ export function createComposioTools(composioClient) {
       async execute({ per_page = 20, sort = 'updated' }) {
         try {
           const result = await composioClient.executeAction(
-            'GITHUB_USER_GET_CURRENT_USER_REPOS',
+            'GITHUB_LIST_REPOSITORIES_FOR_THE_AUTHENTICATED_USER',
             { per_page, sort }
           )
           
-          if (!result.items || result.items.length === 0) {
+          if (!result.data?.repositories || result.data.repositories.length === 0) {
             return { repos: [], count: 0 }
           }
 
           return {
-            repos: result.items.map(repo => ({
+            repos: result.data.repositories.map(repo => ({
               name: repo.name,
               fullName: repo.full_name,
               description: repo.description || '',
@@ -52,7 +52,7 @@ export function createComposioTools(composioClient) {
               language: repo.language || '',
               updatedAt: repo.updated_at,
             })),
-            count: result.items.length,
+            count: result.data.repositories.length,
           }
         } catch (error) {
           return { error: error.message, repos: [], count: 0 }
@@ -61,46 +61,58 @@ export function createComposioTools(composioClient) {
     },
 
     {
-      name: 'github_list_pull_requests',
-      description: '获取 GitHub Pull Requests 列表',
+      name: 'github_search_my_prs',
+      description: '搜索当前用户相关的 Pull Requests（我创建的、我被请求审查的、提到我的）',
       inputSchema: {
         type: 'object',
         properties: {
           state: {
             type: 'string',
-            enum: ['open', 'closed', 'all'],
+            enum: ['open', 'closed'],
             description: 'PR 状态',
             default: 'open',
           },
-          per_page: {
-            type: 'number',
-            description: '返回的 PR 数量',
-            default: 10,
+          query_type: {
+            type: 'string',
+            enum: ['involves_me', 'review_requested', 'authored_by_me'],
+            description: '查询类型',
+            default: 'involves_me',
           },
         },
       },
-      async execute({ state = 'open', per_page = 10 }) {
+      async execute({ state = 'open', query_type = 'involves_me' }) {
         try {
+          // Build query string based on type
+          let q = `is:pr is:${state}`;
+          if (query_type === 'involves_me') {
+            q += ' involves:@me';
+          } else if (query_type === 'review_requested') {
+            q += ' review-requested:@me';
+          } else if (query_type === 'authored_by_me') {
+            q += ' author:@me';
+          }
+          
           const result = await composioClient.executeAction(
-            'GITHUB_LIST_PULL_REQUESTS',
-            { state, per_page }
+            'GITHUB_SEARCH_ISSUES_AND_PULL_REQUESTS',
+            { q, per_page: 10 }
           )
           
-          if (!result.items || result.items.length === 0) {
+          if (!result.data?.items || result.data.items.length === 0) {
             return { pullRequests: [], count: 0 }
           }
 
           return {
-            pullRequests: result.items.map(pr => ({
+            pullRequests: result.data.items.map(pr => ({
               number: pr.number,
               title: pr.title,
               state: pr.state,
               url: pr.html_url,
+              repo: pr.repository_url?.split('/').slice(-2).join('/') || 'unknown',
               author: pr.user?.login || 'unknown',
               createdAt: pr.created_at,
               updatedAt: pr.updated_at,
             })),
-            count: result.items.length,
+            count: result.data.items.length,
           }
         } catch (error) {
           return { error: error.message, pullRequests: [], count: 0 }
@@ -109,8 +121,8 @@ export function createComposioTools(composioClient) {
     },
 
     {
-      name: 'github_list_issues',
-      description: '获取 GitHub Issues 列表',
+      name: 'github_list_my_issues',
+      description: '获取分配给当前用户的 GitHub Issues',
       inputSchema: {
         type: 'object',
         properties: {
@@ -120,35 +132,31 @@ export function createComposioTools(composioClient) {
             description: 'Issue 状态',
             default: 'open',
           },
-          per_page: {
-            type: 'number',
-            description: '返回的 Issue 数量',
-            default: 10,
-          },
         },
       },
-      async execute({ state = 'open', per_page = 10 }) {
+      async execute({ state = 'open' }) {
         try {
           const result = await composioClient.executeAction(
-            'GITHUB_LIST_ISSUES',
-            { state, per_page, filter: 'assigned' }
+            'GITHUB_LIST_ISSUES_ASSIGNED_TO_THE_AUTHENTICATED_USER',
+            { state, per_page: 10 }
           )
           
-          if (!result.items || result.items.length === 0) {
+          if (!result.data?.issues || result.data.issues.length === 0) {
             return { issues: [], count: 0 }
           }
 
           return {
-            issues: result.items.map(issue => ({
+            issues: result.data.issues.map(issue => ({
               number: issue.number,
               title: issue.title,
               state: issue.state,
               url: issue.html_url,
+              repo: issue.repository_url?.split('/').slice(-2).join('/') || 'unknown',
               labels: (issue.labels || []).map(l => l.name),
               createdAt: issue.created_at,
               updatedAt: issue.updated_at,
             })),
-            count: result.items.length,
+            count: result.data.issues.length,
           }
         } catch (error) {
           return { error: error.message, issues: [], count: 0 }
@@ -157,39 +165,44 @@ export function createComposioTools(composioClient) {
     },
 
     {
-      name: 'gmail_list_recent',
-      description: '获取最近的 Gmail 邮件',
+      name: 'gmail_fetch_emails',
+      description: '获取 Gmail 邮件',
       inputSchema: {
         type: 'object',
         properties: {
-          maxResults: {
+          max_results: {
             type: 'number',
             description: '返回的邮件数量',
             default: 5,
           },
+          query: {
+            type: 'string',
+            description: 'Gmail 搜索查询（例如：is:unread, from:example@example.com）',
+            default: 'in:inbox',
+          },
         },
       },
-      async execute({ maxResults = 5 }) {
+      async execute({ max_results = 5, query = 'in:inbox' }) {
         try {
           const result = await composioClient.executeAction(
-            'GMAIL_LIST_EMAILS',
-            { maxResults, labelIds: ['INBOX'] }
+            'GMAIL_FETCH_EMAILS',
+            { max_results, query }
           )
           
-          if (!result.messages || result.messages.length === 0) {
+          if (!result.data?.messages || result.data.messages.length === 0) {
             return { messages: [], count: 0 }
           }
 
           return {
-            messages: result.messages.map(msg => ({
+            messages: result.data.messages.map(msg => ({
               id: msg.id,
               threadId: msg.threadId,
               subject: msg.subject || '(无主题)',
               from: msg.from || 'unknown',
               snippet: msg.snippet || '',
-              date: msg.internalDate,
+              date: msg.internalDate || msg.date,
             })),
-            count: result.messages.length,
+            count: result.data.messages.length,
           }
         } catch (error) {
           return { error: error.message, messages: [], count: 0 }
@@ -203,44 +216,44 @@ export function createComposioTools(composioClient) {
       inputSchema: {
         type: 'object',
         properties: {
-          timeMin: {
+          time_min: {
             type: 'string',
             description: '开始时间 (ISO 8601)',
           },
-          timeMax: {
+          time_max: {
             type: 'string',
             description: '结束时间 (ISO 8601)',
           },
-          maxResults: {
+          max_results: {
             type: 'number',
             description: '返回的事件数量',
             default: 10,
           },
         },
       },
-      async execute({ timeMin, timeMax, maxResults = 10 }) {
+      async execute({ time_min, time_max, max_results = 10 }) {
         try {
           // Default to today if no time range specified
-          if (!timeMin) {
+          if (!time_min) {
             const now = new Date()
-            timeMin = new Date(now.setHours(0, 0, 0, 0)).toISOString()
+            time_min = new Date(now.setHours(0, 0, 0, 0)).toISOString()
           }
-          if (!timeMax) {
+          if (!time_max) {
             const now = new Date()
-            timeMax = new Date(now.setHours(23, 59, 59, 999)).toISOString()
+            time_max = new Date(now.setHours(23, 59, 59, 999)).toISOString()
           }
 
           const result = await composioClient.executeAction(
-            'GOOGLECALENDAR_LIST_EVENTS',
-            { timeMin, timeMax, maxResults }
+            'GOOGLECALENDAR_EVENTS_LIST',
+            { timeMin: time_min, timeMax: time_max, maxResults: max_results }
           )
           
-          if (!result.items || result.items.length === 0) {
+          if (!result.data?.items || result.data.items.length === 0) {
             return { events: [], count: 0 }
           }
 
           return {
-            events: result.items.map(event => ({
+            events: result.data.items.map(event => ({
               id: event.id,
               summary: event.summary || '(无标题)',
               start: event.start?.dateTime || event.start?.date,
@@ -248,7 +261,7 @@ export function createComposioTools(composioClient) {
               location: event.location || '',
               attendees: (event.attendees || []).length,
             })),
-            count: result.items.length,
+            count: result.data.items.length,
           }
         } catch (error) {
           return { error: error.message, events: [], count: 0 }

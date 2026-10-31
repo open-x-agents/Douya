@@ -153,12 +153,12 @@ async function gatherContext(composioClient, store) {
           try {
             if (slug === 'github') {
               // Get user's repos (first 5)
-              const repos = await composioClient.executeAction('GITHUB_USER_GET_CURRENT_USER_REPOS', {
+              const repos = await composioClient.executeAction('GITHUB_LIST_REPOSITORIES_FOR_THE_AUTHENTICATED_USER', {
                 per_page: 5,
                 sort: 'updated',
               });
               context.data.github = {
-                repos: repos?.items?.slice(0, 5).map(r => ({
+                repos: repos?.data?.repositories?.slice(0, 5).map(r => ({
                   name: r.name,
                   description: r.description,
                   updated: r.updated_at,
@@ -170,25 +170,25 @@ async function gatherContext(composioClient, store) {
               const startOfDay = new Date(now.setHours(0,0,0,0)).toISOString();
               const endOfDay = new Date(now.setHours(23,59,59,999)).toISOString();
               
-              const events = await composioClient.executeAction('GOOGLECALENDAR_LIST_EVENTS', {
+              const events = await composioClient.executeAction('GOOGLECALENDAR_EVENTS_LIST', {
                 timeMin: startOfDay,
                 timeMax: endOfDay,
                 maxResults: 5,
               });
               context.data.calendar = {
-                events: events?.items?.slice(0, 5).map(e => ({
+                events: events?.data?.items?.slice(0, 5).map(e => ({
                   summary: e.summary,
                   start: e.start?.dateTime || e.start?.date,
                 })) || [],
               };
             } else if (slug === 'gmail') {
               // Get recent emails
-              const emails = await composioClient.executeAction('GMAIL_LIST_EMAILS', {
-                maxResults: 3,
-                labelIds: ['INBOX'],
+              const emails = await composioClient.executeAction('GMAIL_FETCH_EMAILS', {
+                max_results: 3,
+                query: 'in:inbox',
               });
               context.data.gmail = {
-                unread: emails?.messages?.length || 0,
+                unread: emails?.data?.messages?.length || 0,
               };
             }
           } catch (err) {
@@ -1301,6 +1301,60 @@ export function mountApiRoutes(server, router) {
           }
         });
         return;
+      } else if (url.pathname === '/composio-callback' && req.method === 'GET') {
+        // OAuth callback from Composio
+        const status = url.searchParams.get('status');
+        const connectedAccountId = url.searchParams.get('connected_account_id');
+        const error = url.searchParams.get('error');
+        
+        const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Composio ${status === 'success' ? '连接成功' : '连接失败'}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
+    .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-align: center; max-width: 400px; }
+    .icon { font-size: 48px; margin-bottom: 1rem; }
+    h1 { margin: 0 0 0.5rem; font-size: 1.5rem; }
+    p { margin: 0 0 1rem; color: #666; }
+    .countdown { font-weight: bold; color: #333; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">${status === 'success' ? '✅' : '❌'}</div>
+    <h1>${status === 'success' ? 'Composio 连接成功！' : 'Composio 连接失败'}</h1>
+    <p>${status === 'success' 
+      ? `账号已连接 (${connectedAccountId || 'unknown'})`
+      : `错误: ${error || '未知错误'}`
+    }</p>
+    <p class="countdown"><span id="countdown">2</span> 秒后自动关闭窗口...</p>
+  </div>
+  <script>
+    let count = 2;
+    const countdownEl = document.getElementById('countdown');
+    const timer = setInterval(() => {
+      count--;
+      countdownEl.textContent = count;
+      if (count <= 0) {
+        clearInterval(timer);
+        window.close();
+        // If window.close() doesn't work (e.g. not opened by script), redirect
+        setTimeout(() => {
+          if (window.opener) {
+            window.opener.location.reload();
+          }
+          window.location.href = '/';
+        }, 500);
+      }
+    }, 1000);
+  </script>
+</body>
+</html>`;
+        
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(html);
       } else if (url.pathname === '/api/llm/config' && req.method === 'GET') {
         const data = await router.getLLMConfig();
         res.writeHead(200, { 'Content-Type': 'application/json' });

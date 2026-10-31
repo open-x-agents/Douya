@@ -821,7 +821,7 @@ export function clusterByProjectTheme(items) {
       sourceId: `gmail:cluster:${sender}:${today}`,
       title: `${sender}`,
       subtitle: 'Emails',
-      body: `${senderItems.length} messages${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`,
+      body: `最近 24h 收到 ${senderItems.length} 封邮件${unreadCount > 0 ? `，其中 ${unreadCount} 封未读` : ''}`,
       url: `https://mail.google.com/mail/u/0/#search/from:${encodeURIComponent(sender)}`,
       priority: importantCount > 0 ? 'high' : 'medium',
       status: 'active',
@@ -1384,6 +1384,14 @@ function generateClusterCards(grouped) {
         card.blocks.push({
           type: 'tags',
           tags: [{ text: `${cluster.metadata.unreadCount} 封未读`, color: 'orange' }],
+        });
+      }
+      
+      // Add tag for timeframe if not all are unread
+      if (cluster.clusterSize > cluster.metadata.unreadCount) {
+        card.blocks.push({
+          type: 'tags',
+          tags: [{ text: '最近 24h', color: 'gray' }],
         });
       }
       

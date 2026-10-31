@@ -28,18 +28,19 @@
   .app{display:grid;grid-template-columns:200px 1fr;height:100vh;width:100vw}
   @media (max-width:760px){.app{grid-template-columns:1fr}.side{display:none}}
 
-  .side{background:#f8f7f4;border-right:1px solid var(--line);padding:14px 10px;font-size:13px}
-  .side .who{display:flex;align-items:center;gap:8px;padding:2px 8px 14px}
-  .side .who img{width:22px;height:22px}
-  .side .who b{font-size:13px;font-weight:600}
-  .nav{padding:6px 10px;border-radius:8px;color:var(--ink2);margin-bottom:2px;transition:.25s var(--ease);cursor:pointer}
+  .side{background:#f8f7f4;border-right:1px solid var(--line);padding:16px 12px;font-size:13px;overflow-y:auto}
+  .side .who{display:flex;align-items:center;gap:8px;padding:4px 8px 16px}
+  .side .who img{width:24px;height:24px}
+  .side .who b{font-size:14px;font-weight:600}
+  .nav{padding:8px 12px;border-radius:8px;color:var(--ink2);margin-bottom:2px;transition:.25s var(--ease);cursor:pointer}
+  .nav:hover{background:rgba(255,255,255,.5)}
   .nav.on{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(21,23,28,.07)}
-  .side .grp{font-size:10.5px;color:#a8acb5;letter-spacing:.08em;padding:13px 10px 5px}
+  .side .grp{font-size:10.5px;color:#a8acb5;letter-spacing:.08em;padding:16px 12px 6px;text-transform:uppercase}
 
-  .views{position:relative;overflow:hidden}
-  .view{position:absolute;inset:0;overflow-y:auto;padding:24px 30px 30px;opacity:0;visibility:hidden;transition:opacity .34s var(--ease),transform .34s var(--ease);transform:translateY(8px)}
+  .views{position:relative;overflow:hidden;background:#fff}
+  .view{position:absolute;inset:0;overflow-y:auto;padding:32px 40px 40px;opacity:0;visibility:hidden;transition:opacity .34s var(--ease),transform .34s var(--ease);transform:translateY(8px)}
   .view.on{opacity:1;visibility:visible;transform:none}
-  @media (max-width:620px){.view{padding:18px 16px 24px}}
+  @media (max-width:620px){.view{padding:20px 16px 24px}}
 
   .a{opacity:0;transform:translateY(10px);transition:opacity .5s var(--ease),transform .5s var(--ease)}
   .a.in{opacity:1;transform:none}
@@ -150,40 +151,27 @@
 </head>
 <body>
 
-<header class="top">
-  <h1>数字同事 · Open Digital Mate</h1>
-  <div class="hint">每日汇聚、智能提醒、卡片交互</div>
-</header>
-
-<div class="stage">
-  <div class="device">
-    <div class="chrome">
-      <div class="lights"><i></i><i></i><i></i></div>
-      <div class="url">localhost:7777/today</div>
-      <div class="when" id="chromeClock">—</div>
+<div class="app">
+  <aside class="side">
+    <div class="who">
+      <svg viewBox="0 0 32 32" width="24" height="24" aria-hidden="true">
+        <circle cx="16" cy="16" r="16" fill="#eef2ff"/>
+        <ellipse cx="16" cy="18" rx="10.5" ry="9.5" fill="#4a6cf7"/>
+        <path d="M16 4.6c0-1.6 1.2-2.6 2.9-2.6-.2 1.7-1.2 2.9-2.9 3.1z" fill="#2f9e6b"/>
+        <circle cx="12.4" cy="16.6" r="1.6" fill="#fff"/>
+        <circle cx="19.6" cy="16.6" r="1.6" fill="#fff"/>
+        <path d="M13.4 20.4q2.6 2.4 5.2 0" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+      </svg>
+      <b>豆芽</b>
     </div>
+    <div class="nav on" data-view="today">今天</div>
+    <div class="nav" data-view="digest">每日汇聚</div>
+    <div class="nav" data-view="sources">信源状态</div>
+    <div class="grp">设置</div>
+    <div class="nav" data-view="settings">配置</div>
+  </aside>
 
-    <div class="app">
-      <aside class="side">
-        <div class="who">
-          <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true">
-            <circle cx="16" cy="16" r="16" fill="#eef2ff"/>
-            <ellipse cx="16" cy="18" rx="10.5" ry="9.5" fill="#4a6cf7"/>
-            <path d="M16 4.6c0-1.6 1.2-2.6 2.9-2.6-.2 1.7-1.2 2.9-2.9 3.1z" fill="#2f9e6b"/>
-            <circle cx="12.4" cy="16.6" r="1.6" fill="#fff"/>
-            <circle cx="19.6" cy="16.6" r="1.6" fill="#fff"/>
-            <path d="M13.4 20.4q2.6 2.4 5.2 0" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-          </svg>
-          <b>豆芽</b>
-        </div>
-        <div class="nav on" data-view="today">今天</div>
-        <div class="nav" data-view="digest">每日汇聚</div>
-        <div class="nav" data-view="sources">信源状态</div>
-        <div class="grp">设置</div>
-        <div class="nav" data-view="settings">配置</div>
-      </aside>
-
-      <div class="views">
+  <div class="views">
         <!-- 今天视图 -->
         <section class="view on" id="v-today">
           <h3 class="concl" id="conclText">正在加载...</h3>
@@ -225,7 +213,56 @@
 
         <!-- 设置 -->
         <section class="view" id="v-settings">
-          <h3 class="concl">Composio 设置</h3>
+          <h3 class="concl">模型配置</h3>
+          <div class="stamp a in">配置 AI 模型用于智能对话</div>
+
+          <!-- Model Configuration -->
+          <div class="card a in" id="modelCard">
+            <h3>🤖 AI模型</h3>
+            <p style="font-size:12.5px;color:var(--ink2);margin:8px 0">配置用于对话的 AI 模型</p>
+            
+            <div style="display:grid;gap:12px;margin-top:12px">
+              <div>
+                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:4px">提供商</label>
+                <select id="llmProviderSelect" 
+                  style="width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px;background:#fff">
+                  <option value="">选择提供商...</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="deepseek">DeepSeek</option>
+                  <option value="custom">自定义</option>
+                </select>
+              </div>
+
+              <div id="llmBaseURLDiv" style="display:none">
+                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:4px">Base URL</label>
+                <input type="text" id="llmBaseURLInput" placeholder="https://api.example.com/v1" 
+                  style="width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px;font-family:ui-monospace,monospace" />
+              </div>
+
+              <div>
+                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:4px">API Key</label>
+                <div style="display:flex;gap:8px">
+                  <input type="password" id="llmApiKeyInput" placeholder="输入 API Key" 
+                    style="flex:1;border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px;font-family:ui-monospace,monospace" />
+                </div>
+              </div>
+
+              <div>
+                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:4px">模型</label>
+                <input type="text" id="llmModelInput" placeholder="gpt-4o" 
+                  style="width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px" />
+              </div>
+
+              <div style="display:flex;gap:8px">
+                <button class="btn primary" id="saveLLMBtn">保存模型配置</button>
+                <button class="btn" id="testLLMBtn">测试连接</button>
+              </div>
+              
+              <div id="llmStatus" style="font-size:11.5px;margin-top:6px"></div>
+            </div>
+          </div>
+
+          <h3 class="concl" style="margin-top:32px">Composio 设置</h3>
           <div class="stamp a in">连接你的应用，开始聚合信息</div>
 
           <!-- API Key Configuration -->
@@ -343,7 +380,10 @@
       Object.keys(views).forEach(k => views[k].classList.toggle('on', k === view));
       if (view === 'digest') loadDigest();
       if (view === 'sources') loadSources();
-      if (view === 'settings') checkConfig();
+      if (view === 'settings') {
+        checkConfig();
+        loadLLMSettings();
+      }
     });
   });
 
@@ -472,7 +512,6 @@
       $('nOpen').textContent = data.openCount || 0;
       $('nMeet').textContent = (data.meetingHours || 0).toFixed(1) + 'h';
       $('nWait').textContent = data.waitingCount || 0;
-      $('chromeClock').textContent = new Date().toLocaleString('zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(/\//g,'-');
 
       renderWorkList(data.tasks || []);
     } catch (err) {
@@ -556,6 +595,123 @@
       console.error('Failed to load sources:', err);
       content.innerHTML = '<div class="error">加载失败</div>';
     }
+  }
+
+  // LLM Settings handlers
+  async function loadLLMSettings() {
+    try {
+      const res = await fetch('/api/llm/config');
+      const data = await res.json();
+      
+      if (data.provider) {
+        $('llmProviderSelect').value = data.provider;
+        handleProviderChange();
+      }
+      if (data.baseURL) $('llmBaseURLInput').value = data.baseURL;
+      if (data.model) $('llmModelInput').value = data.model;
+      if (data.apiKey) {
+        $('llmApiKeyInput').placeholder = data.apiKey;
+        $('llmApiKeyInput').value = '';
+      }
+    } catch (error) {
+      console.error('Failed to load LLM settings:', error);
+    }
+  }
+
+  function handleProviderChange() {
+    const provider = $('llmProviderSelect').value;
+    const baseURLDiv = $('llmBaseURLDiv');
+    const baseURLInput = $('llmBaseURLInput');
+    const modelInput = $('llmModelInput');
+
+    if (provider === 'openai') {
+      baseURLDiv.style.display = 'none';
+      baseURLInput.value = 'https://api.openai.com/v1';
+      modelInput.value = modelInput.value || 'gpt-4o';
+      modelInput.placeholder = 'gpt-4o';
+    } else if (provider === 'deepseek') {
+      baseURLDiv.style.display = 'none';
+      baseURLInput.value = 'https://api.deepseek.com/v1';
+      modelInput.value = modelInput.value || 'deepseek-chat';
+      modelInput.placeholder = 'deepseek-chat';
+    } else if (provider === 'custom') {
+      baseURLDiv.style.display = 'block';
+      baseURLInput.value = '';
+      modelInput.placeholder = '输入模型名称';
+    } else {
+      baseURLDiv.style.display = 'none';
+    }
+  }
+
+  const llmProviderSelect = $('llmProviderSelect');
+  if (llmProviderSelect) {
+    llmProviderSelect.addEventListener('change', handleProviderChange);
+  }
+
+  const saveLLMBtn = $('saveLLMBtn');
+  if (saveLLMBtn) {
+    saveLLMBtn.addEventListener('click', async () => {
+      const provider = $('llmProviderSelect').value;
+      const baseURL = $('llmBaseURLInput').value;
+      const apiKey = $('llmApiKeyInput').value;
+      const model = $('llmModelInput').value;
+
+      if (!provider) {
+        $('llmStatus').innerHTML = '<span style="color:var(--red)">请选择提供商</span>';
+        return;
+      }
+      if (!apiKey && !$('llmApiKeyInput').placeholder.includes('...')) {
+        $('llmStatus').innerHTML = '<span style="color:var(--red)">请输入 API Key</span>';
+        return;
+      }
+
+      $('llmStatus').innerHTML = '<span style="color:var(--ink3)">保存中...</span>';
+      
+      try {
+        const payload = { provider, baseURL, model };
+        if (apiKey) payload.apiKey = apiKey;
+        
+        const res = await fetch('/api/llm/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        
+        const result = await res.json();
+        
+        if (result.success) {
+          $('llmStatus').innerHTML = '<span style="color:var(--green)">✓ 保存成功，模型已更新</span>';
+          if (result.masked) {
+            $('llmApiKeyInput').placeholder = result.masked;
+            $('llmApiKeyInput').value = '';
+          }
+        } else {
+          $('llmStatus').innerHTML = `<span style="color:var(--red)">保存失败: ${result.error}</span>`;
+        }
+      } catch (error) {
+        $('llmStatus').innerHTML = `<span style="color:var(--red)">保存失败: ${error.message}</span>`;
+      }
+    });
+  }
+
+  const testLLMBtn = $('testLLMBtn');
+  if (testLLMBtn) {
+    testLLMBtn.addEventListener('click', async () => {
+      $('llmStatus').innerHTML = '<span style="color:var(--ink3)">测试中...</span>';
+      
+      try {
+        const res = await fetch('/api/llm/test', { method: 'POST' });
+        const result = await res.json();
+        
+        if (result.ok) {
+          $('llmStatus').innerHTML = `<span style="color:var(--green)">✓ 连接成功！<br>回复: ${escapeHtml(result.response)}</span>`;
+        } else {
+          $('llmStatus').innerHTML = `<span style="color:var(--red)">连接失败: ${escapeHtml(result.error)}</span>`;
+        }
+      } catch (error) {
+        $('llmStatus').innerHTML = `<span style="color:var(--red)">测试失败: ${error.message}</span>`;
+      }
+    });
   }
 
   // Check config

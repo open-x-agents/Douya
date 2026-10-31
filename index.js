@@ -56,16 +56,19 @@ export function createRuntime(ctx, config = {}) {
     log(`Composio initialization failed: ${err.message}`)
   }
 
-  // Create API router for web interface
-  const apiRouter = createApiRouter({ 
+  // Create API router function (actual router created later with LLM context)
+  const createApiRouterFn = (options) => createApiRouter({ 
     store, 
     composioClient, 
     config,
-    llmCtx: ctx,
     sendCard,
     configStore,
-    ctx, // Pass for updating composioClient
+    ctx,
+    ...options,
   })
+
+  // Create initial API router
+  const apiRouter = createApiRouterFn({ llmCtx: ctx })
 
   const rt = {
     ctx,
@@ -75,7 +78,9 @@ export function createRuntime(ctx, config = {}) {
     now,
     today,
     composioClient,
+    configStore,
     apiRouter,
+    createApiRouter: createApiRouterFn,
 
     // One pass of the clock: plan from the calendar, deliver what is due, keep the rest for
     // the panel. Only a delivered reminder is marked sent, so a Feishu hiccup retries.

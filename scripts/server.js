@@ -7,6 +7,7 @@
 import { createServer } from 'node:http';
 import { createRuntime } from '../index.js';
 import { mountApiRoutes } from '../src/host/api.js';
+import { createLLMClient, PROVIDERS } from '../src/host/llm-client.js';
 
 const PORT = process.env.PORT || process.argv[2] || 7777;
 
@@ -25,6 +26,41 @@ console.log(`📁 Data directory: ${config.home}`);
 console.log(`🔑 Composio configured: ${config.composioApiKey ? 'Yes' : 'No'}`);
 
 const runtime = createRuntime(null, config);
+
+// Create mock ctx with LLM client
+const ctx = { llm: null };
+
+function updateLLMClient() {
+  const llmConfig = runtime.configStore?.get()?.llm;
+  if (llmConfig?.apiKey && llmConfig?.provider) {
+    console.log(`🤖 Initializing LLM: ${llmConfig.provider} / ${llmConfig.model || 'default'}`);
+    ctx.llm = createLLMClient({
+      provider: llmConfig.provider,
+      baseURL: llmConfig.baseURL || PROVIDERS[llmConfig.provider]?.baseURL,
+      apiKey: llmConfig.apiKey,
+      model: llmConfig.model || PROVIDERS[llmConfig.provider]?.models[0],
+      log: config.log,
+    });
+  } else {
+    ctx.llm = null;
+    console.log('⚠️  LLM not configured - chat will use fallback responses');
+  }
+}
+
+// Initialize LLM on startup
+updateLLMClient();
+
+// Update apiRouter with LLM context and update callback
+runtime.apiRouter = runtime.createApiRouter?.({
+  store: runtime.store,
+  composioClient: runtime.composioClient,
+  config,
+  llmCtx: ctx,
+  sendCard: runtime.sendCard,
+  configStore: runtime.configStore,
+  ctx: runtime,
+  updateLLMClient,
+}) || runtime.apiRouter;
 
 // Create HTTP server
 const server = createServer();

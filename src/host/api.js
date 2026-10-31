@@ -20,14 +20,8 @@ async function callLLM(ctx, messages, sessionId = 'web-chat') {
   // Try LLM if available
   if (ctx?.llm?.stream) {
     try {
-      const provider = 'deepseek';
-      const model = 'deepseek-chat';
-      
       let fullText = '';
       for await (const chunk of ctx.llm.stream({
-        provider,
-        model,
-        sessionId,
         messages,
         maxTokens: 1000,
       })) {
@@ -36,10 +30,11 @@ async function callLLM(ctx, messages, sessionId = 'web-chat') {
         }
       }
 
-      // Generate action cards based on response
-      const cards = parseResponseToCards(fullText);
-      
-      return { text: fullText, cards };
+      if (fullText.trim()) {
+        // Generate action cards based on response
+        const cards = parseResponseToCards(fullText);
+        return { text: fullText, cards };
+      }
     } catch (error) {
       console.error('LLM error:', error);
       // Fall through to fallback

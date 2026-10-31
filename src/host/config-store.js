@@ -55,11 +55,22 @@ export class ConfigStore {
     return `${key.slice(0, 4)}...${key.slice(-4)}`;
   }
 
+  getMaskedLLMKey() {
+    const key = this.config?.llm?.apiKey;
+    if (!key || typeof key !== 'string') return null;
+    if (key.length < 8) return '***';
+    return `${key.slice(0, 6)}...${key.slice(-4)}`;
+  }
+
   /**
    * Check if Composio is configured
    */
   isConfigured() {
     return !!(this.config?.composioApiKey);
+  }
+
+  isLLMConfigured() {
+    return !!(this.config?.llm?.apiKey && this.config?.llm?.provider);
   }
 }
 

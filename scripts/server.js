@@ -26,6 +26,7 @@ console.log('🚀 Starting Open Digital Mate server...');
 console.log(`📁 Data directory: ${config.home}`);
 
 const runtime = createRuntime(null, config);
+await runtime.store.load();
 
 // Build Composio client from saved config at startup
 const savedConfig = runtime.configStore?.get();

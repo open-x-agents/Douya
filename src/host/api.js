@@ -1220,6 +1220,79 @@ export function mountApiRoutes(server, router) {
           'Expires': '0',
         });
         res.end(html);
+      } else if (url.pathname === '/composio-callback' && req.method === 'GET') {
+        // OAuth callback from Composio - show success page and close popup
+        const status = url.searchParams.get('status');
+        const connectedAccountId = url.searchParams.get('connected_account_id');
+        
+        const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>连接${status === 'success' ? '成功' : '失败'}</title>
+  <style>
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      height: 100vh; 
+      margin: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .card {
+      background: white;
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      text-align: center;
+      max-width: 400px;
+    }
+    .icon { font-size: 64px; margin-bottom: 20px; }
+    .success { color: #10b981; }
+    .error { color: #ef4444; }
+    h1 { margin: 0 0 12px; font-size: 24px; color: #1f2937; }
+    p { margin: 0; color: #6b7280; font-size: 14px; line-height: 1.6; }
+    .countdown { margin-top: 20px; font-size: 12px; color: #9ca3af; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon ${status === 'success' ? 'success' : 'error'}">
+      ${status === 'success' ? '✓' : '✕'}
+    </div>
+    <h1>${status === 'success' ? '连接成功！' : '连接失败'}</h1>
+    <p>${status === 'success' 
+      ? '数据源已成功连接，窗口将自动关闭。' 
+      : '连接过程中出现错误，请重试。'}</p>
+    ${connectedAccountId ? `<p style="margin-top:12px;font-family:monospace;font-size:11px;color:#d1d5db;">ID: ${connectedAccountId}</p>` : ''}
+    <div class="countdown">窗口将在 <span id="timer">2</span> 秒后关闭</div>
+  </div>
+  <script>
+    let seconds = 2;
+    const timer = document.getElementById('timer');
+    const interval = setInterval(() => {
+      seconds--;
+      timer.textContent = seconds;
+      if (seconds <= 0) {
+        clearInterval(interval);
+        window.close();
+        // If window.close() is blocked, redirect back
+        setTimeout(() => {
+          if (!window.closed) {
+            window.location.href = '/#/settings';
+          }
+        }, 100);
+      }
+    }, 1000);
+  </script>
+</body>
+</html>`;
+        res.writeHead(200, { 
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+        });
+        res.end(html);
       } else {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Not found' }));

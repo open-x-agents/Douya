@@ -552,19 +552,28 @@
   function handleCardAction(value) {
     console.log('[Card Action]', value);
     
-    // Special actions
-    if (value === 'goto_settings') {
+    // Normalize value for matching
+    const normalized = value.toLowerCase().trim();
+    
+    // Special actions - match human-readable text patterns
+    if (normalized.includes('设置') || normalized === 'goto_settings') {
       closeAllViews();
       showView('settings');
       return;
     }
     
-    if (value === 'retry') {
+    if (normalized.includes('重试') || normalized === 'retry') {
       $('dockInput').focus();
       return;
     }
     
-    // Send action value as message
+    if (normalized.includes('今天') || normalized.includes('今日') || normalized === 'view_today') {
+      closeAllViews();
+      showView('today');
+      return;
+    }
+    
+    // Default: send action value as message (human-readable text)
     $('dockInput').value = value;
     sendMessage();
   }

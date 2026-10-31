@@ -355,6 +355,138 @@
   }
   .today-chat-input .send-btn:hover{background:var(--blue);transform:scale(1.05)}
   .today-chat-input .send-btn:active{transform:scale(.95)}
+  
+  /* Tile zoom modal overlay */
+  .tile-zoom-overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.6);
+    backdrop-filter:blur(8px);
+    z-index:2000;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:40px;
+    animation:fadeIn .2s ease;
+  }
+  .tile-zoom-overlay.open{display:flex}
+  
+  .tile-zoom-modal{
+    background:rgba(255,255,255,.98);
+    border-radius:20px;
+    width:90%;
+    max-width:900px;
+    max-height:90vh;
+    overflow:auto;
+    padding:32px;
+    box-shadow:0 20px 60px rgba(0,0,0,.3);
+    position:relative;
+    animation:zoomIn .3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  
+  @keyframes fadeIn{from{opacity:0}}
+  @keyframes zoomIn{from{transform:scale(.8);opacity:0}to{transform:scale(1);opacity:1}}
+  
+  .tile-zoom-close{
+    position:absolute;
+    top:20px;
+    right:20px;
+    width:36px;
+    height:36px;
+    border-radius:50%;
+    background:var(--gray-soft);
+    border:1px solid var(--line);
+    font-size:20px;
+    cursor:pointer;
+    display:grid;
+    place-items:center;
+    transition:.2s;
+  }
+  .tile-zoom-close:hover{background:var(--line)}
+  
+  .tile-zoom-header{
+    margin-bottom:24px;
+    padding-bottom:16px;
+    border-bottom:2px solid var(--line);
+  }
+  .tile-zoom-title{font-size:24px;font-weight:800;margin:0 0 8px;color:var(--ink)}
+  .tile-zoom-subtitle{font-size:14px;color:var(--ink3);margin:0}
+  
+  .tile-zoom-content{
+    display:grid;
+    gap:24px;
+  }
+  
+  .tile-zoom-section{
+    background:var(--gray-soft);
+    border-radius:12px;
+    padding:20px;
+  }
+  .tile-zoom-section h3{margin:0 0 12px;font-size:16px;font-weight:700;color:var(--ink)}
+  
+  .tile-zoom-items{display:flex;flex-direction:column;gap:12px}
+  .tile-zoom-item{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:12px 16px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .tile-zoom-item-content{flex:1;min-width:0}
+  .tile-zoom-item-title{font-size:14px;font-weight:600;margin:0 0 4px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tile-zoom-item-meta{font-size:12px;color:var(--ink3);margin:0}
+  
+  .tile-zoom-actions{display:flex;gap:8px;flex-shrink:0}
+  .tile-zoom-action{
+    padding:6px 12px;
+    border-radius:6px;
+    font-size:12px;
+    font-weight:600;
+    border:1px solid var(--line);
+    background:#fff;
+    cursor:pointer;
+    transition:.2s;
+  }
+  .tile-zoom-action:hover{background:var(--blue-soft);border-color:var(--blue);color:var(--blue)}
+  .tile-zoom-action.done{background:var(--green-soft);border-color:var(--green);color:var(--green)}
+  .tile-zoom-action.dismiss{background:var(--red-soft);border-color:var(--red);color:var(--red)}
+  
+  .tile-zoom-chat{
+    background:linear-gradient(135deg,#eef2ff 0%,#e0e7ff 100%);
+    border-radius:12px;
+    padding:20px;
+  }
+  .tile-zoom-chat h3{margin:0 0 12px;font-size:16px;font-weight:700;color:var(--ink)}
+  .tile-zoom-chat-input{
+    display:flex;
+    gap:10px;
+    background:#fff;
+    border:2px solid var(--line);
+    border-radius:10px;
+    padding:4px;
+  }
+  .tile-zoom-chat-input input{
+    flex:1;
+    border:0;
+    outline:none;
+    font:inherit;
+    padding:10px 12px;
+    font-size:14px;
+  }
+  .tile-zoom-chat-input button{
+    padding:10px 20px;
+    border-radius:6px;
+    background:var(--blue);
+    color:#fff;
+    border:0;
+    font-weight:600;
+    cursor:pointer;
+    transition:.2s;
+  }
+  .tile-zoom-chat-input button:hover{background:#3d5ce8}
+  
   .btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 14px;font-size:12.5px;color:var(--ink);font-weight:500;font-family:inherit;cursor:pointer;transition:.2s}
   .btn:hover{border-color:#cfd3db}
   .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
@@ -1177,9 +1309,11 @@
     `;
     
     // Add click handlers
-    container.querySelectorAll('.tile').forEach(tile => {
+    container.querySelectorAll('.tile').forEach((tile, idx) => {
       const cardId = tile.getAttribute('data-card-id');
       const url = tile.getAttribute('data-url');
+      const card = cards[idx]; // Get the full card object
+      
       tile.addEventListener('click', async (e) => {
         // Don't trigger if clicking an action button
         if (e.target.classList.contains('tile-action')) return;
@@ -1197,7 +1331,10 @@
           }
         }
         
-        if (url && url !== 'undefined' && url !== '') {
+        // Open zoom modal instead of direct URL
+        if (card) {
+          openTileZoom(card);
+        } else if (url && url !== 'undefined' && url !== '') {
           window.open(url, '_blank');
         }
       });
@@ -1696,6 +1833,144 @@
     });
   }
 
+  // Tile zoom modal functions
+  let currentZoomCard = null;
+  
+  function openTileZoom(card) {
+    currentZoomCard = card;
+    const overlay = $('tileZoomOverlay');
+    const title = $('zoomTitle');
+    const subtitle = $('zoomSubtitle');
+    const content = $('zoomContent');
+    
+    if (!overlay || !title || !subtitle || !content) return;
+    
+    // Set header
+    title.textContent = card.title || '';
+    subtitle.textContent = card.body || '';
+    
+    // Build content
+    let html = '';
+    
+    // Items section
+    if (card.blocks) {
+      const linkList = card.blocks.find(b => b.type === 'link-list');
+      if (linkList && linkList.links) {
+        html += '<div class="tile-zoom-section"><h3>相关项目</h3><div class="tile-zoom-items">';
+        linkList.links.forEach(link => {
+          html += `
+            <div class="tile-zoom-item">
+              <div class="tile-zoom-item-content">
+                <div class="tile-zoom-item-title">${escapeHtml(link.title)}</div>
+                <div class="tile-zoom-item-meta">${escapeHtml(link.type || '')}</div>
+              </div>
+              <div class="tile-zoom-actions">
+                <button class="tile-zoom-action" onclick="window.open('${escapeHtml(link.url)}', '_blank')">打开</button>
+                <button class="tile-zoom-action done" data-item-url="${escapeHtml(link.url)}">完成</button>
+                <button class="tile-zoom-action dismiss" data-item-url="${escapeHtml(link.url)}">忽略</button>
+              </div>
+            </div>
+          `;
+        });
+        html += '</div></div>';
+      }
+    }
+    
+    // Chat section
+    html += `
+      <div class="tile-zoom-chat">
+        <h3>💬 问问豆芽</h3>
+        <div class="tile-zoom-chat-input">
+          <input type="text" id="zoomChatInput" placeholder="关于这个项目，问我任何问题..." />
+          <button id="zoomChatSend">发送</button>
+        </div>
+      </div>
+    `;
+    
+    content.innerHTML = html;
+    
+    // Wire up chat
+    const chatInput = $('zoomChatInput');
+    const chatSend = $('zoomChatSend');
+    if (chatInput && chatSend) {
+      const sendZoomChat = () => {
+        const msg = chatInput.value.trim();
+        if (!msg) return;
+        
+        // Prepend card context to message
+        const contextMsg = `关于 "${card.title}": ${msg}`;
+        openDock();
+        $('dockInput').value = contextMsg;
+        sendMessage();
+        chatInput.value = '';
+        closeTileZoom();
+      };
+      
+      chatSend.onclick = sendZoomChat;
+      chatInput.onkeydown = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendZoomChat();
+        }
+      };
+    }
+    
+    // Wire up action buttons
+    document.querySelectorAll('.tile-zoom-action.done').forEach(btn => {
+      btn.onclick = async () => {
+        const url = btn.getAttribute('data-item-url');
+        if (card.id) {
+          await fetch(`/api/cards/${card.id}/interact`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'done', itemUrl: url }),
+          });
+          btn.textContent = '✓ 已完成';
+          btn.disabled = true;
+          btn.style.opacity = '0.5';
+        }
+      };
+    });
+    
+    document.querySelectorAll('.tile-zoom-action.dismiss').forEach(btn => {
+      btn.onclick = async () => {
+        const url = btn.getAttribute('data-item-url');
+        if (card.id) {
+          await fetch(`/api/cards/${card.id}/interact`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'dismiss', itemUrl: url }),
+          });
+          btn.closest('.tile-zoom-item').style.opacity = '0.3';
+          btn.textContent = '✓ 已忽略';
+          btn.disabled = true;
+        }
+      };
+    });
+    
+    // Show overlay
+    overlay.classList.add('open');
+  }
+  
+  function closeTileZoom() {
+    const overlay = $('tileZoomOverlay');
+    if (overlay) overlay.classList.remove('open');
+    currentZoomCard = null;
+  }
+  
+  // Wire up close handlers
+  const closeBtn = $('tileZoomClose');
+  const overlay = $('tileZoomOverlay');
+  if (closeBtn) closeBtn.onclick = closeTileZoom;
+  if (overlay) {
+    overlay.onclick = (e) => {
+      if (e.target === overlay) closeTileZoom();
+    };
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && currentZoomCard) closeTileZoom();
+  });
+
   // Initialize
   loadToday();
   setInterval(loadToday, 60000); // Refresh every minute
@@ -1713,5 +1988,17 @@
   }, 2000);
 })();
 </script>
+<!-- Tile zoom modal overlay -->
+<div class="tile-zoom-overlay" id="tileZoomOverlay">
+  <div class="tile-zoom-modal">
+    <button class="tile-zoom-close" id="tileZoomClose">✕</button>
+    <div class="tile-zoom-header">
+      <h2 class="tile-zoom-title" id="zoomTitle"></h2>
+      <p class="tile-zoom-subtitle" id="zoomSubtitle"></p>
+    </div>
+    <div class="tile-zoom-content" id="zoomContent"></div>
+  </div>
+</div>
+
 </body>
 </html>

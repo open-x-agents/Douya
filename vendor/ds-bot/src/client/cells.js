@@ -21,7 +21,7 @@ import { partIndexOf, withBtwRows } from './btw-model.js'
 import { layoutOf, thinkingShown } from './themes.js'
 import { draftForDisplay } from '../shared/room-draft.js'
 import { anchoredCompletions, applyScroll, pinnedToBottom, projectRelay, scrollAction, scrollGroup } from '../shared/work-line-complete.js'
-import { citeTexts, groupCitedQuotes, isPendingSteerCopy, lateCiteSentences } from '../shared/cite.js'
+import { citeTexts, groupCitedQuotes, isPendingSteerCopy, lateCiteSentences, watchCitedHostBubbles } from '../shared/cite.js'
 import { groupUserBubble } from '../host/group-steer.js'
 
 export { clockLabel }
@@ -373,7 +373,14 @@ export function stackReplies(replies) {
 
 function LateCite({ text, texts }) {
   const sentences = lateCiteSentences(text, texts)
-  return h('div', { className: 'bt-route-cite', 'data-late-cite': '' },
+  // The desktop draws history with its own bubble, not UserMessageCell.
+  // Hiding runs from the cite that is actually on the page.
+  useLayoutEffect(() => watchCitedHostBubbles(), [sentences.join('\n')])
+  return h('div', {
+    className: 'bt-route-cite',
+    'data-late-cite': '',
+    ...(sentences.length > 0 ? { 'data-cite-texts': JSON.stringify(sentences) } : {}),
+  },
     h('div', { className: 'bt-route-cite-label' }, t('Replying to what you wrote earlier')),
     sentences.map((sentence, index) => h('div', { key: index, className: 'bt-urow' },
       h('div', { className: 'bt-ububble' }, h(MarkdownText, { text: sentence, labels: mdLabels(), variant: 'compact' })))))

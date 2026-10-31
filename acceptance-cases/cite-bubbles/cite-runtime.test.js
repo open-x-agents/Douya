@@ -5,6 +5,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import { install as installTurns } from '../../vendor/ds-bot/src/host/turns.js'
+import { install as installRoute } from '../../vendor/ds-bot/src/host/route-inbound.js'
 import {
   citeTexts,
   citedFromLog,
@@ -251,6 +252,66 @@ test('while the round is still running the essay reply carries the late cite in 
   assert.equal(hideCitedHistory({ text: FIRST, messageId: 'm-who', citedTexts: cited.texts, citedIds: cited.ids }), true)
   assert.equal(hideCitedHistory({ text: FOLLOW, messageId: 'm-do', citedTexts: cited.texts, citedIds: cited.ids }), true)
   assert.equal(hideCitedHistory({ text: IDIOM, messageId: 'm-idiom', citedTexts: cited.texts, citedIds: cited.ids }), false)
+})
+
+test('an open ask card confirms onto the essay and the live host posts one late cite', async () => {
+  const deskState = desk()
+  installRoute(deskState.rt)
+  deskState.rt.live = new Map([
+    ['work', { turn: 1 }],
+    ['work-b', { turn: 2 }],
+  ])
+  deskState.room.log = [
+    { seq: 1, who: 'User', text: '新开 帮我列3个秋天的成语', messageId: 'm-old' },
+    { seq: 2, who: 'Chief', botId: 'chief', text: IDIOM },
+    { seq: 3, who: 'User', text: PROMPT, messageId: 'm-essay' },
+    { seq: 8, who: 'User', text: '海边散步看夜色', messageId: 'm-beach' },
+  ]
+  deskState.room.seq = 8
+  deskState.rt.state.workLines = {
+    essay: {
+      id: 'essay', botId: 'chief', sessionId: 'work', lastRoomId: ROOM,
+      quote: { roomId: ROOM, seq: 3 }, label: '秋水', updatedAt: 2, segments: [],
+    },
+    beach: {
+      id: 'beach', botId: 'chief', sessionId: 'work-b', lastRoomId: ROOM,
+      quote: { roomId: ROOM, seq: 8 }, label: '海边', updatedAt: 1, segments: [],
+    },
+  }
+  await finishedRound(deskState)
+  const ask = deskState.rt.routeRoomUser({ room: deskState.room, text: FIRST, plain: true })
+  assert.equal(ask.action, 'ask')
+  assert.deepEqual(ask.choices.map(choice => choice.id).sort(), ['beach', 'essay'])
+  await deskState.rt.applyRouteDecision(deskState.room, ask, { text: FIRST, id: 'm-who' })
+  const held = deskState.rt.routeRoomUser({ room: deskState.room, text: FOLLOW, plain: true })
+  assert.equal(held.action, 'hold')
+  await deskState.rt.applyRouteDecision(deskState.room, held, { text: FOLLOW, id: 'm-do' })
+  assert.deepEqual(deskState.rt.state.pendingRoutes[ROOM].texts, [FIRST, FOLLOW])
+  const choice = deskState.rt.routeRoomUser({ room: deskState.room, text: 'essay', plain: true })
+  assert.equal(choice.action, 'steer')
+  assert.equal(choice.sessionId, 'work')
+  await deskState.rt.applyRouteDecision(deskState.room, choice, { text: 'essay', id: 'm-choice' })
+  assert.equal(deskState.rt.state.pendingRoutes[ROOM], undefined)
+  assert.equal(idiomRow(deskState.room).quote, undefined)
+  await deskState.rt.lateRoomReply('work', {
+    role: 'room',
+    roomId: ROOM,
+    quoteText: PROMPT,
+    quoteSeq: 3,
+    quoteRoomId: ROOM,
+  }, ESSAY)
+  const message = await relayPost(deskState)
+  assert.equal(message.source.late, true)
+  assert.equal(message.source.quiet, true)
+  assert.deepEqual(citeTexts(message.source), [FIRST, FOLLOW])
+  assert.equal(citeTexts(message.source).includes(PROMPT), false)
+  assert.equal(idiomRow(deskState.room).quote, undefined)
+  assert.equal(idiomRow(deskState.room).quotes, undefined)
+  const essay = deskState.room.log.find(row => row.text === ESSAY)
+  const who = deskState.room.log.find(row => row.who === 'User' && row.text === FIRST)
+  const follow = deskState.room.log.find(row => row.who === 'User' && row.text === FOLLOW)
+  assert.deepEqual(essay.quotes.map(item => item.seq), [who.seq, follow.seq])
+  assert.ok(who.seq < follow.seq)
 })
 
 test('a restarted host still cites the follow-ups the turn already recorded', async () => {

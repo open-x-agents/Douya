@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { SOURCE_KIND } from '../../vendor/ds-bot/src/host/constants.js'
+import { ROOM_REPLY_TIMEOUT_MS, roomReplyTimeoutMs, SOURCE_KIND } from '../../vendor/ds-bot/src/host/constants.js'
 import { install as installTurns } from '../../vendor/ds-bot/src/host/turns.js'
 import { install as installWorkLines } from '../../vendor/ds-bot/src/host/work-lines.js'
 import { applyRouteDecision, install as installRoute } from '../../vendor/ds-bot/src/host/route-inbound.js'
@@ -742,4 +742,26 @@ test('confirming the busy line after an ask still cites 你们是谁 and 在干�
   assert.deepEqual(steered.map(item => item.message.quoteText), [FIRST, FOLLOW])
   assert.ok(steered[0].message.quoteSeq < steered[1].message.quoteSeq)
   assert.equal(steered.some(item => item.message.text === 'essay-line'), false)
+})
+
+test('member reply timeout stays four minutes unless a test override is set', () => {
+  assert.equal(ROOM_REPLY_TIMEOUT_MS, 240_000)
+  const previous = process.env.DSH_ROOM_REPLY_TIMEOUT_MS
+  delete process.env.DSH_ROOM_REPLY_TIMEOUT_MS
+  try {
+    assert.equal(roomReplyTimeoutMs(), 240_000)
+    process.env.DSH_ROOM_REPLY_TIMEOUT_MS = '1500'
+    assert.equal(roomReplyTimeoutMs(), 1500)
+    assert.equal(ROOM_REPLY_TIMEOUT_MS, 240_000)
+    process.env.DSH_ROOM_REPLY_TIMEOUT_MS = '0'
+    assert.equal(roomReplyTimeoutMs(), 240_000)
+    process.env.DSH_ROOM_REPLY_TIMEOUT_MS = 'nope'
+    assert.equal(roomReplyTimeoutMs(), 240_000)
+  } finally {
+    if (previous === undefined) delete process.env.DSH_ROOM_REPLY_TIMEOUT_MS
+    else process.env.DSH_ROOM_REPLY_TIMEOUT_MS = previous
+  }
+  const groups = source('vendor/ds-bot/src/host/groups.js')
+  assert.match(groups, /setTimeout\(\(\) => finish\(\{ missed: true \}\), roomReplyTimeoutMs\(\)\)/)
+  assert.match(groups, /minutes: Math\.round\(roomReplyTimeoutMs\(\) \/ 60000\)/)
 })

@@ -440,7 +440,9 @@ test('confirm by choice id clears the saved card before delivery and keeps the h
 
 test('create selects the new session model and delivers the user text', async () => {
   const host = wireHost({
-    workLines: { poem: stored({ id: 'poem', quote: { roomId: 'r1', seq: 1 } }) },
+    // A label keeps this line a task. The unlabeled primary session is the group
+    // round, and a miss on only that round stays on the relay.
+    workLines: { poem: stored({ id: 'poem', label: '秋天的诗', quote: { roomId: 'r1', seq: 1 } }) },
     logs: { r1: [{ seq: 1, who: 'User', text: POEM }] },
   })
   let disk = {}
@@ -609,6 +611,65 @@ test('R16 a busy line in another room does not steer on its own', async () => {
   assert.equal(JSON.stringify(host.rooms.r1.log).includes(OLD), false)
   assert.notEqual(host.rt.state.workLines.far, undefined)
   assert.equal(Object.values(host.rt.state.workLines).some(item => item.sessionId === 'session-new'), true)
+})
+
+test('idle lines in other rooms do not ask or swallow the opening sentence', async () => {
+  const host = wireHost({
+    workLines: {
+      a: stored({ id: 'a', sessionId: 'remote-a', lastRoomId: 'r2', quote: { roomId: 'r2', seq: 1 } }),
+      b: stored({ id: 'b', sessionId: 'remote-b', lastRoomId: 'r2', quote: { roomId: 'r2', seq: 2 } }),
+      c: stored({ id: 'c', sessionId: 'remote-c', lastRoomId: 'r2', quote: { roomId: 'r2', seq: 3 }, label: '秋水' }),
+    },
+    logs: {
+      r1: [],
+      r2: [
+        { seq: 1, who: 'User', text: 'hi' },
+        { seq: 2, who: 'User', text: '你们是谁' },
+        { seq: 3, who: 'User', text: '在干嘛' },
+      ],
+    },
+  })
+  host.emit('r1', userMessage('hi'))
+  host.emit('r1', userMessage('你们是谁'))
+  await flush()
+  assert.equal(host.rt.state.pendingRoutes.r1, undefined)
+  assert.equal(host.steered.length, 0)
+  assert.equal(host.delivered.length, 0)
+  assert.deepEqual(host.rt.roomInbox.get('r1').map(item => item.text), ['hi', '你们是谁'])
+})
+
+test('one other member\'s leftover line does not take the opening off the group', async () => {
+  const host = wireHost({
+    workLines: {
+      a: stored({ id: 'a', sessionId: 'remote-a', lastRoomId: 'r2', quote: { roomId: 'r2', seq: 1 } }),
+      b: stored({ id: 'b', sessionId: 'remote-b', lastRoomId: 'r2', quote: { roomId: 'r2', seq: 2 } }),
+      quiet: stored({ id: 'quiet', botId: 'writer', sessionId: 'gb', lastRoomId: 'r3', quote: { roomId: 'r3', seq: 1 } }),
+    },
+    logs: {
+      r1: [],
+      r2: [
+        { seq: 1, who: 'User', text: 'hi' },
+        { seq: 2, who: 'User', text: '你们是谁' },
+        { seq: 3, who: 'User', text: '在干嘛' },
+      ],
+    },
+  })
+  host.rooms.r3 = {
+    id: 'r3',
+    name: 'Quiet',
+    admin: 'writer',
+    members: ['writer'],
+    sessions: { writer: 'gb' },
+    seq: 1,
+    log: [{ seq: 1, who: 'User', text: '在干嘛' }],
+  }
+  host.emit('r1', userMessage('你们是谁'))
+  host.emit('r1', userMessage('在干嘛'))
+  await flush()
+  assert.equal(host.rt.state.pendingRoutes.r1, undefined)
+  assert.equal(host.steered.length, 0)
+  assert.equal(host.delivered.length, 0)
+  assert.deepEqual(host.rt.roomInbox.get('r1').map(item => item.text), ['你们是谁', '在干嘛'])
 })
 
 test('wired host keeps #18 queue, named, and mode-new on the relay path when there is no index', () => {

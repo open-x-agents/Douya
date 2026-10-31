@@ -3590,6 +3590,10 @@ div:has(> nav [class*="_marks"]){display:none!important}
 [data-pending-steering]::after{content:var(--bt-steer-unread,none);display:block;flex-basis:100%;width:100%;order:99;margin-top:4px;font-size:11px;line-height:14px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
 [data-pending-steering][data-steer-copy]{display:none!important}
 [class*="_flowItem"]:has([data-pending-steering][data-steer-copy]){display:none!important}
+/* A late cite paints the sentence as the user's bubble. The host's earlier
+   copy of that send is the history bubble; it is not .bt-umsg on this desktop. */
+[data-cited-history]{display:none!important}
+[class*="_flowItem"]:has([data-cited-history]){display:none!important}
 [data-chat-flow-kind=user] [class*="_userRow"]{flex-direction:row-reverse;align-items:center;justify-content:flex-start}
 [data-chat-flow-kind=user] [class*="_actions"]{display:flex!important;height:24px!important;gap:2px!important;opacity:0!important;visibility:hidden;transition:opacity .12s ease,visibility .12s!important;flex:none}
 [data-chat-flow-kind=user] [class*="_userRow"]:hover [class*="_actions"],[data-chat-flow-kind=user] [class*="_userRow"]:focus-within [class*="_actions"]{opacity:1!important;visibility:visible}
@@ -7968,10 +7972,14 @@ function lateCiteSentences(text, texts2) {
 function escapeCiteText(text) {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
+function escapeAttr(text) {
+  return text.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 function lateCiteHtml(texts2) {
   const sentences = lateCiteSentences(void 0, texts2);
   const bubbles = sentences.map((sentence) => `<div class="bt-urow"><div class="bt-ububble">${escapeCiteText(sentence)}</div></div>`).join("");
-  return `<div class="bt-route-cite" data-late-cite="">${bubbles}</div>`;
+  const marked = sentences.length > 0 ? ` data-cite-texts="${escapeAttr(JSON.stringify(sentences))}"` : "";
+  return `<div class="bt-route-cite" data-late-cite=""${marked}>${bubbles}</div>`;
 }
 function groupCitedQuotes(replies) {
   const rows2 = Array.isArray(replies) ? replies : [];
@@ -8159,6 +8167,142 @@ function hideCitedHistory({ text, messageId, citedTexts, citedIds } = {}) {
   if (typeof messageId === "string" && messageId !== "" && cited.includes(messageId)) return true;
   if (typeof messageId === "string" && messageId !== "" && cited.length > 0) return false;
   return typeof text === "string" && text !== "" && sentences.includes(text);
+}
+var CLOCK_LINE = /^(?:\d{1,2}:\d{2}(?:\s*[AP]M)?|未读|Not read yet)$/i;
+var GLUED_TAIL = /(?:\s*(?:\d{1,2}:\d{2}(?:\s*[AP]M)?|未读|Not read yet))+$/i;
+function citeSentences(cite) {
+  const raw = cite.getAttribute?.("data-cite-texts");
+  if (typeof raw === "string" && raw !== "") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.filter((item) => typeof item === "string" && item !== "");
+    } catch {
+    }
+  }
+  const out = [];
+  for (const bubble of cite.querySelectorAll(".bt-ububble")) {
+    const text = String(bubble.textContent ?? "").replace(/\u00a0/g, " ").trim();
+    if (text !== "" && !out.includes(text)) out.push(text);
+  }
+  return out;
+}
+function candidateTexts(node) {
+  const raw = String(node?.textContent ?? "").replace(/\u00a0/g, " ").trim();
+  if (raw === "") return [];
+  const out = [];
+  const add = (value) => {
+    const text = String(value ?? "").replace(/[ \t]+/g, " ").trim();
+    if (text !== "" && !out.includes(text)) out.push(text);
+  };
+  add(raw);
+  const lines = raw.split(/\n+/).map((line) => line.trim()).filter((line) => line !== "" && !CLOCK_LINE.test(line));
+  if (lines.length === 1) add(lines[0]);
+  add(raw.replace(GLUED_TAIL, ""));
+  return out;
+}
+function isBefore(node, other) {
+  if (node == null || other == null || typeof node.compareDocumentPosition !== "function") return false;
+  const following = node.DOCUMENT_POSITION_FOLLOWING ?? 4;
+  return (node.compareDocumentPosition(other) & following) !== 0;
+}
+function userRow(node) {
+  return node.closest?.('[data-chat-flow-kind="user"]') ?? node.closest?.(".bt-umsg") ?? node.closest?.("[data-pending-steering]") ?? node.closest?.('[class*="_userRow"]') ?? null;
+}
+function hideRow(node) {
+  return node.closest?.('[class*="_flowItem"]') ?? node.closest?.('[data-chat-flow-kind="user"]') ?? node.closest?.(".bt-umsg") ?? node.closest?.("[data-pending-steering]") ?? node;
+}
+function skippedCopy(node) {
+  return node.closest?.("[data-late-cite]") != null || node.closest?.(".bt-route-dock") != null || node.closest?.("[data-route-dock]") != null;
+}
+function hideCitedHostBubbles(doc = globalThis.document) {
+  if (doc == null || typeof doc.querySelectorAll !== "function") return 0;
+  const cites = [...doc.querySelectorAll("[data-late-cite]")];
+  const byText = /* @__PURE__ */ new Map();
+  for (const cite of cites) {
+    for (const text of citeSentences(cite)) {
+      const list = byText.get(text) ?? [];
+      list.push(cite);
+      byText.set(text, list);
+    }
+  }
+  const roots = /* @__PURE__ */ new Set();
+  for (const cite of cites) roots.add(cite.closest?.("[data-conversation-scroll]") ?? doc.body ?? doc);
+  if (roots.size === 0) roots.add(doc.body ?? doc);
+  const hide = /* @__PURE__ */ new Set();
+  for (const root of roots) {
+    if (root == null || typeof root.querySelectorAll !== "function") continue;
+    for (const node of root.querySelectorAll("*")) {
+      if (skippedCopy(node)) continue;
+      const row = userRow(node);
+      if (row == null) continue;
+      const candidates = candidateTexts(node);
+      const text = candidates.find((item) => byText.has(item));
+      const owners = text === void 0 ? void 0 : byText.get(text);
+      if (owners == null || owners.length === 0) continue;
+      const tighter = [...node.querySelectorAll("*")].some((child) => {
+        if (skippedCopy(child) || userRow(child) == null) return false;
+        return candidateTexts(child).includes(text);
+      });
+      if (tighter) continue;
+      const citedAfter = owners.some((cite) => isBefore(node, cite));
+      const citedBefore = owners.some((cite) => isBefore(cite, node));
+      if (!citedAfter || citedBefore) continue;
+      hide.add(hideRow(node));
+    }
+  }
+  for (const root of roots) {
+    if (root == null || typeof root.querySelectorAll !== "function") continue;
+    for (const node of root.querySelectorAll("[data-cited-history]")) {
+      if (!hide.has(node)) node.removeAttribute("data-cited-history");
+    }
+  }
+  for (const node of hide) {
+    if (node.getAttribute?.("data-cited-history") !== "1") node.setAttribute("data-cited-history", "1");
+  }
+  return hide.size;
+}
+var citedWatchers = 0;
+var citedObserver;
+var citedFrame = 0;
+function watchCitedHostBubbles(doc = globalThis.document) {
+  if (doc == null || typeof doc.querySelectorAll !== "function") return () => {
+  };
+  citedWatchers += 1;
+  hideCitedHostBubbles(doc);
+  if (citedWatchers === 1 && typeof MutationObserver === "function") {
+    const root = (typeof doc.querySelector === "function" ? doc.querySelector("[data-conversation-scroll]") : null) ?? doc.body;
+    if (root != null) {
+      const schedule = () => {
+        if (citedFrame !== 0) return;
+        const raf = doc.defaultView?.requestAnimationFrame ?? globalThis.requestAnimationFrame;
+        if (typeof raf !== "function") {
+          hideCitedHostBubbles(doc);
+          return;
+        }
+        citedFrame = raf(() => {
+          citedFrame = 0;
+          hideCitedHostBubbles(doc);
+        });
+      };
+      citedObserver = new MutationObserver(schedule);
+      citedObserver.observe(root, { childList: true, subtree: true, characterData: true });
+    }
+  }
+  return () => {
+    citedWatchers = Math.max(0, citedWatchers - 1);
+    if (citedWatchers > 0) {
+      hideCitedHostBubbles(doc);
+      return;
+    }
+    citedObserver?.disconnect();
+    citedObserver = void 0;
+    const cancel = doc.defaultView?.cancelAnimationFrame ?? globalThis.cancelAnimationFrame;
+    if (citedFrame !== 0 && typeof cancel === "function") cancel(citedFrame);
+    citedFrame = 0;
+    if (typeof doc.querySelectorAll === "function") {
+      for (const node of doc.querySelectorAll("[data-cited-history]")) node.removeAttribute("data-cited-history");
+    }
+  };
 }
 
 // src/shared/work-line-complete.js
@@ -8861,9 +9005,14 @@ function stackReplies(replies) {
 }
 function LateCite({ text, texts: texts2 }) {
   const sentences = lateCiteSentences(text, texts2);
+  (0, import_react17.useLayoutEffect)(() => watchCitedHostBubbles(), [sentences.join("\n")]);
   return (0, import_react17.createElement)(
     "div",
-    { className: "bt-route-cite", "data-late-cite": "" },
+    {
+      className: "bt-route-cite",
+      "data-late-cite": "",
+      ...sentences.length > 0 ? { "data-cite-texts": JSON.stringify(sentences) } : {}
+    },
     (0, import_react17.createElement)("div", { className: "bt-route-cite-label" }, t("Replying to what you wrote earlier")),
     sentences.map((sentence, index) => (0, import_react17.createElement)(
       "div",

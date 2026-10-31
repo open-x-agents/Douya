@@ -140,6 +140,10 @@ function escapeCiteText(text) {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
+function escapeAttr(text) {
+  return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 /**
  * The late-cite row as HTML: one marker, then the user's bubbles in send order.
  * The painter and the acceptance check share this shape.
@@ -148,7 +152,8 @@ function escapeCiteText(text) {
 export function lateCiteHtml(texts) {
   const sentences = lateCiteSentences(undefined, texts)
   const bubbles = sentences.map(sentence => `<div class="bt-urow"><div class="bt-ububble">${escapeCiteText(sentence)}</div></div>`).join('')
-  return `<div class="bt-route-cite" data-late-cite="">${bubbles}</div>`
+  const marked = sentences.length > 0 ? ` data-cite-texts="${escapeAttr(JSON.stringify(sentences))}"` : ''
+  return `<div class="bt-route-cite" data-late-cite=""${marked}>${bubbles}</div>`
 }
 
 /**
@@ -419,4 +424,176 @@ export function hideCitedHistory({ text, messageId, citedTexts, citedIds } = {})
   if (typeof messageId === 'string' && messageId !== '' && cited.includes(messageId)) return true
   if (typeof messageId === 'string' && messageId !== '' && cited.length > 0) return false
   return typeof text === 'string' && text !== '' && sentences.includes(text)
+}
+
+const CLOCK_LINE = /^(?:\d{1,2}:\d{2}(?:\s*[AP]M)?|未读|Not read yet)$/i
+const GLUED_TAIL = /(?:\s*(?:\d{1,2}:\d{2}(?:\s*[AP]M)?|未读|Not read yet))+$/i
+
+// Sentences the cite itself names. Markdown inside the bubble can add a control
+// such as a copy label; that text is not the sentence.
+function citeSentences(cite) {
+  const raw = cite.getAttribute?.('data-cite-texts')
+  if (typeof raw === 'string' && raw !== '') {
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return parsed.filter(item => typeof item === 'string' && item !== '')
+    } catch { /* the bubble text is the fallback */ }
+  }
+  const out = []
+  for (const bubble of cite.querySelectorAll('.bt-ububble')) {
+    const text = String(bubble.textContent ?? '').replace(/\u00a0/g, ' ').trim()
+    if (text !== '' && !out.includes(text)) out.push(text)
+  }
+  return out
+}
+
+// Ways this host node can be the same sentence. The desktop glues a clock or
+// the unread label onto the bubble, sometimes with no newline between them.
+function candidateTexts(node) {
+  const raw = String(node?.textContent ?? '').replace(/\u00a0/g, ' ').trim()
+  if (raw === '') return []
+  const out = []
+  const add = (value) => {
+    const text = String(value ?? '').replace(/[ \t]+/g, ' ').trim()
+    if (text !== '' && !out.includes(text)) out.push(text)
+  }
+  add(raw)
+  const lines = raw.split(/\n+/).map(line => line.trim()).filter(line => line !== '' && !CLOCK_LINE.test(line))
+  if (lines.length === 1) add(lines[0])
+  add(raw.replace(GLUED_TAIL, ''))
+  return out
+}
+
+function isBefore(node, other) {
+  if (node == null || other == null || typeof node.compareDocumentPosition !== 'function') return false
+  const following = node.DOCUMENT_POSITION_FOLLOWING ?? 4
+  return (node.compareDocumentPosition(other) & following) !== 0
+}
+
+function userRow(node) {
+  return node.closest?.('[data-chat-flow-kind="user"]')
+    ?? node.closest?.('.bt-umsg')
+    ?? node.closest?.('[data-pending-steering]')
+    ?? node.closest?.('[class*="_userRow"]')
+    ?? null
+}
+
+function hideRow(node) {
+  return node.closest?.('[class*="_flowItem"]')
+    ?? node.closest?.('[data-chat-flow-kind="user"]')
+    ?? node.closest?.('.bt-umsg')
+    ?? node.closest?.('[data-pending-steering]')
+    ?? node
+}
+
+function skippedCopy(node) {
+  return node.closest?.('[data-late-cite]') != null
+    || node.closest?.('.bt-route-dock') != null
+    || node.closest?.('[data-route-dock]') != null
+}
+
+/**
+ * Hide the desktop's own history bubbles once a late cite has painted those
+ * sentences. The cite's bubbles, the ask card, and a later send of the same
+ * words stay. Returns how many rows were hidden.
+ * The host draws the history bubble itself. UserMessageCell is not mounted
+ * when the desktop has no text projection, so this walks the document.
+ * @param {ParentNode | undefined} doc
+ */
+export function hideCitedHostBubbles(doc = globalThis.document) {
+  if (doc == null || typeof doc.querySelectorAll !== 'function') return 0
+  const cites = [...doc.querySelectorAll('[data-late-cite]')]
+  /** @type {Map<string, Element[]>} */
+  const byText = new Map()
+  for (const cite of cites) {
+    for (const text of citeSentences(cite)) {
+      const list = byText.get(text) ?? []
+      list.push(cite)
+      byText.set(text, list)
+    }
+  }
+  const roots = new Set()
+  for (const cite of cites) roots.add(cite.closest?.('[data-conversation-scroll]') ?? doc.body ?? doc)
+  if (roots.size === 0) roots.add(doc.body ?? doc)
+  const hide = new Set()
+  for (const root of roots) {
+    if (root == null || typeof root.querySelectorAll !== 'function') continue
+    for (const node of root.querySelectorAll('*')) {
+      if (skippedCopy(node)) continue
+      const row = userRow(node)
+      if (row == null) continue
+      const candidates = candidateTexts(node)
+      const text = candidates.find(item => byText.has(item))
+      const owners = text === undefined ? undefined : byText.get(text)
+      if (owners == null || owners.length === 0) continue
+      // A child with the same sentence is the tighter match. Hide that row once.
+      const tighter = [...node.querySelectorAll('*')].some(child => {
+        if (skippedCopy(child) || userRow(child) == null) return false
+        return candidateTexts(child).includes(text)
+      })
+      if (tighter) continue
+      // Hide the copy that sits above the cite. A send that follows the cite stays,
+      // including one that repeats the same words.
+      const citedAfter = owners.some(cite => isBefore(node, cite))
+      const citedBefore = owners.some(cite => isBefore(cite, node))
+      if (!citedAfter || citedBefore) continue
+      hide.add(hideRow(node))
+    }
+  }
+  for (const root of roots) {
+    if (root == null || typeof root.querySelectorAll !== 'function') continue
+    for (const node of root.querySelectorAll('[data-cited-history]')) {
+      if (!hide.has(node)) node.removeAttribute('data-cited-history')
+    }
+  }
+  for (const node of hide) {
+    if (node.getAttribute?.('data-cited-history') !== '1') node.setAttribute('data-cited-history', '1')
+  }
+  return hide.size
+}
+
+let citedWatchers = 0
+let citedObserver
+let citedFrame = 0
+
+// One observer for every late cite on the page. History bubbles can land
+// after the cite's first paint; the observer hides those too.
+export function watchCitedHostBubbles(doc = globalThis.document) {
+  if (doc == null || typeof doc.querySelectorAll !== 'function') return () => {}
+  citedWatchers += 1
+  hideCitedHostBubbles(doc)
+  if (citedWatchers === 1 && typeof MutationObserver === 'function') {
+    const root = (typeof doc.querySelector === 'function' ? doc.querySelector('[data-conversation-scroll]') : null) ?? doc.body
+    if (root != null) {
+      const schedule = () => {
+        if (citedFrame !== 0) return
+        const raf = doc.defaultView?.requestAnimationFrame ?? globalThis.requestAnimationFrame
+        if (typeof raf !== 'function') {
+          hideCitedHostBubbles(doc)
+          return
+        }
+        citedFrame = raf(() => {
+          citedFrame = 0
+          hideCitedHostBubbles(doc)
+        })
+      }
+      citedObserver = new MutationObserver(schedule)
+      citedObserver.observe(root, { childList: true, subtree: true, characterData: true })
+    }
+  }
+  return () => {
+    citedWatchers = Math.max(0, citedWatchers - 1)
+    if (citedWatchers > 0) {
+      hideCitedHostBubbles(doc)
+      return
+    }
+    citedObserver?.disconnect()
+    citedObserver = undefined
+    const cancel = doc.defaultView?.cancelAnimationFrame ?? globalThis.cancelAnimationFrame
+    if (citedFrame !== 0 && typeof cancel === 'function') cancel(citedFrame)
+    citedFrame = 0
+    if (typeof doc.querySelectorAll === 'function') {
+      for (const node of doc.querySelectorAll('[data-cited-history]')) node.removeAttribute('data-cited-history')
+    }
+  }
 }

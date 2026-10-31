@@ -158,12 +158,35 @@ function finish(decision, queued) {
   }
 }
 
+function legacyDecision(botId) {
+  return { action: 'legacy', steer: false, botId }
+}
+
+function scored(text, lines) {
+  return {
+    hits: lines.filter(line => band(score(text, line)) === 'hit'),
+    unsures: lines.filter(line => band(score(text, line)) === 'unsure'),
+  }
+}
+
+// Lines in this room decide an ask or a new task. Lines in other rooms do not.
+// Several of them matching the same sentence is how a new group's opening was
+// pulled onto a card and never became a user bubble. A single strong match in
+// another room still continues that line. No local task and no such match
+// stays on the group relay.
 function matchIdle(text, idle, roomId, botId) {
-  const hits = idle.filter(line => band(score(text, line)) === 'hit')
-  const unsures = idle.filter(line => band(score(text, line)) === 'unsure')
-  if (hits.length === 1 && unsures.length === 0) return lineChoice(hits[0], roomId)
-  if (hits.length > 1 || unsures.length > 0) return ask(idle)
-  return createDecision(botId)
+  const here = idle.filter(line => line.lastRoomId === roomId)
+  const away = idle.filter(line => line.lastRoomId !== roomId)
+  const local = scored(text, here)
+  const remote = scored(text, away)
+  if (local.hits.length === 1 && local.unsures.length === 0) return lineChoice(local.hits[0], roomId)
+  if (local.hits.length > 1 || local.unsures.length > 0) return ask(here)
+  if (remote.hits.length === 1 && remote.unsures.length === 0) return lineChoice(remote.hits[0], roomId)
+  // Other rooms matched, but not as one line. Asking would list them and the
+  // send would never become a bubble. A total miss still opens a task.
+  if (remote.hits.length > 0 || remote.unsures.length > 0) return legacyDecision(botId)
+  if (here.some(isTaskLine) || here.length === 0) return createDecision(botId)
+  return legacyDecision(botId)
 }
 
 function isRoundLine(line) {
@@ -177,7 +200,10 @@ function isTaskLine(line) {
 // The primary group session is the round, not a second task. One local work
 // line still takes a follow-up while that session is also busy. Leftover lines
 // in other rooms do not raise a card during that round, and they do not steal
-// a follow-up from the one local busy task. An idle line in this room still can.
+// a follow-up from the one local busy task. Once nothing here is busy, those
+// other rooms still do not raise a card; matchIdle leaves the sentence on the
+// relay unless one of them is the only strong match. An idle line in this room
+// still can.
 function routePool(open, roomId) {
   const localTaskBusy = open.some(line => line.busy === true && isTaskLine(line) && line.lastRoomId === roomId)
   const roundBusy = open.some(line => line.busy === true && isRoundLine(line) && (line.lastRoomId === roomId || line.lastRoomId == null))
@@ -466,7 +492,15 @@ function routeIdle(rt, room, members, text, explicitQueue) {
   const asking = rows.find(row => row.decision.action === 'ask')
   if (asking !== undefined) return { ...asking.decision, botId: asking.member.id }
   const picked = rows.filter(row => row.decision.action === 'steer' || row.decision.action === 'continue' || (row.decision.action === 'queue' && row.decision.relay !== true))
-  if (picked.length === 1) return { ...picked[0].decision, botId: picked[0].member.id }
+  if (picked.length === 1) {
+    const only = picked[0]
+    const lastRoomId = only.decision.lastRoomId
+    const crossRoom = typeof lastRoomId === 'string' && lastRoomId !== '' && lastRoomId !== room.id
+    // Another member already left this sentence on the relay. One leftover line
+    // in a different room must not take the opening off the group.
+    const relayed = rows.some(row => row !== only && row.decision.action === 'legacy')
+    if (!(crossRoom && relayed)) return { ...only.decision, botId: only.member.id }
+  }
   if (picked.length > 1) {
     return ask(picked.map(row => ({
       id: row.decision.workLineId,

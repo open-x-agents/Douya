@@ -11,6 +11,8 @@ import { installPanel, reportKey } from './src/host/panel.js'
 import { createFeishuSender } from './src/host/feishu.js'
 import { localDay } from './src/host/normalize.js'
 import { defaultZone, nextWakeAt, runWithBudget } from './src/host/schedule.js'
+import { assertReadOnlyRegistry, registry as composioRegistryDefault } from './src/sources/composio/registry.js'
+import { SNAPSHOT as COMPOSIO_SNAPSHOT } from './src/sources/composio/capabilities.js'
 import {
   CALENDAR_ATTEMPTS,
   CALENDAR_REFRESH_MS,
@@ -32,6 +34,10 @@ export function apply(ctx, config = {}) {
 }
 
 export function createRuntime(ctx, config = {}) {
+  // Composio 的注册表在启动时校验：白名单里混进一个写动作就同步抛 E_WRITE_ACTION。
+  // 这是「启动失败」，不是一条告警 —— 告警会被日志吞掉，写动作却已经进了白名单。
+  const composioRegistry = config.composioRegistry ?? composioRegistryDefault
+  assertReadOnlyRegistry(composioRegistry, COMPOSIO_SNAPSHOT)
   const home = config.home ?? join(process.env.DSH_HOME ?? '.', 'opendigitalmate')
   const now = config.now ?? (() => new Date())
   // The zone the two report slots are read in, and the two functions the single timer uses.

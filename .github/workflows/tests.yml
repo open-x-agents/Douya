@@ -17,4 +17,4 @@ jobs:
       # No dependency install on purpose: the suite runs on the standard library alone, so a
       # red check can only mean the code changed, never that a registry was slow.
       - name: Unit tests
-        run: node --test test/*.test.js 'acceptance-cases/**/*.test.js'
+        run: node --test 'test/**/*.test.js' 'acceptance-cases/**/*.test.js'

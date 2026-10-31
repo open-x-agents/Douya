@@ -106,6 +106,35 @@ report 的形状：`{ date, memberId, memberName, schedule[], done[], plan[], no
 - 每条卡片断言都带 `data-evidence="<ref>"`，`ref` 是来源自己的 id，形如 `<source>:<id>`（`gmail:thread/9`、`feishu_cal:event/77`、`github:pr/42`）；承载证据的 `<details class="evi" id="ev-<eventId>">` 可点开后追到同一条事件的 `sources[]`。一张卡最多一个 `data-act`。
 - 夹具：`test/fixtures/panel-five.json` 一份 `base_events`（8 条，覆盖 open / waiting_other / 改过时间 / 已关）+ `normal / empty / srcless / partial / weekend` 五场景 + 一个 brevity 对照日；用例在 `test/panel-states.test.js`。
 
+## Composio 多 app（#32）
+
+一个数字同事同时接多个 app（首批 `gmail`、`googlecalendar`、`notion`、`slack`）。骨架是
+`src/sources/composio/registry.js` 的一张表：**一个 app 一行**，`{ toolkit, label, adapter, actions[], readScope }`。
+加一个 app 只许改三处——注册表一行、`src/sources/composio/<app>.js` 一个适配器、
+`test/composio/<app>.contract.test.js` 一份契约测试；`report.js` / `cards.js` / 面板不改（要改它们，就说明这张表没做对）。
+`labelOf()` 从这里出中文名，面板不认具体的 app 名。
+
+**只读白名单。** 每行 `actions[]` 只放读动作。只读判定**只看 tag**：`tags` 含 `readOnlyHint` 且
+`is_deprecated !== true` 才算读，名字不算——`GOOGLECALENDAR_CALENDAR_LIST_INSERT` 名字像读、实际是写，
+`LINEAR_CREATE_LINEAR_ISSUE_DETAILS` 名字像写、实际是读。快照在 `src/sources/composio/capabilities.js`：
+`at` 是取得时间，`visible` / `read_only_tagged` 是当次 `/tools` 的实数，撞 `limit` 记 `capped: true`
+（slack 今天 100 是截断）；不存 `tools_count`（那是 toolkit 版本总数，gmail 61，不是可用动作数）。
+`isReadOnly()` 只认名单，**不在名单里一律判假**（fail-closed，不猜名字）。
+`assertReadOnlyRegistry()` 在 `createRuntime()` 返回之前跑：任一行任一动作不是读动作或不在快照里就同步抛
+`E_WRITE_ACTION`——**启动失败**，不是一条告警。`node scripts/composio-check.mjs [--registry <file>]` 是同一个校验的 CLI 形态。
+
+**按人授权（S2 起）。** 每个 app × 每个人一个 connected account，状态 `ok | missing | expired | ambiguous | scope`；
+解析键是 `(toolkit, userId)`，账号表必须用复数参数 `toolkit_slugs` / `user_ids` 取（单数参数会被静默忽略，
+「按人」会悄悄变成「按所有人」）。掉一个 app 时该源进 `unread_sources`，早报照出并点名缺的是哪个 app；
+`ambiguous` 绝不允许静默挑一个。
+
+**多源同时在线（S4 起）。** 每个 app 单独一个 3 秒预算，超时只让该源 `partial`（记 `latency_ms`），
+其它 app 照常进早报。每条 fact 的证据 ref 固定为 `composio:<toolkit>:<object>/<record_id>`，
+面板上的 `data-evidence` 原样指向输入里存在的记录。
+
+**冲突（S5 起）。** 两个 app 对同一件事给出不同时间时，`conflicts` 并列两个值并写明采信哪条
+（`日程是硬时间` → 取日历那条），卡片上两个时间都写。
+
 ## 与 ds-bot 的边界
 
 - 用 ds-bot 的 `ctx.connection.fetch.register` 挂路由，用 `ctx.effect` 管定时器和注销——插件卸载即清理。

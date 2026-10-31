@@ -89,7 +89,7 @@ jobs:
       # 不是另起一套测试 —— 换一套就等于没测同一个东西。
       - name: 在合并结果上跑单元测试
         id: unit
-        run: node --test test/*.test.js 'acceptance-cases/**/*.test.js'
+        run: node --test 'test/**/*.test.js' 'acceptance-cases/**/*.test.js'
 
       # 手动入口的结论必须落在 PR head 上，否则守卫（只看同一 sha 的 check）看不见。
       - name: 把结果写成 PR head 上的 merge-tree check

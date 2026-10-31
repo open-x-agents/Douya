@@ -1,0 +1,42 @@
+{
+  "registry": [
+    {
+      "toolkit": "gmail",
+      "label": "邮件",
+      "adapter": "./gmail.js",
+      "readScope": "metadata",
+      "actions": [
+        "GMAIL_FETCH_EMAILS",
+        "GMAIL_LIST_THREADS",
+        "GMAIL_SEND_EMAIL"
+      ]
+    },
+    {
+      "toolkit": "googlecalendar",
+      "label": "谷歌日历",
+      "adapter": "./googlecalendar.js",
+      "readScope": "metadata",
+      "actions": [
+        "GOOGLECALENDAR_EVENTS_LIST"
+      ]
+    },
+    {
+      "toolkit": "notion",
+      "label": "Notion",
+      "adapter": "./notion.js",
+      "readScope": "metadata",
+      "actions": [
+        "NOTION_SEARCH_NOTION_PAGE"
+      ]
+    },
+    {
+      "toolkit": "slack",
+      "label": "Slack",
+      "adapter": "./slack.js",
+      "readScope": "metadata",
+      "actions": [
+        "SLACK_LIST_CONVERSATIONS"
+      ]
+    }
+  ]
+}

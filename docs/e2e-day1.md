@@ -9,7 +9,7 @@ Status: 跑不通
 
 | 项 | 值 |
 | --- | --- |
-| 记录来自的 main | `5b21385502336b8daa91c42a01ae52b9ca881fbf`（开工时读到；真跑时换成被跑的那次 commit） |
+| 记录来自的 main | `e7239659ac05e10c23e076185d0166a6a1c07534`（写这条时读到；开工时是 `5b21385`，#46 在 08:42Z 合入后刷新；真跑时换成被跑的那次 commit） |
 | 时区 | Asia/Shanghai |
 | 机器 | 未跑（还没有真实运行） |
 | 起点 / 终点（UTC） | 未跑 |
@@ -30,22 +30,23 @@ Status: 跑不通
 
 还没有面板快照。真跑后这里写提交率与未交数两个值，以及各自的 `report:` / `member:` ref；
 机器可读的那份放在 `run.json` 的 `panel`（`member_ids` / `report_keys` / `numbers`）里，
-判定器按它复算并核对这里写的值（`src/host/panel.js` 今天只有提交率、未交名单、近期日程、投递）。
+判定器按它复算并核对这里写的值。面板今天（#46 合入后）有 day 契约的 ① 首屏，
+提交率 / 未交两张卡仍从 `state.reports` 算；快照里的每件事只给信源的类型名，没有逐句 `source.ref`。
 
 ## 时延四项
 
 | 项 | 预算 | 实测 | 口径 |
 | --- | --- | --- | --- |
-| 首屏 | 1000ms（浏览器） | `null` | 缺 #15 的面板 day 契约：首屏还没有能计时的形态 |
+| 首屏 | 1000ms（浏览器） | `null` | #46 已落 day 契约的 ① 首屏，但还没有一次真跑：`server_ms` 与 `browser_ms` 要分开实测、不合并（#15 收尾时补） |
 | 追问首字 | 3000ms | `null` | 面板内追问入口还没有（#34 只合了引擎 `src/host/ask.js`，第五幕的常驻输入框未落）；只能按 `test/e2e/real-model.e2e.mjs` 同口径直连量，口径 ≠ 面板内追问 |
 | 提醒误差 | 30000ms | `null` | 今天就能算（`sent[eventId@fireAt]` 的投递时刻 − `fireAt`），但还没有真跑 |
 | 日报偏差 | 60000ms | `null` | 缺 #14 的投放记录：`deliveries` 里还没有 `kind=report` 的条目，日报本身也还不存在 |
 
 ## 20 句抽查
 
-还没有抽样池：面板今天没有任何带 `evidence_ref` 的 fact（缺 #9 的证据账本与 `explain()`），
-`docs/e2e-day1/panel-facts.json` 只能是空数组。池子不足 20 条时判定器直接报「池子不足 20 条」，
-**不手写补满**。
+还没有抽样池：面板快照里的每件事只有信源类型名与 `closure.evidence_ref`，没有逐句的 `source.ref`
+（缺 #9 的证据账本与 `explain()`），`docs/e2e-day1/panel-facts.json` 只能是空数组。
+池子不足 20 条时判定器直接报「池子不足 20 条」，**不手写补满**。
 
 ## 失败场景
 
@@ -84,4 +85,4 @@ node scripts/e2e-day1-check.mjs docs/e2e-day1.md                    # 现在：N
 - **#11 Composio（日历 / 邮件）**：`needs-human`。
 - **#12 飞书应用**：要本人建应用并给凭证。
 - **#14 08:45 / 18:30 与日报投递记录**：`REPORT_HOUR = 18` 全仓只在一处，投递记录里还没有 `kind=report`；#43 未合（#40 已合）。→ 日报 ±60s 无从实测。
-- **#15 面板 day 契约**：面板快照没有一条带 `evidence_ref` 的 fact。→ 抽样池为空。
+- **#15 面板**：快照里的每件事只有信源类型名与 `closure.evidence_ref`，没有逐句 `source.ref`；四种坏状态与其余卡片还没落。→ 抽样池为空。

@@ -1172,6 +1172,19 @@ div:has(> nav [class*="_marks"]){display:none!important}
 .bt-btw-answer p{margin:0}
 .bt-btw-fail{margin:0 0 6px;color:var(--bt-danger);font-size:13px;line-height:18px}
 @media (prefers-reduced-motion:reduce){.bt-btw-chevron{transition:none}}
+.bt-route-dock{width:100%;display:flex;justify-content:center}
+.bt-route{box-sizing:border-box;width:calc(var(--dsh-chat-content-width,748px) - 32px);max-width:calc(100% - 32px);margin:0 auto 8px;padding:12px 14px;border-radius:16px;background:var(--bt-card);color:var(--bt-ink);box-shadow:inset 0 0 0 .5px color-mix(in srgb,var(--bt-ink) 8%,transparent);font-family:var(--bt-font)}
+.bt-route-text{margin:0 0 8px;font-size:14px;line-height:22px}
+.bt-route-list{display:flex;flex-direction:column;gap:4px}
+.bt-route-choice{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;margin:0;padding:8px 10px;border:0;border-radius:12px;background:transparent;color:inherit;font:inherit;font-size:13px;line-height:18px;text-align:left;cursor:pointer}
+.bt-route-choice:hover{background:var(--bt-hover)}
+.bt-route-choice:disabled{opacity:.55;cursor:default}
+.bt-route-choice[data-highlight]{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--bt-accent) 45%,transparent)}
+.bt-route-choice-state{flex:none;color:var(--bt-ink-3);font-size:12px}
+.bt-route-miss{margin:8px 0 0;color:var(--bt-ink-3);font-size:12px;line-height:16px}
+.bt-route-cite{display:flex;flex-direction:column;gap:2px;max-width:min(550px,86%);margin:6px 0}
+.bt-route-cite-label{color:var(--bt-ink-3);font-size:12px;line-height:16px}
+.bt-route-cite-text{color:var(--bt-ink);font-size:14px;line-height:22px}
 `
 
 // -------------------------------------------------------------------------

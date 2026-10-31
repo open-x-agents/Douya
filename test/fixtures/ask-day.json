@@ -1,0 +1,112 @@
+{
+  "day": "2026-10-31",
+  "sources": [
+    {
+      "ref": "gcal:event/evt-77",
+      "source": "gcal",
+      "title": "产品评审",
+      "excerpt": "产品评审 14:00，张伟、李娜，3 号会议室",
+      "at": "2026-10-31T14:00:00Z",
+      "clock": "14:00",
+      "read_scope": "event"
+    },
+    {
+      "ref": "gcal:event/evt-88",
+      "source": "gcal",
+      "title": "周会",
+      "excerpt": "周会 10:30，全员",
+      "at": "2026-10-31T10:30:00Z",
+      "clock": "10:30",
+      "read_scope": "event"
+    },
+    {
+      "ref": "gmail:thread/9a1",
+      "source": "gmail",
+      "title": "供应商报价 v3",
+      "excerpt": "供应商报价 v3",
+      "at": "2026-10-30T09:12:00Z",
+      "clock": "09:12",
+      "read_scope": "metadata",
+      "limits": ["gmail:body"]
+    },
+    {
+      "ref": "gmail:thread/bb2",
+      "source": "gmail",
+      "title": "设计稿反馈",
+      "excerpt": "设计稿反馈",
+      "at": "2026-10-30T11:40:00Z",
+      "clock": "11:40",
+      "read_scope": "metadata"
+    }
+  ],
+  "mail_body_sentinel": "BODY-ONLY-9a1：交货期 45 天，单价 12.8 万",
+  "questions": {
+    "calendar": {
+      "text": "今天下午的评审是几点？",
+      "refs": ["gcal:event/evt-77"],
+      "unread": []
+    },
+    "mail": {
+      "text": "供应商报价 v3 说了什么？",
+      "refs": ["gmail:thread/9a1"],
+      "unread": []
+    },
+    "missing": {
+      "text": "飞书日历上这周五的评审在哪间会议室？",
+      "refs": [],
+      "unread": ["gcal"]
+    }
+  },
+  "ten_questions": [
+    {
+      "text": "产品评审几点开始？",
+      "refs": ["gcal:event/evt-77"],
+      "unread": []
+    },
+    {
+      "text": "产品评审在几号会议室？",
+      "refs": ["gcal:event/evt-77"],
+      "unread": []
+    },
+    {
+      "text": "周会改到什么时候？",
+      "refs": ["gcal:event/evt-88"],
+      "unread": []
+    },
+    {
+      "text": "供应商报价 v3 的主题是什么？",
+      "refs": ["gmail:thread/9a1"],
+      "unread": []
+    },
+    {
+      "text": "供应商报价 v3 是谁发给我的？",
+      "refs": ["gmail:thread/9a1"],
+      "unread": []
+    },
+    {
+      "text": "设计稿反馈里说了哪几条？",
+      "refs": ["gmail:thread/bb2"],
+      "unread": []
+    },
+    {
+      "text": "飞书日历上这周五的评审在哪间会议室？",
+      "refs": [],
+      "unread": ["gcal"]
+    },
+    {
+      "text": "云文档里的报价单原件写了什么？",
+      "refs": [],
+      "unread": ["feishu_doc"]
+    },
+    {
+      "text": "GitHub 上这个 PR 的评论说了什么？",
+      "refs": [],
+      "unread": ["github"]
+    },
+    {
+      "text": "周会的参会人都有谁？",
+      "refs": ["gcal:event/evt-88"],
+      "unread": []
+    }
+  ]
+}

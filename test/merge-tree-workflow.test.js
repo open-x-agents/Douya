@@ -13,8 +13,28 @@ test('在 pull_request 上触发', () => {
   assert.match(workflow, /^on:\n {2}pull_request:/m);
 });
 
-test('起点是 base 的 sha，不是 PR 的 head', () => {
-  assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
+test('起点是 base 的 sha；手动入口固定当前 main', () => {
+  assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.base\.sha/);
+  assert.match(workflow, /\|\| 'main' \}\}/);
+});
+
+test('有 workflow_dispatch(pr) 入口：能对当前 main 重跑', () => {
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /inputs:\n\s+pr:/);
+  assert.match(workflow, /github\.event\.inputs\.pr/);
+});
+
+test('手动入口把结论写成 PR head 上的 merge-tree check（守卫才看得见）', () => {
+  assert.match(workflow, /checks\.create/);
+  assert.match(workflow, /name: 'merge-tree'/);
+  assert.match(workflow, /head_sha: process\.env\.HEAD_SHA/);
+  assert.match(workflow, /if: always\(\)/);
+  assert.match(workflow, /checks: write/);
+});
+
+test('手动入口的结论按合并与测试两步的真实结果给', () => {
+  assert.match(workflow, /steps\.merge\.outcome/);
+  assert.match(workflow, /steps\.unit\.outcome/);
 });
 
 test('用 refs/pull/<n>/head 取 head：fork 的 PR 也能取到', () => {

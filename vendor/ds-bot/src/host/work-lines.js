@@ -2,7 +2,7 @@
 // The index holds metadata only. Message text stays in the session log, and a
 // Bot's MEMORY.md stays one file per bot. Busy is live.turn, not a stored status.
 import { randomUUID } from 'node:crypto'
-import { orderedCompletions } from '../shared/work-line-complete.js'
+import { orderedCompletions, quoteSentence } from '../shared/work-line-complete.js'
 import { HISTORY_TIMEOUT_MS } from './constants.js'
 import { splitRef, textOf } from './text.js'
 
@@ -130,10 +130,29 @@ export function createLine(state, input = {}) {
   return line
 }
 
+function logsByRoom(state) {
+  /** @type {Record<string, { seq?: number, who?: string, kind?: string, text?: string }[]>} */
+  const logs = {}
+  const rooms = state?.rooms
+  if (rooms == null || typeof rooms !== 'object') return logs
+  for (const [id, room] of Object.entries(rooms)) {
+    if (Array.isArray(room?.log)) logs[id] = room.log
+  }
+  return logs
+}
+
+function openingQuote(room) {
+  const seq = typeof room?.seq === 'number' ? room.seq : 0
+  const quote = { roomId: room?.id, seq }
+  const logs = { [room?.id]: Array.isArray(room?.log) ? room.log : [] }
+  return quoteSentence(quote, logs) !== '' ? quote : undefined
+}
+
 /**
  * One line for each private chat and each `room.sessions[botId]`.
  * A session that already has a line keeps that id.
- * @returns {boolean} true when a line was added
+ * A quote is stored only when that seq is a user sentence.
+ * @returns {boolean} true when a line was added or a body was stripped
  */
 export function ensureLegacy(state, { now = Date.now(), createId, chatOf } = {}) {
   const before = Object.keys(linesOf(state)).length
@@ -147,18 +166,19 @@ export function ensureLegacy(state, { now = Date.now(), createId, chatOf } = {})
   for (const room of Object.values(state?.rooms ?? {})) {
     for (const [botId, sessionId] of Object.entries(room?.sessions ?? {})) {
       if (typeof sessionId !== 'string' || sessionId === '' || lineBySession(state, sessionId) !== undefined) continue
-      const seq = typeof room.seq === 'number' ? room.seq : 0
+      const quote = openingQuote(room)
       createLine(state, {
         botId,
         sessionId,
         roomId: room.id,
-        quote: { roomId: room.id, seq },
+        ...(quote !== undefined ? { quote } : {}),
         now,
         createId,
       })
     }
   }
   let stripped = false
+  const logs = logsByRoom(state)
   for (const line of Object.values(linesOf(state))) {
     for (const key of ['messages', 'memory', 'text', 'status', 'body']) {
       if (Object.hasOwn(line, key)) {
@@ -169,6 +189,10 @@ export function ensureLegacy(state, { now = Date.now(), createId, chatOf } = {})
     const segments = cleanSegments(line.segments)
     if (JSON.stringify(segments) !== JSON.stringify(line.segments ?? [])) {
       line.segments = segments
+      stripped = true
+    }
+    if (line.quote !== undefined && quoteSentence(line.quote, logs) === '') {
+      delete line.quote
       stripped = true
     }
   }
@@ -256,10 +280,12 @@ export function noteTurnEnd(state, { sessionId, exchangeId, turn, reason, replay
   if (seen[key] === true) return { line, event: undefined }
   seen[key] = true
   line.updatedAt = now
+  const sentence = quoteSentence(line.quote, logsByRoom(state))
   const event = {
     workLineId: line.id,
     completedAt: now,
     ...(line.quote !== undefined ? { quote: line.quote } : {}),
+    ...(sentence !== '' ? { quoteText: sentence } : {}),
     exchangeId: key,
   }
   return { line, event }

@@ -1592,10 +1592,10 @@ export async function runAggregationPipeline(composioClient, activeSources, llmC
 async function generateHeroCard(grouped, sourceData, llmClient, profileContext) {
   const now = new Date();
   const hour = now.getHours();
-  const timeOfDay = hour < 12 ? 'MORNING' : hour < 17 ? 'AFTERNOON' : 'EVENING';
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const timeOfDay = hour < 12 ? '早上' : hour < 17 ? '下午' : '晚上';
+  const greeting = hour < 12 ? '早上好' : hour < 17 ? '下午好' : '晚上好';
   
-  const date = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
+  const date = now.toLocaleDateString('zh-CN', { weekday: 'long', month: 'long', day: 'numeric' });
   
   // Calculate today's achievements
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());

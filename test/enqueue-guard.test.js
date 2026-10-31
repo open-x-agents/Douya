@@ -64,6 +64,34 @@ test('Ran: 后面空着也算没写', () => {
   assert.ok(codes(verdict).includes('missing-ran'));
 });
 
+// 规则 2 的判据：`Ran:` 后面必须是**行首命令**（行首 `$ ` 或行首命令词），
+// 散文里提到命令词不算，块边界之后也不往回找。口径写在 docs/testing.md 的 L5 规则 2。
+test('Ran: 后面只有散文，不算跑了命令', () => {
+  const verdict = judge(pull({ body: `Fixes #12\n\nRan: 看过了\ntip ${SHA}` }));
+  assert.ok(codes(verdict).includes('missing-ran'));
+});
+
+test('Ran: none 不算跑了命令', () => {
+  const verdict = judge(pull({ body: `Fixes #12\n\nRan: none\ntip ${SHA}` }));
+  assert.ok(codes(verdict).includes('missing-ran'));
+});
+
+test('Ran: 行里散文提到 git 不算命令', () => {
+  const verdict = judge(pull({ body: `Fixes #12\n\nRan: 我用 git 看过了\ntip ${SHA}` }));
+  assert.ok(codes(verdict).includes('missing-ran'));
+});
+
+test('Ran: 下一行代码块里的命令算数', () => {
+  const verdict = judge(pull({ body: `Fixes #12\n\nRan:\n\`\`\`sh\n$ node --test test/*.test.js\n\`\`\`\ntip ${SHA}` }));
+  assert.ok(!codes(verdict).includes('missing-ran'));
+  assert.equal(verdict.ok, true);
+});
+
+test('Ran: 到下一个空行就停，不往下找命令', () => {
+  const verdict = judge(pull({ body: `Fixes #12\n\nRan: 看过了\n\n$ node --test test/*.test.js\ntip ${SHA}` }));
+  assert.ok(codes(verdict).includes('missing-ran'));
+});
+
 test('没有写 tip sha', () => {
   const verdict = judge(pull({ body: 'Fixes #12\n\nRan: node --test test/*.test.js' }));
   assert.ok(codes(verdict).includes('missing-tip-sha'));

@@ -30,15 +30,33 @@ const ISSUE_REF = /\b(?:fixes|closes|resolves)\s+#(\d+)\b/i;
 const RAN_LINE = /^\s*Ran\s*:/im;
 const TIP_SHA = /\b([0-9a-f]{40})\b/;
 
+// 「真命令」的口径：行首 `$ `，或行首是已知命令词（词后必须是词边界）。
+// 命令词出现在句子中间不算 —— `Ran: 我用 git 看过了` 说的是「看过」，不是跑过。
+// 口径与 docs/testing.md 的 L5 规则 2 是同一句话，改一边就要改另一边。
+export const COMMAND_HINT = ['node', 'npm', 'npx', 'pnpm', 'yarn', 'git', 'gh', 'python', 'python3'];
+const COMMAND_LINE = /^\s*(?:\$\s|(?:node|npm|npx|pnpm|yarn|git|gh|python3?)\b)/;
+// `Ran:` 之下最多看这么多行，再往下就是别的话了。
+const RAN_BLOCK_LINES = 10;
+
+function isCommandLine(line) {
+  return COMMAND_LINE.test(line);
+}
+
 function hasRanLine(body) {
   const m = body.match(RAN_LINE);
   if (!m) return false;
   const rest = body.slice(m.index + m[0].length);
-  // 一行 `Ran:` 后面要真有东西：空着等于没写。
-  const line = rest.split('\n')[0].trim();
-  if (line.length > 0) return true;
-  // 允许 `Ran:` 之下跟一个代码块 / 列表
-  return /^\s*$/m.test(rest.split('\n')[0]) && /(\$\s|\bnode\b|\bnpm\b|\bpnpm\b|\bgit\b)/m.test(rest);
+  const lines = rest.split('\n');
+  // `Ran:` 这一行内：冒号后面就是命令。
+  if (isCommandLine(lines[0])) return true;
+  // `Ran:` 之下同一块内也算（裸 `Ran:` + 下一行 `$ …`）。
+  // 到块边界就停：空行、下一个 `Ran:`，或超过 RAN_BLOCK_LINES 行 —— 不全文搜索。
+  for (const line of lines.slice(1, 1 + RAN_BLOCK_LINES)) {
+    if (/^\s*$/.test(line)) break;
+    if (RAN_LINE.test(line)) break;
+    if (isCommandLine(line)) return true;
+  }
+  return false;
 }
 
 function issuesReferenced(body) {

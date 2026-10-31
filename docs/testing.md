@@ -37,7 +37,9 @@ node scripts/enqueue-guard.mjs --pr 12        # L5：对一个真 PR 跑准入�
 写在 `scripts/enqueue-guard.mjs`，样例集在 `test/enqueue-guard.test.js`：
 
 1. `Fixes #N` / `Closes #N`，且那个 issue 是 open；
-2. `Ran:` 行里有真命令；
+2. `Ran:` 行里有真命令。判据是**行首命令词**：该行（允许前置空白）以 `$ ` 开头，或以 `node`/`npm`/`npx`/`pnpm`/`yarn`/`git`/`gh`/`python`/`python3` 开头且后面是词边界；
+   命令词只出现在散文里不算（`Ran: 我用 git 看过了`、`Ran: none` 都判 `missing-ran`）。裸 `Ran:` 之下**同一块**内的命令行也算，
+   但到块边界就停（空行 / 下一个 `Ran:` / 最多 10 行），不往下全文找；
 3. body 里的 40 位 sha 等于当前 head；
 4. `tests` 在这个 head 上绿（不是「最后一次跑绿过」）；
 5. 没有 `hold`；

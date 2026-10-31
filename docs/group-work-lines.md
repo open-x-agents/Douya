@@ -6,7 +6,7 @@
 
 ## 1. 目的与原则
 
-群聊和工作线不是两套会话系统，而是同一批 DSH 会话的两种用法：一条工作线指向一条**已经存在**的会话，一个群聊则是「房间日志 + 每成员一条隐藏群会话 + 一次只让一个人说」的调度器。以下六条是代码里真正生效的约束，读的时候可以拿它们验证任何一段实现。
+群聊和工作线不是两套会话系统，而是同一批 DSH 会话的两种用法：一条工作线指向一条**已经存在**的会话，一个群聊则是「房间日志 + 每成员一条隐藏群会话 + 一次只让一个人说」的调度器。以下七条是代码里真正生效的约束，读的时候可以拿它们验证任何一段实现。
 
 1. **一条工作线 = 一条已有会话。** 索引只存元数据，`INDEX_FIELDS` — `vendor/ds-bot/src/host/work-lines.js:10` 是一份白名单；`indexOnly` — `vendor/ds-bot/src/host/work-lines.js:62` 只接受这 9 个键。`createLine` — `vendor/ds-bot/src/host/work-lines.js:105` 明确丢掉 `messages` / `memory` / `status` 这类正文，正文永远在会话日志里，`state.json` 不存消息。
 2. **房间只投递，不搬记录。** 一条消息进入房间只写这一次（`appendRoom` — `vendor/ds-bot/src/host/groups.js:192`），跨房间继续也不会把源房间的 transcript 抄进目标房间：`deliverAcrossRooms` — `vendor/ds-bot/src/host/route-inbound.js:595` 只更新索引的房间指针，回复由 `armArrivalReply` — `vendor/ds-bot/src/host/route-inbound.js:572` 用 `projectExchange` — `vendor/ds-bot/src/host/work-lines.js:223` 投影成「这一问一答」两行。
@@ -26,7 +26,7 @@
 | `vendor/ds-bot/src/host/work-lines.js` | 工作线索引、busy 判定、完成投影、完整线程读回 | vendored ds-bot | ds-bot 上游；本仓补丁见 #47 |
 | `vendor/ds-bot/src/host/route-inbound.js` | 入站消息归属哪条工作线的**唯一**决定，以及把决定落地（投递/存卡/新建线） | vendored ds-bot | ds-bot 上游；ask 卡与引用为本仓 #50/#51/#52 |
 | `vendor/ds-bot/src/host/groups.js` | 房间日志、成员隐藏群会话、一轮的调度、relay 上限、late 回帖、`group_relay` / `read_own_chat` / `read_group_chat` 工具 | vendored ds-bot | ds-bot 上游；本仓补丁见 #18–#35 |
-| `vendor/ds-bot/src/host/room-halt.js` | Stop 语义：哪些 relay 算「已落日志」、halting 期间投递走 followup / skip / log | dev_nyp 本仓补丁 | 本仓（#56/#59）；main 上对应文件是 `group-stop.js` |
+| `vendor/ds-bot/src/host/room-halt.js` | Stop 语义：哪些 relay 算「已落日志」、halting 期间投递走 followup / skip / log | dev_nyp 本仓补丁 | 本仓（#56/#59）；main 上的对应实现不同，见 §7.1 |
 | `vendor/ds-bot/src/host/delivery.js` | 一条消息怎么写进某个会话：header、exchange 记账、steer 还是 followup | vendored ds-bot | ds-bot 上游 |
 | `vendor/ds-bot/src/host/turns.js` | 每个会话的活 turn、房间收件箱与等待者、turn 结束后触发 late 回帖 | vendored ds-bot | ds-bot 上游 |
 | `vendor/ds-bot/src/host/channel.js` | Web/桌面宿主接口：发送、`room-continue`、view 里带出 `pendingRoutes` | vendored ds-bot | ds-bot 上游 |
@@ -40,14 +40,14 @@
 
 ## 3. 数据模型
 
-### 3.1 `state.json` 的 19 个落盘键
+### 3.1 `state.json` 的落盘键（19 个初始键 + 可选 `workspaceId`）
 
-`state` — `vendor/ds-bot/src/host/store.js:22` 的初始形状就是允许落盘的键集合；表里每一行都必须在文档里出现一次（PR1 的测试逐键断言）。
+`state` — `vendor/ds-bot/src/host/store.js:22` 的初始形状给出 19 个键；宿主在运行中还会写入可选的 `workspaceId`。表里每一行都必须在文档里出现一次（PR1 的测试逐键断言 19 个初始键）。
 
 | 键 | 内容 | 谁写 |
 | --- | --- | --- |
 | `version` | 固定 `1`；读到别的版本当作「更新版写的」拒绝 | store |
-| `workspaceId` | 团队工作区 id | store / 宿主 |
+| `workspaceId` | 团队工作区 id（宿主在运行中写入，可能不存在） | store / 宿主 |
 | `mainBotIds` | Main Bot 列表，第一个当侧栏头像 | roster |
 | `bots` | `{ [botId]: bot }`，含名字、颜色、模型、`segments`（历史 part） | roster / bot 工具 |
 | `privateArchives` | 被删除的私有 Bot 的归档（文件夹、记忆、会话仍保持关闭） | roster |
@@ -115,7 +115,7 @@
 | --- | --- | --- |
 | 消息正文 | 各会话的事件日志 | `state.json` 永远不因聊天变胖；读全文走 `getFullThread` — `vendor/ds-bot/src/host/work-lines.js:509` |
 | `MEMORY.md` | 每个 Bot 一个文件 | 不随团队文件复制，删 Bot 才归档 |
-| `live.turn` | 进程内存（`turns.js` 的 `live`） | 重启即空闲，`isBusy` 不会假阳性 |
+| `live.turn` | 进程内存（`live` — `vendor/ds-bot/src/host/turns.js:95`） | 重启即空闲，`isBusy` 不会假阳性 |
 | `roomInbox` | 进程内存，`roomInbox` — `vendor/ds-bot/src/host/turns.js:101` | 未 relay 的群消息随进程消失（设计如此，日志里已有行） |
 | `roomWaiters` | 进程内存，`roomWaiters` — `vendor/ds-bot/src/host/turns.js:97` | 等待中的跨房间回复随进程消失，turn/end 时兜底 |
 | late 回帖的 relay 意图 | 进程内存（`relayIntents` / `suppressedRelay`） | 只在一次投递的窗口内有意义 |

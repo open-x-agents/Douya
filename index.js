@@ -4,6 +4,7 @@
 
 import { join } from 'node:path'
 import { createStore } from './src/host/store.js'
+import { createConfigStore } from './src/host/config-store.js'
 import { buildDailyReport } from './src/host/report.js'
 import { due, planFor, reminderKey, snooze } from './src/host/reminders.js'
 import { dailyReportCard, readAction, reminderCard } from './src/host/cards.js'
@@ -29,18 +30,25 @@ export function createRuntime(ctx, config = {}) {
   const now = config.now ?? (() => new Date())
   const today = config.today ?? (() => now().toISOString().slice(0, 10))
   const store = createStore(join(home, 'state.json'))
+  const configStore = createConfigStore(join(home, 'config.json'))
   const sender = createFeishuSender({ credentials: config.credentials, log: config.log })
   const sendCard = config.sendCard ?? sender.sendCard
   const calendar = config.calendar ?? (async () => [])
   const log = config.log ?? (() => {})
 
-  // Composio integration for daily digest
+  // Load config store
+  configStore.load().catch(err => log(`Config store load failed: ${err.message}`))
+
+  // Composio integration - try config store first, then env vars
   let composioClient = null
   try {
-    if (config.composioApiKey || process.env.COMPOSIO_API_KEY) {
+    const apiKey = configStore.get()?.composioApiKey || config.composioApiKey || process.env.COMPOSIO_API_KEY
+    const entityId = configStore.get()?.composioEntityId || config.composioEntityId || process.env.COMPOSIO_ENTITY_ID || 'default'
+    
+    if (apiKey) {
       composioClient = createComposioClient({
-        composioApiKey: config.composioApiKey || process.env.COMPOSIO_API_KEY,
-        composioEntityId: config.composioEntityId || process.env.COMPOSIO_ENTITY_ID || 'default',
+        composioApiKey: apiKey,
+        composioEntityId: entityId,
       })
       log('Composio client initialized')
     }
@@ -49,7 +57,15 @@ export function createRuntime(ctx, config = {}) {
   }
 
   // Create API router for web interface
-  const apiRouter = createApiRouter({ store, composioClient, config })
+  const apiRouter = createApiRouter({ 
+    store, 
+    composioClient, 
+    config,
+    llmCtx: ctx,
+    sendCard,
+    configStore,
+    ctx, // Pass for updating composioClient
+  })
 
   const rt = {
     ctx,

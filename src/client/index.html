@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>数字同事 · Open Digital Mate</title>
+<title>Open Digital Mate</title>
 <style>
   :root{
     --ink:#15171c; --ink2:#4a4f5a; --ink3:#8b909c;
@@ -16,35 +16,17 @@
     --ease:cubic-bezier(.22,.61,.36,1);
   }
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden}
   body{
-    background:radial-gradient(1200px 700px at 50% -10%,#ffffff 0,#f4f2ee 55%,#eceae5 100%);
+    background:#fafafa;
     color:var(--ink);
     font:15px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
     -webkit-font-smoothing:antialiased;
-    display:flex;flex-direction:column;align-items:center;
-    padding:26px 18px 30px;min-height:100%;
   }
   code{font:12px/1.5 ui-monospace,Menlo,monospace;background:#ecebe7;padding:1px 5px;border-radius:4px}
 
-  header.top{width:100%;max-width:1100px;display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
-  .top h1{margin:0;font-size:17px;letter-spacing:-.01em}
-  .top .hint{font-size:12.5px;color:var(--ink3)}
-
-  .stage{width:100%;max-width:1100px;display:flex;flex-direction:column;gap:12px}
-
-  .device{
-    position:relative;background:#fff;border:1px solid #e2e0da;border-radius:16px;overflow:hidden;
-    box-shadow:0 26px 60px -34px rgba(21,23,28,.45),0 2px 0 rgba(255,255,255,.6) inset;
-  }
-  .chrome{display:flex;align-items:center;gap:10px;background:#f6f5f2;border-bottom:1px solid var(--line);padding:9px 14px}
-  .lights{display:flex;gap:6px}
-  .lights i{width:10px;height:10px;border-radius:50%;background:#dad8d2;display:block}
-  .url{background:#fff;border:1px solid var(--line);border-radius:7px;padding:3px 10px;font-size:11.5px;color:var(--ink3);min-width:210px}
-  .chrome .when{margin-left:auto;font:12px/1 ui-monospace,Menlo,monospace;color:var(--ink3);font-variant-numeric:tabular-nums}
-
-  .app{display:grid;grid-template-columns:168px 1fr;height:560px}
-  @media (max-width:760px){.app{grid-template-columns:1fr;height:620px}.side{display:none}}
+  .app{display:grid;grid-template-columns:200px 1fr;height:100vh;width:100vw}
+  @media (max-width:760px){.app{grid-template-columns:1fr}.side{display:none}}
 
   .side{background:#f8f7f4;border-right:1px solid var(--line);padding:14px 10px;font-size:13px}
   .side .who{display:flex;align-items:center;gap:8px;padding:2px 8px 14px}
@@ -136,6 +118,31 @@
   .loading{text-align:center;padding:40px;color:var(--ink3)}
   .error{background:var(--red-soft);border:1px solid var(--red);border-radius:8px;padding:12px;margin:12px 0;color:var(--red)}
 
+  .apps-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+  .app-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;transition:.2s var(--ease);cursor:pointer}
+  .app-card:hover{border-color:var(--blue);box-shadow:0 4px 12px rgba(74,108,247,.1)}
+  .app-card.connected{border-color:var(--green);background:var(--green-soft)}
+  .app-header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+  .app-logo{font-size:32px;width:48px;height:48px;display:grid;place-items:center;border-radius:10px;background:var(--gray-soft)}
+  .app-info{flex:1}
+  .app-info h4{margin:0;font-size:14px;font-weight:600}
+  .app-info p{margin:2px 0 0;font-size:11.5px;color:var(--ink3)}
+  .app-status{font-size:11px;padding:3px 8px;border-radius:999px;font-weight:600}
+  .app-status.connected{background:var(--green);color:#fff}
+  .app-status.disconnected{background:var(--gray-soft);color:var(--ink3)}
+  .app-actions{display:flex;gap:6px;margin-top:8px}
+  .app-actions .btn{font-size:11.5px;padding:5px 12px}
+
+  .source-toggle{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;
+    background:#fff;font-size:12px;cursor:pointer;transition:.2s}
+  .source-toggle:hover{border-color:var(--blue)}
+  .source-toggle.active{background:var(--blue);border-color:var(--blue);color:#fff}
+  .source-toggle input[type=checkbox]{display:none}
+
+  @media (max-width:620px){
+    .apps-grid{grid-template-columns:1fr}
+  }
+
   @media (max-width:620px){
     .dockPanel{width:calc(100vw - 32px);right:16px;left:16px;bottom:10px;max-height:60%}
   }
@@ -218,35 +225,64 @@
 
         <!-- 设置 -->
         <section class="view" id="v-settings">
-          <h3 class="concl">配置</h3>
-          <div class="stamp a in">环境变量和Composio配置</div>
+          <h3 class="concl">Composio 设置</h3>
+          <div class="stamp a in">连接你的应用，开始聚合信息</div>
 
-          <div class="card a in">
-            <h3>Composio 配置</h3>
-            <p>需要设置以下环境变量：</p>
-            <ul style="margin:8px 0;padding-left:20px;font-size:13px;color:var(--ink2)">
-              <li><code>COMPOSIO_API_KEY</code> - Composio API密钥</li>
-              <li><code>COMPOSIO_ENTITY_ID</code> - 实体ID（可选，默认为 'default'）</li>
-              <li><code>DIGEST_SCHEDULE</code> - 推送时间（格式：HH:MM，默认 08:00）</li>
-            </ul>
-            <p style="margin-top:12px">当前状态：<span id="configStatus">检查中...</span></p>
-            <p style="margin-top:8px;font-size:12px;color:var(--ink2)">LLM 聊天：<span id="llmStatus">检查中...</span></p>
-            <div class="actions" style="margin-top:12px">
-              <button class="btn primary" id="pushDigestBtn">手动推送汇聚</button>
+          <!-- API Key Configuration -->
+          <div class="card a in" id="apiKeyCard">
+            <h3>🔑 API密钥</h3>
+            <p style="font-size:12.5px;color:var(--ink2);margin:8px 0">从 <a href="https://app.composio.dev" target="_blank" style="color:var(--blue)">Composio Dashboard</a> 获取你的 API 密钥</p>
+            
+            <div style="display:grid;gap:12px;margin-top:12px">
+              <div>
+                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:4px">API Key</label>
+                <div style="display:flex;gap:8px">
+                  <input type="password" id="apiKeyInput" placeholder="输入 Composio API Key" 
+                    style="flex:1;border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px;font-family:ui-monospace,monospace" />
+                  <button class="btn primary" id="saveApiKeyBtn">保存</button>
+                </div>
+                <div id="apiKeyStatus" style="font-size:11.5px;margin-top:6px"></div>
+              </div>
+              
+              <div>
+                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:4px">Entity ID（可选）</label>
+                <input type="text" id="entityIdInput" placeholder="default" 
+                  style="width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px" />
+              </div>
             </div>
           </div>
 
-          <div class="card a in">
-            <h3>可连接的应用</h3>
-            <p>通过 Composio 可以连接 1000+ 应用，包括：</p>
-            <ul style="margin:8px 0;padding-left:20px;font-size:13px;color:var(--ink2)">
-              <li>GitHub - 代码仓库和PR/Issue</li>
-              <li>Slack - 团队消息</li>
-              <li>Notion - 知识库和任务</li>
-              <li>Gmail - 邮件</li>
-              <li>Linear - 项目管理</li>
-              <li>Calendar - 日历事件</li>
-            </ul>
+          <!-- Available Apps Grid -->
+          <div style="margin-top:24px">
+            <h4 style="font-size:15px;font-weight:600;margin:0 0 12px">可连接的应用</h4>
+            <div id="appsGrid" class="apps-grid">
+              <!-- Apps will be loaded here -->
+            </div>
+          </div>
+
+          <!-- Digest Settings -->
+          <div class="card a in" style="margin-top:24px">
+            <h3>⏰ 每日汇聚设置</h3>
+            
+            <div style="display:grid;gap:16px;margin-top:12px">
+              <div>
+                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:4px">推送时间</label>
+                <input type="time" id="digestTimeInput" 
+                  style="border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px;width:150px" />
+              </div>
+              
+              <div>
+                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:8px">选择信源</label>
+                <div id="digestSources" style="display:flex;flex-wrap:wrap;gap:8px">
+                  <!-- Source toggles will be loaded here -->
+                </div>
+              </div>
+              
+              <div class="actions">
+                <button class="btn primary" id="saveDigestSettingsBtn">保存设置</button>
+                <button class="btn" id="testDigestBtn">测试推送</button>
+              </div>
+            </div>
           </div>
         </section>
       </div>

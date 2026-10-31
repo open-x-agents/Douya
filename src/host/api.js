@@ -5,7 +5,7 @@
 import { readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { generateDailyDigest, getSourcesStatus, pushDailyDigest } from './composio.js';
+import { generateDailyDigest, getSourcesStatus, pushDailyDigest, createComposioClient } from './composio.js';
 import { reminderCard } from './cards.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -453,6 +453,186 @@ export function createApiRouter(ctx) {
     },
 
     /**
+     * GET /api/composio/config - Get current Composio configuration (masked)
+     */
+    async getComposioConfig() {
+      if (!configStore) {
+        return {
+          configured: false,
+          apiKeyMasked: null,
+          entityId: 'default',
+          digestSchedule: '08:00',
+          digestSources: [],
+        };
+      }
+
+      const cfg = configStore.get();
+      return {
+        configured: configStore.isConfigured(),
+        apiKeyMasked: configStore.getMaskedKey(),
+        entityId: cfg.composioEntityId || 'default',
+        digestSchedule: cfg.digestSchedule || '08:00',
+        digestSources: cfg.digestSources || [],
+        updatedAt: cfg.updatedAt,
+      };
+    },
+
+    /**
+     * POST /api/composio/config - Update Composio configuration
+     */
+    async updateComposioConfig(data) {
+      if (!configStore) {
+        return { error: '配置存储未初始化' };
+      }
+
+      try {
+        const updates = {};
+        
+        if (data.apiKey && typeof data.apiKey === 'string') {
+          updates.composioApiKey = data.apiKey.trim();
+        }
+        
+        if (data.entityId) {
+          updates.composioEntityId = data.entityId;
+        }
+        
+        if (data.digestSchedule) {
+          updates.digestSchedule = data.digestSchedule;
+        }
+        
+        if (Array.isArray(data.digestSources)) {
+          updates.digestSources = data.digestSources;
+        }
+
+        await configStore.save(updates);
+        
+        // Recreate Composio client if API key changed
+        if (updates.composioApiKey) {
+          ctx.composioClient = createComposioClient({
+            composioApiKey: updates.composioApiKey,
+            composioEntityId: updates.composioEntityId || 'default',
+          });
+        }
+
+        return {
+          success: true,
+          configured: configStore.isConfigured(),
+          apiKeyMasked: configStore.getMaskedKey(),
+        };
+      } catch (err) {
+        console.error('Update config error:', err);
+        return { error: err.message };
+      }
+    },
+
+    /**
+     * GET /api/composio/apps - List available apps with connection status
+     */
+    async getComposioApps() {
+      try {
+        // Return app list even without client
+        const apps = COMPOSIO_APPS.map(app => ({
+          ...app,
+          connected: false,
+          connectionId: null,
+        }));
+
+        if (!composioClient || !configStore?.isConfigured()) {
+          return { apps, configured: false };
+        }
+
+        // Fetch actual connection status
+        try {
+          const accounts = await composioClient.getConnectedAccounts();
+          const connectedApps = new Map();
+          
+          accounts.items?.forEach(account => {
+            const appId = account.appName?.toLowerCase();
+            if (appId) {
+              connectedApps.set(appId, {
+                connectionId: account.id,
+                connectedAt: account.createdAt,
+              });
+            }
+          });
+
+          apps.forEach(app => {
+            const conn = connectedApps.get(app.id);
+            if (conn) {
+              app.connected = true;
+              app.connectionId = conn.connectionId;
+              app.connectedAt = conn.connectedAt;
+            }
+          });
+        } catch (err) {
+          console.error('Failed to fetch connections:', err);
+        }
+
+        return { apps, configured: true };
+      } catch (err) {
+        console.error('Get apps error:', err);
+        return { error: err.message, apps: [] };
+      }
+    },
+
+    /**
+     * POST /api/composio/connect - Initiate OAuth connection for an app
+     */
+    async connectComposioApp(data) {
+      if (!composioClient || !configStore?.isConfigured()) {
+        return { error: 'Composio 未配置。请先设置 API Key' };
+      }
+
+      try {
+        const { appId } = data;
+        const app = COMPOSIO_APPS.find(a => a.id === appId);
+        
+        if (!app) {
+          return { error: '未知应用' };
+        }
+
+        // Create connection link
+        const redirectUrl = `${config.baseUrl || 'http://localhost:7777'}/composio-callback`;
+        const result = await composioClient.createConnection(appId, redirectUrl);
+
+        return {
+          success: true,
+          connectionUrl: result.connectionUrl || result.redirectUrl,
+          appName: app.name,
+        };
+      } catch (err) {
+        console.error('Connect app error:', err);
+        return { error: err.message };
+      }
+    },
+
+    /**
+     * POST /api/composio/disconnect - Disconnect an app
+     */
+    async disconnectComposioApp(data) {
+      if (!composioClient || !configStore?.isConfigured()) {
+        return { error: 'Composio 未配置' };
+      }
+
+      try {
+        const { appId, connectionId } = data;
+        
+        if (connectionId) {
+          // TODO: Implement disconnect via Composio API
+          // await composioClient.deleteConnection(connectionId);
+        }
+
+        return {
+          success: true,
+          appId,
+        };
+      } catch (err) {
+        console.error('Disconnect app error:', err);
+        return { error: err.message };
+      }
+    },
+
+    /**
      * Serve the main HTML interface
      */
     async serveIndex() {
@@ -525,6 +705,59 @@ export function mountApiRoutes(server, router) {
         const data = await router.pushDigest();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(data));
+      } else if (url.pathname === '/api/composio/config' && req.method === 'GET') {
+        const data = await router.getComposioConfig();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
+      } else if (url.pathname === '/api/composio/config' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const data = JSON.parse(body);
+            const response = await router.updateComposioConfig(data);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid request' }));
+          }
+        });
+        return;
+      } else if (url.pathname === '/api/composio/apps' && req.method === 'GET') {
+        const data = await router.getComposioApps();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
+      } else if (url.pathname === '/api/composio/connect' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const data = JSON.parse(body);
+            const response = await router.connectComposioApp(data);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid request' }));
+          }
+        });
+        return;
+      } else if (url.pathname === '/api/composio/disconnect' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const data = JSON.parse(body);
+            const response = await router.disconnectComposioApp(data);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid request' }));
+          }
+        });
+        return;
       } else if (url.pathname === '/' && req.method === 'GET') {
         const html = await router.serveIndex();
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });

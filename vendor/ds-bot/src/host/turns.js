@@ -5,6 +5,7 @@
 import { HANDOFF_ACK, MESSAGE_INLINE_MAX, REFERENCE_KIND, REPLY_KIND, SOURCE_KIND } from './constants.js'
 import { decideRoomSteer, explicitSendFlags, isJoinedFollowUp, pairComposerEcho, rememberComposerSteer, roomMembers, textNamesMember } from './group-steer.js'
 import { routeTakesEffect } from './route-inbound.js'
+import { isUserLineLogged } from './room-user-line.js'
 import { absoluteLinks } from './links.js'
 import { textOf } from './text.js'
 import { reminderText } from './schedules.js'
@@ -379,6 +380,13 @@ export function install(rt) {
       files: blocks.filter(block => block?.type === 'file' && block.attachment !== undefined).map(block => block.attachment),
     }
   }
+  // A line the room log already holds leaves the Session's inbox: DSH draws the rows
+  // left in next-step as pending bubbles, and a later wake would post the line again.
+  const dropInboxLine = (roomId, id) => {
+    void Promise.resolve(rt.resolveAgent?.(roomId))
+      .then(agent => agent?.inbox?.remove?.(id))
+      .catch(error => rt.warn?.('ds-bot: dropping the logged line in %s failed: %s', roomId, error))
+  }
   // `via` is `splice` when the composer inserted the line into the room inbox,
   // and `message` when the deferred user/message finally arrives.
   const admitRoomUser = (roomId, parts, via) => {
@@ -400,6 +408,13 @@ export function install(rt) {
     }
     const room = rt.roomOf(roomId)
     if (room === undefined) return
+    // A stop, a replay, or a route can leave a row in the inbox whose line is already
+    // written here. It is not admitted again: it leaves the inbox and opens nothing.
+    // After pairComposerEcho, so a steer token is still consumed before this returns.
+    if (typeof data?.id === 'string' && data.id !== '' && isUserLineLogged(room.log, data.id)) {
+      dropInboxLine(roomId, data.id)
+      return
+    }
     const members = roomMembers(room, sessionId => live.get(sessionId), botId => rt.botOf(botId))
     const flags = explicitSendFlags(source ?? {}, data ?? {})
     // Composer queue is visible here when the source carries it, when the line
@@ -418,7 +433,10 @@ export function install(rt) {
       plain,
       via: 'user',
     })
-    const queued = { text, ...(images.length > 0 ? { images } : {}), ...(files.length > 0 ? { files } : {}) }
+    // The message id rides with the queued post, so the line the relay writes for it
+    // can be matched back to the row it came from.
+    const inboxId = typeof data?.id === 'string' && data.id !== '' ? { inboxId: data.id } : {}
+    const queued = { text, ...(images.length > 0 ? { images } : {}), ...(files.length > 0 ? { files } : {}), ...inboxId }
     if (routeTakesEffect(routed)) {
       composerSteerPending.set(roomId, rememberComposerSteer(paired.pending, text, via))
       rt.noteSteeredRoomLine?.(roomId, text)
@@ -426,7 +444,14 @@ export function install(rt) {
       // synthesizes group_relay, posts an empty User row, and the admin speaks.
       rt.suppressRelayText?.(roomId, text)
       rt.holdRoomRoute?.(roomId)
-      void rt.applyRouteDecision?.(room, routed, { text: routed.text ?? text, files }).catch(error => rt.warn('ds-bot: inbound route failed: %s', error))
+      // The id goes to the route so the line it writes is this row, and the row leaves
+      // the inbox only once that line is really in the log: `hold` writes none.
+      const applied = rt.applyRouteDecision?.(room, routed, { text: routed.text ?? text, files, ...inboxId })
+      void Promise.resolve(applied)
+        .then(() => {
+          if (inboxId.inboxId !== undefined && isUserLineLogged(room.log, inboxId.inboxId)) dropInboxLine(roomId, inboxId.inboxId)
+        })
+        .catch(error => rt.warn('ds-bot: inbound route failed: %s', error))
       return
     }
     rt.releaseRoomRoute?.(roomId)

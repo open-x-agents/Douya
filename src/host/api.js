@@ -131,17 +131,27 @@ async function gatherContext(composioClient, store) {
   try {
     // Check connected Composio accounts
     if (composioClient) {
-      const accounts = await composioClient.getConnectedAccounts();
-      if (accounts && accounts.length > 0) {
-        context.connectedSources = accounts.map(acc => acc.appName || acc.appId);
-        context.hasData = true;
+      const result = await composioClient.getConnectedAccounts();
+      const accounts = result?.items || [];
+      
+      if (accounts.length > 0) {
+        // Extract toolkit slugs from ACTIVE accounts
+        context.connectedSources = accounts
+          .filter(acc => acc.status === 'ACTIVE' && acc.toolkit?.slug)
+          .map(acc => ({
+            slug: acc.toolkit.slug,
+            identity: acc.metadata?.username || acc.metadata?.email || acc.user_id,
+          }));
+        context.hasData = context.connectedSources.length > 0;
 
         // Fetch real data from connected sources (limited to avoid token overflow)
         for (const account of accounts.slice(0, 3)) {  // Max 3 sources
-          const appId = account.appName?.toLowerCase() || account.appId;
+          if (account.status !== 'ACTIVE' || !account.toolkit?.slug) continue;
+          
+          const slug = account.toolkit.slug;
           
           try {
-            if (appId === 'github') {
+            if (slug === 'github') {
               // Get user's repos (first 5)
               const repos = await composioClient.executeAction('GITHUB_USER_GET_CURRENT_USER_REPOS', {
                 per_page: 5,
@@ -154,20 +164,11 @@ async function gatherContext(composioClient, store) {
                   updated: r.updated_at,
                 })) || [],
               };
-            } else if (appId === 'gmail') {
-              // Get recent emails (first 3)
-              const emails = await composioClient.executeAction('GMAIL_LIST_EMAILS', {
-                maxResults: 3,
-                labelIds: ['INBOX'],
-              });
-              context.data.gmail = {
-                recentCount: emails?.messages?.length || 0,
-              };
-            } else if (appId === 'googlecalendar' || appId === 'calendar') {
+            } else if (slug === 'googlecalendar') {
               // Get today's events
               const now = new Date();
-              const startOfDay = new Date(now.setHours(0, 0, 0, 0)).toISOString();
-              const endOfDay = new Date(now.setHours(23, 59, 59, 999)).toISOString();
+              const startOfDay = new Date(now.setHours(0,0,0,0)).toISOString();
+              const endOfDay = new Date(now.setHours(23,59,59,999)).toISOString();
               
               const events = await composioClient.executeAction('GOOGLECALENDAR_LIST_EVENTS', {
                 timeMin: startOfDay,
@@ -175,14 +176,23 @@ async function gatherContext(composioClient, store) {
                 maxResults: 5,
               });
               context.data.calendar = {
-                todayEvents: events?.items?.slice(0, 5).map(e => ({
-                  title: e.summary,
-                  time: e.start?.dateTime || e.start?.date,
+                events: events?.items?.slice(0, 5).map(e => ({
+                  summary: e.summary,
+                  start: e.start?.dateTime || e.start?.date,
                 })) || [],
+              };
+            } else if (slug === 'gmail') {
+              // Get recent emails
+              const emails = await composioClient.executeAction('GMAIL_LIST_EMAILS', {
+                maxResults: 3,
+                labelIds: ['INBOX'],
+              });
+              context.data.gmail = {
+                unread: emails?.messages?.length || 0,
               };
             }
           } catch (err) {
-            console.warn(`[Context] Failed to fetch ${appId} data:`, err.message);
+            console.warn(`[gatherContext] Failed to fetch ${slug} data:`, err.message);
           }
         }
       }
@@ -216,13 +226,14 @@ async function gatherContext(composioClient, store) {
  * Build context message for LLM
  */
 function buildContextMessage(context) {
-  if (!context.hasData) {
+  if (!context.hasData || context.connectedSources.length === 0) {
     return `
 当前状态：未连接任何数据源
 
 用户还没有连接 GitHub、Gmail、Calendar 等数据源，也没有本地任务数据。
-如果用户询问项目、邮件、日程、任务等信息，请：
-1. 诚实说明"暂无相关数据"
+如果用户询问项目、邮件、日程、任务等信息，你可以调用工具尝试获取，但工具会返回 "not connected" 错误。
+这时请：
+1. 诚实说明"暂无相关数据"或"未连接 XX 数据源"
 2. 提供卡片引导用户连接数据源（设置页面）
 3. 绝不编造任何数据
 
@@ -239,10 +250,10 @@ function buildContextMessage(context) {
   }
 
   let message = '\n当前连接的数据源：\n';
-  message += context.connectedSources.join('、') + '\n\n';
+  message += context.connectedSources.map(s => `${s.slug} (${s.identity})`).join('、') + '\n\n';
   message += '真实数据上下文（只使用这些数据回答问题）：\n';
 
-  if (context.data.github) {
+  if (context.data.github?.repos) {
     message += '\nGitHub 仓库（最近更新的 5 个）：\n';
     context.data.github.repos.forEach(r => {
       message += `- ${r.name}${r.description ? ': ' + r.description : ''}\n`;
@@ -250,28 +261,21 @@ function buildContextMessage(context) {
   }
 
   if (context.data.gmail) {
-    message += `\nGmail: 收件箱有 ${context.data.gmail.recentCount} 封未读邮件\n`;
+    message += `\nGmail: 收件箱有 ${context.data.gmail.unread} 封未读邮件\n`;
   }
 
-  if (context.data.calendar) {
+  if (context.data.calendar?.events) {
     message += '\n今日日程：\n';
-    if (context.data.calendar.todayEvents.length === 0) {
+    if (context.data.calendar.events.length === 0) {
       message += '今天没有日程安排\n';
     } else {
-      context.data.calendar.todayEvents.forEach(e => {
-        message += `- ${e.title} (${e.time})\n`;
+      context.data.calendar.events.forEach(e => {
+        message += `- ${e.summary} (${e.start})\n`;
       });
     }
   }
 
-  if (context.data.localTasks) {
-    message += '\n本地任务：\n';
-    context.data.localTasks.forEach(t => {
-      message += `- ${t.title} [${t.status || '待处理'}]\n`;
-    });
-  }
-
-  message += '\n重要：只使用以上真实数据回答问题，绝不编造其他信息。';
+  message += '\n重要：只使用以上真实数据回答问题，绝不编造其他信息。如需更多数据，调用相应工具。';
   return message;
 }
 
@@ -865,17 +869,6 @@ export function createApiRouter(ctx) {
             time: new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'}),
           };
         }
-            cards: [{
-              type: 'error',
-              title: '内部错误',
-              description: 'LLM 返回了无效响应',
-            }],
-            time: new Date().toLocaleTimeString('zh-CN', {
-              hour: '2-digit',
-              minute: '2-digit',
-            }),
-          };
-        }
 
         // Add assistant message
         session.messages.push({ role: 'assistant', content: response.text || '' });
@@ -1012,22 +1005,20 @@ export function createApiRouter(ctx) {
 
         // Fetch actual connection status
         try {
-          const accounts = await client.getConnectedAccounts();
+          const result = await client.getConnectedAccounts();
+          const accounts = result?.items || [];
           const connectedApps = new Map();
           
-          // v3 API response: array of items with {id, status, toolkit: {slug}, ...}
-          // NOT accounts.items - it's a direct array
-          if (accounts && Array.isArray(accounts)) {
-            accounts.forEach(account => {
-              // Only count ACTIVE connections, skip INITIATED (pending OAuth)
-              if (account.status === 'ACTIVE' && account.toolkit?.slug) {
-                connectedApps.set(account.toolkit.slug, {
-                  connectionId: account.id,
-                  connectedAt: account.createdAt,
-                });
-              }
-            });
-          }
+          // v3 API response: {items: [...]}, items contain {id, status, toolkit: {slug}, ...}
+          accounts.forEach(account => {
+            // Only count ACTIVE connections, skip INITIATED (pending OAuth)
+            if (account.status === 'ACTIVE' && account.toolkit?.slug) {
+              connectedApps.set(account.toolkit.slug, {
+                connectionId: account.id,
+                connectedAt: account.createdAt,
+              });
+            }
+          });
 
           // Match apps by toolkitSlug (calendar->googlecalendar) or key
           apps.forEach(app => {

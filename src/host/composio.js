@@ -124,7 +124,7 @@ export function createComposioClient(config) {
     async getConnectedAccounts() {
       console.log('[Composio] Fetching connected accounts');
       
-      const result = await request(`/connected_accounts?user_ids=${encodeURIComponent(entityId)}`);
+      const result = await request(`/connected_accounts?user_ids=${encodeURIComponent(entityId)}&statuses=ACTIVE`);
       
       return {
         items: result.items || [],

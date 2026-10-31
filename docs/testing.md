@@ -44,9 +44,16 @@ node scripts/enqueue-guard.mjs --pr 12        # L5：对一个真 PR 跑准入�
 6. 改动文件清单非空；
 7. 改到 `index.js` 或 `src/host/**`：要么同 PR 改 `docs/architecture.md`，要么写 `Docs-not-needed: <理由>`；
 8. `merge-tree` 在这个 head 上绿：自己绿、合到 main 上破的不算（没有这个 check 也算没有）；
-9. 这两个绿都要比 **main 现在的 tip 新**：main 在你跑完之后又动过，绿就是陈的，重跑一次再排队（不用新提交）。
+9. `merge-tree` 的绿要比 **main 现在的 tip 新**：main 在你跑完之后又动过，这个绿就是陈的。
+   用 `workflow_dispatch` 带 `pr` 对当前 main 重跑 `merge-tree`（结论写回 PR head），再重跑守卫，不用新提交。
+   `tests` 没有陈旧一说：它测的是 head 那棵树，main 前进不改变它的结论。
 
 `pr-guard.yml` 从 **base 分支** 取脚本，不在 PR head 上跑 —— 否则 PR 改掉守卫就能给自己放行。
+
+守卫和 `tests`/`merge-tree` 是同一个事件同批启动的，所以脚本先按同一 sha 轮询到这两条 check 都
+completed（`waitForChecks`：15 分钟窗口、15 秒读一次真实状态）再判；等不齐就报 `checks-timeout`
+（没结论），不会把 in_progress 判成红。拒绝理由写进本 job 那条 `guard` check 的 output summary
+与 step summary，人看 PR 页面就知道为什么。
 
 ## 已知的缺口
 
@@ -54,7 +61,8 @@ node scripts/enqueue-guard.mjs --pr 12        # L5：对一个真 PR 跑准入�
 
 > 实测纠正一条：GitHub 在 `pull_request` 上默认 checkout 的是 `refs/pull/<n>/merge`（PR 合到 base 的合成提交），
 > 所以同仓 PR 的 `tests` 其实已经跑在合并结果上，不是「只跑 head」。真正漏的是两件事：main 在该次 run 之后又往前走了（绿变陈），
-> 以及冲突的 PR 起不了这次 run。第 9 条管前者，`merge-tree` 用 `base.sha` 在跑的时候重新合一次、并且是一个能被守卫要求的名字。
+> 以及冲突的 PR 起不了这次 run。第 9 条只对 `merge-tree` 管前者（`tests` 测的是 head 那棵树，不算陈旧），
+> `merge-tree` 用 `base.sha` 在跑的时候重新合一次、并且是一个能被守卫要求的名字。
 - **L6 不串行、不自动合**：`merge-tree` 每个 PR 上真合并一次再跑 L0，拦的东西和 merge queue 一样，
   差的是两点 —— 两个 PR 同时绿地合进来仍可能互相踩，合入还得有人（或 Bot）按一下。仓库是 internal，
   merge queue 实测可用（规则集 201），但开它意味着没人能直接推 main 且发版流程要改走 PR，所以 #23 先做这一层。

@@ -270,7 +270,6 @@ test('C2 a new topic in room B does not append or steer into S1', async () => {
   assert.equal(stillSteers.workLineId, 'local')
 
   const host = wireHost()
-  const before = JSON.stringify(host.rooms.r1.log)
   host.emit('r1', userMessage(BEACH))
   await flush()
   assert.equal(host.steered.length, 0)
@@ -280,7 +279,8 @@ test('C2 a new topic in room B does not append or steer into S1', async () => {
   assert.equal(host.delivered.at(-1)?.text, BEACH)
   assert.equal(host.rt.state.workLines.s1.sessionId, 'remote')
   assert.equal(host.rt.state.workLines.s1.lastRoomId, 'r2')
-  assert.equal(JSON.stringify(host.rooms.r1.log), before)
+  assert.deepEqual(texts(host.rooms.r1), [LOCAL, BEACH])
+  assert.equal(host.rooms.r1.log.at(-1).who, 'User')
   assert.equal(texts(host.rooms.r1).includes(OLD), false)
   assert.equal(texts(host.rooms.r1).includes(HISTORY), false)
 })

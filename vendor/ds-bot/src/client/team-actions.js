@@ -1,5 +1,6 @@
 import { countCards, heldCardKey } from './sources.js'
 import { noteClientError } from './diagnostics.js'
+import { noteRouteComposerSend } from './route-dock.js'
 
 // The actions every window that draws the Bot views shares: dialogs and panels (the `ui`
 // source), requests to the host, and the notes the transcript keeps. The shell around the
@@ -105,7 +106,12 @@ export function teamActions({ call, after, partFor, roster, ui, live, cards, hel
     setMain: (id, main = true, options = {}) => after(call('set-main', { id, main, ...options })),
     updateRoom: (id, patch) => after(call('update-room', { id, ...patch })),
     continueRoom: roomId => after(call('room-continue', { roomId })),
-    send: (sessionId, text, mode) => after(call('send', { sessionId: partFor(sessionId), text, ...(mode === 'steer' || mode === 'queue' ? { mode } : {}) })),
+    send: (sessionId, text, mode) => {
+      const snap = roster.getSnapshot()
+      const pending = snap.roomsById?.[sessionId] != null ? snap.pendingRoutes?.[sessionId] : undefined
+      noteRouteComposerSend(sessionId, text, pending)
+      return after(call('send', { sessionId: partFor(sessionId), text, ...(mode === 'steer' || mode === 'queue' ? { mode } : {}) }))
+    },
     answerQuestion: (sessionId, questionId, answer) => after(call('answer-question', { sessionId: partFor(sessionId), questionId, answer })),
     dismissQuestion: sessionId => after(call('dismiss-question', { sessionId })),
     answerView: (sessionId, viewId, action, values) => after(call('view-reply', { sessionId: partFor(sessionId), viewId, action, values })),

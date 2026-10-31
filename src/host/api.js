@@ -64,6 +64,12 @@ const CARD_SYSTEM_PROMPT = `你是「豆芽」，一个智能数字同事助手�
 - 交互通过卡片（info/action/choice/task/event）
 - 每次回复 1-3 张卡片
 
+**严格禁止编造数据**：
+- 绝不虚构项目、任务、会议、邮件、代码仓库、PR、Issue、消息等任何数据
+- 绝不编造数字、统计、人名、时间
+- 只使用用户消息中明确提到的信息和系统提供的真实上下文数据
+- 如果没有相关数据，诚实说明"暂无相关数据"，并引导用户连接数据源
+
 **回复格式（JSON）**：
 {
   "text": "简短总结（1-2句话）",
@@ -72,7 +78,7 @@ const CARD_SYSTEM_PROMPT = `你是「豆芽」，一个智能数字同事助手�
       "type": "info|action|choice|task|event",
       "title": "卡片标题",
       "description": "详细说明（可选）",
-      "actions": [{"label": "按钮文字", "value": "action_id"}],
+      "actions": [{"label": "按钮文字", "value": "人类可读的完整文本"}],
       "items": ["列表项1", "列表项2"],
       "time": "时间（可选）",
       "status": "状态（可选）"
@@ -87,6 +93,10 @@ const CARD_SYSTEM_PROMPT = `你是「豆芽」，一个智能数字同事助手�
 - task: 任务卡片（title, description, status）
 - event: 日程卡片（title, time, description）
 
+**重要**：
+- actions 的 value 字段必须是人类可读的完整文本（如"查看今日任务"），不是代码标识符（如"view_today"）
+- 点击按钮后，value 会作为新消息发送，必须是合理的人类问句
+
 **示例**：
 用户："今天有什么安排？"
 {
@@ -97,15 +107,173 @@ const CARD_SYSTEM_PROMPT = `你是「豆芽」，一个智能数字同事助手�
   ]
 }
 
-用户："帮我查一下项目进度"
+用户："我的项目"
+（如果没有连接 GitHub/Linear 等数据源）
 {
-  "text": "以下是可用的操作",
+  "text": "暂无项目数据",
   "cards": [
-    {"type":"action","title":"查询项目进度","actions":[{"label":"查看详情","value":"view_project"}]}
+    {"type":"action","title":"连接数据源","description":"连接 GitHub、Linear 或 Notion 以查看项目","actions":[{"label":"前往设置","value":"打开设置页面"}]}
   ]
 }
 
 严格返回 JSON，不要 markdown 格式。`;
+
+/**
+ * Gather real context from connected data sources
+ */
+async function gatherContext(composioClient, store) {
+  const context = {
+    connectedSources: [],
+    hasData: false,
+    data: {},
+  };
+
+  try {
+    // Check connected Composio accounts
+    if (composioClient) {
+      const accounts = await composioClient.getConnectedAccounts();
+      if (accounts && accounts.length > 0) {
+        context.connectedSources = accounts.map(acc => acc.appName || acc.appId);
+        context.hasData = true;
+
+        // Fetch real data from connected sources (limited to avoid token overflow)
+        for (const account of accounts.slice(0, 3)) {  // Max 3 sources
+          const appId = account.appName?.toLowerCase() || account.appId;
+          
+          try {
+            if (appId === 'github') {
+              // Get user's repos (first 5)
+              const repos = await composioClient.executeAction('GITHUB_USER_GET_CURRENT_USER_REPOS', {
+                per_page: 5,
+                sort: 'updated',
+              });
+              context.data.github = {
+                repos: repos?.items?.slice(0, 5).map(r => ({
+                  name: r.name,
+                  description: r.description,
+                  updated: r.updated_at,
+                })) || [],
+              };
+            } else if (appId === 'gmail') {
+              // Get recent emails (first 3)
+              const emails = await composioClient.executeAction('GMAIL_LIST_EMAILS', {
+                maxResults: 3,
+                labelIds: ['INBOX'],
+              });
+              context.data.gmail = {
+                recentCount: emails?.messages?.length || 0,
+              };
+            } else if (appId === 'googlecalendar' || appId === 'calendar') {
+              // Get today's events
+              const now = new Date();
+              const startOfDay = new Date(now.setHours(0, 0, 0, 0)).toISOString();
+              const endOfDay = new Date(now.setHours(23, 59, 59, 999)).toISOString();
+              
+              const events = await composioClient.executeAction('GOOGLECALENDAR_LIST_EVENTS', {
+                timeMin: startOfDay,
+                timeMax: endOfDay,
+                maxResults: 5,
+              });
+              context.data.calendar = {
+                todayEvents: events?.items?.slice(0, 5).map(e => ({
+                  title: e.summary,
+                  time: e.start?.dateTime || e.start?.date,
+                })) || [],
+              };
+            }
+          } catch (err) {
+            console.warn(`[Context] Failed to fetch ${appId} data:`, err.message);
+          }
+        }
+      }
+    }
+
+    // Get local store tasks
+    if (store) {
+      try {
+        const tasks = await store.get('tasks') || [];
+        if (tasks.length > 0) {
+          context.hasData = true;
+          context.data.localTasks = tasks.slice(0, 10).map(t => ({
+            title: t.title,
+            status: t.status,
+            due: t.due,
+          }));
+        }
+      } catch (err) {
+        console.warn('[Context] Failed to get local tasks:', err.message);
+      }
+    }
+
+  } catch (err) {
+    console.error('[Context] Error gathering context:', err);
+  }
+
+  return context;
+}
+
+/**
+ * Build context message for LLM
+ */
+function buildContextMessage(context) {
+  if (!context.hasData) {
+    return `
+当前状态：未连接任何数据源
+
+用户还没有连接 GitHub、Gmail、Calendar 等数据源，也没有本地任务数据。
+如果用户询问项目、邮件、日程、任务等信息，请：
+1. 诚实说明"暂无相关数据"
+2. 提供卡片引导用户连接数据源（设置页面）
+3. 绝不编造任何数据
+
+示例回复：
+{
+  "text": "暂无项目数据",
+  "cards": [{
+    "type": "action",
+    "title": "连接数据源",
+    "description": "连接 GitHub、Linear 或 Notion 以查看项目",
+    "actions": [{"label": "前往设置", "value": "打开设置页面"}]
+  }]
+}`;
+  }
+
+  let message = '\n当前连接的数据源：\n';
+  message += context.connectedSources.join('、') + '\n\n';
+  message += '真实数据上下文（只使用这些数据回答问题）：\n';
+
+  if (context.data.github) {
+    message += '\nGitHub 仓库（最近更新的 5 个）：\n';
+    context.data.github.repos.forEach(r => {
+      message += `- ${r.name}${r.description ? ': ' + r.description : ''}\n`;
+    });
+  }
+
+  if (context.data.gmail) {
+    message += `\nGmail: 收件箱有 ${context.data.gmail.recentCount} 封未读邮件\n`;
+  }
+
+  if (context.data.calendar) {
+    message += '\n今日日程：\n';
+    if (context.data.calendar.todayEvents.length === 0) {
+      message += '今天没有日程安排\n';
+    } else {
+      context.data.calendar.todayEvents.forEach(e => {
+        message += `- ${e.title} (${e.time})\n`;
+      });
+    }
+  }
+
+  if (context.data.localTasks) {
+    message += '\n本地任务：\n';
+    context.data.localTasks.forEach(t => {
+      message += `- ${t.title} [${t.status || '待处理'}]\n`;
+    });
+  }
+
+  message += '\n重要：只使用以上真实数据回答问题，绝不编造其他信息。';
+  return message;
+}
 
 /**
  * Call LLM - Build client from config store on-demand
@@ -547,6 +715,13 @@ export function createApiRouter(ctx) {
           chatSessions.set(sessionId, session);
         }
 
+        // Gather real context from connected sources
+        const context = await gatherContext(
+          getComposioClient(),
+          store
+        );
+        const contextMessage = buildContextMessage(context);
+
         // Add user message
         session.messages.push({ role: 'user', content: message });
         session.history.push({
@@ -555,8 +730,19 @@ export function createApiRouter(ctx) {
           time: new Date().toISOString(),
         });
 
+        // Inject context before LLM call (as a system message after the main system prompt)
+        const messagesWithContext = [
+          ...session.messages.slice(0, -1),  // Previous messages
+          { role: 'system', content: contextMessage },  // Context injection
+          session.messages[session.messages.length - 1],  // Current user message
+        ];
+
         // Get LLM response
-        const response = await callLLM({ llm: llmCtx?.llm }, session.messages, sessionId);
+        const response = await callLLM(
+          { llm: llmCtx?.llm },
+          messagesWithContext,
+          sessionId
+        );
 
         // Ensure response is valid
         if (!response || typeof response !== 'object') {

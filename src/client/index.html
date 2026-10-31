@@ -918,11 +918,19 @@
           body: JSON.stringify({ appKey }),
         });
         const result = await res.json();
-        if (result.authUrl) {
+        const authUrl = result.redirectUrl || result.authUrl;
+        if (authUrl) {
           // Open OAuth in new window
-          window.open(result.authUrl, '_blank', 'width=600,height=700');
-          // Poll for connection status
-          setTimeout(() => loadComposioSettings(), 2000);
+          window.open(authUrl, '_blank', 'width=600,height=700');
+          // Poll for connection status (3 attempts over 6 seconds)
+          let attempts = 0;
+          const pollInterval = setInterval(() => {
+            attempts++;
+            loadComposioSettings();
+            if (attempts >= 3) {
+              clearInterval(pollInterval);
+            }
+          }, 2000);
         } else {
           alert('连接失败: ' + (result.error || '未知错误'));
         }

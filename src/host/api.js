@@ -760,7 +760,8 @@ export function createApiRouter(ctx) {
 
         // Initiate connection (returns OAuth redirect URL)
         const callbackUrl = `${config?.baseUrl || 'http://localhost:7777'}/composio-callback`;
-        const result = await client.initiateConnection(app.key || appId, callbackUrl);
+        const toolkitSlug = app.toolkitSlug || app.key || appId;
+        const result = await client.initiateConnection(toolkitSlug, callbackUrl);
 
         return {
           success: true,

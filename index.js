@@ -143,6 +143,16 @@ export function createRuntime(ctx, config = {}) {
       timer = null
     },
 
+    // The store is read before the first pass: the timer arms as soon as the plugin mounts,
+    // and a pass that ran before the file was read would save the empty state over the
+    // members, reports and sent reminders the previous run had left there.
+    start() {
+      return (async () => {
+        await rt.load()
+        await rt.tick()
+      })()
+    },
+
     // A button press changes one record. `snooze` re-plans the same event at a later fireAt,
     // which is a new key and so a new delivery — the original is never edited.
     async onCardAction(payload) {
@@ -204,7 +214,7 @@ export function createRuntime(ctx, config = {}) {
     }), 'opendigitalmate: card callback')
 
     ctx.effect(() => {
-      void rt.tick().catch(error => log(`tick failed: ${String(error?.message ?? error)}`))
+      void rt.start().catch(error => log(`tick failed: ${String(error?.message ?? error)}`))
       return () => rt.stop()
     }, 'opendigitalmate: precise tick')
   }

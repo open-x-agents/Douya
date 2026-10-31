@@ -662,20 +662,85 @@ export function createApiRouter(ctx) {
     async getSources() {
       try {
         const client = getComposioClient();
+        
         if (!client) {
           return {
-            sources: [
-              { name: 'Composio', connected: false, description: '未配置 API Key' },
-            ],
+            sources: COMPOSIO_APPS.map(app => ({
+              name: app.name,
+              logo: app.logo,
+              description: app.description,
+              connected: false,
+              identity: null,
+            })),
           };
         }
 
-        const status = await getSourcesStatus(client);
-        return status;
+        // Get all connected accounts from Composio v3
+        const accounts = await client.getConnectedAccounts();
+        
+        // Build map of ACTIVE connections by toolkit.slug
+        const activeConnections = new Map();
+        if (accounts && Array.isArray(accounts)) {
+          accounts.forEach(account => {
+            // Only include ACTIVE connections, skip INITIATED
+            if (account.status === 'ACTIVE' && account.toolkit?.slug) {
+              const slug = account.toolkit.slug;
+              
+              // Extract real account identity if available
+              let identity = account.user_id || 'default';
+              
+              // Try to get more specific identity from account data
+              if (account.account_display_name) {
+                identity = account.account_display_name;
+              } else if (account.user_info?.login) {
+                identity = account.user_info.login;  // GitHub login
+              } else if (account.user_info?.email) {
+                identity = account.user_info.email;  // Gmail address
+              } else if (account.metadata?.username) {
+                identity = account.metadata.username;
+              }
+              
+              // Only store first ACTIVE connection per toolkit (dedupe)
+              if (!activeConnections.has(slug)) {
+                activeConnections.set(slug, {
+                  connectionId: account.id,
+                  identity,
+                  connectedAt: account.createdAt,
+                  status: account.status,
+                });
+              }
+            }
+          });
+        }
+
+        // Map supported apps with connection status
+        const sources = COMPOSIO_APPS.map(app => {
+          const toolkitSlug = app.toolkitSlug || app.key;
+          const connection = activeConnections.get(toolkitSlug);
+          
+          return {
+            name: app.name,
+            logo: app.logo,
+            description: app.description,
+            key: app.key,
+            connected: !!connection,
+            identity: connection?.identity || null,
+            connectionId: connection?.connectionId || null,
+            connectedAt: connection?.connectedAt || null,
+          };
+        });
+
+        return { sources };
       } catch (err) {
         console.error('API /sources error:', err);
         return {
-          sources: [],
+          sources: COMPOSIO_APPS.map(app => ({
+            name: app.name,
+            logo: app.logo,
+            description: app.description,
+            connected: false,
+            identity: null,
+          })),
           error: err.message,
         };
       }

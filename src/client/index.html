@@ -663,15 +663,47 @@
       const res = await fetch('/api/sources');
       const data = await res.json();
       
-      const cards = data.sources?.map(src => `
-        <div class="card a in">
-          <h3>${escapeHtml(src.name)}</h3>
-          <p>状态: <span style="color:${src.connected ? 'var(--green)' : 'var(--red)'}">
-            ${src.connected ? '✓ 已连接' : '✗ 未连接'}
-          </span></p>
-          <div class="meta">${escapeHtml(src.description || '')}</div>
+      const cards = data.sources?.map(source => {
+        const initial = source.name.charAt(0).toUpperCase();
+        const logoFallback = `data:image/svg+xml,${encodeURIComponent(`
+          <svg width="56" height="56" xmlns="http://www.w3.org/2000/svg">
+            <rect width="56" height="56" rx="12" fill="#667eea"/>
+            <text x="28" y="38" font-family="sans-serif" font-size="24" font-weight="600" fill="white" text-anchor="middle">${initial}</text>
+          </svg>
+        `)}`;
+        
+        return `
+        <div class="card a in" style="display:flex;align-items:start;gap:16px;padding:20px">
+          <img src="${escapeHtml(source.logo)}" 
+               alt="${escapeHtml(source.name)}" 
+               style="width:56px;height:56px;border-radius:12px;flex-shrink:0" 
+               onerror="this.src='${logoFallback}'">
+          <div style="flex:1;min-width:0">
+            <h3 style="margin:0 0 6px;font-size:16px">${escapeHtml(source.name)}</h3>
+            <p style="margin:0 0 12px;font-size:13px;color:var(--ink2);line-height:1.5">${escapeHtml(source.description)}</p>
+            ${source.connected ? `
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:var(--green-soft);color:var(--green);border-radius:8px;font-size:13px;font-weight:600">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M13.5 4L6 11.5L2.5 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  已连接
+                </span>
+                ${source.identity && source.identity !== 'default' ? `
+                  <span style="padding:6px 12px;background:var(--gray-soft);color:var(--ink2);border-radius:8px;font-size:12px;font-family:ui-monospace,monospace">
+                    ${escapeHtml(source.identity)}
+                  </span>
+                ` : ''}
+              </div>
+            ` : `
+              <span style="display:inline-block;padding:6px 12px;background:var(--line);color:var(--ink3);border-radius:8px;font-size:13px">
+                未连接
+              </span>
+            `}
+          </div>
         </div>
-      `).join('') || '';
+      `;
+      }).join('') || '';
       
       content.innerHTML = cards || '<div class="card a in"><p>暂无信源</p></div>';
     } catch (err) {

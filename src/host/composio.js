@@ -58,8 +58,13 @@ export function createComposioClient(config) {
     // Find existing auth_config
     const configs = await request(`/auth_configs?toolkit_slug=${toolkitSlug}`);
     
-    if (configs.items && configs.items.length > 0) {
-      const authConfigId = configs.items[0].id;
+    // Filter to ensure we only get configs matching this exact toolkit
+    const matchingConfigs = configs.items?.filter(
+      item => item.toolkit?.slug === toolkitSlug
+    ) || [];
+    
+    if (matchingConfigs.length > 0) {
+      const authConfigId = matchingConfigs[0].id;
       authConfigCache.set(toolkitSlug, authConfigId);
       console.log(`[Composio] Found auth_config for ${toolkitSlug}: ${authConfigId}`);
       return authConfigId;

@@ -160,9 +160,14 @@ function parseResponseToCards(text) {
   return cards;
 }
 
-export function createApiRouter(ctx) {
-  const { store, composioClient, config, configStore } = ctx;
-  const llmContext = ctx.llmCtx || ctx.ctx;
+export function createApiRouter({ store, composioClient, config, llmCtx, sendCard, configStore, ctx, updateLLMClient }) {
+  // Ensure required dependencies are available
+  if (!configStore) {
+    console.warn('Warning: configStore not provided to createApiRouter');
+  }
+  if (!store) {
+    console.warn('Warning: store not provided to createApiRouter');
+  }
 
   return {
     /**
@@ -223,7 +228,8 @@ export function createApiRouter(ctx) {
           });
         }
 
-        // If store is empty, show clear message
+        // If store is empty, show clear message  
+        const hasRealTasks = tasks.length > 0;
         if (tasks.length === 0) {
           tasks.push({
             title: '暂无待办任务',
@@ -243,13 +249,16 @@ export function createApiRouter(ctx) {
         if (reports.length > 0) sources.push('日报');
         if (deliveries.length > 0) sources.push('提醒');
 
+        // Count only real tasks (not the empty placeholder)
+        const realTaskCount = hasRealTasks ? tasks.length : 0;
+
         return {
-          summary: tasks.length === 0 
-            ? '今天暂无待办事项' 
-            : `今天 ${todayMeetings.length} 个会，${tasks.length} 件事`,
+          summary: realTaskCount === 0
+            ? '今天 0 个会，0 件事' 
+            : `今天 ${todayMeetings.length} 个会，${realTaskCount} 件事`,
           date: today,
           sources: sources.join('、') + (sources.length > 0 ? ' 已读' : '暂无数据'),
-          openCount: tasks.filter(t => !t.closed).length,
+          openCount: realTaskCount,
           meetingHours: Math.round(meetingHours * 10) / 10,
           waitingCount: 0,
           tasks,

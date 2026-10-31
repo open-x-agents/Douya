@@ -11,7 +11,7 @@ import { dirname } from 'node:path';
  */
 export function emptyProfile() {
   return {
-    name: 'User',
+    name: 'Danyang',
     preferences: {
       // Learned from data
       topRepos: {},           // {repo: count}

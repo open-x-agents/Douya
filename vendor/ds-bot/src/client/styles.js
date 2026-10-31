@@ -1091,6 +1091,12 @@ div:has(> nav [class*="_marks"]){display:none!important}
    the host's bubble surface alone would otherwise leave the text unreadable. */
 [class*="_userRow"] [class*="_bubble"],[data-chat-flow-kind=question-reply] [class*="_bubble"],[data-chat-flow-kind=command-input] [class*="_bubble"]{background:var(--bt-user)!important;color:var(--bt-user-ink)!important;border-radius:18px!important;padding:7px 12px!important;font-size:var(--dsh-content-font-size,14px)!important;line-height:calc(var(--dsh-content-font-size,14px) + 8px)!important}
 [class*="_userRow"] [class*="_bubble"] [class*="_markdown"],[class*="_userRow"] [class*="_bubble"] a{color:inherit}
+/* A one-line send is one line. The host paints it as a paragraph in its bubble, and
+   that paragraph's own margin is a blank second line unless it is reset the way a
+   Bot bubble's paragraph already is. */
+[class*="_userRow"] [class*="_bubble"] [class*="_markdown"],[data-chat-flow-kind=question-reply] [class*="_bubble"] [class*="_markdown"],[data-chat-flow-kind=command-input] [class*="_bubble"] [class*="_markdown"]{font-size:inherit!important;line-height:inherit!important}
+[class*="_userRow"] [class*="_bubble"] p,[data-chat-flow-kind=question-reply] [class*="_bubble"] p,[data-chat-flow-kind=command-input] [class*="_bubble"] p{margin:0;line-height:inherit!important}
+[class*="_userRow"] [class*="_bubble"] p+p,[data-chat-flow-kind=question-reply] [class*="_bubble"] p+p,[data-chat-flow-kind=command-input] [class*="_bubble"] p+p{margin-top:6px}
 /* Sent messages get the hover toolbar below; steering and unsent bubbles keep none. */
 [class*="_userRow"] [class*="_actions"]{display:none!important}
 /* A steering message the Bot has not read yet shows a small unread label under
@@ -1188,7 +1194,11 @@ div:has(> nav [class*="_marks"]){display:none!important}
 .bt-route-choice[data-highlight]{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--bt-accent) 45%,transparent)}
 .bt-route-choice-state{flex:none;color:var(--bt-ink-3);font-size:12px}
 .bt-route-miss{margin:8px 0 0;color:var(--bt-ink-3);font-size:12px;line-height:16px}
-.bt-route-cite{display:flex;flex-direction:column;align-items:flex-end;gap:8px;width:100%;margin:6px 0}
+/* The cite is the Bot quoting history, so it sits on the left. Its row is as wide as
+   the column: a shrink-wrapped row lets max-width:80% fold a short sentence in half.
+   A message the user sent keeps .bt-urow, which stays on the right. */
+.bt-route-cite{display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;margin:6px 0}
+.bt-route-cite .bt-urow{justify-content:flex-start;width:100%}
 .bt-route-cite-label{color:var(--bt-ink-3);font-size:12px;line-height:16px}
 .bt-route-cite-text{color:var(--bt-ink);font-size:14px;line-height:22px}
 `

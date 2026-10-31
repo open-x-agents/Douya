@@ -51,7 +51,7 @@ export function install(rt) {
   // `length`: the whole message's length when it went as a file (attachLong). `work`:
   // the work (handoffs.js) a result that came back goes on with. `merged`: a request
   // that takes in an earlier one its recipient had not read, under that one's exchange.
-  async function deliver({ fromId, toId, sessionId, text, role, replyTo, roomId, audience, note, exchangeId = randomUUID(), steer = false, userSteer = false, deferred = false, resumed = false, retried = false, resent = false, merged = false, askedBy, fromRoomId, files = [], length, work }) {
+  async function deliver({ fromId, toId, sessionId, text, role, replyTo, roomId, audience, note, exchangeId = randomUUID(), steer = false, userSteer = false, deferred = false, resumed = false, retried = false, resent = false, merged = false, askedBy, fromRoomId, files = [], length, work, quoteText, quoteSeq, quoteRoomId }) {
     const from = rt.botOf(fromId)
     const to = rt.botOf(toId)
     if (to === undefined) throw new Error(`Unknown Bot ${toId}`)
@@ -76,6 +76,9 @@ export function install(rt) {
       ...(askedBy ? { askedBy } : {}),
       ...(fromRoomId ? { senderRoomId: fromRoomId } : {}),
       ...(userSteer ? { userSteer: true } : {}),
+      ...(typeof quoteText === 'string' && quoteText !== '' ? { quoteText } : {}),
+      ...(typeof quoteSeq === 'number' && Number.isFinite(quoteSeq) ? { quoteSeq } : {}),
+      ...(typeof quoteRoomId === 'string' && quoteRoomId !== '' ? { quoteRoomId } : {}),
     }
     const targetSessionId = sessionId ?? rt.chatOf(toId)
     if (EXCHANGE_ROLES.has(role) && !deferred && !resumed && !retried && !resent) {

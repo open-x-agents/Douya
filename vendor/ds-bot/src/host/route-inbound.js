@@ -257,6 +257,7 @@ export function routeCard(pending) {
     highlight: pending.highlight,
     choices: pending.choices ?? [],
     timeoutSends: false,
+    ...(typeof pending.seq === 'number' ? { seq: pending.seq } : {}),
   }
 }
 
@@ -589,11 +590,11 @@ function armArrivalReply(rt, room, decision, exchangeId) {
   })
 }
 
-// The model turn stays on the line's session. The arrival room records only this exchange.
-async function deliverAcrossRooms(rt, room, decision, text, files) {
+// The model turn stays on the line's session. The arrival room already logged this
+// sentence once. The other room's transcript is not copied.
+async function deliverAcrossRooms(rt, room, decision, text, files, cite = {}) {
   noteLineRoom(rt.state, { workLineId: decision.workLineId, sessionId: decision.sessionId, roomId: room.id })
   retargetWorkOwner(rt, decision.sessionId, room.id)
-  writeProjected(rt, room, projectExchange({ userText: text }))
   if (typeof rt.save === 'function') void rt.save()
   const exchangeId = randomUUID()
   armArrivalReply(rt, room, decision, exchangeId)
@@ -611,15 +612,81 @@ async function deliverAcrossRooms(rt, room, decision, text, files) {
     exchangeId,
     steer,
     ...(steer ? { userSteer: true } : {}),
+    ...cite,
   })
+}
+
+function isUserLogRow(row) {
+  return row != null
+    && row.who === 'User'
+    && row.kind == null
+    && typeof row.text === 'string'
+    && row.text !== ''
+    && typeof row.seq === 'number'
+    && Number.isFinite(row.seq)
+}
+
+function logInboundSentence(rt, room, text) {
+  if (room == null || typeof text !== 'string' || text === '') return undefined
+  const log = Array.isArray(room.log) ? room.log : []
+  const last = log.at(-1)
+  if (isUserLogRow(last) && last.text === text) return last.seq
+  const line = { who: 'User', text }
+  if (typeof rt.appendRoomLine === 'function') rt.appendRoomLine(room, line)
+  else appendPlain(room, line)
+  return typeof room.seq === 'number' ? room.seq : undefined
+}
+
+function pointsAtUser(rt, quote) {
+  if (quote == null || typeof quote !== 'object') return false
+  if (typeof quote.seq !== 'number' || !Number.isFinite(quote.seq) || quote.seq === 0) return false
+  if (typeof quote.roomId !== 'string' || quote.roomId === '') return false
+  const room = rt.roomOf?.(quote.roomId)
+  const row = (Array.isArray(room?.log) ? room.log : []).find(item => item?.seq === quote.seq)
+  return isUserLogRow(row)
+}
+
+function lineForDecision(rt, decision) {
+  const lines = rt.state?.workLines
+  if (lines == null || typeof lines !== 'object' || Array.isArray(lines)) return undefined
+  if (typeof decision?.workLineId === 'string' && lines[decision.workLineId] != null) return lines[decision.workLineId]
+  if (typeof decision?.sessionId === 'string' && decision.sessionId !== '') {
+    return Object.values(lines).find(line => line?.sessionId === decision.sessionId)
+  }
+  return undefined
+}
+
+function repairQuote(rt, room, decision, seq) {
+  if (room == null || typeof seq !== 'number' || !Number.isFinite(seq) || seq === 0) return
+  const line = lineForDecision(rt, decision)
+  if (line == null || pointsAtUser(rt, line.quote)) return
+  line.quote = { roomId: room.id, seq }
+}
+
+function quoteDelivery(room, text, seq) {
+  if (room == null || typeof text !== 'string' || text === '') return {}
+  if (typeof seq !== 'number' || !Number.isFinite(seq)) return {}
+  return { quoteText: text, quoteSeq: seq, quoteRoomId: room.id }
+}
+
+function logsThisAction(action) {
+  return action === 'ask' || action === 'steer' || action === 'continue' || action === 'create' || action === 'queue'
 }
 
 export async function applyRouteDecision(rt, room, decision, message = {}) {
   const text = typeof decision?.text === 'string' ? decision.text : String(message.text ?? '')
   const files = message.files ?? []
   const action = decision?.action
-  // Ask replaces whatever card was showing. Every other leaving action must hit
-  // disk before deliver, because a later load would put the card back.
+  // A second ask that loses the race keeps the card already stored.
+  if (action === 'ask' && pendingTable(rt.state)[room.id] != null) return decision
+  // Ask, steer, continue, create, and a non-relay queue log this sentence once.
+  // Hold does not. Confirm sends the stored sentence, so the last-row check
+  // does not append it again. effectsOf still reports writeLog false: the relay
+  // must not write a second row or copy another room.
+  const seq = logsThisAction(action) ? logInboundSentence(rt, room, text) : undefined
+  const cite = quoteDelivery(room, text, seq)
+  // Every leaving action must hit disk before deliver, because a later load
+  // would put the card back.
   if (decision?.clearPending === true && action !== 'ask') {
     delete pendingTable(rt.state)[room.id]
     await persistRoute(rt)
@@ -636,18 +703,20 @@ export async function applyRouteDecision(rt, room, decision, message = {}) {
         choices: decision.choices ?? [],
         at: Date.now(),
         timeoutSends: false,
+        ...(typeof seq === 'number' ? { seq } : {}),
       }
       await persistRoute(rt)
       return decision
     }
     case 'steer': {
+      repairQuote(rt, room, decision, seq)
       if (decision.crossRoom === true) {
-        await deliverAcrossRooms(rt, room, decision, text, files)
+        await deliverAcrossRooms(rt, room, decision, text, files, cite)
         return decision
       }
       const member = memberFrom(room, decision)
       if (member != null && typeof rt.acceptRoomSteer === 'function') {
-        await rt.acceptRoomSteer(room, member, { text, files })
+        await rt.acceptRoomSteer(room, member, { text, files, ...cite })
         return decision
       }
       if (decision.sessionId != null && typeof rt.deliver === 'function') {
@@ -661,14 +730,16 @@ export async function applyRouteDecision(rt, room, decision, message = {}) {
           files,
           steer: true,
           userSteer: true,
+          ...cite,
         })
       }
       return decision
     }
     case 'continue':
     case 'queue': {
+      repairQuote(rt, room, decision, seq)
       if (action === 'continue' && decision.crossRoom === true) {
-        await deliverAcrossRooms(rt, room, decision, text, files)
+        await deliverAcrossRooms(rt, room, decision, text, files, cite)
         return decision
       }
       if (decision.sessionId == null || typeof rt.deliver !== 'function') return decision
@@ -681,18 +752,22 @@ export async function applyRouteDecision(rt, room, decision, message = {}) {
         text,
         files,
         steer: false,
+        ...cite,
       })
       return decision
     }
     case 'create': {
       if (typeof rt.createWorkLine !== 'function') return decision
       const label = labelFrom(text)
+      const quote = typeof seq === 'number' && seq !== 0 ? { roomId: room.id, seq } : undefined
       const line = await rt.createWorkLine({
         botId: decision.botId,
         roomId: room.id,
-        quote: { roomId: room.id, seq: typeof room.seq === 'number' ? room.seq : 0 },
+        ...(quote !== undefined ? { quote } : {}),
         ...(label !== undefined ? { label } : {}),
       })
+      const created = { ...decision, workLineId: line?.id ?? decision.workLineId, sessionId: line?.sessionId ?? decision.sessionId }
+      repairQuote(rt, room, created, seq)
       if (line?.sessionId != null && typeof rt.deliver === 'function') {
         await rt.deliver({
           toId: decision.botId,
@@ -703,9 +778,10 @@ export async function applyRouteDecision(rt, room, decision, message = {}) {
           text,
           files,
           steer: false,
+          ...cite,
         })
       }
-      return { ...decision, workLineId: line?.id ?? decision.workLineId, sessionId: line?.sessionId }
+      return created
     }
     default: {
       /** @type {never} */

@@ -29,6 +29,7 @@ import { GROUP_REF, output } from './tools.js'
 import { failureLine } from './turns.js'
 import { keepDraftOnSlotEnd, opensGroupRelay, roundForStream, steeringReply, stepRoute, takeSteeredLine } from './group-steer.js'
 import { routeTakesEffect } from './route-inbound.js'
+import { createRoomHalt, dropLoggedRelays, haltDelivery } from './room-halt.js'
 import { applyRoomStreamFrame, clearDraftIfPosted } from '../shared/room-draft.js'
 import { lateCite } from '../shared/work-line-complete.js'
 
@@ -440,6 +441,7 @@ export function install(rt) {
   /** @type {Map<string, {callId: string, round: any}>} */
   const lastRound = new Map()
   const idleHooks = new Set()
+  const roomHalt = createRoomHalt()
   rt.userSteered = userSteered
   rt.keptRounds = keptRounds
   rt.lastRound = lastRound
@@ -509,6 +511,29 @@ export function install(rt) {
   ctx.on('session/event', (_session, event) => {
     if (event?.type !== 'turn/end') return
     for (const hook of idleHooks) hook()
+  })
+
+  // User abort of this room Session: drop relays the log already has. Halt stays
+  // up through the unwind, and postToRoom logs a later reply in place.
+  ctx.on('session/event', (session, event) => {
+    const roomId = session?.id
+    if (rt.roomOf(roomId) === undefined) return
+    const action = roomHalt.observe(roomId, event)
+    switch (action) {
+      case 'none':
+      case 'clear':
+        return
+      case 'drop':
+        void rt.resolveAgent(roomId).then((agent) => {
+          dropLoggedRelays(agent?.inbox)
+        }).catch(error => rt.warn('ds-bot: drop logged relays in %s failed: %s', roomId, error))
+        return
+      default: {
+        /** @type {never} */
+        const unexpected = action
+        throw new Error(`Unknown room halt action ${String(unexpected)}`)
+      }
+    }
   })
 
   // Steer the one busy member. The probe is a steering reply on the current
@@ -757,108 +782,116 @@ export function install(rt) {
       await rt.load()
       const room = rt.roomOf(exec.agent?.id)
       if (room === undefined) return JSON.stringify({ error: 'Not a group chat' })
-      ensureRoomLog(room)
-      // Everything queued since the last relay is posted in order, so messages that the
-      // Session folds into one turn are not lost; the newest one picks the speakers.
-      const queued = rt.roomInbox.get(room.id) ?? []
-      rt.roomInbox.delete(room.id)
-      // The composer already gave this message to a work line. An empty inbox
-      // must not become a blank User row or a fresh admin turn.
-      if (queued.length === 0 && rt.consumeRouteHold(room.id)) return JSON.stringify({ held: true })
-      const posts = queued.length > 0 ? queued : [{ text: '' }]
-      // A post a running round already logged stays inside the round this relay opens.
-      const startSeq = Math.min(room.seq + 1, ...posts.map(post => post.logged).filter(seq => typeof seq === 'number'))
-      // The opening greeting is a cue for the admin, not a line of the group; a member's
-      // late failure, its work picked up after a restart, its work the user stopped, or
-      // the end of work whose result it already posted is an event of the round.
-      const event = item => item.failed || item.resumed || item.stopped || item.done
-      for (const post of posts.filter(item => !item.kickoff && !item.resume && !event(item) && item.logged === undefined)) {
-        // Image readings go into the log only; `@` names are picked from what the user typed.
-        // A file stays with its line and reaches each member the line is shown to.
-        const readings = post.images === undefined ? [] : await rt.imagesForGroup(post.images, room.id)
-        const text = [post.text, ...readings, ...(post.files ?? []).map(fileLine)].filter(Boolean).join('\n')
-        appendRoom(room, {
-          ...(post.botId ? { who: rt.botOf(post.botId)?.name ?? post.name ?? 'Bot', botId: post.botId } : { who: 'User' }),
-          text,
-          ...(post.files === undefined ? {} : { files: post.files }),
-        })
-      }
-      // The user wrote here — or pressed Continue, which opens the same round
-      // without a line of its own — so Bot relays count afresh and the calls the
-      // limit parked run after the speakers this message picks.
-      const releases = posts.some(post => post.resume === true || (!post.botId && !post.kickoff))
-      if (releases) room.relays = 0
-      await rt.save()
-      // An event post, and a member post that calls nobody, never pick the speakers
-      // over a message queued with them.
-      const callsNobody = post => post.member === true && openingSpeakers(room, post).length === 0
-      const opener = posts.findLast(post => !event(post) && !callsNobody(post)) ?? posts.findLast(post => !event(post)) ?? posts.at(-1)
-      const references = posts.flatMap(post => post.references ?? [])
-      // A member a Bot's post calls by name works for that Bot.
-      const named = opener.botId === undefined ? [] : mentionsIn(opener.text ?? '', room.members.map(rt.botOf).filter(Boolean)).found
-      const speakers = openingSpeakers(room, opener)
-      // The admin alone with the user's message: when it passes, the round ends with
-      // nothing said, and the group says so once.
-      const admin = room.members.map(rt.botOf).filter(Boolean).find(bot => rt.isAdminOf(room, bot.id))
-      const soleAdmin = opener.botId === undefined && !opener.kickoff && room.mode === 'admin' && admin !== undefined
-        && speakers.length === 1 && speakers[0].id === admin.id
-      const round = {
-        roomId: room.id,
-        members: room.members,
-        startSeq,
-        ...(opener.kickoff ? { kickoff: true } : {}),
-        ...(references.length > 0 ? { references, shown: [] } : {}),
-        slots: speakers.map(member => ({
-          id: member.id, name: member.name, status: 'waiting',
-          origin: opener.botId === undefined ? 'user' : 'bot',
-          ...(opener.kickoff ? { note: 'the group was just created' } : {}),
-          ...(named.includes(member) ? { by: opener.botId } : {}),
-          ...(opener.done ? { note: `${opener.name ?? 'a member'} finished the work you asked for` } : {}),
-        })),
-        ...(soleAdmin ? { soleAdmin: { id: admin.id, name: admin.name, color: admin.color } } : {}),
-        speaking: null,
-        replies: [],
-        passed: [],
-        failed: [],
-        started: [],
-      }
-      for (const post of posts.filter(item => item.failed && item.logged === undefined)) {
-        const bot = rt.botOf(post.botId)
-        const { code, status, message } = post.failed
-        round.failed.push(bot?.name ?? post.name)
-        round.replies.push({ kind: 'failed', botId: post.botId, name: bot?.name ?? post.name, color: bot?.color, code, ...(status ? { status } : {}), text: message, time: Date.now() })
-      }
-      // The log line tells the admin and the other members on their next turn.
-      for (const post of posts.filter(item => (item.resumed || item.stopped || item.done) && item.logged === undefined)) {
-        const bot = rt.botOf(post.botId)
-        const name = bot?.name ?? post.name
-        const kind = post.done ? 'done' : post.stopped ? 'stopped' : post.again ? 'cut' : 'resumed'
-        appendRoom(room, { who: name, botId: post.botId, kind, text: '' })
-        round.replies.push({ kind, botId: post.botId, name, color: bot?.color, time: Date.now() })
-      }
-      if (posts.some(post => post.resumed || post.stopped || post.done)) await rt.save()
-      if (releases) resumePaused(room, round)
-      keptRounds.delete(room.id)
-      rt.roomProgress.set(exec.callId, round)
+      // agent.cancel aborts this signal synchronously, before later posts run.
+      const halt = () => roomHalt.halt(room.id)
+      if (exec.signal?.aborted) halt()
+      else exec.signal?.addEventListener('abort', halt, { once: true })
       try {
-        await runRound(room, round, exec.signal, exec.agent)
-      } catch (error) {
-        rt.warn('ds-bot: group round in %s stopped: %s', room.name, error)
+        ensureRoomLog(room)
+        // Everything queued since the last relay is posted in order, so messages that the
+        // Session folds into one turn are not lost; the newest one picks the speakers.
+        const queued = rt.roomInbox.get(room.id) ?? []
+        rt.roomInbox.delete(room.id)
+        // The composer already gave this message to a work line. An empty inbox
+        // must not become a blank User row or a fresh admin turn.
+        if (queued.length === 0 && rt.consumeRouteHold(room.id)) return JSON.stringify({ held: true })
+        const posts = queued.length > 0 ? queued : [{ text: '' }]
+        // A post a running round already logged stays inside the round this relay opens.
+        const startSeq = Math.min(room.seq + 1, ...posts.map(post => post.logged).filter(seq => typeof seq === 'number'))
+        // The opening greeting is a cue for the admin, not a line of the group; a member's
+        // late failure, its work picked up after a restart, its work the user stopped, or
+        // the end of work whose result it already posted is an event of the round.
+        const event = item => item.failed || item.resumed || item.stopped || item.done
+        for (const post of posts.filter(item => !item.kickoff && !item.resume && !event(item) && item.logged === undefined)) {
+          // Image readings go into the log only; `@` names are picked from what the user typed.
+          // A file stays with its line and reaches each member the line is shown to.
+          const readings = post.images === undefined ? [] : await rt.imagesForGroup(post.images, room.id)
+          const text = [post.text, ...readings, ...(post.files ?? []).map(fileLine)].filter(Boolean).join('\n')
+          appendRoom(room, {
+            ...(post.botId ? { who: rt.botOf(post.botId)?.name ?? post.name ?? 'Bot', botId: post.botId } : { who: 'User' }),
+            text,
+            ...(post.files === undefined ? {} : { files: post.files }),
+          })
+        }
+        // The user wrote here — or pressed Continue, which opens the same round
+        // without a line of its own — so Bot relays count afresh and the calls the
+        // limit parked run after the speakers this message picks.
+        const releases = posts.some(post => post.resume === true || (!post.botId && !post.kickoff))
+        if (releases) room.relays = 0
+        await rt.save()
+        // An event post, and a member post that calls nobody, never pick the speakers
+        // over a message queued with them.
+        const callsNobody = post => post.member === true && openingSpeakers(room, post).length === 0
+        const opener = posts.findLast(post => !event(post) && !callsNobody(post)) ?? posts.findLast(post => !event(post)) ?? posts.at(-1)
+        const references = posts.flatMap(post => post.references ?? [])
+        // A member a Bot's post calls by name works for that Bot.
+        const named = opener.botId === undefined ? [] : mentionsIn(opener.text ?? '', room.members.map(rt.botOf).filter(Boolean)).found
+        const speakers = openingSpeakers(room, opener)
+        // The admin alone with the user's message: when it passes, the round ends with
+        // nothing said, and the group says so once.
+        const admin = room.members.map(rt.botOf).filter(Boolean).find(bot => rt.isAdminOf(room, bot.id))
+        const soleAdmin = opener.botId === undefined && !opener.kickoff && room.mode === 'admin' && admin !== undefined
+          && speakers.length === 1 && speakers[0].id === admin.id
+        const round = {
+          roomId: room.id,
+          members: room.members,
+          startSeq,
+          ...(opener.kickoff ? { kickoff: true } : {}),
+          ...(references.length > 0 ? { references, shown: [] } : {}),
+          slots: speakers.map(member => ({
+            id: member.id, name: member.name, status: 'waiting',
+            origin: opener.botId === undefined ? 'user' : 'bot',
+            ...(opener.kickoff ? { note: 'the group was just created' } : {}),
+            ...(named.includes(member) ? { by: opener.botId } : {}),
+            ...(opener.done ? { note: `${opener.name ?? 'a member'} finished the work you asked for` } : {}),
+          })),
+          ...(soleAdmin ? { soleAdmin: { id: admin.id, name: admin.name, color: admin.color } } : {}),
+          speaking: null,
+          replies: [],
+          passed: [],
+          failed: [],
+          started: [],
+        }
+        for (const post of posts.filter(item => item.failed && item.logged === undefined)) {
+          const bot = rt.botOf(post.botId)
+          const { code, status, message } = post.failed
+          round.failed.push(bot?.name ?? post.name)
+          round.replies.push({ kind: 'failed', botId: post.botId, name: bot?.name ?? post.name, color: bot?.color, code, ...(status ? { status } : {}), text: message, time: Date.now() })
+        }
+        // The log line tells the admin and the other members on their next turn.
+        for (const post of posts.filter(item => (item.resumed || item.stopped || item.done) && item.logged === undefined)) {
+          const bot = rt.botOf(post.botId)
+          const name = bot?.name ?? post.name
+          const kind = post.done ? 'done' : post.stopped ? 'stopped' : post.again ? 'cut' : 'resumed'
+          appendRoom(room, { who: name, botId: post.botId, kind, text: '' })
+          round.replies.push({ kind, botId: post.botId, name, color: bot?.color, time: Date.now() })
+        }
+        if (posts.some(post => post.resumed || post.stopped || post.done)) await rt.save()
+        if (releases) resumePaused(room, round)
+        keptRounds.delete(room.id)
+        rt.roomProgress.set(exec.callId, round)
+        try {
+          await runRound(room, round, exec.signal, exec.agent)
+        } catch (error) {
+          rt.warn('ds-bot: group round in %s stopped: %s', room.name, error)
+        } finally {
+          rt.roomProgress.delete(exec.callId)
+          lastRound.set(room.id, { callId: exec.callId, round })
+          if ([...userSteered.values()].some(info => info.roomId === room.id)) keptRounds.set(room.id, { callId: exec.callId, round })
+          else keptRounds.delete(room.id)
+        }
+        if (exec.signal?.aborted) {
+          for (const turn of round.started) void rt.stopRoomTurn?.(room.sessions?.[turn.botId] ?? turn.sessionId, turn.exchangeId)
+        }
+        await rt.save()
+        for (const post of posts) {
+          if (post.reportBack && rt.botOf(post.botId)) void reportRound(room, post, round)
+        }
+        exec.concludeTurn?.()
+        return JSON.stringify({ replies: round.replies, passed: round.passed, ...(round.failed.length > 0 ? { failed: round.failed } : {}) })
       } finally {
-        rt.roomProgress.delete(exec.callId)
-        lastRound.set(room.id, { callId: exec.callId, round })
-        if ([...userSteered.values()].some(info => info.roomId === room.id)) keptRounds.set(room.id, { callId: exec.callId, round })
-        else keptRounds.delete(room.id)
+        exec.signal?.removeEventListener('abort', halt)
       }
-      if (exec.signal?.aborted) {
-        for (const turn of round.started) void rt.stopRoomTurn?.(room.sessions?.[turn.botId] ?? turn.sessionId, turn.exchangeId)
-      }
-      await rt.save()
-      for (const post of posts) {
-        if (post.reportBack && rt.botOf(post.botId)) void reportRound(room, post, round)
-      }
-      exec.concludeTurn?.()
-      return JSON.stringify({ replies: round.replies, passed: round.passed, ...(round.failed.length > 0 ? { failed: round.failed } : {}) })
     },
   }))
 
@@ -972,10 +1005,35 @@ export function install(rt) {
     return admin ? [admin, ...members.filter(bot => bot !== admin)] : members
   }
 
+  // The round that would have logged this post is already gone. Append the line
+  // the running round would have written, then leave the inbox for dropLoggedRelays.
+  function logHaltedPost(room, sender, text, extra = {}, files = []) {
+    ensureRoomLog(room)
+    if (extra.resumed === true || extra.stopped === true || extra.done === true) {
+      const kind = extra.done === true ? 'done' : extra.stopped === true ? 'stopped' : extra.again === true ? 'cut' : 'resumed'
+      appendRoom(room, { who: sender.name, botId: sender.id, kind, text: '' })
+      return room.seq
+    }
+    const line = [text, ...files.map(fileLine)].filter(Boolean).join('\n')
+    if (line === '') return undefined
+    const cite = extra.late === true ? lateCite(extra) : {}
+    const pointer = typeof cite.quoteSeq === 'number'
+      ? { quote: { roomId: cite.quoteRoomId ?? room.id, seq: cite.quoteSeq } }
+      : {}
+    appendRoom(room, {
+      who: sender.name,
+      botId: sender.id,
+      text: line,
+      ...(files.length > 0 ? { files } : {}),
+      ...pointer,
+    })
+    return room.seq
+  }
+
   // A Bot's message into the group's own Session, which relays it as a new round.
   // While a round runs, the post goes into the group's log and that round's replies at
   // once, so it is not held back until the round ends; the relay it still opens does not
-  // write it again (source `logged`).
+  // write it again (source `logged`). During a user abort that relay is not opened.
   async function postToRoom(room, sender, text, extra = {}, files = []) {
     const running = [...rt.roomProgress.values()].find(round => round.roomId === room.id)
     let logged
@@ -1014,11 +1072,33 @@ export function install(rt) {
       await rt.save()
     }
     const agent = await rt.resolveAgent(room.id)
-    agent.followup(createUserMessage({
-      content: [{ type: 'text', text: `[Group post from ${sender.name}]\n${text}` }, ...files.map(attachment => ({ type: 'file', attachment }))],
-      source: { kind: SOURCE_KIND, form: 'relay', role: 'post', exchangeId: randomUUID(), senderName: sender.name, senderSessionId: sender.id, roomId: room.id, ...extra, ...(logged !== undefined ? { logged } : {}) },
-    }))
-    await ctx.sessions.flush(agent.session)
+    // Cancel can land while resolveAgent is in flight. `running` is the round
+    // captured at the start, including one that already wrote the log line.
+    const delivery = haltDelivery(roomHalt.has(room.id), running !== undefined)
+    switch (delivery) {
+      case 'followup':
+        agent.followup(createUserMessage({
+          content: [{ type: 'text', text: `[Group post from ${sender.name}]\n${text}` }, ...files.map(attachment => ({ type: 'file', attachment }))],
+          source: { kind: SOURCE_KIND, form: 'relay', role: 'post', exchangeId: randomUUID(), senderName: sender.name, senderSessionId: sender.id, roomId: room.id, ...extra, ...(logged !== undefined ? { logged } : {}) },
+        }))
+        await ctx.sessions.flush(agent.session)
+        return
+      case 'skip':
+        dropLoggedRelays(agent?.inbox)
+        return
+      case 'log':
+        if (logged === undefined) {
+          const appended = logHaltedPost(room, sender, text, extra, files)
+          if (appended !== undefined) await rt.save()
+        }
+        dropLoggedRelays(agent?.inbox)
+        return
+      default: {
+        /** @type {never} */
+        const unexpected = delivery
+        throw new Error(`Unknown halt delivery ${String(unexpected)}`)
+      }
+    }
   }
   rt.postToRoom = postToRoom
 

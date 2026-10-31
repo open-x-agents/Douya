@@ -432,11 +432,24 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text, sessionId: 'web-default' }),
       });
+      
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      
       const data = await res.json();
 
       // Remove typing indicator
       typing.remove();
 
+      // Check for empty response
+      if (!data.text && (!data.cards || data.cards.length === 0)) {
+        console.warn('[Chat] Empty response:', data);
+        addBotMessage('收到了，但模型没有返回内容。', data.time);
+        return;
+      }
+
+      // Add response
       if (data.error) {
         addBotMessage(data.error, data.time);
       } else {
@@ -444,6 +457,7 @@
       }
     } catch (err) {
       typing.remove();
+      console.error('[Chat Error]', err);
       addBotMessage('抱歉，发送失败了。请稍后重试。', null);
     }
   }

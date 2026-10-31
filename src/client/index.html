@@ -165,7 +165,6 @@
       <b>豆芽</b>
     </div>
     <div class="nav on" data-view="today">今天</div>
-    <div class="nav" data-view="digest">每日汇聚</div>
     <div class="nav" data-view="sources">信源状态</div>
     <div class="grp">设置</div>
     <div class="nav" data-view="settings">配置</div>
@@ -192,15 +191,14 @@
             </div>
           </div>
 
-          <div id="workList"></div>
-        </section>
+          <div style="margin:16px 0;text-align:center">
+            <button id="generateDigestBtn" class="btn primary" style="font-size:14px;padding:8px 24px">
+              ⚡ 立即汇聚
+            </button>
+            <span id="digestStatus" style="margin-left:12px;font-size:12px;color:var(--ink3)"></span>
+          </div>
 
-        <!-- 每日汇聚 (Composio) -->
-        <section class="view" id="v-digest">
-          <h3 class="concl">每日汇聚</h3>
-          <div class="stamp a in">通过 Composio 聚合多个信源的最新动态</div>
-
-          <div id="digestContent"></div>
+          <div id="cardList"></div>
         </section>
 
         <!-- 信源状态 -->
@@ -378,7 +376,6 @@
       document.querySelectorAll('.nav').forEach(n => n.classList.remove('on'));
       nav.classList.add('on');
       Object.keys(views).forEach(k => views[k].classList.toggle('on', k === view));
-      if (view === 'digest') loadDigest();
       if (view === 'sources') loadSources();
       if (view === 'settings') {
         checkConfig();
@@ -596,168 +593,155 @@
       $('nMeet').textContent = (data.meetingHours || 0).toFixed(1) + 'h';
       $('nWait').textContent = data.waitingCount || 0;
 
-      renderWorkList(data.tasks || []);
+      renderCardList(data.cards || []);
+      
+      // Update digest status
+      if (data.hasDigest) {
+        $('digestStatus').textContent = '已汇聚';
+        $('digestStatus').style.color = 'var(--green)';
+      } else {
+        $('digestStatus').textContent = '';
+      }
     } catch (err) {
       console.error('Failed to load today:', err);
       $('conclText').textContent = '加载失败，请稍后重试';
     }
   }
 
-  function renderWorkList(tasks) {
-    const html = tasks.length === 0 ? '<p class="card a in">今天没有待办事项 🎉</p>' :
-      '<ul class="work">' + tasks.map((task, i) => `
-        <li class="a in ${task.closed ? 'closed' : ''}">
-          <span class="idx">${task.closed ? '✓' : i + 1}</span>
-          <div>
-            <h4>${escapeHtml(task.title)}</h4>
-            <p class="why">${escapeHtml(task.reason || '')}
-              ${task.evidence ? `<span class="evi">${escapeHtml(task.evidence)}</span>` : ''}
-            </p>
-            ${task.advice ? `<span class="adv">${escapeHtml(task.advice)}</span>` : ''}
-          </div>
-        </li>
-      `).join('') + '</ul>';
-    $('workList').innerHTML = html;
-  }
-
-  // Load Composio digest
-  async function loadDigest() {
-    const content = $('digestContent');
-    content.innerHTML = '<div class="loading">加载中...</div>';
+  function renderCardList(cards) {
+    const container = $('cardList');
     
-    try {
-      const res = await fetch('/api/digest');
-      const data = await res.json();
+    if (cards.length === 0) {
+      container.innerHTML = '<div class="card a in" style="text-align:center;padding:40px;color:var(--ink3)"><p>暂无待办卡片</p><p style="font-size:12px;margin-top:8px">点击上方「立即汇聚」从数据源获取最新动态</p></div>';
+      return;
+    }
+    
+    const html = cards.map(card => {
+      let cardHtml = `<div class="card a in" data-card-id="${escapeHtml(card.id)}" style="position:relative">`;
       
-      if (data.error) {
-        content.innerHTML = `<div class="error">${escapeHtml(data.error)}</div>`;
-        return;
+      // Priority indicator
+      if (card.priority === 'high') {
+        cardHtml += '<div style="position:absolute;top:12px;right:12px;width:8px;height:8px;border-radius:50%;background:var(--red)"></div>';
       }
-
-      const cards = data.items?.map(item => `
-        <div class="card a in">
-          <h3>${escapeHtml(item.title)}</h3>
-          <p>${escapeHtml(item.description)}</p>
-          <div class="meta">${escapeHtml(item.source)} · ${escapeHtml(item.time)}</div>
-          ${item.actions ? `
-            <div class="actions">
-              ${item.actions.map(action => `<button class="btn ${action.primary ? 'primary' : ''}">${escapeHtml(action.label)}</button>`).join('')}
-            </div>
-          ` : ''}
-        </div>
-      `).join('') || '';
       
-      if (!cards) {
-        // Show manual trigger button when no digest
-        content.innerHTML = `
-          <div class="card a in" style="text-align:center;padding:40px">
-            <p style="color:#94a3b8;margin-bottom:24px">暂无汇聚内容</p>
-            <button id="generateDigestBtn" class="btn primary" style="font-size:16px;padding:12px 32px">
-              立即汇聚
-            </button>
-          </div>
-        `;
+      // Title
+      cardHtml += `<h4 style="margin:0 0 8px">${escapeHtml(card.title)}</h4>`;
+      
+      // Body (if present and short)
+      if (card.body && card.body.length < 100) {
+        cardHtml += `<p style="font-size:13px;color:var(--ink2);margin:0 0 12px">${escapeHtml(card.body)}</p>`;
+      }
+      
+      // Visual blocks
+      if (card.blocks && card.blocks.length > 0) {
+        cardHtml += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin:12px 0">';
         
-        // Attach event listener
-        const btn = $('generateDigestBtn');
-        if (btn) {
-          btn.addEventListener('click', generateDigestManually);
+        for (const block of card.blocks) {
+          if (block.type === 'stat') {
+            const colorMap = {red:'var(--red)',yellow:'var(--yellow)',green:'var(--green)',blue:'var(--blue)',gray:'var(--ink3)'};
+            const color = colorMap[block.color] || 'var(--blue)';
+            cardHtml += `
+              <div style="padding:12px 16px;background:var(--bg2);border-radius:8px;text-align:center;min-width:80px">
+                <div style="font-size:24px;font-weight:600;color:${color}">${escapeHtml(String(block.value))}</div>
+                <div style="font-size:11px;color:var(--ink3);margin-top:4px">${escapeHtml(block.label)}</div>
+              </div>
+            `;
+          } else if (block.type === 'tags') {
+            cardHtml += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+            for (const tag of block.items || []) {
+              const bgMap = {red:'#fee',yellow:'#ffa',green:'#efe',blue:'#eef',orange:'#fed',gray:'#f5f5f5'};
+              const bg = bgMap[tag.color] || '#eee';
+              cardHtml += `<span style="font-size:11px;padding:4px 8px;background:${bg};border-radius:4px;color:var(--ink1)">${escapeHtml(tag.label)}</span>`;
+            }
+            cardHtml += '</div>';
+          } else if (block.type === 'timeline') {
+            cardHtml += '<div style="font-size:12px;color:var(--ink2)">';
+            for (const item of block.items || []) {
+              cardHtml += `<div style="padding:4px 0;display:flex;gap:8px"><span style="color:var(--blue);font-weight:500">${escapeHtml(item.time)}</span><span>${escapeHtml(item.title)}</span></div>`;
+            }
+            cardHtml += '</div>';
+          } else if (block.type === 'progress') {
+            const pct = block.max > 0 ? (block.value / block.max * 100).toFixed(0) : 0;
+            cardHtml += `
+              <div style="flex:1">
+                <div style="height:8px;background:var(--bg2);border-radius:4px;overflow:hidden">
+                  <div style="height:100%;width:${pct}%;background:var(--blue);transition:width 0.3s"></div>
+                </div>
+                <div style="font-size:11px;color:var(--ink3);margin-top:4px">${escapeHtml(block.label || '')}</div>
+              </div>
+            `;
+          } else if (block.type === 'avatars') {
+            cardHtml += '<div style="display:flex;align-items:center;gap:4px">';
+            for (const avatar of (block.items || []).slice(0, 5)) {
+              cardHtml += `<div style="width:24px;height:24px;border-radius:50%;background:var(--blue);color:white;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600">${escapeHtml(avatar.name.charAt(0).toUpperCase())}</div>`;
+            }
+            if (block.overflow > 0) {
+              cardHtml += `<span style="font-size:11px;color:var(--ink3)">+${block.overflow}</span>`;
+            }
+            cardHtml += '</div>';
+          }
         }
-      } else {
-        content.innerHTML = cards;
+        
+        cardHtml += '</div>';
       }
-    } catch (err) {
-      console.error('Failed to load digest:', err);
-      content.innerHTML = '<div class="error">加载失败，请检查 Composio 配置</div>';
-    }
+      
+      // URL link
+      if (card.url) {
+        cardHtml += `<a href="${escapeHtml(card.url)}" target="_blank" style="font-size:12px;color:var(--blue);text-decoration:none;margin-top:8px;display:inline-block">查看详情 →</a>`;
+      }
+      
+      // Status badge
+      if (card.status && card.status !== 'active') {
+        const statusMap = {done:'✓ 完成',snoozed:'💤 已推迟',pinned:'📌 置顶'};
+        cardHtml += `<div style="margin-top:8px;font-size:11px;color:var(--ink3)">${statusMap[card.status] || card.status}</div>`;
+      }
+      
+      cardHtml += '</div>';
+      return cardHtml;
+    }).join('');
+    
+    container.innerHTML = html;
   }
 
-  // Manually trigger digest generation
-  async function generateDigestManually() {
-    const content = $('digestContent');
+  // Manual digest generation
+  async function generateDigest() {
     const btn = $('generateDigestBtn');
+    const status = $('digestStatus');
     
-    // Show loading state
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = '生成中...';
-    }
-    content.innerHTML = `
-      <div class="card a in" style="text-align:center;padding:40px">
-        <div class="loading">正在汇聚数据并生成摘要...</div>
-      </div>
-    `;
+    btn.disabled = true;
+    btn.textContent = '汇聚中...';
+    status.textContent = '正在获取数据...';
+    status.style.color = 'var(--blue)';
     
     try {
-      const res = await fetch('/api/digest/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      
+      const res = await fetch('/api/digest/generate', { method: 'POST' });
       const result = await res.json();
       
       if (!result.success) {
-        content.innerHTML = `
-          <div class="card a in" style="text-align:center;padding:40px">
-            <p style="color:#ef4444;margin-bottom:16px">⚠️ ${escapeHtml(result.error || '生成失败')}</p>
-            <button id="generateDigestBtn" class="btn primary" onclick="generateDigestManually()">
-              重新尝试
-            </button>
-          </div>
-        `;
+        status.textContent = '⚠️ ' + (result.error || '汇聚失败');
+        status.style.color = 'var(--red)';
+        btn.textContent = '⚡ 立即汇聚';
+        btn.disabled = false;
         return;
       }
       
-      // Display generated digest
-      const digest = result.digest;
-      const timestamp = new Date(result.timestamp).toLocaleString('zh-CN', {
-        month: 'numeric',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+      status.textContent = `✓ 已汇聚 ${result.newCardCount} 张新卡片`;
+      status.style.color = 'var(--green)';
+      btn.textContent = '⚡ 重新汇聚';
+      btn.disabled = false;
       
-      const cards = digest.cards?.map(card => {
-        let cardHtml = `
-          <div class="card a in">
-            <h3>${escapeHtml(card.title)}</h3>
-        `;
-        
-        if (card.description) {
-          cardHtml += `<p>${escapeHtml(card.description)}</p>`;
-        }
-        
-        if (card.url) {
-          cardHtml += `<a href="${escapeHtml(card.url)}" target="_blank" style="color:#667eea;text-decoration:none">查看详情 →</a>`;
-        }
-        
-        cardHtml += `</div>`;
-        return cardHtml;
-      }).join('') || '';
-      
-      content.innerHTML = `
-        <div class="stamp a in" style="margin-bottom:16px;color:#64748b">
-          ${escapeHtml(digest.summary || '今日汇聚')} · 生成于 ${timestamp}
-        </div>
-        ${cards}
-        <div style="text-align:center;margin-top:24px">
-          <button id="refreshDigestBtn" class="btn" onclick="generateDigestManually()">
-            重新汇聚
-          </button>
-        </div>
-      `;
+      // Reload today page
+      await loadToday();
     } catch (err) {
       console.error('Failed to generate digest:', err);
-      content.innerHTML = `
-        <div class="card a in" style="text-align:center;padding:40px">
-          <p style="color:#ef4444;margin-bottom:16px">⚠️ 生成失败：${escapeHtml(err.message)}</p>
-          <button id="generateDigestBtn" class="btn primary" onclick="generateDigestManually()">
-            重新尝试
-          </button>
-        </div>
-      `;
+      status.textContent = '⚠️ 生成失败';
+      status.style.color = 'var(--red)';
+      btn.textContent = '⚡ 立即汇聚';
+      btn.disabled = false;
     }
   }
+
+  // Load Composio digest
 
   // Load sources status
   async function loadSources() {
@@ -1159,6 +1143,12 @@
   // Initialize
   loadToday();
   setInterval(loadToday, 60000); // Refresh every minute
+  
+  // Wire up digest button
+  const digestBtn = $('generateDigestBtn');
+  if (digestBtn) {
+    digestBtn.addEventListener('click', generateDigest);
+  }
   
   // Show chat hint after 2 seconds
   setTimeout(() => {

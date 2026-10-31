@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createRuntime } from '../index.js'
@@ -169,4 +169,21 @@ test('a calendar that throws does not break the pass, and every attempt is recor
     ['calendar', 'error', 2],
     ['calendar', 'error', 3],
   ])
+})
+
+// The timer arms at load time, so the first pass can run before the store file is read. Reading
+// first is what keeps that pass from saving an empty state over the previous run's members.
+test('start reads the store before the first pass, so a wake cannot save it empty', async () => {
+  const dir = await home()
+  await writeFile(
+    join(dir, 'state.json'),
+    `${JSON.stringify({ members: { m1: { id: 'm1', name: '小王', active: true } }, reports: {} })}\n`,
+    'utf8',
+  )
+  const rt = createRuntime({}, { home: dir, now: () => new Date('2026-10-30T09:00:00Z'), calendar: async () => [] })
+  assert.deepEqual(rt.store.get().members, {}, 'the fresh runtime starts without the file')
+  await rt.start()
+  assert.equal(rt.store.get().members.m1.name, '小王', 'the member written by an earlier run survived the first pass')
+  assert.equal(JSON.parse(await readFile(join(dir, 'state.json'), 'utf8')).members.m1.name, '小王')
+  rt.stop()
 })

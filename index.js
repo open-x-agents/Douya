@@ -9,6 +9,7 @@ import { due, planFor, reminderKey, snooze } from './src/host/reminders.js'
 import { dailyReportCard, readAction, reminderCard } from './src/host/cards.js'
 import { installPanel, reportKey } from './src/host/panel.js'
 import { createFeishuSender } from './src/host/feishu.js'
+import { localDay } from './src/host/normalize.js'
 import { defaultZone, nextWakeAt, runWithBudget } from './src/host/schedule.js'
 import {
   CALENDAR_ATTEMPTS,
@@ -33,15 +34,17 @@ export function apply(ctx, config = {}) {
 export function createRuntime(ctx, config = {}) {
   const home = config.home ?? join(process.env.DSH_HOME ?? '.', 'opendigitalmate')
   const now = config.now ?? (() => new Date())
-  const today = config.today ?? (() => now().toISOString().slice(0, 10))
+  // The zone the two report slots are read in, and the two functions the single timer uses.
+  // Both are injected, so a test can watch the delay without waiting for it.
+  const timeZone = config.timeZone ?? defaultZone()
+  // Reports and the panel are keyed on the day the person lives in, never the UTC day: a
+  // morning report at 00:30 in Shanghai belongs to that day, not to the one before it.
+  const today = config.today ?? (() => localDay(now().toISOString(), timeZone))
   const store = createStore(join(home, 'state.json'))
   const sender = createFeishuSender({ credentials: config.credentials, log: config.log })
   const sendCard = config.sendCard ?? sender.sendCard
   const calendar = config.calendar ?? (async () => [])
   const log = config.log ?? (() => {})
-  // The zone the two report slots are read in, and the two functions the single timer uses.
-  // Both are injected, so a test can watch the delay without waiting for it.
-  const timeZone = config.timeZone ?? defaultZone()
   const schedule = config.schedule ?? setTimeout
   const cancel = config.cancel ?? clearTimeout
   let timer = null
@@ -53,6 +56,7 @@ export function createRuntime(ctx, config = {}) {
     store,
     now,
     today,
+    timeZone,
 
     // One pass of the clock: plan from the calendar, deliver what is due, keep the rest for
     // the panel. Only a delivered reminder is marked sent, so a Feishu hiccup retries.
@@ -61,11 +65,23 @@ export function createRuntime(ctx, config = {}) {
       const moment = now().getTime()
       // A calendar that is down or slow costs the day's meeting lines, not the whole pass: the
       // failures are kept so a late report can say "日历接口 3 次超时" instead of pretending.
+      const readAt = now().toISOString()
       const reading = await runWithBudget(calendar, {
         attempts: CALENDAR_ATTEMPTS,
         timeoutMs: CALENDAR_TIMEOUT_MS,
         source: 'calendar',
       })
+      // What this pass did with the calendar is part of the state the panel reads: a source that
+      // returned null, threw, or handed back something that is not a list is "not connected",
+      // not "no meetings". The page must be able to say which sentence has no evidence left.
+      const connected = reading.ok && Array.isArray(reading.value)
+      const failure = reading.failures[0]
+      const calendarSource = {
+        connected,
+        last_read_at: connected ? readAt : null,
+        detail: connected ? `读到 ${reading.value.length} 个日程` : (failure?.message ?? '日历没有返回数据'),
+        error: connected ? null : (failure?.reason ?? null),
+      }
       const planned = planFor(reading.ok ? reading.value : [], { now: moment, leadMinutes: config.leadMinutes })
       const plan = [...planned, ...(state.manual ?? [])].sort((a, b) => a.fireAt.localeCompare(b.fireAt))
       const firing = due(plan, { now: moment, sent: Object.keys(state.sent ?? {}) })
@@ -103,13 +119,14 @@ export function createRuntime(ctx, config = {}) {
       const next = rt.nextWake({ plan, sent: Object.keys(sent), moment })
       await store.save({
         ...state,
+        sources: { ...(state.sources ?? {}), feishu_cal: calendarSource },
         sent,
         manual: (state.manual ?? []).filter(item => Date.parse(item.fireAt) > moment),
         upcoming: plan.slice(0, 20),
         deliveries: [...(state.deliveries ?? []), ...deliveries].slice(-200),
       })
       rt.arm(next)
-      return { plan, firing, deliveries, failures: reading.failures, nextWake: next }
+      return { plan, firing, deliveries, failures: reading.failures, sources: { feishu_cal: calendarSource }, nextWake: next }
     },
 
     // When to look again. With a plan, the next reminder is the wake. With nothing planned, the
@@ -141,6 +158,16 @@ export function createRuntime(ctx, config = {}) {
       if (timer === null) return
       cancel(timer)
       timer = null
+    },
+
+    // The store is read before the first pass: the timer arms as soon as the plugin mounts,
+    // and a pass that ran before the file was read would save the empty state over the
+    // members, reports and sent reminders the previous run had left there.
+    start() {
+      return (async () => {
+        await rt.load()
+        await rt.tick()
+      })()
     },
 
     // A button press changes one record. `snooze` re-plans the same event at a later fireAt,
@@ -204,7 +231,7 @@ export function createRuntime(ctx, config = {}) {
     }), 'opendigitalmate: card callback')
 
     ctx.effect(() => {
-      void rt.tick().catch(error => log(`tick failed: ${String(error?.message ?? error)}`))
+      void rt.start().catch(error => log(`tick failed: ${String(error?.message ?? error)}`))
       return () => rt.stop()
     }, 'opendigitalmate: precise tick')
   }

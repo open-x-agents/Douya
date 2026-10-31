@@ -38,7 +38,9 @@ export function sourceLabel(source) {
 }
 
 // `state.sources` as the panel reads it: one record per source with connection, the last
-// successful read, and the last error. Anything missing counts as not connected.
+// successful read, and the last error. Anything missing counts as not connected. The tick
+// (#46) writes the error as `error`; the older fixture says `last_error` — read both, so a
+// failed read never silently turns into a live source.
 export function sourceHealth(sources = {}) {
   const out = {}
   for (const [name, raw] of Object.entries(sources ?? {})) {
@@ -46,7 +48,7 @@ export function sourceHealth(sources = {}) {
       name,
       connected: raw?.connected === true,
       last_read_at: text(raw?.last_read_at) || null,
-      last_error: text(raw?.last_error) || null,
+      last_error: text(raw?.last_error ?? raw?.error) || null,
     }
   }
   return out

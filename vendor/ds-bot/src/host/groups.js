@@ -1122,11 +1122,13 @@ export function install(rt) {
   rt.withRoomSteps = (lines, reply) => (lines === '' ? reply : isPass(reply) ? lines : `${lines}\n\n${reply}`)
 
   // User-visible group turns: mirror agent/assistant-stream text-delta into the
-  // active round's draft so room-progress can live-render GroupMessage. Bot↔Bot
-  // exchange turns are not speaking in a round, so they never get a draft here.
+  // active round's draft so room-progress can live-render GroupMessage.
+  // turnVisibleInGroup is false for a Bot↔Bot request/reply, so those deltas
+  // never become a room draft. A room turn still accumulates here.
   ctx.on('agent/assistant-stream', ({ agent, frame }) => {
     const owner = rt.groupOwners.get(agent.id)
     if (owner === undefined) return
+    if (rt.turnVisibleInGroup?.(agent.id) === false) return
     const rounds = [...rt.roomProgress.values()].filter(entry => entry.roomId === owner.roomId)
     const kept = keptRounds.get(owner.roomId)
     if (kept !== undefined && !rounds.includes(kept.round)) rounds.push(kept.round)

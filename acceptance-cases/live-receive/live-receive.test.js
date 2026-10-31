@@ -1,12 +1,11 @@
 // L1–L7: busy-time live receive and one-bubble finalize (#3).
 // Pure modules, a turns.js install, and a feed.js install — no @deepseek-ai.
-// A shorter already-posted step, and a group draft for a hidden exchange
-// turn, are review items. This file does not assert them.
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { SOURCE_KIND } from '../../vendor/ds-bot/src/host/constants.js'
 import { FEED_ROUTE, install as installFeed } from '../../vendor/ds-bot/src/host/feed.js'
 import { install as installTurns } from '../../vendor/ds-bot/src/host/turns.js'
 import { roundForStream } from '../../vendor/ds-bot/src/host/group-steer.js'
@@ -278,6 +277,70 @@ test('L6 one attempt finalizes to a single line and keeps the tail on that line'
     chunk: { type: 'text-delta', text: '串了' },
   }, { botId: 'chief' })
   assert.equal(isolated.text, '第二句的尾巴')
+})
+
+test('L6 a shorter posted prefix keeps the unposted tail on the same attempt', () => {
+  let draft = applyRoomStreamFrame(undefined, { type: 'start', attemptId: 'a1' }, { botId: 'chief' })
+  draft = applyRoomStreamFrame(draft, { type: 'chunk', attemptId: 'a1', chunk: { type: 'text-delta', text: '先说一句' } }, { botId: 'chief' })
+  draft = applyRoomStreamFrame(draft, { type: 'chunk', attemptId: 'a1', chunk: { type: 'text-delta', text: '这是结尾' } }, { botId: 'chief' })
+  const kept = clearDraftIfPosted(draft, [{ botId: 'chief', text: '先说一句' }])
+  assert.equal(kept, draft)
+  assert.equal(draftForDisplay(kept, [{ botId: 'chief', text: '先说一句' }])?.text, '先说一句这是结尾')
+  const grown = applyRoomStreamFrame(kept, {
+    type: 'chunk',
+    attemptId: 'a1',
+    chunk: { type: 'text-delta', text: '又来' },
+  }, { botId: 'chief' })
+  assert.equal(grown.text, '先说一句这是结尾又来')
+  assert.equal(clearDraftIfPosted(draft, [{ botId: 'chief', text: '这是结尾' }]), draft)
+})
+
+test('L6 joined same-attempt lines and a trimmed name cover the draft', () => {
+  const draft = speak('a1', ['先说一句', '这是结尾'])
+  const parts = [
+    { botId: 'chief', text: '先说一句' },
+    { botId: 'chief', text: '这是结尾' },
+  ]
+  assert.equal(clearDraftIfPosted(draft, parts), undefined)
+  assert.equal(draftForDisplay(draft, parts), undefined)
+  assert.equal(clearDraftIfPosted(draft, [...parts, { botId: 'chief', text: '另一轮' }]), undefined)
+  assert.equal(clearDraftIfPosted(draft, [{ botId: 'chief', text: draft.text }, { botId: 'chief', text: '另一轮' }]), undefined)
+  assert.equal(clearDraftIfPosted(draft, [{ botId: 'chief', text: `  ${draft.text}  ` }]), undefined)
+  assert.equal(clearDraftIfPosted(draft, [{ botId: 'chief', name: 'Chief', text: 'Chief：先说一句这是结尾' }]), undefined)
+  assert.equal(clearDraftIfPosted(draft, [{ botId: 'chief', name: 'Chief', text: '**Chief**：先说一句这是结尾' }]), undefined)
+  assert.equal(clearDraftIfPosted(draft, [{ botId: 'chief', name: 'Chief', text: 'Chief：先说一句这是结尾，补了一笔' }]), undefined)
+  assert.equal(clearDraftIfPosted(draft, [{ botId: 'chief', name: 'Chief', text: 'Chief：先说一句\n\n这是结尾' }]), undefined)
+  assert.equal(clearDraftIfPosted(draft, [{ botId: 'writer', name: 'Chief', text: 'Chief：先说一句这是结尾' }]), draft)
+})
+
+test('L5 a Bot-to-Bot request is not a user-visible group turn', () => {
+  const roomSource = (role, exchangeId) => ({ kind: SOURCE_KIND, role, exchangeId, roomId: 'r1' })
+  const visible = host()
+  visible.emit('ga', { type: 'turn/start', data: { turn: 4 }, time: 1 })
+  assert.equal(visible.rt.turnVisibleInGroup('ga'), true)
+  visible.emit('ga', { type: 'user/message', data: { source: roomSource('room', 'room-1'), content: [{ type: 'text', text: '房间回合' }] } })
+  assert.equal(visible.rt.turnVisibleInGroup('ga'), true)
+
+  const hidden = host()
+  hidden.emit('ga', { type: 'turn/start', data: { turn: 5 }, time: 2 })
+  hidden.emit('ga', { type: 'user/message', data: { source: roomSource('request', 'req-1'), content: [{ type: 'text', text: '请另一位回答' }] } })
+  assert.equal(hidden.rt.turnVisibleInGroup('ga'), false)
+  hidden.emit('ga', { type: 'turn/end', data: { reason: { kind: 'completed' } } })
+  hidden.emit('ga', { type: 'turn/start', data: { turn: 6 }, time: 3 })
+  hidden.emit('ga', { type: 'user/message', data: { source: roomSource('stopped', 'stop-1'), content: [{ type: 'text', text: '停一下' }] } })
+  assert.equal(hidden.rt.turnVisibleInGroup('ga'), false)
+
+  const priv = host()
+  priv.emit('priv', { type: 'turn/start', data: { turn: 1 }, time: 4 })
+  assert.equal(priv.rt.turnVisibleInGroup('priv'), false)
+
+  const groups = source('vendor/ds-bot/src/host/groups.js')
+  const streamAt = groups.indexOf("ctx.on('agent/assistant-stream'")
+  const visibleAt = groups.indexOf('turnVisibleInGroup', streamAt)
+  const applyAt = groups.indexOf('applyRoomStreamFrame', streamAt)
+  assert.ok(streamAt >= 0 && visibleAt > streamAt && applyAt > visibleAt)
+  const turns = source('vendor/ds-bot/src/host/turns.js')
+  assert.match(turns, /rt\.turnVisibleInGroup = \(sessionId\) => speaksInGroup\(sessionId, live\.get\(sessionId\)\?\.info\)/)
 })
 
 test('L7 work-line routing still owns the room decision, and send mode stays behind it', () => {

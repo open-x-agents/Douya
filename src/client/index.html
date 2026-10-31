@@ -387,7 +387,7 @@
   @keyframes fadeIn{from{opacity:0}}
   @keyframes zoomIn{from{transform:scale(.8);opacity:0}to{transform:scale(1);opacity:1}}
   
-  .tile-zoom-close{
+  .tile-zoom-close{z-index:5;
     position:absolute;
     top:20px;
     right:20px;
@@ -2121,15 +2121,11 @@
     currentZoomCard = null;
   }
   
-  // Wire up close handlers
-  const closeBtn = $('tileZoomClose');
-  const overlay = $('tileZoomOverlay');
-  if (closeBtn) closeBtn.onclick = closeTileZoom;
-  if (overlay) {
-    overlay.onclick = (e) => {
-      if (e.target === overlay) closeTileZoom();
-    };
-  }
+  // Wire up close handlers (delegated: overlay markup is after this script)
+  document.addEventListener('click', (e) => {
+    if (e.target.closest && e.target.closest('#tileZoomClose')) { e.preventDefault(); closeTileZoom(); return; }
+    if (e.target && e.target.id === 'tileZoomOverlay') closeTileZoom();
+  });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && currentZoomCard) closeTileZoom();
   });

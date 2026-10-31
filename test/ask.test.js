@@ -82,7 +82,7 @@ test('ten questions drawn from one fixture all resolve their citations inside th
 test('a stub model that says Friday when the source never does is refused and the answer never says Friday', () => {
   const question = fixture.questions.calendar
   const sources = evidenceFor(question.refs)
-  assert.equal(JSON.stringify(sources).includes('周五'), false, 'the question's evidence never says Friday')
+  assert.equal(JSON.stringify(sources).includes('周五'), false, 'the evidence never says Friday')
   const result = askQuestion({
     text: question.text,
     sources,

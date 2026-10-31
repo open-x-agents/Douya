@@ -21,7 +21,7 @@ node --test test/*.test.js 'acceptance-cases/**/*.test.js'   # 全部测试，�
 node scripts/demo.mjs          # 打印一张日报卡和一张提醒卡（不发出去）
 ```
 
-装进 DSH 之后（和 ds-bot 一样按插件挂载）：
+装进 DSH 之后（和 ds-bot 一样按插件挂载）。本地 Web 不要只加这一段：profile 的 bundles 还得含 `ds-bot`，并且 `vendor/ds-bot` 里要有 `deep-view`。完整步骤见下面的「本地 DSH Web（Bot 模式）」。
 
 ```yaml
 # cordis 补丁里加一行
@@ -40,6 +40,40 @@ node scripts/demo.mjs          # 打印一张日报卡和一张提醒卡（不�
 | `ownerOpenId` | 没人认领的提醒发给谁 |
 | `leadMinutes` | 提前几分钟提醒，默认 10 |
 
+## 本地 DSH Web（Bot 模式）
+
+开发机上用 `scripts/setup-opendigitalmate-web.sh` 把本仓库挂进 DeepSeek Harness 的 Web profile。它只检查和补齐挂载，不改插件运行时。
+
+固定布局（目录名可以不是 `ds_dev`，上下级关系要一致）：
+
+```
+<ROOT>/                          # 例如 ~/Documents/ds_dev
+  dsh-web.sh
+  deepseek-harness/
+  tools/bin/pnpm                 # bash dsh-dev.sh setup 之后才有
+  data/web/harness/profiles/web/ # 本脚本写入
+  openDigitalMate/               # 本仓库，与 deepseek-harness 并列
+    scripts/setup-opendigitalmate-web.sh
+    vendor/ds-bot/
+```
+
+本仓库的上一级就是 `<ROOT>`。仓库不在那个目录里时，先 `export DSH_DEV_ROOT=<ROOT>`（含 `dsh-web.sh` 的那一层）。被 link 的是你正在跑脚本的这个仓库。
+
+```sh
+bash scripts/setup-opendigitalmate-web.sh check   # 只看缺什么
+bash scripts/setup-opendigitalmate-web.sh setup   # 补齐 profile、cordis insert、deep-view
+bash scripts/setup-opendigitalmate-web.sh start   # 检查通过后转调 bash dsh-web.sh start
+```
+
+脚本不代替 harness 自身的构建。先在 `<ROOT>` 准备好 `deepseek-harness` 和 `dsh-web.sh`（`dsh-dev.sh setup`、`dsh-web.sh build`）。它补上以前容易漏、会导致「不是 Bot 界面」或 `ds-bot failed to import` 的几步：
+
+1. profile 的 `bundles` 含 `ds-bot`（只有 `opendigitalmate` 会变成非 Bot 界面）
+2. dependencies 用 `link:` 指向本仓库的 `vendor/ds-bot` 和仓库根
+3. `cordis.patch.yml` insert `opendigitalmate`（已有的 LLM / UI 配置保留，只追加）
+4. 在 `vendor/ds-bot` 里 `npm install --omit=dev`，装上 `deep-view`
+
+在 macOS 上跑，不要用 sudo，需要 Node.js >= 24.9。`setup` 会重写 `profiles/web/package.json`。
+
 ## 两个刻意的设计
 
 **提醒的 key 是「事件 + 到点时刻」**，不是事件 id。所以「推迟 10 分钟」是一次新的投递，而不是把已经发过的标记改掉；原提醒不被修改。
@@ -54,6 +88,7 @@ src/host/            纯逻辑：report / reminders / cards / panel / store / fe
 src/client/panel.html 面板单页（无构建步骤，直接由插件托管）
 test/                node:test，110 条
 scripts/demo.mjs     一次性的可视化输出
+scripts/setup-opendigitalmate-web.sh  本地 DSH Web（Bot 模式）check / setup / start
 docs/architecture.md 架构、数据形状、与 ds-bot 的边界
 docs/labels.md       标签流程：谁能把一张单变成「可开工」
 ```

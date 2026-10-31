@@ -33,3 +33,16 @@ In a DSH profile `package.json`:
 Or install/link `vendor/ds-bot` another way that resolves the `ds-bot` package name.
 Peer dependency on the root package is `ds-bot >= 0.2.4` (matches the vendored
 `package.json` version).
+
+For a local DSH Web profile in Bot mode, use `scripts/setup-opendigitalmate-web.sh`
+(`check`, `setup`, `start`) instead of editing the profile by hand. The README
+section 「本地 DSH Web（Bot 模式）」 describes the expected `<ROOT>` layout
+(`dsh-web.sh` and `deepseek-harness` beside this repo; override with
+`DSH_DEV_ROOT`). Three wiring mistakes show up as the wrong UI or an import
+failure, and the script checks each of them:
+
+- `bundles` must include `ds-bot`. Insert `opendigitalmate` from
+  `cordis.patch.yml`; do not use that plugin as the only bundle.
+- `dependencies` must `link:` this checkout's `vendor/ds-bot` and the repo root.
+- `vendor/ds-bot` needs its runtime dependency `deep-view` (`npm install --omit=dev`
+  in that directory). Without it, ds-bot fails to import.

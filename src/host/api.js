@@ -278,58 +278,33 @@ function buildContextMessage(context) {
 /**
  * Call LLM - Build client from config store on-demand
  */
-async function callLLM(ctx, messages, sessionId = 'web-chat') {
+/**
+ * Call LLM with function calling support for Composio tools
+ * @param {object} ctx - Context with llm client
+ * @param {Array} messages - Message history
+ * @param {string} sessionId - Session ID for logging
+ * @param {object} composioClient - Composio client for tool execution
+ * @returns {Promise<{text: string, cards: Array}>}
+ */
+async function callLLM(ctx, messages, sessionId = 'web-chat', composioClient = null) {
+  const { createComposioTools, AGENT_SYSTEM_PROMPT } = await import('./agent-tools.js');
+  
+  // Build tool definitions if Composio is available
+  const tools = composioClient ? createComposioTools(composioClient) : [];
+  
   // Prepend system prompt
   const messagesWithSystem = [
-    { role: 'system', content: CARD_SYSTEM_PROMPT },
+    { role: 'system', content: AGENT_SYSTEM_PROMPT },
     ...messages,
   ];
 
   // Try to get LLM from context first (ds-bot mode)
   if (ctx?.llm?.stream) {
     try {
-      let fullText = '';
-      for await (const chunk of ctx.llm.stream({
-        messages: messagesWithSystem,
-        maxTokens: 1000,
-        responseFormat: { type: 'json_object' },
-      })) {
-        if (chunk.type === 'text' && chunk.text) {
-          fullText += chunk.text;
-        }
-      }
-
-      if (fullText.trim()) {
-        const result = parseResponseToCards(fullText);
-        console.log(`[LLM] Response: text=${result.text?.length || 0} chars, cards=${result.cards?.length || 0}`);
-        return result;
-      } else {
-        console.warn('[LLM] Empty response from ds-bot LLM - returning prompt');
-        return {
-          text: '我暂时没有想法，您可以换个问法试试',
-          cards: [
-            {
-              type: 'action',
-              title: '换个方式问',
-              description: '可能是模型没有理解您的问题',
-              actions: [{ label: '重新提问', value: 'retry' }],
-            },
-          ],
-        };
-      }
+      return await callLLMWithTools(ctx.llm, messagesWithSystem, tools, sessionId);
     } catch (error) {
       console.error('[LLM] ds-bot error:', error);
-      return {
-        text: '调用模型时出错',
-        cards: [
-          {
-            type: 'error',
-            title: '错误: ' + error.message,
-            description: '请检查模型配置',
-            actions: [{ label: '检查配置', value: 'goto_settings' }],
-          },
-        ],
-      };
+      throw error;  // Rethrow to let caller handle
     }
   }
 
@@ -348,71 +323,116 @@ async function callLLM(ctx, messages, sessionId = 'web-chat') {
           log: console.log,
         });
 
-        let fullText = '';
-        for await (const chunk of client.stream({
-          messages: messagesWithSystem,
-          maxTokens: 1000,
-          responseFormat: { type: 'json_object' },
-        })) {
-          if (chunk.type === 'text' && chunk.text) {
-            fullText += chunk.text;
-          }
-        }
-
-        console.log(`[LLM] Received ${fullText.length} chars from ${cfg.provider}`);
-
-        if (fullText.trim()) {
-          const result = parseResponseToCards(fullText);
-          console.log(`[LLM] Parsed: text=${result.text?.length || 0} chars, cards=${result.cards?.length || 0}`);
-          return result;
-        } else {
-          console.warn('[LLM] Empty response from model - returning prompt');
-          return {
-            text: '我暂时没有想法，您可以换个问法试试',
-            cards: [
-              {
-                type: 'action',
-                title: '换个方式问',
-                description: '可能是模型没有理解您的问题',
-                actions: [{ label: '重新提问', value: 'retry' }],
-              },
-            ],
-          };
-        }
+        return await callLLMWithTools(client, messagesWithSystem, tools, sessionId);
       } catch (error) {
         console.error('[LLM] Standalone mode error:', error);
-        return {
-          text: '调用模型时出错',
-          cards: [
-            {
-              type: 'error',
-              title: '错误: ' + error.message,
-              description: '请检查模型配置是否正确',
-              actions: [
-                { label: '检查配置', value: 'goto_settings' },
-              ],
-            },
-          ],
-        };
+        throw error;  // Rethrow to let caller handle
       }
     }
   }
 
-  // No model configured
-  console.warn('[LLM] No model configured');
-  return {
-    text: '模型未配置',
-    cards: [
-      {
-        type: 'action',
-        title: '需要配置 AI 模型才能对话',
-        description: '请点击下方按钮前往配置页面',
-        actions: [
-          { label: '前往配置', value: 'goto_settings' },
-        ],
-      },
-    ],
-  };
+  // No LLM available - throw error
+  throw new Error('模型未配置。请先在设置中配置 LLM 模型');
+}
+
+/**
+ * Call LLM with function calling and execute tools
+ * @param {object} llm - LLM client with stream method
+ * @param {Array} messages - Message history with system prompt
+ * @param {Array} tools - Tool definitions
+ * @param {string} sessionId - Session ID for logging
+ * @returns {Promise<{text: string, cards: Array}>}
+ */
+async function callLLMWithTools(llm, messages, tools, sessionId) {
+  const MAX_TOOL_ITERATIONS = 5;
+  let iteration = 0;
+  let currentMessages = [...messages];
+
+  while (iteration < MAX_TOOL_ITERATIONS) {
+    iteration++;
+    console.log(`[LLM] Iteration ${iteration}, messages: ${currentMessages.length}`);
+
+    // For models that support function calling (like OpenAI)
+    // we would pass tools here. For now, we use JSON mode and parse tool calls manually
+    let fullText = '';
+    for await (const chunk of llm.stream({
+      messages: currentMessages,
+      maxTokens: 2000,
+      responseFormat: { type: 'json_object' },
+    })) {
+      if (chunk.type === 'text' && chunk.text) {
+        fullText += chunk.text;
+      }
+    }
+
+    console.log(`[LLM] Received ${fullText.length} chars`);
+
+    if (!fullText.trim()) {
+      throw new Error('模型返回了空响应');
+    }
+
+    // Try to parse as JSON
+    let parsed;
+    try {
+      parsed = JSON.parse(fullText);
+    } catch (err) {
+      console.error('[LLM] Failed to parse JSON:', fullText.substring(0, 200));
+      throw new Error('模型返回的不是有效的 JSON 格式');
+    }
+
+    // Check if response contains tool calls
+    if (parsed.tool_calls && Array.isArray(parsed.tool_calls) && parsed.tool_calls.length > 0) {
+      console.log(`[LLM] Model requested ${parsed.tool_calls.length} tool calls`);
+      
+      // Execute all tool calls
+      const toolResults = [];
+      for (const toolCall of parsed.tool_calls) {
+        const tool = tools.find(t => t.name === toolCall.name);
+        if (!tool) {
+          toolResults.push({
+            tool: toolCall.name,
+            error: 'Tool not found',
+          });
+          continue;
+        }
+
+        try {
+          console.log(`[LLM] Executing tool: ${toolCall.name}`);
+          const result = await tool.execute(toolCall.arguments || {});
+          toolResults.push({
+            tool: toolCall.name,
+            result,
+          });
+          console.log(`[LLM] Tool ${toolCall.name} returned:`, JSON.stringify(result).substring(0, 100));
+        } catch (error) {
+          toolResults.push({
+            tool: toolCall.name,
+            error: error.message,
+          });
+          console.error(`[LLM] Tool ${toolCall.name} failed:`, error);
+        }
+      }
+
+      // Add tool results to messages and continue
+      currentMessages.push({
+        role: 'assistant',
+        content: JSON.stringify({ tool_calls: parsed.tool_calls }),
+      });
+      currentMessages.push({
+        role: 'user',
+        content: `工具调用结果：\n${JSON.stringify(toolResults, null, 2)}\n\n请基于以上真实数据回复用户。`,
+      });
+
+      continue;  // Next iteration with tool results
+    }
+
+    // No tool calls, this is the final response
+    const result = parseResponseToCards(fullText);
+    console.log(`[LLM] Final response: text=${result.text?.length || 0} chars, cards=${result.cards?.length || 0}`);
+    return result;
+  }
+
+  throw new Error('达到最大工具调用次数限制');
 }
 
 /**
@@ -767,7 +787,11 @@ export function createApiRouter(ctx) {
       try {
         const { message, sessionId = 'default' } = data;
         if (!message || typeof message !== 'string') {
-          return { error: '消息不能为空' };
+          return { 
+            text: '消息不能为空',
+            cards: [],
+            time: new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'}),
+          };
         }
 
         // Get or create chat session
@@ -781,10 +805,8 @@ export function createApiRouter(ctx) {
         }
 
         // Gather real context from connected sources
-        const context = await gatherContext(
-          getComposioClient(),
-          store
-        );
+        const composioClient = getComposioClient();
+        const context = await gatherContext(composioClient, store);
         const contextMessage = buildContextMessage(context);
 
         // Add user message
@@ -802,18 +824,47 @@ export function createApiRouter(ctx) {
           session.messages[session.messages.length - 1],  // Current user message
         ];
 
-        // Get LLM response
-        const response = await callLLM(
-          { llm: llmCtx?.llm },
-          messagesWithContext,
-          sessionId
-        );
+        // Get LLM response with tool support
+        let response;
+        try {
+          response = await callLLM(
+            { llm: llmCtx?.llm },
+            messagesWithContext,
+            sessionId,
+            composioClient  // Pass Composio client for tool execution
+          );
+        } catch (error) {
+          console.error('[sendChatMessage] LLM call failed:', error);
+          
+          // Return error as card
+          return {
+            text: error.message || '调用模型时出错',
+            cards: [{
+              type: 'error',
+              title: '错误',
+              description: error.message || '未知错误',
+              actions: error.message.includes('未配置') 
+                ? [{ label: '前往模型设置', value: '打开模型设置页面' }]
+                : [{ label: '重试', value: message }]  // Retry with same message
+            }],
+            time: new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'}),
+          };
+        }
 
         // Ensure response is valid
         if (!response || typeof response !== 'object') {
           console.error('[sendChatMessage] Invalid response from callLLM:', response);
           return {
-            text: '系统错误',
+            text: '模型返回了无效响应',
+            cards: [{
+              type: 'error',
+              title: '响应错误',
+              description: '请检查模型配置或重试',
+              actions: [{ label: '重试', value: message }]
+            }],
+            time: new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'}),
+          };
+        }
             cards: [{
               type: 'error',
               title: '内部错误',

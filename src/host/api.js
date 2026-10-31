@@ -160,14 +160,9 @@ function parseResponseToCards(text) {
   return cards;
 }
 
-export function createApiRouter({ store, composioClient, config, llmCtx, sendCard, configStore, ctx, updateLLMClient }) {
-  // Ensure required dependencies are available
-  if (!configStore) {
-    console.warn('Warning: configStore not provided to createApiRouter');
-  }
-  if (!store) {
-    console.warn('Warning: store not provided to createApiRouter');
-  }
+export function createApiRouter(ctx) {
+  const { store, composioClient, config, configStore } = ctx;
+  const llmCtx = ctx.llmCtx || ctx.ctx;  // Use llmCtx consistently
 
   return {
     /**
@@ -333,7 +328,7 @@ export function createApiRouter({ store, composioClient, config, llmCtx, sendCar
         composioApiKey: !!config?.composioApiKey,
         composioEntityId: config?.composioEntityId || 'default',
         digestSchedule: config?.digestSchedule || '08:00',
-        llmConfigured: !!(llmContext?.llm?.stream),
+        llmConfigured: !!(llmCtx?.llm?.stream),
       };
     },
 
@@ -368,7 +363,7 @@ export function createApiRouter({ store, composioClient, config, llmCtx, sendCar
         });
 
         // Get LLM response
-        const response = await callLLM(llmContext, session.messages, sessionId);
+        const response = await callLLM(llmCtx, session.messages, sessionId);
 
         // Add assistant message
         session.messages.push({ role: 'assistant', content: response.text });

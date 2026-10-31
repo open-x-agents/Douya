@@ -695,57 +695,33 @@ export function createApiRouter(ctx) {
         const { runAggregationPipeline } = await import('./aggregation.js');
         const brief = await runAggregationPipeline(client, activeAccounts, llm);
 
-        // Merge/dedupe with existing cards in store
+        // CRITICAL: Cards are append/merge-only, NEVER wiped
+        // Store.save() now handles merging internally
         const state = store.get();
-        const existingCards = state.cards || [];
-        const existingIds = new Set(existingCards.map(c => c.sourceId).filter(Boolean));
         
-        // Dedupe new cards first (within the batch)
-        const seenInBatch = new Set();
-        const uniqueNewCards = [];
-        for (const card of brief.cards) {
-          if (card.sourceId && !seenInBatch.has(card.sourceId) && !existingIds.has(card.sourceId)) {
-            seenInBatch.add(card.sourceId);
-            uniqueNewCards.push(card);
-          }
-        }
-        
-        // Update existing cards if content changed
-        const updatedCards = existingCards.map(existing => {
-          const match = brief.cards.find(c => c.sourceId === existing.sourceId);
-          if (match && (match.title !== existing.title || match.body !== existing.body)) {
-            return {
-              ...existing,
-              title: match.title,
-              body: match.body,
-              url: match.url,
-              priority: match.priority,
-              blocks: match.blocks || existing.blocks,
-              updatedAt: new Date().toISOString(),
-            };
-          }
-          return existing;
-        });
-        
-        state.cards = [...updatedCards, ...uniqueNewCards];
+        // Just pass the new cards to store.save()
+        // Store will merge them with existing cards by sourceId
+        state.cards = brief.cards;
         state.lastDigest = {
           summary: brief.summary,
           generatedAt: new Date().toISOString(),
           itemCount: brief.cards.length,
-          newCardCount: uniqueNewCards.length,
           sources: activeAccounts.map(a => a.toolkit.slug),
         };
         
         await store.save(state);
+        
+        // Get final merged count
+        const finalState = store.get();
+        const newCardCount = finalState.cards.length - (state.cards?.length || 0);
 
         console.log(`[generateDigest] Generated brief: ${brief.summary}`);
-        console.log(`[generateDigest] Added ${uniqueNewCards.length} new cards, updated ${brief.cards.length - uniqueNewCards.length} existing`);
+        console.log(`[generateDigest] Total cards in store: ${finalState.cards.length} (added ${newCardCount >= 0 ? newCardCount : 'and updated'})`);
 
         return {
           success: true,
           summary: brief.summary,
-          newCardCount: uniqueNewCards.length,
-          totalCardCount: state.cards.length,
+          totalCardCount: finalState.cards.length,
           timestamp: state.lastDigest.generatedAt,
         };
       } catch (err) {

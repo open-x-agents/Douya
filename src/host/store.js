@@ -44,8 +44,13 @@ export function createStore(path) {
     path,
     async load() {
       try {
-        state = normalizeState(JSON.parse(await readFile(path, 'utf8')))
-      } catch {
+        const data = await readFile(path, 'utf8')
+        state = normalizeState(JSON.parse(data))
+        console.log(`[Store] Loaded ${state.cards?.length || 0} cards from ${path}`)
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          console.warn(`[Store] Failed to load ${path}:`, err.message)
+        }
         state = emptyState()
       }
       return state
@@ -54,11 +59,43 @@ export function createStore(path) {
       return state
     },
     async save(next) {
-      state = { ...normalizeState(next), revision: (next?.revision ?? state.revision ?? 0) + 1 }
+      // CRITICAL: Merge with existing state, NEVER replace
+      const existing = state
+      
+      // Merge cards: update existing by sourceId, add new
+      const existingCardsMap = new Map((existing.cards || []).map(c => [c.sourceId, c]))
+      const incomingCards = next.cards || []
+      
+      for (const card of incomingCards) {
+        if (card.sourceId && existingCardsMap.has(card.sourceId)) {
+          // UPDATE existing card: keep id and createdAt, update rest
+          const existingCard = existingCardsMap.get(card.sourceId)
+          existingCardsMap.set(card.sourceId, {
+            ...card,
+            id: existingCard.id,
+            createdAt: existingCard.createdAt,
+            updatedAt: new Date().toISOString(),
+          })
+        } else {
+          // ADD new card
+          existingCardsMap.set(card.sourceId || card.id, card)
+        }
+      }
+      
+      state = { 
+        ...existing,
+        ...next, 
+        cards: Array.from(existingCardsMap.values()),
+        revision: (next?.revision ?? existing.revision ?? 0) + 1 
+      }
+      
+      // Atomic write: tmp file then rename
       await mkdir(dirname(path), { recursive: true })
       const temporary = `${path}.${randomUUID()}.tmp`
       await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
       await rename(temporary, path)
+      
+      console.log(`[Store] Saved ${state.cards.length} cards (revision ${state.revision})`)
       return state
     },
   }

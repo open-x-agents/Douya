@@ -80,14 +80,12 @@ export async function fetchFromSources(composioClient, activeSources) {
         console.log(`  - Merged PRs: ${mergedPRs.length}`);
         
       } else if (slug === 'gmail') {
-        // Gmail: paginate through ALL messages from last 24h
-        // Note: Gmail API query format, not search operators
-        const oneDayAgo = Math.floor(Date.now() / 1000) - (24 * 60 * 60);
+        // Gmail: paginate through last 24h with newer_than:1d (DOES work in Composio)
         
         const [unread, recent, important] = await Promise.all([
-          paginateGmail(composioClient, 'in:inbox is:unread'),
-          paginateGmail(composioClient, `in:inbox after:${oneDayAgo}`), // Use timestamp instead of date
-          paginateGmail(composioClient, 'in:inbox is:important'),
+          paginateGmail(composioClient, 'in:inbox is:unread newer_than:1d'),
+          paginateGmail(composioClient, 'in:inbox newer_than:1d'),
+          paginateGmail(composioClient, 'in:inbox is:important newer_than:1d'),
         ]);
         
         sourceData.gmail = {
@@ -103,7 +101,7 @@ export async function fetchFromSources(composioClient, activeSources) {
         }).length;
         
         console.log(`[Gmail] Fetched ${recent.length} recent messages`);
-        console.log(`  - Query 'is:unread' returned: ${unread.length}`);
+        console.log(`  - Query 'is:unread newer_than:1d' returned: ${unread.length}`);
         console.log(`  - Actual UNREAD labels in recent: ${actualUnread}`);
         console.log(`  - Important: ${important.length}`);
         
@@ -167,13 +165,16 @@ async function paginateGitHubSearch(composioClient, query) {
         page,
       });
       
+      // CRITICAL: Composio double-nests at response.data.data.items
+      const d = result?.data?.data ?? result?.data;
+      
       // Log total_count on first page
-      if (page === 1 && result?.data?.total_count !== undefined) {
-        totalCount = result.data.total_count;
+      if (page === 1 && d?.total_count !== undefined) {
+        totalCount = d.total_count;
         console.log(`  Query: "${query}" -> total_count: ${totalCount}`);
       }
       
-      const batch = result?.data?.items || [];
+      const batch = d?.items || [];
       if (batch.length === 0) break;
       
       items.push(...batch);
@@ -213,7 +214,10 @@ async function paginateGitHubIssues(composioClient) {
         state: 'open',
       });
       
-      const batch = result?.data?.issues || result?.data?.items || [];
+      // CRITICAL: Composio double-nests at response.data.data
+      const d = result?.data?.data ?? result?.data;
+      const batch = d?.issues || d?.items || [];
+      
       if (batch.length === 0) break;
       
       items.push(...batch);
@@ -235,20 +239,18 @@ async function paginateGitHubIssues(composioClient) {
 }
 
 /**
- * Helper: Paginate Gmail (uncapped, with 413 payload fix)
+ * Helper: Paginate Gmail with date-bounded queries
  */
 async function paginateGmail(composioClient, query) {
   const messages = [];
   let pageToken = null;
   const maxResults = 20; // Smaller pages to avoid 413 Payload Too Large
   
-  // Don't add newer_than - use timestamp in the after: query instead
-  
   while (true) {
     try {
       const params = {
         max_results: maxResults,
-        query: query,
+        query: query,  // Already includes newer_than:1d
         include_payload: false,  // Metadata only, no body
         verbose: false,          // Minimal response
       };
@@ -443,10 +445,10 @@ export function normalizeItems(sourceData) {
   // Important emails
   if (sourceData.gmail?.important) {
     for (const email of sourceData.gmail.important) {
-      // Gmail uses id (from API response)
-      const emailId = email.id || email.messageId || email.threadId;
+      // Gmail message structure: {messageId, threadId, subject, sender, ...}
+      const emailId = email.messageId || email.threadId;
       if (!emailId) {
-        console.warn('[normalizeItems] Gmail item missing ID:', Object.keys(email));
+        console.warn('[normalizeItems] Gmail item missing messageId/threadId:', Object.keys(email));
         continue;
       }
       items.push({
@@ -455,11 +457,11 @@ export function normalizeItems(sourceData) {
         sourceId: `gmail:${emailId}`,
         title: email.subject || '(no subject)',
         url: `https://mail.google.com/mail/u/0/#inbox/${emailId}`,
-        body: `From: ${email.from || 'unknown'}`,
-        createdAt: email.internalDate ? new Date(parseInt(email.internalDate)).toISOString() : new Date().toISOString(),
+        body: `From: ${email.sender || 'unknown'}`,
+        createdAt: email.messageTimestamp ? new Date(parseInt(email.messageTimestamp)).toISOString() : new Date().toISOString(),
         metadata: {
-          from: email.from,
-          snippet: email.snippet,
+          from: email.sender,
+          snippet: email.preview,
           labelIds: email.labelIds || [],
         },
       });
@@ -469,7 +471,7 @@ export function normalizeItems(sourceData) {
   // Unread emails (lower priority)
   if (sourceData.gmail?.unread) {
     for (const email of sourceData.gmail.unread.slice(0, 20)) {
-      const emailId = email.id || email.messageId || email.threadId;
+      const emailId = email.messageId || email.threadId;
       if (!emailId) continue;
       
       if (!items.find(i => i.sourceId === `gmail:${emailId}`)) {
@@ -479,11 +481,11 @@ export function normalizeItems(sourceData) {
           sourceId: `gmail:${emailId}`,
           title: email.subject || '(no subject)',
           url: `https://mail.google.com/mail/u/0/#inbox/${emailId}`,
-          body: `From: ${email.from || 'unknown'}`,
-          createdAt: email.internalDate ? new Date(parseInt(email.internalDate)).toISOString() : new Date().toISOString(),
+          body: `From: ${email.sender || 'unknown'}`,
+          createdAt: email.messageTimestamp ? new Date(parseInt(email.messageTimestamp)).toISOString() : new Date().toISOString(),
           metadata: {
-            from: email.from,
-            snippet: email.snippet,
+            from: email.sender,
+            snippet: email.preview,
             labelIds: email.labelIds || [],
           },
         });
@@ -494,7 +496,7 @@ export function normalizeItems(sourceData) {
   // Recent emails (for clustering)
   if (sourceData.gmail?.recent) {
     for (const email of sourceData.gmail.recent) {
-      const emailId = email.id || email.messageId || email.threadId;
+      const emailId = email.messageId || email.threadId;
       if (!emailId) continue;
       
       // Skip if already added as important/unread
@@ -506,11 +508,11 @@ export function normalizeItems(sourceData) {
         sourceId: `gmail:${emailId}`,
         title: email.subject || '(no subject)',
         url: `https://mail.google.com/mail/u/0/#inbox/${emailId}`,
-        body: `From: ${email.from || 'unknown'}`,
-        createdAt: email.internalDate ? new Date(parseInt(email.internalDate)).toISOString() : new Date().toISOString(),
+        body: `From: ${email.sender || 'unknown'}`,
+        createdAt: email.messageTimestamp ? new Date(parseInt(email.messageTimestamp)).toISOString() : new Date().toISOString(),
         metadata: {
-          from: email.from,
-          snippet: email.snippet,
+          from: email.sender,
+          snippet: email.preview,
           labelIds: email.labelIds || [],
         },
       });
@@ -570,12 +572,23 @@ export function dedupeItems(items) {
   const deduped = [];
   let skippedCount = 0;
   
-  // Log a sample of sourceIds
+  // Log sample sourceIds (first 3 with actual values)
   if (items.length > 0) {
-    console.log(`[dedupeItems] Sample sourceIds (first 3):`);
-    items.slice(0, 3).forEach(item => {
-      console.log(`  - ${item.sourceId} (${item.source}:${item.type})`);
-    });
+    console.log(`[dedupeItems] Sample sourceIds from ${items.length} items:`);
+    let sampleCount = 0;
+    for (const item of items) {
+      if (sampleCount >= 3) break;
+      if (item.sourceId) {
+        console.log(`  - sourceId="${item.sourceId}" source="${item.source}" type="${item.type}" title="${item.title?.substring(0, 40)}"`);
+        sampleCount++;
+      }
+    }
+    if (sampleCount === 0) {
+      console.warn(`[dedupeItems] WARNING: First 10 items have no sourceId!`);
+      items.slice(0, 10).forEach((item, i) => {
+        console.warn(`  Item ${i}: keys=${Object.keys(item).join(',')}`);
+      });
+    }
   }
   
   for (const item of items) {
@@ -583,7 +596,7 @@ export function dedupeItems(items) {
     const key = item.sourceId;
     
     if (!key || key === 'undefined' || key.includes('undefined')) {
-      console.warn(`[dedupeItems] Item with invalid sourceId:`, item.sourceId, item.title?.substring(0, 50));
+      console.warn(`[dedupeItems] Item with invalid sourceId: "${item.sourceId}" title="${item.title?.substring(0, 50)}"`);
       skippedCount++;
       continue;
     }

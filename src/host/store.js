@@ -20,6 +20,9 @@ export function emptyState() {
     days: {},
     sources: {},
     week: [],
+    // The two preferences the panel's bad states read (#15): how long a day may be, and
+    // whether a weekend is quiet. Read-only for the panel, like the three keys above.
+    prefs: {},
   }
 }
 
@@ -41,6 +44,7 @@ export function normalizeState(raw) {
     days: isRecord(raw.days) ? raw.days : {},
     sources: isRecord(raw.sources) ? raw.sources : {},
     week: Array.isArray(raw.week) ? raw.week : [],
+    prefs: isRecord(raw.prefs) ? raw.prefs : {},
   }
 }
 

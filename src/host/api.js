@@ -700,42 +700,43 @@ export function createApiRouter(ctx) {
         }
 
         // Get all connected accounts from Composio v3
-        const accounts = await client.getConnectedAccounts();
+        const result = await client.getConnectedAccounts();
+        const accounts = result?.items || [];
         
         // Build map of ACTIVE connections by toolkit.slug
         const activeConnections = new Map();
-        if (accounts && Array.isArray(accounts)) {
-          accounts.forEach(account => {
-            // Only include ACTIVE connections, skip INITIATED
-            if (account.status === 'ACTIVE' && account.toolkit?.slug) {
-              const slug = account.toolkit.slug;
-              
-              // Extract real account identity if available
-              let identity = account.user_id || 'default';
-              
-              // Try to get more specific identity from account data
-              if (account.account_display_name) {
-                identity = account.account_display_name;
-              } else if (account.user_info?.login) {
-                identity = account.user_info.login;  // GitHub login
-              } else if (account.user_info?.email) {
-                identity = account.user_info.email;  // Gmail address
-              } else if (account.metadata?.username) {
-                identity = account.metadata.username;
-              }
-              
-              // Only store first ACTIVE connection per toolkit (dedupe)
-              if (!activeConnections.has(slug)) {
-                activeConnections.set(slug, {
-                  connectionId: account.id,
-                  identity,
-                  connectedAt: account.createdAt,
-                  status: account.status,
-                });
-              }
+        accounts.forEach(account => {
+          // Only include ACTIVE connections, skip INITIATED
+          if (account.status === 'ACTIVE' && account.toolkit?.slug) {
+            const slug = account.toolkit.slug;
+            
+            // Extract real account identity if available
+            let identity = account.user_id || 'default';
+            
+            // Try to get more specific identity from account data
+            if (account.account_display_name) {
+              identity = account.account_display_name;
+            } else if (account.user_info?.login) {
+              identity = account.user_info.login;  // GitHub login
+            } else if (account.user_info?.email) {
+              identity = account.user_info.email;  // Gmail address
+            } else if (account.metadata?.username) {
+              identity = account.metadata.username;
+            } else if (account.metadata?.email) {
+              identity = account.metadata.email;
             }
-          });
-        }
+            
+            // Only store first ACTIVE connection per toolkit (dedupe)
+            if (!activeConnections.has(slug)) {
+              activeConnections.set(slug, {
+                connectionId: account.id,
+                identity,
+                connectedAt: account.createdAt,
+                status: account.status,
+              });
+            }
+          }
+        });
 
         // Map supported apps with connection status
         const sources = COMPOSIO_APPS.map(app => {

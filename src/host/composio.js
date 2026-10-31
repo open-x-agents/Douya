@@ -320,6 +320,11 @@ function buildDigestCard(digest) {
     elements,
   };
 }
+
+/**
+ * Schedule daily digest push
+ */
+export function scheduleDailyDigest(config, callback) {
   const [hour, minute] = (config.digestSchedule || '08:00').split(':').map(Number);
   
   function checkAndRun() {

@@ -1792,3 +1792,159 @@ JSON: {
     updatedAt: new Date().toISOString(),
   };
 }
+
+/**
+ * Generate achievements tile with streak and contribution heatmap
+ */
+function generateAchievementsTile(sourceData, items) {
+  const githubItems = sourceData.github?.all || [];
+  
+  // Calculate total merged PRs
+  const mergedPRs = githubItems.filter(i => i.state === 'closed' && i.merged_at).length;
+  
+  // Calculate streak (consecutive days with activity)
+  const activityDates = new Set();
+  items.forEach(item => {
+    if (item.metadata?.updated_at) {
+      const date = new Date(item.metadata.updated_at).toISOString().split('T')[0];
+      activityDates.add(date);
+    }
+  });
+  
+  let streak = 0;
+  const today = new Date();
+  for (let i = 0; i < 365; i++) {
+    const checkDate = new Date(today);
+    checkDate.setDate(checkDate.getDate() - i);
+    const dateStr = checkDate.toISOString().split('T')[0];
+    if (activityDates.has(dateStr)) {
+      streak++;
+    } else if (i > 0) {
+      break; // Streak broken
+    }
+  }
+  
+  // Build 8-week contribution heatmap data
+  const heatmapData = [];
+  for (let week = 0; week < 8; week++) {
+    const weekData = [];
+    for (let day = 0; day < 7; day++) {
+      const checkDate = new Date(today);
+      checkDate.setDate(checkDate.getDate() - ((7 - week) * 7 - day));
+      const dateStr = checkDate.toISOString().split('T')[0];
+      
+      const count = items.filter(item => {
+        const itemDate = item.metadata?.updated_at ? 
+          new Date(item.metadata.updated_at).toISOString().split('T')[0] : null;
+        return itemDate === dateStr;
+      }).length;
+      
+      weekData.push({ date: dateStr, count });
+    }
+    heatmapData.push(weekData);
+  }
+  
+  if (mergedPRs === 0 && streak === 0) return null; // Skip if no data
+  
+  return {
+    id: `card_achievements_${Date.now()}`,
+    type: 'achievements-tile',
+    title: '成就统计',
+    body: `连续活跃 ${streak} 天，已合并 ${mergedPRs} 个 PR`,
+    source: 'system',
+    sourceId: `achievements:${new Date().toISOString().split('T')[0]}`,
+    priority: 'medium',
+    status: 'active',
+    size: 'wide',
+    blocks: [
+      {
+        type: 'stat-row',
+        stats: [
+          { label: '已合并 PR', value: mergedPRs, color: '#00d084' },
+          { label: '连续活跃天数', value: streak, color: '#4a6cf7' },
+        ],
+      },
+      {
+        type: 'heatmap',
+        data: heatmapData,
+        label: '最近 8 周贡献',
+      },
+    ],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Generate inbox overview with category donut and top senders bar
+ */
+function generateInboxOverview(sourceData) {
+  const emails = sourceData.gmail?.all || [];
+  
+  if (emails.length === 0) return null;
+  
+  // Categorize emails
+  const categories = {
+    github: 0,
+    newsletters: 0,
+    personal: 0,
+  };
+  
+  const senders = {};
+  
+  emails.forEach(email => {
+    const sender = email.from || 'unknown';
+    const subject = email.subject || '';
+    
+    // Track sender
+    senders[sender] = (senders[sender] || 0) + 1;
+    
+    // Categorize
+    if (sender.includes('notifications@github.com') || subject.match(/\[[\w-]+\/[\w-]+\]/)) {
+      categories.github++;
+    } else if (isNewsletter(sender, subject)) {
+      categories.newsletters++;
+    } else {
+      categories.personal++;
+    }
+  });
+  
+  // Top 5 senders
+  const topSenders = Object.entries(senders)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([sender, count]) => ({
+      label: extractSenderName(sender),
+      value: count,
+    }));
+  
+  return {
+    id: `card_inbox_${Date.now()}`,
+    type: 'email-categories',
+    title: '收件箱概览',
+    body: `共 ${emails.length} 封邮件，来自 ${Object.keys(senders).length} 个发件人`,
+    source: 'gmail',
+    sourceId: `inbox-overview:${new Date().toISOString().split('T')[0]}`,
+    priority: 'low',
+    status: 'active',
+    size: 'normal',
+    blocks: [
+      {
+        type: 'chart',
+        chartType: 'donut',
+        data: [categories.github, categories.newsletters, categories.personal].filter(v => v > 0),
+        labels: ['GitHub', 'Newsletter', '个人邮件'].filter((_, i) => 
+          [categories.github, categories.newsletters, categories.personal][i] > 0
+        ),
+      },
+      {
+        type: 'chart',
+        chartType: 'bar',
+        data: topSenders.map(s => s.value),
+        labels: topSenders.map(s => s.label),
+      },
+    ],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}

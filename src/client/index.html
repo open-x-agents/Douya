@@ -61,32 +61,37 @@
   .card .meta{font-size:11.5px;color:var(--ink3);margin-top:8px}
   .card .actions{display:flex;gap:8px;margin-top:12px}
   
-  /* Windows 8 style tile grid */
+  /* Windows 8 style tile grid with glassmorphism */
+  body{background:linear-gradient(135deg,#f5f7fa 0%,#e3e8f0 100%);min-height:100vh}
+  
   .cards-grid{
     display:grid;
-    grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));
-    grid-auto-rows:180px;
+    grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));
+    grid-auto-rows:200px;
     grid-auto-flow:dense;
-    gap:12px;
+    gap:16px;
     margin-top:24px;
+    padding-bottom:100px;
   }
-  @media (max-width:1200px){.cards-grid{grid-template-columns:repeat(auto-fill, minmax(180px, 1fr));grid-auto-rows:160px}}
-  @media (max-width:760px){.cards-grid{grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));grid-auto-rows:140px}}
-  @media (max-width:480px){.cards-grid{grid-template-columns:1fr 1fr;grid-auto-rows:120px}}
+  @media (max-width:1200px){.cards-grid{grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));grid-auto-rows:180px}}
+  @media (max-width:760px){.cards-grid{grid-template-columns:repeat(auto-fill, minmax(180px, 1fr));grid-auto-rows:160px}}
+  @media (max-width:480px){.cards-grid{grid-template-columns:1fr 1fr;grid-auto-rows:140px;gap:12px}}
   
   .tile{
-    background:#fff;
-    border-radius:10px;
-    padding:16px;
-    transition:.25s var(--ease);
+    background:rgba(255,255,255,.85);
+    backdrop-filter:blur(12px) saturate(180%);
+    border-radius:16px;
+    padding:18px;
+    transition:.28s cubic-bezier(0.4, 0, 0.2, 1);
     cursor:pointer;
     display:flex;
     flex-direction:column;
     overflow:hidden;
     position:relative;
-    border:2px solid transparent;
+    border:1px solid rgba(255,255,255,.6);
+    box-shadow:0 4px 16px rgba(21,23,28,.08),inset 0 1px 0 rgba(255,255,255,.8);
   }
-  .tile:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(21,23,28,.12)}
+  .tile:hover{transform:translateY(-3px) scale(1.01);box-shadow:0 12px 28px rgba(21,23,28,.15),inset 0 1px 0 rgba(255,255,255,.9)}
   
   /* Tile sizes */
   .tile.small{grid-column:span 1;grid-row:span 1}
@@ -98,27 +103,105 @@
     .tile.large{grid-column:span 2;grid-row:span 2}
   }
   
-  /* Tile colors by type/priority */
-  .tile.hero{background:linear-gradient(135deg,#4a6cf7 0%,#3d5ce8 100%);color:#fff;border-color:rgba(255,255,255,.2)}
+  /* Glassmorphism tile colors by type */
+  .tile.hero{
+    background:linear-gradient(135deg,rgba(74,108,247,.95) 0%,rgba(61,92,232,.95) 100%);
+    backdrop-filter:blur(16px) saturate(180%);
+    color:#fff;
+    border-color:rgba(255,255,255,.3);
+    box-shadow:0 8px 32px rgba(74,108,247,.25),inset 0 1px 0 rgba(255,255,255,.4);
+  }
   .tile.hero *{color:#fff}
-  .tile.timetable{background:linear-gradient(135deg,#2f9e6b 0%,#27845a 100%);color:#fff;border-color:rgba(255,255,255,.2)}
-  .tile.timetable *{color:#fff}
-  .tile.project-cluster{background:linear-gradient(135deg,#eef2ff 0%,#e0e7ff 100%);border-color:var(--blue-line)}
-  .tile.email-cluster{background:linear-gradient(135deg,#fdf4e6 0%,#f9ead1 100%);border-color:#efd9a8}
-  .tile.calendar-cluster{background:linear-gradient(135deg,#eaf7f0 0%,#d5efe2 100%);border-color:#b8e2cf}
-  .tile.newsletter-cluster{background:var(--gray-soft);border-color:var(--line)}
-  .tile.urgent{border-color:var(--red);border-width:3px}
   
-  .tile-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;gap:8px}
-  .tile-title{font-size:15px;font-weight:700;letter-spacing:-.01em;line-height:1.3;margin:0;word-break:break-word}
-  .tile-subtitle{font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:.08em;margin:2px 0 8px;font-weight:600}
-  .tile-body{font-size:12.5px;line-height:1.5;opacity:.85;margin:4px 0;flex:1;overflow:hidden}
+  .tile.timetable{
+    background:linear-gradient(135deg,rgba(47,158,107,.92) 0%,rgba(39,132,90,.92) 100%);
+    backdrop-filter:blur(16px) saturate(180%);
+    color:#fff;
+    border-color:rgba(255,255,255,.3);
+    box-shadow:0 8px 32px rgba(47,158,107,.25),inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .tile.timetable *{color:#fff}
+  
+  .tile.project-cluster{
+    background:linear-gradient(135deg,rgba(238,242,255,.95) 0%,rgba(224,231,255,.95) 100%);
+    backdrop-filter:blur(12px) saturate(180%);
+    border-color:rgba(74,108,247,.2);
+    box-shadow:0 4px 16px rgba(74,108,247,.1),inset 0 1px 0 rgba(255,255,255,.9);
+  }
+  
+  .tile.email-cluster,
+  .tile.email-categories{
+    background:linear-gradient(135deg,rgba(253,244,230,.95) 0%,rgba(249,234,209,.95) 100%);
+    backdrop-filter:blur(12px) saturate(180%);
+    border-color:rgba(255,166,0,.2);
+    box-shadow:0 4px 16px rgba(255,166,0,.1),inset 0 1px 0 rgba(255,255,255,.9);
+  }
+  
+  .tile.calendar-cluster{
+    background:linear-gradient(135deg,rgba(234,247,240,.95) 0%,rgba(213,239,226,.95) 100%);
+    backdrop-filter:blur(12px) saturate(180%);
+    border-color:rgba(47,158,107,.2);
+    box-shadow:0 4px 16px rgba(47,158,107,.1),inset 0 1px 0 rgba(255,255,255,.9);
+  }
+  
+  .tile.newsletter-cluster{
+    background:rgba(250,250,252,.95);
+    backdrop-filter:blur(12px) saturate(180%);
+    border-color:rgba(0,0,0,.08);
+  }
+  
+  .tile.achievements-tile{
+    background:linear-gradient(135deg,rgba(138,43,226,.92) 0%,rgba(106,27,154,.92) 100%);
+    backdrop-filter:blur(16px) saturate(180%);
+    color:#fff;
+    border-color:rgba(255,255,255,.3);
+    box-shadow:0 8px 32px rgba(138,43,226,.25),inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .tile.achievements-tile *{color:#fff}
+  
+  .tile.urgent{border-color:rgba(239,68,68,.6);border-width:2px;box-shadow:0 0 0 3px rgba(239,68,68,.1),0 4px 16px rgba(239,68,68,.2)}
+  
+  .tile-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;gap:8px}
+  .tile-title{font-size:15.5px;font-weight:700;letter-spacing:-.015em;line-height:1.3;margin:0;word-break:break-word}
+  .tile-subtitle{font-size:10.5px;color:var(--ink3);text-transform:uppercase;letter-spacing:.1em;margin:2px 0 6px;font-weight:700;opacity:.8}
+  .tile-body{font-size:13px;line-height:1.55;opacity:.9;margin:4px 0 8px;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
   
   /* Visual blocks in tiles */
-  .tile-blocks{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px;align-items:center}
-  .tile-blocks .stat-block{display:flex;flex-direction:column;align-items:flex-start;min-width:0}
-  .tile-blocks .stat-block .value{font-size:24px;font-weight:700;line-height:1;letter-spacing:-.02em}
-  .tile-blocks .stat-block .label{font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+  .tile-blocks{display:flex;flex-direction:column;gap:10px;margin:10px 0;flex:1;min-height:0}
+  
+  /* Stat blocks */
+  .tile-blocks .stat-block{display:flex;align-items:baseline;gap:4px}
+  .tile-blocks .stat-block .value{font-size:28px;font-weight:800;line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+  .tile-blocks .stat-block .label{font-size:11px;color:var(--ink3);font-weight:600;opacity:.85}
+  
+  /* Stat row (colored stats) */
+  .stat-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .stat-row-item{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+  .stat-row-item .value{font-size:20px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+  .stat-row-item .label{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;opacity:.8}
+  
+  /* Achievement rings */
+  .achievement-rings{display:flex;gap:16px;align-items:center;justify-content:center;margin:12px 0}
+  .achievement-ring{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .achievement-ring svg{width:64px;height:64px}
+  .achievement-ring .label{font-size:10px;font-weight:600;text-align:center;opacity:.9;line-height:1.3}
+  
+  /* Sparkline */
+  .sparkline-container{display:flex;flex-direction:column;gap:4px}
+  .sparkline-container .label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;opacity:.75}
+  .sparkline-container svg{width:100%;height:32px}
+  
+  /* Avatar stack */
+  .avatars{display:flex;align-items:center}
+  .avatars .avatar{width:28px;height:28px;border-radius:50%;border:2px solid #fff;margin-left:-8px;overflow:hidden;background:var(--gray-soft)}
+  .avatars .avatar:first-child{margin-left:0}
+  .avatars .avatar img{width:100%;height:100%;object-fit:cover}
+  
+  /* Link list */
+  .link-list{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+  .link-list-item{font-size:11.5px;line-height:1.4;padding:6px 8px;background:rgba(255,255,255,.4);border-radius:6px;
+    text-decoration:none;color:inherit;transition:.2s;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid rgba(0,0,0,.08)}
+  .link-list-item:hover{background:rgba(255,255,255,.7);transform:translateX(2px)}
   
   .tile-blocks .tags{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
   .tile-blocks .tag{font-size:10px;padding:3px 8px;border-radius:999px;font-weight:600;letter-spacing:.03em;white-space:nowrap;flex-shrink:0}
@@ -145,13 +228,65 @@
   .timeline-event .time{font-weight:700;font-variant-numeric:tabular-nums;font-family:ui-monospace,monospace;color:var(--ink)}
   .timeline-event .event-title{line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   
-  /* Timetable strip */
-  .timetable-strip{display:flex;height:40px;border-radius:6px;overflow:hidden;margin:12px 0;position:relative}
-  .timetable-block{flex:1;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:rgba(255,255,255,.9);
-    border-right:1px solid rgba(255,255,255,.3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px}
-  .timetable-block.fixed{background:rgba(255,255,255,.25)}
-  .timetable-block.suggested{background:rgba(255,255,255,.15);font-style:italic;opacity:.8}
-  .timetable-now{position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 4px rgba(255,255,255,.8);z-index:1}
+  /* Timetable strip (24h horizontal) */
+  .timetable-strip{
+    display:flex;
+    height:48px;
+    border-radius:8px;
+    overflow:hidden;
+    margin:10px 0;
+    position:relative;
+    background:rgba(255,255,255,.15);
+    box-shadow:inset 0 2px 8px rgba(0,0,0,.1);
+  }
+  .timetable-block{
+    flex:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:9.5px;
+    font-weight:700;
+    color:rgba(255,255,255,.95);
+    border-right:1px solid rgba(255,255,255,.2);
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    padding:0 6px;
+    text-align:center;
+    line-height:1.2;
+  }
+  .timetable-block.fixed{
+    background:rgba(255,255,255,.35);
+    box-shadow:inset 0 1px 3px rgba(0,0,0,.1);
+  }
+  .timetable-block.suggested{
+    background:rgba(255,255,255,.12);
+    font-style:italic;
+    opacity:.85;
+  }
+  .timetable-block:last-child{border-right:none}
+  .timetable-now{
+    position:absolute;
+    top:-2px;
+    bottom:-2px;
+    width:3px;
+    background:#fff;
+    box-shadow:0 0 6px rgba(255,255,255,.9),0 0 12px rgba(255,255,255,.5);
+    z-index:10;
+    border-radius:999px;
+  }
+  .timetable-now::before{
+    content:'';
+    position:absolute;
+    top:0;
+    left:50%;
+    transform:translateX(-50%);
+    width:8px;
+    height:8px;
+    background:#fff;
+    border-radius:50%;
+    box-shadow:0 0 8px rgba(255,255,255,.9);
+  }
   
   /* Tile actions */
   .tile-actions{display:flex;gap:6px;margin-top:auto;padding-top:8px}
@@ -886,6 +1021,98 @@
               `;
             }
             tileHtml += '</div>';
+          } else if (block.type === 'achievement-rings') {
+            // SVG achievement rings
+            tileHtml += '<div class="achievement-rings">';
+            for (const ring of (block.rings || [])) {
+              const pct = ring.max > 0 ? (ring.value / ring.max) : 0;
+              const circumference = 2 * Math.PI * 28;
+              const offset = circumference - (pct * circumference);
+              tileHtml += `
+                <div class="achievement-ring">
+                  <svg viewBox="0 0 64 64">
+                    <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="6"/>
+                    <circle cx="32" cy="32" r="28" fill="none" stroke="${ring.color}" stroke-width="6"
+                            stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"
+                            transform="rotate(-90 32 32)" stroke-linecap="round"/>
+                    <text x="32" y="38" font-size="18" font-weight="800" text-anchor="middle" fill="currentColor">${ring.value}</text>
+                  </svg>
+                  <div class="label">${escapeHtml(ring.label)}</div>
+                </div>
+              `;
+            }
+            tileHtml += '</div>';
+          } else if (block.type === 'stat-row') {
+            // Stat row with colored values
+            tileHtml += '<div class="stat-row">';
+            for (const stat of (block.stats || [])) {
+              tileHtml += `
+                <div class="stat-row-item" style="color:${stat.color}">
+                  <div class="value">${stat.value}</div>
+                  <div class="label">${escapeHtml(stat.label)}</div>
+                </div>
+              `;
+            }
+            tileHtml += '</div>';
+          } else if (block.type === 'sparkline') {
+            // 7-day activity sparkline
+            const data = block.data || [];
+            const max = Math.max(...data, 1);
+            const points = data.map((v, i) => {
+              const x = (i / (data.length - 1)) * 100;
+              const y = 28 - ((v / max) * 24);
+              return `${x},${y}`;
+            }).join(' ');
+            tileHtml += `
+              <div class="sparkline-container">
+                <div class="label">${escapeHtml(block.label)}</div>
+                <svg viewBox="0 0 100 32">
+                  <polyline points="${points}" fill="none" stroke="currentColor" stroke-width="2" 
+                            opacity=".7" stroke-linecap="round" stroke-linejoin="round"/>
+                  ${data.map((v, i) => {
+                    const x = (i / (data.length - 1)) * 100;
+                    const y = 28 - ((v / max) * 24);
+                    return `<circle cx="${x}" cy="${y}" r="2.5" fill="currentColor" opacity=".8"/>`;
+                  }).join('')}
+                </svg>
+              </div>
+            `;
+          } else if (block.type === 'avatars') {
+            // Contributor avatars
+            tileHtml += '<div class="avatars">';
+            for (const url of (block.urls || []).slice(0, 5)) {
+              tileHtml += `<div class="avatar"><img src="${escapeHtml(url)}" alt="avatar" loading="lazy" onerror="this.style.display='none'"/></div>`;
+            }
+            tileHtml += '</div>';
+          } else if (block.type === 'link-list') {
+            // Top 3 item links
+            tileHtml += '<div class="link-list">';
+            for (const link of (block.links || []).slice(0, 3)) {
+              tileHtml += `
+                <a href="${escapeHtml(link.url)}" target="_blank" class="link-list-item" title="${escapeHtml(link.title)}">
+                  ${escapeHtml(link.title)}
+                </a>
+              `;
+            }
+            tileHtml += '</div>';
+          } else if (block.type === 'heatmap') {
+            // GitHub-style contribution heatmap
+            const heatmapData = block.data || [];
+            tileHtml += `
+              <div style="margin:8px 0">
+                <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;opacity:.75;margin-bottom:6px">${escapeHtml(block.label || '贡献')}</div>
+                <svg viewBox="0 0 ${heatmapData.length * 14} 96" style="width:100%;height:96px">
+                  ${heatmapData.map((week, weekIdx) => 
+                    week.map((day, dayIdx) => {
+                      const x = weekIdx * 14 + 1;
+                      const y = dayIdx * 14 + 1;
+                      const opacity = day.count === 0 ? 0.1 : Math.min(day.count / 5, 1) * 0.8 + 0.2;
+                      return `<rect x="${x}" y="${y}" width="12" height="12" rx="2" fill="currentColor" opacity="${opacity}"/>`;
+                    }).join('')
+                  ).join('')}
+                </svg>
+              </div>
+            `;
           } else if (block.type === 'timetable') {
             // Timetable strip
             const allBlocks = [...(block.fixedBlocks || []), ...(block.suggestedBlocks || [])].sort((a, b) => {

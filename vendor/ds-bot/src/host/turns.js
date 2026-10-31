@@ -422,6 +422,7 @@ export function install(rt) {
       via: 'user',
     })
     const queued = { text, ...(images.length > 0 ? { images } : {}), ...(files.length > 0 ? { files } : {}) }
+    const messageId = typeof data?.id === 'string' && data.id !== '' ? data.id : undefined
     if (routeTakesEffect(routed)) {
       composerSteerPending.set(roomId, rememberComposerSteer(paired.pending, text, via))
       rt.noteSteeredRoomLine?.(roomId, text)
@@ -429,7 +430,6 @@ export function install(rt) {
       // synthesizes group_relay, posts an empty User row, and the admin speaks.
       rt.suppressRelayText?.(roomId, text)
       rt.holdRoomRoute?.(roomId)
-      const messageId = typeof data?.id === 'string' && data.id !== '' ? data.id : undefined
       void rt.applyRouteDecision?.(room, routed, { text: routed.text ?? text, files, ...(messageId !== undefined ? { id: messageId } : {}) }).catch(error => rt.warn('ds-bot: inbound route failed: %s', error))
       return
     }
@@ -447,7 +447,7 @@ export function install(rt) {
         if (canSteer) {
           composerSteerPending.set(roomId, rememberComposerSteer(paired.pending, text, via))
           rt.noteSteeredRoomLine?.(roomId, text)
-          void rt.acceptRoomSteer(room, decision.member, { text, files }).catch(error => rt.warn('ds-bot: group steer failed: %s', error))
+          void rt.acceptRoomSteer(room, decision.member, { text, files, ...(messageId !== undefined ? { messageId } : {}) }).catch(error => rt.warn('ds-bot: group steer failed: %s', error))
           return
         }
         if (via === 'splice') return

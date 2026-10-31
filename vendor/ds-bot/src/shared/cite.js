@@ -186,9 +186,61 @@ export function applyLogPointer(log, pointer, options = {}) {
 }
 
 /**
- * User sentences a room log's bot rows point at, plus the message ids on those rows.
- * Bot text is not a sentence.
- * @param {{ seq?: number, who?: string, kind?: string, text?: string, messageId?: string, quote?: { seq?: number, roomId?: string }, quotes?: { seq?: number, roomId?: string }[] }[]} [log]
+ * Mark the user row a steering reply is already showing. No bot line is required.
+ * @param {unknown[]} log
+ * @param {{ seq?: number, messageId?: string, text?: string }} [fields]
+ * @returns {{ changed: boolean, messageId?: string }}
+ */
+export function markSteeredRow(log, { seq, messageId, text } = {}) {
+  const rows = Array.isArray(log) ? log : []
+  let row
+  if (typeof seq === 'number' && Number.isFinite(seq)) {
+    row = rows.find(item => item?.seq === seq && item?.who === 'User' && item.kind == null)
+  }
+  if (row == null && typeof messageId === 'string' && messageId !== '') {
+    row = rows.find(item => item?.messageId === messageId && item?.who === 'User' && item.kind == null)
+  }
+  if (row == null && typeof text === 'string' && text !== '') {
+    for (let index = rows.length - 1; index >= 0; index -= 1) {
+      const item = rows[index]
+      if (item?.who === 'User' && item.kind == null && item.text === text) {
+        row = item
+        break
+      }
+    }
+  }
+  const passedId = typeof messageId === 'string' && messageId !== '' ? messageId : undefined
+  if (row == null) return { changed: false, ...(passedId !== undefined ? { messageId: passedId } : {}) }
+  let changed = row.steered !== true
+  if (changed) row.steered = true
+  // The later user/message uses this inbox id. Stamp it when the row was logged without one.
+  if (passedId !== undefined && row.messageId !== passedId && (typeof row.messageId !== 'string' || row.messageId === '')) {
+    row.messageId = passedId
+    changed = true
+  }
+  const id = typeof row.messageId === 'string' && row.messageId !== '' ? row.messageId : passedId
+  return { changed, ...(id !== undefined ? { messageId: id } : {}) }
+}
+
+/** Pending host bubble text, without the unread label the stylesheet paints after it. */
+export function steerCopyText(raw) {
+  return String(raw ?? '').replace(/\u00a0/g, ' ').replace(/\s*(?:未读|Not read yet)\s*$/u, '').trim()
+}
+
+/** True when this pending bubble repeats a sentence the round is already showing. */
+export function isPendingSteerCopy(raw, steeringTexts) {
+  const text = steerCopyText(raw)
+  const list = (Array.isArray(steeringTexts) ? steeringTexts : []).filter(item => typeof item === 'string' && item !== '')
+  if (text === '' || list.length === 0) return false
+  if (list.includes(text)) return true
+  // A clock or the unread label can sit on its own line under the sentence.
+  return text.split(/\n+/).map(line => steerCopyText(line)).some(line => line !== '' && list.includes(line))
+}
+
+/**
+ * User sentences a room log's bot rows point at, plus rows already shown as steering
+ * replies, and the message ids on those rows. Bot text is not a sentence.
+ * @param {{ seq?: number, who?: string, kind?: string, text?: string, messageId?: string, steered?: boolean, quote?: { seq?: number, roomId?: string }, quotes?: { seq?: number, roomId?: string }[] }[]} [log]
  * @param {string} [roomId]
  */
 export function citedFromLog(log, roomId) {
@@ -207,6 +259,9 @@ export function citedFromLog(log, roomId) {
       seenId.add(row.messageId)
       ids.push(row.messageId)
     }
+  }
+  for (const row of rows) {
+    if (row?.steered === true) add(row)
   }
   for (const line of rows) {
     const pointers = []

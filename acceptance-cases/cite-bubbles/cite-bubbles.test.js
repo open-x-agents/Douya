@@ -18,8 +18,10 @@ import {
   citeTexts,
   citedFromLog,
   hideCitedHistory,
+  isPendingSteerCopy,
   logPointer,
   logQuotes,
+  markSteeredRow,
   steerSentence,
 } from '../../vendor/ds-bot/src/shared/cite.js'
 
@@ -317,6 +319,78 @@ test('an in-round reply points at both steered sentences so each history bubble 
     ],
   }, steerCites)
   assert.deepEqual(citeTexts(late), [FIRST, FOLLOW])
+})
+
+test('an opening relay still running shows hi and 你们是谁 once each before anyone posts', () => {
+  const HI = 'hi'
+  const WHO = '你们是谁'
+  const hiId = 'bd93af0a-e491-4566-8bae-c72afc96f41d'
+  const whoId = 'd9d1524b-d566-4abc-9593-041f873387c9'
+  // Room log from the 21:14 accept: both user rows, no Chief line (still typing, then TIMEOUT).
+  const log = [
+    { seq: 1, who: 'User', text: HI, messageId: hiId },
+    { seq: 2, who: 'User', text: WHO, messageId: whoId },
+  ]
+  assert.deepEqual(citedFromLog(log, 'room'), { texts: [], ids: [] })
+  const hi = markSteeredRow(log, { seq: 1, messageId: hiId, text: HI })
+  const who = markSteeredRow(log, { seq: 2, messageId: whoId, text: WHO })
+  assert.equal(hi.changed, true)
+  assert.equal(hi.messageId, hiId)
+  assert.equal(who.changed, true)
+  assert.equal(who.messageId, whoId)
+  assert.equal(log[0].steered, true)
+  assert.equal(log[1].steered, true)
+  assert.equal(markSteeredRow(log, { seq: 1, messageId: hiId, text: HI }).changed, false)
+  const cited = citedFromLog(log, 'room')
+  assert.deepEqual(cited, { texts: [HI, WHO], ids: [hiId, whoId] })
+  assert.equal(hideCitedHistory({ text: HI, messageId: hiId, citedTexts: cited.texts, citedIds: cited.ids }), true)
+  assert.equal(hideCitedHistory({ text: WHO, messageId: whoId, citedTexts: cited.texts, citedIds: cited.ids }), true)
+  // A later send of the same words, with its own id, stays.
+  assert.equal(hideCitedHistory({ text: HI, messageId: 'later-hi', citedTexts: cited.texts, citedIds: cited.ids }), false)
+  const bare = [{ seq: 1, who: 'User', text: HI }]
+  const filled = markSteeredRow(bare, { seq: 1, messageId: hiId, text: HI })
+  assert.equal(filled.changed, true)
+  assert.equal(bare[0].messageId, hiId)
+  assert.deepEqual(citedFromLog(bare).ids, [hiId])
+  assert.deepEqual(markSteeredRow([], { messageId: hiId, text: HI }), { changed: false, messageId: hiId })
+  const botOnly = [{ seq: 1, who: 'Chief', botId: 'chief', text: HI }]
+  assert.equal(markSteeredRow(botOnly, { seq: 1, messageId: hiId, text: HI }).changed, false)
+  assert.equal(botOnly[0].steered, undefined)
+  const repeated = [
+    { seq: 1, who: 'User', text: HI, messageId: 'old' },
+    { seq: 3, who: 'User', text: HI, messageId: 'new' },
+  ]
+  assert.equal(markSteeredRow(repeated, { text: HI }).messageId, 'new')
+  assert.equal(repeated[0].steered, undefined)
+  assert.equal(repeated[1].steered, true)
+  assert.equal(isPendingSteerCopy('hi', [HI, WHO]), true)
+  assert.equal(isPendingSteerCopy('hi\u00a0未读', [HI, WHO]), true)
+  assert.equal(isPendingSteerCopy('你们是谁\n未读', [HI, WHO]), true)
+  assert.equal(isPendingSteerCopy('hi\n21:14', [HI, WHO]), true)
+  assert.equal(isPendingSteerCopy('Not read yet', [HI, WHO]), false)
+  assert.equal(isPendingSteerCopy('在干嘛', [HI, WHO]), false)
+  assert.equal(isPendingSteerCopy('hi', []), false)
+
+  const groups = source('vendor/ds-bot/src/host/groups.js')
+  const showAt = groups.indexOf('const showSteer = ')
+  const showEnd = groups.indexOf('const running = [...rt.roomProgress.values()]', showAt)
+  assert.ok(showAt >= 0 && showEnd > showAt)
+  const show = groups.slice(showAt, showEnd)
+  assert.ok(show.indexOf('replies.push(reply)') < show.indexOf('markSteeredRow'))
+  assert.ok(show.indexOf('markSteeredRow') < show.indexOf('dropSteeredInbox'))
+  assert.match(groups, /inbox\?\.remove\?\.\(messageId\)/)
+  const router = source('vendor/ds-bot/src/host/route-inbound.js')
+  const steerCase = router.slice(router.indexOf("case 'steer': {"), router.indexOf("case 'continue':", router.indexOf("case 'steer': {")))
+  assert.match(steerCase, /acceptRoomSteer\(room, member, \{ text, files, \.\.\.cite, \.\.\.\(messageId/)
+  const turns = source('vendor/ds-bot/src/host/turns.js')
+  assert.match(turns, /acceptRoomSteer\(room, decision\.member, \{ text, files, \.\.\.\(messageId/)
+  const cells = source('vendor/ds-bot/src/client/cells.js')
+  assert.match(cells, /useLayoutEffect\(\(\) => hidePendingSteerCopies/)
+  assert.match(cells, /data-steer-copy/)
+  assert.match(cells, /isPendingSteerCopy/)
+  const styles = source('vendor/ds-bot/src/client/styles.js')
+  assert.match(styles, /\[data-pending-steering\]\[data-steer-copy\]\{display:none!important\}/)
+  assert.match(styles, /_flowItem"\]:has\(\[data-pending-steering\]\[data-steer-copy\]\)/)
 })
 
 test('the late cite paints user bubbles and history hides a sentence that cite already shows', () => {

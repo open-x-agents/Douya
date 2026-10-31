@@ -721,7 +721,7 @@ export async function applyRouteDecision(rt, room, decision, message = {}) {
       }
       const member = memberFrom(room, decision)
       if (member != null && typeof rt.acceptRoomSteer === 'function') {
-        await rt.acceptRoomSteer(room, member, { text, files, ...cite })
+        await rt.acceptRoomSteer(room, member, { text, files, ...cite, ...(messageId !== undefined ? { messageId } : {}) })
         return decision
       }
       if (decision.sessionId != null && typeof rt.deliver === 'function') {

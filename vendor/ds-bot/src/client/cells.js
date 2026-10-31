@@ -21,7 +21,7 @@ import { partIndexOf, withBtwRows } from './btw-model.js'
 import { layoutOf, thinkingShown } from './themes.js'
 import { draftForDisplay } from '../shared/room-draft.js'
 import { anchoredCompletions, applyScroll, pinnedToBottom, projectRelay, scrollAction, scrollGroup } from '../shared/work-line-complete.js'
-import { citeTexts } from '../shared/cite.js'
+import { citeTexts, isPendingSteerCopy } from '../shared/cite.js'
 import { groupUserBubble } from '../host/group-steer.js'
 
 export { clockLabel }
@@ -320,6 +320,42 @@ const citedReply = (reply) => reply?.late === true && citeTexts(reply).length > 
 // quote of the same words would be a second copy.
 function coveredByLateCite(replies, text) {
   return replies.some(other => other?.late === true && citeTexts(other).includes(text))
+}
+
+// The round already paints these sentences. The host's unread pending bubble is
+// the same send sitting in the room inbox until the next step.
+function hidePendingSteerCopies(texts) {
+  if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return undefined
+  const list = Array.isArray(texts) ? texts : []
+  let frame = 0
+  const apply = () => {
+    frame = 0
+    for (const node of document.querySelectorAll('[data-pending-steering]')) {
+      // The steering row inside the relay is the copy that stays.
+      if (node.closest?.('.bt-group-replies') || node.querySelector?.('.bt-group-replies,[data-steering]')) continue
+      const duplicate = isPendingSteerCopy(node.textContent, list)
+      if (duplicate) {
+        if (node.getAttribute('data-steer-copy') !== '1') node.setAttribute('data-steer-copy', '1')
+      } else if (node.hasAttribute('data-steer-copy')) node.removeAttribute('data-steer-copy')
+    }
+  }
+  apply()
+  if (list.length === 0) return undefined
+  if (typeof document.querySelector !== 'function' || typeof MutationObserver !== 'function' || typeof requestAnimationFrame !== 'function') return undefined
+  const root = document.querySelector('[data-conversation-scroll]') ?? document.body
+  if (root == null) return undefined
+  const schedule = () => {
+    if (frame !== 0) return
+    frame = requestAnimationFrame(apply)
+  }
+  const observer = new MutationObserver(schedule)
+  observer.observe(root, { childList: true, subtree: true, characterData: true })
+  return () => {
+    observer.disconnect()
+    if (frame !== 0) cancelAnimationFrame(frame)
+    if (typeof document === 'undefined') return
+    for (const node of document.querySelectorAll('[data-pending-steering][data-steer-copy]')) node.removeAttribute('data-steer-copy')
+  }
 }
 
 export function stackReplies(replies) {
@@ -988,6 +1024,11 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
     scrollLock.current = next.lockedTop
     return undefined
   }, [completeKey, rawWorkingKey, sessionId])
+  const steeringTexts = projected.replies
+    .filter(reply => reply?.kind === 'steering' && typeof reply.text === 'string' && reply.text !== '')
+    .map(reply => reply.text)
+  const steeringKey = JSON.stringify(steeringTexts)
+  useLayoutEffect(() => hidePendingSteerCopies(JSON.parse(steeringKey)), [steeringKey])
   // Members speak one at a time. A live draft replaces the bare typing row.
   const pending = done || !live.speaking || (draft?.text && draft.botId === live.speaking) ? [] : [live.speaking]
   const speakerTool = useWork?.(work => work.bots?.[live.speaking]?.tool) ?? undefined

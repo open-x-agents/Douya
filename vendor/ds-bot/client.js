@@ -3588,6 +3588,8 @@ div:has(> nav [class*="_marks"]){display:none!important}
    the none fallback means no English can leak into a Chinese window. */
 [data-pending-steering]{flex-wrap:wrap}
 [data-pending-steering]::after{content:var(--bt-steer-unread,none);display:block;flex-basis:100%;width:100%;order:99;margin-top:4px;font-size:11px;line-height:14px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+[data-pending-steering][data-steer-copy]{display:none!important}
+[class*="_flowItem"]:has([data-pending-steering][data-steer-copy]){display:none!important}
 [data-chat-flow-kind=user] [class*="_userRow"]{flex-direction:row-reverse;align-items:center;justify-content:flex-start}
 [data-chat-flow-kind=user] [class*="_actions"]{display:flex!important;height:24px!important;gap:2px!important;opacity:0!important;visibility:hidden;transition:opacity .12s ease,visibility .12s!important;flex:none}
 [data-chat-flow-kind=user] [class*="_userRow"]:hover [class*="_actions"],[data-chat-flow-kind=user] [class*="_userRow"]:focus-within [class*="_actions"]{opacity:1!important;visibility:visible}
@@ -7993,6 +7995,45 @@ function applyLogPointer(log, pointer, options = {}) {
   }
   return -1;
 }
+function markSteeredRow(log, { seq, messageId, text } = {}) {
+  const rows2 = Array.isArray(log) ? log : [];
+  let row;
+  if (typeof seq === "number" && Number.isFinite(seq)) {
+    row = rows2.find((item) => item?.seq === seq && item?.who === "User" && item.kind == null);
+  }
+  if (row == null && typeof messageId === "string" && messageId !== "") {
+    row = rows2.find((item) => item?.messageId === messageId && item?.who === "User" && item.kind == null);
+  }
+  if (row == null && typeof text === "string" && text !== "") {
+    for (let index = rows2.length - 1; index >= 0; index -= 1) {
+      const item = rows2[index];
+      if (item?.who === "User" && item.kind == null && item.text === text) {
+        row = item;
+        break;
+      }
+    }
+  }
+  const passedId = typeof messageId === "string" && messageId !== "" ? messageId : void 0;
+  if (row == null) return { changed: false, ...passedId !== void 0 ? { messageId: passedId } : {} };
+  let changed = row.steered !== true;
+  if (changed) row.steered = true;
+  if (passedId !== void 0 && row.messageId !== passedId && (typeof row.messageId !== "string" || row.messageId === "")) {
+    row.messageId = passedId;
+    changed = true;
+  }
+  const id = typeof row.messageId === "string" && row.messageId !== "" ? row.messageId : passedId;
+  return { changed, ...id !== void 0 ? { messageId: id } : {} };
+}
+function steerCopyText(raw) {
+  return String(raw ?? "").replace(/\u00a0/g, " ").replace(/\s*(?:未读|Not read yet)\s*$/u, "").trim();
+}
+function isPendingSteerCopy(raw, steeringTexts) {
+  const text = steerCopyText(raw);
+  const list = (Array.isArray(steeringTexts) ? steeringTexts : []).filter((item) => typeof item === "string" && item !== "");
+  if (text === "" || list.length === 0) return false;
+  if (list.includes(text)) return true;
+  return text.split(/\n+/).map((line) => steerCopyText(line)).some((line) => line !== "" && list.includes(line));
+}
 function citedFromLog(log, roomId) {
   const rows2 = Array.isArray(log) ? log : [];
   const texts2 = [];
@@ -8010,6 +8051,9 @@ function citedFromLog(log, roomId) {
       ids.push(row.messageId);
     }
   };
+  for (const row of rows2) {
+    if (row?.steered === true) add(row);
+  }
   for (const line of rows2) {
     const pointers = [];
     if (line?.quote != null && typeof line.quote === "object") pointers.push(line.quote);
@@ -8684,6 +8728,38 @@ var citedReply = (reply) => reply?.late === true && citeTexts(reply).length > 0;
 function coveredByLateCite(replies, text) {
   return replies.some((other) => other?.late === true && citeTexts(other).includes(text));
 }
+function hidePendingSteerCopies(texts2) {
+  if (typeof document === "undefined" || typeof document.querySelectorAll !== "function") return void 0;
+  const list = Array.isArray(texts2) ? texts2 : [];
+  let frame = 0;
+  const apply2 = () => {
+    frame = 0;
+    for (const node of document.querySelectorAll("[data-pending-steering]")) {
+      if (node.closest?.(".bt-group-replies") || node.querySelector?.(".bt-group-replies,[data-steering]")) continue;
+      const duplicate = isPendingSteerCopy(node.textContent, list);
+      if (duplicate) {
+        if (node.getAttribute("data-steer-copy") !== "1") node.setAttribute("data-steer-copy", "1");
+      } else if (node.hasAttribute("data-steer-copy")) node.removeAttribute("data-steer-copy");
+    }
+  };
+  apply2();
+  if (list.length === 0) return void 0;
+  if (typeof document.querySelector !== "function" || typeof MutationObserver !== "function" || typeof requestAnimationFrame !== "function") return void 0;
+  const root = document.querySelector("[data-conversation-scroll]") ?? document.body;
+  if (root == null) return void 0;
+  const schedule = () => {
+    if (frame !== 0) return;
+    frame = requestAnimationFrame(apply2);
+  };
+  const observer = new MutationObserver(schedule);
+  observer.observe(root, { childList: true, subtree: true, characterData: true });
+  return () => {
+    observer.disconnect();
+    if (frame !== 0) cancelAnimationFrame(frame);
+    if (typeof document === "undefined") return;
+    for (const node of document.querySelectorAll("[data-pending-steering][data-steer-copy]")) node.removeAttribute("data-steer-copy");
+  };
+}
 function stackReplies(replies) {
   const items = [];
   replies.forEach((reply, index) => {
@@ -9306,6 +9382,9 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
     scrollLock.current = next.lockedTop;
     return void 0;
   }, [completeKey, rawWorkingKey, sessionId]);
+  const steeringTexts = projected.replies.filter((reply) => reply?.kind === "steering" && typeof reply.text === "string" && reply.text !== "").map((reply) => reply.text);
+  const steeringKey = JSON.stringify(steeringTexts);
+  (0, import_react17.useLayoutEffect)(() => hidePendingSteerCopies(JSON.parse(steeringKey)), [steeringKey]);
   const pending = done || !live.speaking || draft?.text && draft.botId === live.speaking ? [] : [live.speaking];
   const speakerTool = useWork?.((work) => work.bots?.[live.speaking]?.tool) ?? void 0;
   const speakerDoing = useWork?.((work) => work.bots?.[live.speaking]?.tool ? workPhrase(work.bots[live.speaking]) : void 0) ?? void 0;

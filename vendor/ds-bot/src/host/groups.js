@@ -32,7 +32,7 @@ import { routeTakesEffect } from './route-inbound.js'
 import { createRoomHalt, dropLoggedRelays, haltDelivery } from './room-halt.js'
 import { applyRoomStreamFrame, clearDraftIfPosted } from '../shared/room-draft.js'
 import { lateCite } from '../shared/work-line-complete.js'
-import { appendCite, applyLogPointer, citeForPost, citesOf, logPointer, steerSentence } from '../shared/cite.js'
+import { appendCite, applyLogPointer, citeForPost, citesOf, logPointer, markSteeredRow, steerSentence } from '../shared/cite.js'
 
 const ROOM_LOG_MAX = 60
 const ROOM_FIRST_LOOK = 12
@@ -552,7 +552,16 @@ export function install(rt) {
 
   // Steer the one busy member. The probe is a steering reply on the current
   // round, not a room-log opener and not a second group_relay.
-  async function acceptRoomSteer(room, member, { text = '', files = [], exchangeId, quoteText, quoteSeq, quoteRoomId } = {}) {
+  // The round is already showing this sentence. Take it out of the room inbox so the
+  // host does not keep a second bubble (the unread one) until the next step reads it.
+  const dropSteeredInbox = (roomId, messageId) => {
+    if (typeof messageId !== 'string' || messageId === '' || typeof rt.resolveAgent !== 'function') return
+    void rt.resolveAgent(roomId).then(agent => {
+      agent?.inbox?.remove?.(messageId)
+    }).catch(error => rt.warn('ds-bot: drop steered inbox line failed: %s', error))
+  }
+
+  async function acceptRoomSteer(room, member, { text = '', files = [], exchangeId, quoteText, quoteSeq, quoteRoomId, messageId } = {}) {
     const sessionId = member?.sessionId ?? room?.sessions?.[member?.id]
     if (room == null || member == null || sessionId == null) return
     const reply = steeringReply({ text })
@@ -566,6 +575,12 @@ export function install(rt) {
         if (stamped >= 0) void rt.save().catch(() => {})
       }
       round.replies.push(reply)
+      // Shown now, even when this member has not posted yet. The history cell and
+      // the host's unread copy are the same send.
+      const marked = markSteeredRow(room.log, { seq: sentence?.seq, messageId, text: sentence?.text ?? text })
+      if (marked.changed) void rt.save().catch(() => {})
+      dropSteeredInbox(room.id, marked.messageId)
+      if (typeof messageId === 'string' && messageId !== '' && messageId !== marked.messageId) dropSteeredInbox(room.id, messageId)
     }
     const running = [...rt.roomProgress.values()].find(round => round.roomId === room.id)
     if (running !== undefined) showSteer(running)

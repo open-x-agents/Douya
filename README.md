@@ -55,6 +55,7 @@ src/client/panel.html 面板单页（无构建步骤，直接由插件托管）
 test/                node:test，110 条
 scripts/demo.mjs     一次性的可视化输出
 docs/architecture.md 架构、数据形状、与 ds-bot 的边界
+docs/group-work-lines.md 群聊 / 工作线的现状实现：组件、数据、流程、stop 与迟到回复
 docs/labels.md       标签流程：谁能把一张单变成「可开工」
 ```
 

@@ -64,6 +64,7 @@ report 的形状：`{ date, memberId, memberName, schedule[], done[], plan[], no
 - 用 ds-bot 的 `ctx.connection.fetch.register` 挂路由，用 `ctx.effect` 管定时器和注销——插件卸载即清理。
 - 面板两条 Fetch 路由都在 `/api/...` 下：`PANEL_ROUTE=/api/opendigitalmate`（JSON 快照）、`PANEL_PAGE_ROUTE=/api/opendigitalmate/page`（HTML）。
 - 不碰 ds-bot 的 Bot / 会话 / 群逻辑；要「让 Bot 说话」时，后续接 `deliver` 即可，那是下一版的事。
+- 群聊与工作线在 ds-bot（vendored）里怎么实现——组件与归属、落盘数据、主要流程、stop/late/inbox——见 [group-work-lines.md](group-work-lines.md)。
 - 所有业务模块不 import ds-bot，单测不需要 DSH 也不需要网络。
 
 ## 没解决的问题

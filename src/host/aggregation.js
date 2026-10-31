@@ -704,19 +704,30 @@ export function clusterByProjectTheme(items) {
   
   console.log(`[Clustering] GitHub: ${githubByRepo.size} repo clusters from ${items.filter(i => i.source === 'github').length} items`);
   
-  // Cluster Gmail by sender category
+  // Cluster Gmail with smart categorization
   const emailItems = items.filter(i => i.source === 'gmail');
-  const emailBySender = new Map();
+  const githubNotifications = [];
   const newsletters = [];
+  const emailBySender = new Map();
   
   emailItems.forEach(item => {
     const sender = item.metadata?.from || 'unknown';
     const senderName = extractSenderName(sender);
+    const subject = item.title || '';
     
-    // Classify as newsletter if certain patterns
-    if (isNewsletter(sender, item.title)) {
+    // Detect GitHub notification emails (e.g., "Re: [ThinkFlowLab/FlyBot] ... PR #1915")
+    const githubRepoMatch = subject.match(/\[([\w-]+\/[\w-]+)\]/);
+    if (githubRepoMatch || sender.includes('notifications@github.com')) {
+      const repo = githubRepoMatch ? githubRepoMatch[1] : null;
+      item.metadata.githubRepo = repo;
+      githubNotifications.push(item);
+    }
+    // Classify as newsletter
+    else if (isNewsletter(sender, subject)) {
       newsletters.push(item);
-    } else {
+    }
+    // Personal/work emails
+    else {
       if (!emailBySender.has(senderName)) {
         emailBySender.set(senderName, []);
       }
@@ -724,16 +735,83 @@ export function clusterByProjectTheme(items) {
     }
   });
   
-  // Create clusters for senders with 2+ emails
-  for (const [sender, senderItems] of emailBySender) {
-    if (senderItems.length < 2) {
-      // Single emails remain as individual items (handled later)
-      continue;
+  // Merge GitHub notification emails into repo clusters
+  githubNotifications.forEach(email => {
+    const repo = email.metadata.githubRepo;
+    if (repo && githubByRepo.has(repo)) {
+      // Add email to existing GitHub cluster
+      githubByRepo.get(repo).push(email);
+      console.log(`  [Clustering] Merged GitHub email into ${repo} tile`);
+    } else {
+      // No matching repo cluster, keep as email
+      const senderName = extractSenderName(email.metadata?.from || 'unknown');
+      if (!emailBySender.has(senderName)) {
+        emailBySender.set(senderName, []);
+      }
+      emailBySender.get(senderName).push(email);
     }
+  });
+  
+  // Regenerate GitHub clusters with merged emails
+  clusters.length = 0; // Clear previous GitHub clusters
+  for (const [repo, repoItems] of githubByRepo) {
+    if (repoItems.length === 0) continue;
+    
+    const prCount = repoItems.filter(i => i.type && i.type.includes('pr')).length;
+    const issueCount = repoItems.filter(i => i.type && i.type.includes('issue')).length;
+    const reviewCount = repoItems.filter(i => i.type === 'pr-review').length;
+    const myPRCount = repoItems.filter(i => i.type === 'pr-mine').length;
+    const emailCount = repoItems.filter(i => i.source === 'gmail').length;
+    
+    const hasUrgent = repoItems.some(i => i.type === 'pr-review');
+    const priority = hasUrgent ? 'urgent' : prCount + issueCount > 3 ? 'high' : 'medium';
+    
+    const sortedItems = [...repoItems].sort((a, b) => {
+      const typeScore = { 'pr-review': 3, 'pr-assigned': 2, 'issue-assigned': 2, 'pr-mine': 1, 'email-important': 2 };
+      return (typeScore[b.type] || 0) - (typeScore[a.type] || 0);
+    });
+    const topItems = sortedItems.slice(0, 3);
+    
+    const [owner, name] = repo.split('/');
+    const projectName = (name || repo).toUpperCase();
+    const today = new Date().toISOString().split('T')[0];
+    
+    clusters.push({
+      id: `cluster_github_${repo.replace(/\//g, '_')}_${Date.now()}`,
+      type: 'project-cluster',
+      source: 'github',
+      sourceId: `github:cluster:${repo}:${today}`,
+      title: projectName,  // Will be replaced with LLM headline
+      subtitle: owner ? `${owner}` : '',
+      body: `${prCount} PRs, ${issueCount} issues${emailCount > 0 ? `, ${emailCount} emails` : ''}`,
+      url: `https://github.com/${repo}`,
+      priority,
+      status: reviewCount > 0 ? 'needs-review' : 'active',
+      clusterSize: repoItems.length,
+      items: repoItems,
+      topItems,
+      metadata: {
+        repo,
+        prCount,
+        issueCount,
+        reviewCount,
+        myPRCount,
+        emailCount,
+        labels: [...new Set(repoItems.filter(i => i.metadata?.labels).flatMap(i => i.metadata.labels))],
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  
+  console.log(`[Clustering] GitHub: ${githubByRepo.size} repo clusters (${githubNotifications.length} emails merged)`);
+  
+  // Create email sender clusters for 2+ emails
+  for (const [sender, senderItems] of emailBySender) {
+    if (senderItems.length < 2) continue;
     
     const unreadCount = senderItems.filter(i => i.type === 'email-unread').length;
     const importantCount = senderItems.filter(i => i.type === 'email-important').length;
-    
     const today = new Date().toISOString().split('T')[0];
     
     clusters.push({
@@ -760,9 +838,9 @@ export function clusterByProjectTheme(items) {
     });
   }
   
-  console.log(`[Clustering] Gmail: ${emailBySender.size} sender clusters from ${emailItems.length} emails`);
+  console.log(`[Clustering] Gmail: ${emailBySender.size} sender clusters from ${emailItems.length - githubNotifications.length} emails`);
   
-  // Newsletter cluster
+  // Newsletter digest cluster
   if (newsletters.length > 1) {
     const today = new Date().toISOString().split('T')[0];
     
@@ -787,7 +865,46 @@ export function clusterByProjectTheme(items) {
       updatedAt: new Date().toISOString(),
     });
     
-    console.log(`[Clustering] Gmail: ${newsletters.length} newsletters in cluster`);
+    console.log(`[Clustering] Gmail: ${newsletters.length} newsletters in digest tile`);
+  }
+  
+  // Email categories donut (if we have enough variety)
+  const categories = {
+    'GitHub': githubNotifications.length,
+    'Newsletters': newsletters.length,
+    'People': emailItems.length - githubNotifications.length - newsletters.length,
+  };
+  
+  if (emailItems.length > 5) {
+    const today = new Date().toISOString().split('T')[0];
+    clusters.push({
+      id: `cluster_gmail_categories_${Date.now()}`,
+      type: 'email-categories',
+      source: 'gmail',
+      sourceId: `gmail:categories:${today}`,
+      title: 'Email Overview',
+      subtitle: '',
+      body: `${emailItems.length} emails by category`,
+      url: `https://mail.google.com/mail/u/0/#inbox`,
+      priority: 'low',
+      status: 'active',
+      clusterSize: emailItems.length,
+      items: emailItems.slice(0, 5),
+      topItems: [],
+      metadata: {
+        categories,
+      },
+      blocks: [{
+        type: 'chart',
+        chartType: 'donut',
+        data: Object.values(categories).filter(v => v > 0),
+        labels: Object.keys(categories).filter(k => categories[k] > 0),
+      }],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    
+    console.log(`[Clustering] Gmail: category donut (GitHub:${categories.GitHub}, News:${categories.Newsletters}, People:${categories.People})`);
   }
   
   // Calendar events: cluster today's events
@@ -1212,6 +1329,27 @@ function generateClusterCards(grouped) {
       });
     }
     
+    // Email categories donut
+    else if (cluster.type === 'email-categories') {
+      // Add donut chart block (already in cluster.blocks)
+      if (cluster.blocks && cluster.blocks.length > 0) {
+        card.blocks.push(...cluster.blocks);
+      }
+      
+      // Add stat row for total
+      card.blocks.push({
+        type: 'stat',
+        value: cluster.clusterSize,
+        label: 'Total Emails',
+      });
+      
+      card.actions.push({
+        label: 'Open Inbox',
+        value: cluster.url,
+        primary: false,
+      });
+    }
+    
     // Calendar cluster
     else if (cluster.type === 'calendar-cluster') {
       card.blocks.push({
@@ -1270,6 +1408,69 @@ function generateClusterCards(grouped) {
 }
 
 /**
+ * Generate LLM headlines for project clusters
+ * Style: "v0.2.14 shipped with ... across 17 PRs"
+ * Keep eyebrow label: "FLYBOT · RELEASE"
+ */
+async function generateProjectHeadlines(grouped, llmClient) {
+  const projectClusters = [
+    ...grouped.urgent.filter(c => c.type === 'project-cluster'),
+    ...grouped.action.filter(c => c.type === 'project-cluster'),
+    ...grouped.fyi.filter(c => c.type === 'project-cluster'),
+  ];
+  
+  if (projectClusters.length === 0) return;
+  
+  // Generate headlines in batch
+  for (const cluster of projectClusters.slice(0, 10)) { // Limit to 10 for performance
+    try {
+      const repoName = cluster.metadata.repo;
+      const prCount = cluster.metadata.prCount || 0;
+      const issueCount = cluster.metadata.issueCount || 0;
+      const reviewCount = cluster.metadata.reviewCount || 0;
+      
+      // Get top items for context
+      const topTitles = cluster.topItems.slice(0, 3).map(i => i.title).join('; ');
+      
+      const prompt = `Generate a very short project activity headline (max 60 chars) for repository ${repoName}.
+
+Activity summary:
+- ${prCount} PRs, ${issueCount} issues, ${reviewCount} reviews needed
+- Top items: ${topTitles}
+
+Style examples:
+- "v0.2.14 shipped with new features across 17 PRs"
+- "Major refactor in progress, 5 reviews pending"
+- "Bug fixes and improvements merged this week"
+- "New auth system deployed, monitoring stability"
+
+Return ONLY the headline, no quotes, no explanation.`;
+      
+      let headline = cluster.title; // Fallback to original
+      try {
+        let fullText = '';
+        for await (const chunk of llmClient.stream({
+          messages: [{ role: 'user', content: prompt }],
+          maxTokens: 50,
+        })) {
+          if (chunk.type === 'text' && chunk.text) fullText += chunk.text;
+        }
+        headline = fullText.trim().replace(/^["']|["']$/g, '').substring(0, 60);
+      } catch (err) {
+        console.warn(`[Headlines] LLM failed for ${repoName}, using original`);
+      }
+      
+      // Update cluster title
+      cluster.title = headline;
+      console.log(`  [Headlines] ${repoName} -> "${headline}"`);
+      
+    } catch (err) {
+      console.warn(`[Headlines] Failed for cluster:`, err.message);
+    }
+  }
+}
+
+/**
  * Main aggregation pipeline
  */
 export async function runAggregationPipeline(composioClient, activeSources, llmClient, profileContext) {
@@ -1294,6 +1495,9 @@ export async function runAggregationPipeline(composioClient, activeSources, llmC
   console.log('[Aggregation] Stage 5: Grouping and ranking...');
   const grouped = groupAndRank(classified);
   console.log(`[Aggregation] ${grouped.urgent.length} urgent, ${grouped.action.length} action, ${grouped.fyi.length} fyi clusters`);
+  
+  console.log('[Aggregation] Stage 5.5: Generating project headlines...');
+  await generateProjectHeadlines(grouped, llmClient);
   
   console.log('[Aggregation] Stage 6: Writing brief with LLM...');
   const brief = await writeBrief(grouped, llmClient, profileContext);

@@ -10,176 +10,156 @@ import { reminderCard } from './cards.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// Static list of popular Composio apps
+const COMPOSIO_APPS = [
+  {
+    key: 'github',
+    name: 'GitHub',
+    logo: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+    description: 'Repositories and issues',
+  },
+  {
+    key: 'slack',
+    name: 'Slack',
+    logo: 'https://a.slack-edge.com/80588/marketing/img/icons/icon_slack_hash_colored.png',
+    description: 'Team messages',
+  },
+  {
+    key: 'gmail',
+    name: 'Gmail',
+    logo: 'https://www.google.com/gmail/about/static/images/logo-gmail.png',
+    description: 'Email access',
+  },
+  {
+    key: 'notion',
+    name: 'Notion',
+    logo: 'https://upload.wikimedia.org/wikipedia/commons/4/45/Notion_app_logo.png',
+    description: 'Workspace docs',
+  },
+  {
+    key: 'linear',
+    name: 'Linear',
+    logo: 'https://asset.brandfetch.io/idAnDTFapY/idG_TlAMjQ.png',
+    description: 'Issue tracking',
+  },
+  {
+    key: 'calendar',
+    name: 'Google Calendar',
+    logo: 'https://ssl.gstatic.com/calendar/images/dynamiclogo_2020q4/calendar_31_2x.png',
+    description: 'Calendar events',
+  },
+];
+
 // Simple in-memory chat history for demo
 const chatSessions = new Map();
 
 /**
- * Call LLM and get response with fallback
+ * Call LLM - NO FALLBACK
+ * If LLM not configured, return prompt to configure it
  */
 async function callLLM(ctx, messages, sessionId = 'web-chat') {
-  // Try LLM if available
-  if (ctx?.llm?.stream) {
-    try {
-      let fullText = '';
-      for await (const chunk of ctx.llm.stream({
-        messages,
-        maxTokens: 1000,
-      })) {
-        if (chunk.type === 'text' && chunk.text) {
-          fullText += chunk.text;
-        }
-      }
+  // Check if LLM is configured
+  if (!ctx?.llm?.stream) {
+    return {
+      text: '模型未配置',
+      cards: [
+        {
+          type: 'action',
+          title: '需要配置 AI 模型才能对话',
+          description: '请点击下方按钮前往配置页面',
+          actions: [
+            { label: '前往配置', value: 'goto_settings' },
+          ],
+        },
+      ],
+    };
+  }
 
-      if (fullText.trim()) {
-        // Generate action cards based on response
-        const cards = parseResponseToCards(fullText);
-        return { text: fullText, cards };
+  // Try real LLM
+  try {
+    let fullText = '';
+    for await (const chunk of ctx.llm.stream({
+      messages,
+      maxTokens: 1000,
+    })) {
+      if (chunk.type === 'text' && chunk.text) {
+        fullText += chunk.text;
       }
-    } catch (error) {
-      console.error('LLM error:', error);
-      // Fall through to fallback
     }
-  }
 
-  // Fallback: Smart responses with interactive cards
-  const userMessage = messages[messages.length - 1]?.content || '';
-  return generateFallbackResponse(userMessage);
+    if (fullText.trim()) {
+      // Parse response for structured cards
+      const cards = parseResponseToCards(fullText);
+      return { text: fullText, cards };
+    } else {
+      return {
+        text: '(模型返回空响应)',
+        cards: [],
+      };
+    }
+  } catch (error) {
+    console.error('LLM error:', error);
+    return {
+      text: '调用模型时出错',
+      cards: [
+        {
+          type: 'error',
+          title: '错误: ' + error.message,
+          description: '请检查模型配置是否正确',
+          actions: [
+            { label: '检查配置', value: 'goto_settings' },
+          ],
+        },
+      ],
+    };
+  }
 }
 
 /**
- * Generate smart fallback response with interactive cards (no LLM needed)
- */
-function generateFallbackResponse(userMessage) {
-  const lower = userMessage.toLowerCase();
-  
-  // Task/schedule related
-  if (lower.includes('任务') || lower.includes('安排') || lower.includes('今天')) {
-    return {
-      text: '我帮你看了一下今天的安排。以下是建议的优先级：',
-      cards: [
-        {
-          type: 'action',
-          title: '先处理紧急的会议准备',
-          actions: [
-            { label: '查看详情', value: 'view_urgent' },
-            { label: '推迟到明天', value: 'postpone' },
-          ],
-        },
-        {
-          type: 'action',
-          title: '回复等待中的邮件',
-          actions: [
-            { label: '现在处理', value: 'handle_now' },
-            { label: '稍后提醒', value: 'remind_later' },
-          ],
-        },
-      ],
-    };
-  }
-  
-  // Help/guide related
-  if (lower.includes('帮助') || lower.includes('怎么') || lower.includes('如何')) {
-    return {
-      text: '我可以帮你处理以下事项，请选择：',
-      cards: [
-        {
-          type: 'choice',
-          title: '我能做什么',
-          choices: [
-            { label: '查看今天的任务', value: '今天有什么任务' },
-            { label: '检查日程冲突', value: '检查日程' },
-            { label: '汇总未读消息', value: '未读消息' },
-            { label: '查看配置状态', value: '配置状态' },
-          ],
-        },
-      ],
-    };
-  }
-  
-  // Source/config related
-  if (lower.includes('配置') || lower.includes('设置') || lower.includes('连接')) {
-    return {
-      text: '当前配置状态：需要连接 Composio 来聚合多个信源。',
-      cards: [
-        {
-          type: 'action',
-          title: '设置 Composio API Key',
-          actions: [
-            { label: '查看配置指南', value: 'config_guide' },
-            { label: '跳过，稍后配置', value: 'skip' },
-          ],
-        },
-      ],
-    };
-  }
-  
-  // Default response
-  return {
-    text: '收到！我可以帮你管理任务、查看日程、汇总信息。你想做什么？',
-    cards: [
-      {
-        type: 'choice',
-        title: '快速操作',
-        choices: [
-          { label: '今天的任务', value: '显示今天的任务' },
-          { label: '最近的会议', value: '最近有什么会议' },
-          { label: '查看配置', value: '检查配置状态' },
-        ],
-      },
-    ],
-  };
-}
-
-/**
- * Parse LLM response into interactive cards
+ * Parse LLM response for structured cards
+ * Looks for JSON blocks or action patterns in the response
  */
 function parseResponseToCards(text) {
-  // Simple heuristic: if response contains suggestions or actions, create cards
   const cards = [];
-  
-  // Check for action items
-  const actionPattern = /(?:建议|推荐|可以)[:：]?\s*(.+?)(?:\n|$)/gi;
-  let match;
-  let actionCount = 0;
-  
-  while ((match = actionPattern.exec(text)) && actionCount < 3) {
-    cards.push({
-      type: 'action',
-      title: match[1].trim(),
-      actions: [
-        { label: '执行', value: 'execute' },
-        { label: '稍后', value: 'later' },
-      ],
-    });
-    actionCount++;
-  }
-  
-  // Check for choices/options
-  const choicePattern = /(?:选择|选项)[:：]?\s*(?:1[\.、]|①)\s*(.+?)(?:\n|$)/gi;
-  if ((match = choicePattern.exec(text))) {
-    const choices = [];
-    const choiceLines = text.match(/(?:\d+[\.、]|[①②③④⑤])\s*(.+?)(?:\n|$)/g);
-    if (choiceLines) {
-      choiceLines.slice(0, 4).forEach((line, i) => {
-        const clean = line.replace(/^(?:\d+[\.、]|[①②③④⑤])\s*/, '').trim();
-        choices.push({ label: clean, value: `choice_${i}` });
-      });
-      if (choices.length > 0) {
-        cards.push({
-          type: 'choice',
-          title: '请选择',
-          choices,
-        });
+
+  // Try to find JSON card definitions in the response
+  const jsonMatch = text.match(/```json\s*(\[[\s\S]*?\])\s*```/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[1]);
+      if (Array.isArray(parsed)) {
+        return parsed;
       }
+    } catch {
+      // Ignore parse errors, continue with pattern matching
     }
   }
-  
-  return cards.length > 0 ? cards : null;
+
+  // Pattern: "选项：1. xxx 2. yyy"
+  const optionPattern = /选项[：:]\s*(?:\d+[.、]\s*([^\n]+))+/gi;
+  const optionMatch = text.match(optionPattern);
+  if (optionMatch) {
+    const options = [];
+    const numPattern = /\d+[.、]\s*([^\n\d]+)/g;
+    let match;
+    while ((match = numPattern.exec(text)) !== null) {
+      options.push(match[1].trim());
+    }
+    if (options.length > 0) {
+      cards.push({
+        type: 'choice',
+        title: '请选择',
+        choices: options.map((opt, i) => ({
+          label: opt,
+          value: `option_${i}`,
+        })),
+      });
+    }
+  }
+
+  return cards;
 }
 
-/**
- * Create API router
- */
 export function createApiRouter(ctx) {
   const { store, composioClient, config } = ctx;
   const llmContext = ctx.llmCtx || ctx.ctx;
@@ -602,6 +582,67 @@ export function createApiRouter(ctx) {
     },
 
     /**
+     * GET /api/llm/config - Get LLM configuration
+     */
+    async getLLMConfig() {
+      const cfg = configStore.get();
+      return {
+        configured: configStore.isLLMConfigured(),
+        provider: cfg?.llm?.provider || null,
+        baseURL: cfg?.llm?.baseURL || null,
+        model: cfg?.llm?.model || null,
+        apiKey: configStore.getMaskedLLMKey(),
+      };
+    },
+
+    /**
+     * POST /api/llm/config - Update LLM configuration
+     */
+    async updateLLMConfig(data) {
+      const { provider, baseURL, apiKey, model } = data;
+
+      // Build updates object
+      const currentLLM = configStore.get()?.llm || {};
+      const updates = {
+        llm: {
+          provider: provider || currentLLM.provider,
+          baseURL: baseURL || currentLLM.baseURL,
+          model: model || currentLLM.model,
+          // Only update apiKey if provided (not masked placeholder)
+          ...(apiKey && !apiKey.includes('...') ? { apiKey } : { apiKey: currentLLM.apiKey }),
+        },
+      };
+
+      await configStore.save(updates);
+
+      // Update runtime LLM client if callback provided
+      if (typeof updateLLMClient === 'function') {
+        updateLLMClient();
+      }
+
+      return {
+        success: true,
+        masked: configStore.getMaskedLLMKey(),
+      };
+    },
+
+    /**
+     * POST /api/llm/test - Test LLM connection
+     */
+    async testLLM() {
+      if (!llmCtx?.llm?.testConnection) {
+        return { ok: false, error: 'LLM not configured' };
+      }
+
+      try {
+        const result = await llmCtx.llm.testConnection();
+        return result;
+      } catch (error) {
+        return { ok: false, error: error.message };
+      }
+    },
+
+    /**
      * POST /api/composio/disconnect - Disconnect an app
      */
     async disconnectComposioApp(data) {
@@ -753,6 +794,29 @@ export function mountApiRoutes(server, router) {
           }
         });
         return;
+      } else if (url.pathname === '/api/llm/config' && req.method === 'GET') {
+        const data = await router.getLLMConfig();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
+      } else if (url.pathname === '/api/llm/config' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const data = JSON.parse(body);
+            const response = await router.updateLLMConfig(data);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+          }
+        });
+        return;
+      } else if (url.pathname === '/api/llm/test' && req.method === 'POST') {
+        const data = await router.testLLM();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
       } else if (url.pathname === '/' && req.method === 'GET') {
         const html = await router.serveIndex();
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });

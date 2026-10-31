@@ -6,11 +6,13 @@
 export function createLLMClient(config) {
   const {
     provider = 'openai',
-    baseURL = 'https://api.openai.com/v1',
+    baseURL: rawBaseURL = 'https://api.openai.com/v1',
     apiKey,
     model = 'gpt-3.5-turbo',
     log = () => {},
   } = config;
+
+  const baseURL = normalizeBaseURL(rawBaseURL);
 
   if (!apiKey) {
     log('LLM client created without API key - calls will fail');
@@ -89,16 +91,47 @@ export function createLLMClient(config) {
     }
 
     try {
-      const messages = [{ role: 'user', content: 'Hi! Reply with just "OK"' }];
-      let response = '';
-      
-      for await (const chunk of stream({ messages, maxTokens: 50 })) {
-        if (chunk.type === 'text') {
-          response += chunk.text;
+      const url = `${baseURL}/chat/completions`;
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      };
+
+      const body = JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: 'Hi! Reply with just "OK"' }],
+        max_tokens: 50,
+        stream: false,
+      });
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body,
+      });
+
+      const responseText = await response.text();
+
+      if (!response.ok) {
+        let errorDetail = responseText;
+        try {
+          const errorJson = JSON.parse(responseText);
+          errorDetail = errorJson.error?.message || errorJson.message || responseText;
+        } catch {
+          // Keep original text if not JSON
         }
+        return { 
+          ok: false, 
+          error: `HTTP ${response.status}: ${errorDetail}`,
+          status: response.status,
+          body: responseText.slice(0, 500), // First 500 chars
+        };
       }
 
-      return { ok: true, response: response.trim() };
+      const result = JSON.parse(responseText);
+      const reply = result.choices?.[0]?.message?.content || '(empty response)';
+      
+      return { ok: true, response: reply.trim() };
     } catch (error) {
       return { ok: false, error: error.message };
     }
@@ -110,6 +143,18 @@ export function createLLMClient(config) {
   };
 }
 
+/**
+ * Normalize base URL - ensure it ends with /v1 for OpenAI-compatible APIs
+ */
+function normalizeBaseURL(url) {
+  if (!url) return url;
+  url = url.trim().replace(/\/+$/, ''); // Remove trailing slashes
+  if (!url.endsWith('/v1')) {
+    url = `${url}/v1`;
+  }
+  return url;
+}
+
 export const PROVIDERS = {
   openai: {
     name: 'OpenAI',
@@ -119,10 +164,26 @@ export const PROVIDERS = {
   deepseek: {
     name: 'DeepSeek',
     baseURL: 'https://api.deepseek.com/v1',
-    models: ['deepseek-chat', 'deepseek-coder'],
+    models: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-coder'],
+  },
+  anthropic: {
+    name: 'Anthropic (via OpenAI adapter)',
+    baseURL: 'https://api.anthropic.com/v1',
+    models: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229'],
+    note: 'Requires OpenAI-compatible proxy',
+  },
+  moonshot: {
+    name: 'Moonshot (月之暗面)',
+    baseURL: 'https://api.moonshot.cn/v1',
+    models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'],
+  },
+  zhipu: {
+    name: 'ZhipuAI (智谱清言)',
+    baseURL: 'https://open.bigmodel.cn/api/paas/v4',
+    models: ['glm-4', 'glm-4-plus', 'glm-3-turbo'],
   },
   custom: {
-    name: 'Custom',
+    name: '自定义 / Custom',
     baseURL: '',
     models: [],
   },

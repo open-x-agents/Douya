@@ -229,7 +229,10 @@
                   <option value="">选择提供商...</option>
                   <option value="openai">OpenAI</option>
                   <option value="deepseek">DeepSeek</option>
-                  <option value="custom">自定义</option>
+                  <option value="moonshot">Moonshot (月之暗面)</option>
+                  <option value="zhipu">ZhipuAI (智谱清言)</option>
+                  <option value="anthropic">Anthropic (需代理)</option>
+                  <option value="custom">自定义 / Custom</option>
                 </select>
               </div>
 
@@ -383,6 +386,7 @@
       if (view === 'settings') {
         checkConfig();
         loadLLMSettings();
+        loadComposioSettings();
       }
     });
   });
@@ -618,26 +622,32 @@
     }
   }
 
+  const PROVIDER_PRESETS = {
+    openai: { baseURL: 'https://api.openai.com/v1', model: 'gpt-4o' },
+    deepseek: { baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+    moonshot: { baseURL: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k' },
+    zhipu: { baseURL: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4' },
+    anthropic: { baseURL: 'https://api.anthropic.com/v1', model: 'claude-3-5-sonnet-20241022' },
+  };
+
   function handleProviderChange() {
     const provider = $('llmProviderSelect').value;
     const baseURLDiv = $('llmBaseURLDiv');
     const baseURLInput = $('llmBaseURLInput');
     const modelInput = $('llmModelInput');
 
-    if (provider === 'openai') {
-      baseURLDiv.style.display = 'none';
-      baseURLInput.value = 'https://api.openai.com/v1';
-      modelInput.value = modelInput.value || 'gpt-4o';
-      modelInput.placeholder = 'gpt-4o';
-    } else if (provider === 'deepseek') {
-      baseURLDiv.style.display = 'none';
-      baseURLInput.value = 'https://api.deepseek.com/v1';
-      modelInput.value = modelInput.value || 'deepseek-chat';
-      modelInput.placeholder = 'deepseek-chat';
-    } else if (provider === 'custom') {
+    if (provider === 'custom') {
       baseURLDiv.style.display = 'block';
       baseURLInput.value = '';
       modelInput.placeholder = '输入模型名称';
+    } else if (PROVIDER_PRESETS[provider]) {
+      const preset = PROVIDER_PRESETS[provider];
+      baseURLDiv.style.display = 'none';
+      baseURLInput.value = preset.baseURL;
+      if (!modelInput.value || modelInput.value === modelInput.placeholder) {
+        modelInput.value = preset.model;
+      }
+      modelInput.placeholder = preset.model;
     } else {
       baseURLDiv.style.display = 'none';
     }
@@ -706,13 +716,151 @@
         if (result.ok) {
           $('llmStatus').innerHTML = `<span style="color:var(--green)">✓ 连接成功！<br>回复: ${escapeHtml(result.response)}</span>`;
         } else {
-          $('llmStatus').innerHTML = `<span style="color:var(--red)">连接失败: ${escapeHtml(result.error)}</span>`;
+          let errorHtml = `<span style="color:var(--red)">✗ ${escapeHtml(result.error)}`;
+          if (result.status) {
+            errorHtml += `<br><small style="color:var(--ink3)">HTTP ${result.status}</small>`;
+          }
+          if (result.body && result.body.length > 0) {
+            const shortBody = result.body.slice(0, 200);
+            errorHtml += `<br><small style="color:var(--ink3);font-family:monospace;font-size:10px">${escapeHtml(shortBody)}${result.body.length > 200 ? '...' : ''}</small>`;
+          }
+          errorHtml += '</span>';
+          $('llmStatus').innerHTML = errorHtml;
         }
       } catch (error) {
         $('llmStatus').innerHTML = `<span style="color:var(--red)">测试失败: ${error.message}</span>`;
       }
     });
   }
+
+  // Composio Settings
+  async function loadComposioSettings() {
+    try {
+      // Load config
+      const cfgRes = await fetch('/api/composio/config');
+      const cfg = await cfgRes.json();
+      
+      if (cfg.apiKeyMasked) {
+        $('apiKeyInput').placeholder = cfg.apiKeyMasked;
+        $('apiKeyInput').value = '';
+      }
+      if (cfg.entityId) {
+        $('entityIdInput').value = cfg.entityId;
+      }
+
+      // Load apps
+      const appsRes = await fetch('/api/composio/apps');
+      const appsData = await appsRes.json();
+      
+      const grid = $('appsGrid');
+      if (appsData.apps && appsData.apps.length > 0) {
+        grid.innerHTML = appsData.apps.map(app => `
+          <div class="app-card" style="border:1px solid var(--line);border-radius:8px;padding:16px;text-align:center">
+            <img src="${escapeHtml(app.logo)}" alt="${escapeHtml(app.name)}" style="width:48px;height:48px;margin:0 auto 8px" 
+              onerror="this.style.display='none'">
+            <h4 style="margin:0 0 4px;font-size:14px">${escapeHtml(app.name)}</h4>
+            <p style="font-size:12px;color:var(--ink3);margin:0 0 12px">${escapeHtml(app.description || '')}</p>
+            <button class="btn ${app.connected ? 'secondary' : 'primary'}" style="width:100%;font-size:12px"
+              onclick="handleAppAction('${escapeHtml(app.key)}', ${app.connected})">
+              ${app.connected ? '✓ 已连接' : '连接'}
+            </button>
+          </div>
+        `).join('');
+      } else {
+        grid.innerHTML = '<p style="color:var(--ink3)">暂无可用应用</p>';
+      }
+    } catch (error) {
+      console.error('Failed to load Composio settings:', error);
+    }
+  }
+
+  // Save Composio API Key
+  const saveApiKeyBtn = $('saveApiKeyBtn');
+  if (saveApiKeyBtn) {
+    saveApiKeyBtn.addEventListener('click', async () => {
+      const apiKey = $('apiKeyInput').value;
+      const entityId = $('entityIdInput').value || 'default';
+
+      if (!apiKey && !$('apiKeyInput').placeholder.includes('...')) {
+        $('apiKeyStatus').innerHTML = '<span style="color:var(--red)">请输入 API Key</span>';
+        return;
+      }
+
+      $('apiKeyStatus').innerHTML = '<span style="color:var(--ink3)">保存中...</span>';
+      
+      try {
+        const payload = { entityId };
+        if (apiKey) payload.apiKey = apiKey;
+        
+        const res = await fetch('/api/composio/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        
+        const result = await res.json();
+        
+        if (result.success) {
+          $('apiKeyStatus').innerHTML = '<span style="color:var(--green)">✓ 保存成功</span>';
+          if (result.apiKeyMasked) {
+            $('apiKeyInput').placeholder = result.apiKeyMasked;
+            $('apiKeyInput').value = '';
+          }
+          // Reload apps to get connection status
+          setTimeout(() => loadComposioSettings(), 500);
+        } else {
+          $('apiKeyStatus').innerHTML = `<span style="color:var(--red)">保存失败: ${escapeHtml(result.error)}</span>`;
+        }
+      } catch (error) {
+        $('apiKeyStatus').innerHTML = `<span style="color:var(--red)">保存失败: ${error.message}</span>`;
+      }
+    });
+  }
+
+  // Handle app connect/disconnect
+  window.handleAppAction = async function(appKey, isConnected) {
+    if (isConnected) {
+      // Disconnect
+      if (!confirm(`确定要断开 ${appKey} 的连接吗？`)) return;
+      
+      try {
+        const res = await fetch('/api/composio/disconnect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appKey }),
+        });
+        const result = await res.json();
+        if (result.success) {
+          alert('已断开连接');
+          loadComposioSettings();
+        } else {
+          alert('断开失败: ' + result.error);
+        }
+      } catch (error) {
+        alert('断开失败: ' + error.message);
+      }
+    } else {
+      // Connect via OAuth
+      try {
+        const res = await fetch('/api/composio/connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appKey }),
+        });
+        const result = await res.json();
+        if (result.authUrl) {
+          // Open OAuth in new window
+          window.open(result.authUrl, '_blank', 'width=600,height=700');
+          // Poll for connection status
+          setTimeout(() => loadComposioSettings(), 2000);
+        } else {
+          alert('连接失败: ' + (result.error || '未知错误'));
+        }
+      } catch (error) {
+        alert('连接失败: ' + error.message);
+      }
+    }
+  };
 
   // Check config
   async function checkConfig() {

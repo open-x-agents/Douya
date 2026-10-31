@@ -660,8 +660,8 @@
   .myday-meta b{color:var(--ink);font-weight:650}
   .tt{position:relative;padding:0 4px}
   .tt-track{position:relative;height:46px;border-radius:12px;background:repeating-linear-gradient(90deg,rgba(30,40,80,.035) 0 1px,transparent 1px calc(100%/14)),#f6f7fa;overflow:hidden}
-  .tt-bar{position:absolute;top:5px;bottom:5px;border-radius:9px;padding:5px 10px;overflow:hidden;white-space:nowrap;display:flex;flex-direction:column;justify-content:center;min-width:6px}
-  .tt-bar b{font-size:11px;font-weight:650;line-height:1.2}
+  .tt-bar{position:absolute;box-sizing:border-box;border-radius:9px;padding:4px 8px;overflow:hidden;white-space:nowrap;display:flex;flex-direction:column;justify-content:center;min-width:0}
+  .tt-bar b{overflow:hidden;text-overflow:ellipsis;font-size:11px;font-weight:650;line-height:1.2}
   .tt-bar span{font-size:11px;opacity:.8;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
   .tt-bar.c-meal{background:var(--peach-soft);color:#b8692a;box-shadow:inset 3px 0 0 var(--peach)}
   .tt-bar.c-focus{background:var(--teal-soft);color:#16786d;box-shadow:inset 3px 0 0 var(--teal)}
@@ -670,9 +670,9 @@
   .tt-bar.past{opacity:.45;filter:saturate(.6)}
   .tt-bar.live{box-shadow:inset 3px 0 0 currentColor,0 0 0 2px rgba(34,168,152,.25)}
   .tt-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--ink3)}
-  .tt-now{position:absolute;top:0;bottom:0;width:2px;background:var(--rose);border-radius:2px;transform:translateX(-1px)}
+  .tt-now{position:absolute;top:0;bottom:0;width:2px;z-index:3;pointer-events:none;background:var(--rose);border-radius:2px;transform:translateX(-1px)}
   .tt-now::before{content:"";position:absolute;top:-1px;left:-3px;width:8px;height:8px;border-radius:50%;background:var(--rose)}
-  .tt-now em{position:absolute;bottom:3px;right:6px;font:600 10.5px/1 inherit;font-style:normal;color:var(--rose);background:rgba(255,255,255,.9);padding:3px 5px;border-radius:6px}
+  .tt-now em{position:absolute;z-index:4;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.12);bottom:3px;right:6px;font:600 10.5px/1 inherit;font-style:normal;color:var(--rose);background:rgba(255,255,255,.9);padding:3px 5px;border-radius:6px}
   .tt-axis{position:relative;height:18px;margin-top:4px}
   .tt-tick{position:absolute;top:0;transform:translateX(-50%)}
   .tt-tick:first-child{transform:none}
@@ -1469,6 +1469,14 @@
     return h < 5 ? '夜深了' : h < 11 ? '早上好' : h < 13 ? '中午好' : h < 18 ? '下午好' : '晚上好';
   }
 
+  function ttTitle(t) {
+    t = String(t || '');
+    if (TITLE_ZH[t]) return TITLE_ZH[t];
+    const map = [[/^deep\s*focus\s*[:：-]?\s*/i, '深度专注：'], [/^focus(\s*time)?\s*[:：-]?\s*/i, '专注：'], [/^review\s*/i, '评审 '], [/^lunch\b/i, '午餐'], [/^dinner\b/i, '晚餐'], [/^breakfast\b/i, '早餐'], [/^(short\s*)?break\b/i, '休息'], [/^(wind[\s-]*down|wrap[\s-]*up)\b\s*[:：-]?\s*/i, '收尾：'], [/^exercise|^walk/i, '运动'], [/^meeting\s*[:：-]?\s*/i, '会议：']];
+    for (const [re, zh] of map) if (re.test(t)) { t = t.replace(re, zh); break; }
+    return t.replace(/\s*&\s*/g, '与').replace(/[:：]\s*$/, '');
+  }
+
   function renderTimetable(card) {
     const tt = blockOf(card, 'timetable') || {};
     const blocks = [...(tt.fixedBlocks || []).map(b => ({ ...b, fixed: true })), ...(tt.suggestedBlocks || [])]
@@ -1483,16 +1491,21 @@
     const pct = m => ((m - lo) / (hi - lo)) * 100;
     let ticks = '';
     for (let h = lo / 60; h <= hi / 60; h += 2) ticks += `<span class="tt-tick" style="left:${pct(h * 60)}%"><i>${String(h).padStart(2, '0')}:00</i></span>`;
+    const lanesEnd = [];
+    const minSpan = 0.04 * (hi - lo); // short blocks get a readable minimum width; lanes use the visual end
+    for (const b of blocks) { b.ve = Math.max(b.e, b.s + minSpan); }
+    for (const b of blocks) { let l = lanesEnd.findIndex(e => e <= b.s); if (l < 0) { l = lanesEnd.length; lanesEnd.push(0); } lanesEnd[l] = b.ve; b.lane = l; }
+    const nLanes = Math.max(1, lanesEnd.length), laneH = 40;
     const bars = blocks.map(b => {
       const state = b.e <= nowM ? 'past' : b.s <= nowM ? 'live' : 'next';
       const cat = CAT_ZH[b.category] || (b.fixed ? '日程' : '建议');
-      return `<div class="tt-bar c-${escapeHtml(b.category || (b.fixed ? 'meeting' : 'focus'))} ${state}" style="left:${pct(b.s)}%;width:${pct(b.e) - pct(b.s)}%" title="${escapeHtml(b.start + '–' + b.end + ' ' + (TITLE_ZH[b.title] || b.title))}"><b>${escapeHtml(cat)}</b><span>${escapeHtml(b.start)}–${escapeHtml(b.end)} · ${escapeHtml(TITLE_ZH[b.title] || b.title)}</span></div>`;
+      return `<div class="tt-bar c-${escapeHtml(b.category || (b.fixed ? 'meeting' : 'focus'))} ${state}" style="left:${pct(b.s)}%;width:calc(${pct(b.ve) - pct(b.s)}% - 2px);top:${5 + b.lane * laneH}px;height:${laneH - 6}px" title="${escapeHtml(b.start + '–' + b.end + ' ' + ttTitle(b.title))}"><b>${escapeHtml(cat)}</b><span>${escapeHtml(b.start)}–${escapeHtml(b.end)} · ${escapeHtml(ttTitle(b.title))}</span></div>`;
     }).join('');
     const upcoming = blocks.find(b => b.e > nowM);
     const fixedN = blocks.filter(b => b.fixed).length;
     const freeMin = Math.max(0, (Math.min(hi, 23 * 60) - nowM) - blocks.filter(b => b.e > nowM).reduce((s, b) => s + (b.e - Math.max(b.s, nowM)), 0));
     const note = upcoming
-      ? `接下来 ${escapeHtml(upcoming.start)} ${escapeHtml(CAT_ZH[upcoming.category] || '')}：${escapeHtml(upcoming.title)}`
+      ? `接下来 ${escapeHtml(upcoming.start)} ${(() => { const t = ttTitle(upcoming.title), c = CAT_ZH[upcoming.category] || ''; return escapeHtml(c && !t.startsWith(c) ? c + '：' + t : t); })()}`
       : `今天的安排都已过去，剩余约 ${(freeMin / 60).toFixed(1)} 小时空闲，适合收尾或复盘。`;
     return `
       <section class="myday" data-sys="timetable">
@@ -1504,7 +1517,7 @@
           <div class="myday-meta"><span><b>${fixedN}</b> 个固定日程</span><span><b>${blocks.length - fixedN}</b> 个建议时段</span><span>现在 <b>${fmtMin(nowM)}</b></span></div>
         </div>
         <div class="tt">
-          <div class="tt-track">${bars || '<div class="tt-empty">今天还没有日程，连接日历后会自动排进来</div>'}
+          <div class="tt-track" style="height:${nLanes * laneH + 6}px">${bars || '<div class="tt-empty">今天还没有日程，连接日历后会自动排进来</div>'}
             ${nowM >= lo && nowM <= hi ? `<div class="tt-now" style="left:${pct(nowM)}%"><em>${fmtMin(nowM)}</em></div>` : ''}
           </div>
           <div class="tt-axis">${ticks}</div>
@@ -2114,8 +2127,13 @@
       }
     }
     const name = r ? r.name : (isTT ? '今天的安排' : clip(card.title, 20));
+    const FALLBACK_SUGG = {
+      github: ['这些 PR 现在卡在哪？', '帮我起草一条催 review 的评论', '今天只做一件事的话，做哪件？'],
+      gmail: ['这些邮件里哪封需要我回复？', '帮我起草一条回复', '哪些可以直接归档？'],
+      slack: ['这个频道今天在讨论什么？', '有没有需要我回应的消息？', '帮我起草一条回复'],
+    };
     const sugg = isTT ? ['帮我把今晚剩下的时间排一下', '明天上午留两小时专注，放哪里？'] :
-      ['这些 PR 现在卡在哪？', '帮我起草一条催 review 的评论', '今天只做一件事的话，做哪件？'];
+      (Array.isArray(card.suggestedQuestions) && card.suggestedQuestions.length ? card.suggestedQuestions : (FALLBACK_SUGG[card.source] || ['帮我总结一下这张卡片', '下一步我该做什么？', '这件事有多紧急？']));
     html += `
       <div class="z-chat">
         <h4>继续这个任务 · 和豆芽聊「${escapeHtml(name)}」</h4>

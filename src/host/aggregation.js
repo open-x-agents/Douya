@@ -115,6 +115,19 @@ export async function fetchFromSources(composioClient, activeSources) {
         console.log(`  - Actual UNREAD labels in recent: ${actualUnread}`);
         console.log(`  - Important: ${important.length}`);
         
+      } else if (slug === 'slack') {
+        // Slack: search.messages over the last day (real Composio shape: data.messages.matches[])
+        const since = new Date(Date.now() - 24*60*60*1000).toISOString().split('T')[0];
+        const matches = [];
+        for (let page = 1; page <= 3; page++) {
+          const r = await composioClient.executeAction('SLACK_SEARCH_MESSAGES', { query: `after:${since}`, count: 100, page, sort: 'timestamp' });
+          const m = r?.data?.messages?.matches || [];
+          matches.push(...m);
+          const pg = r?.data?.messages?.paging || r?.data?.messages?.pagination;
+          if (m.length < 100 || (pg && (pg.page || page) >= (pg.pages || pg.page_count || 1))) break;
+        }
+        sourceData.slack = { messages: matches };
+        console.log(`[Slack] Fetched ${matches.length} messages since ${since}`);
       } else if (slug === 'googlecalendar') {
         // Calendar: today + tomorrow (typically small, no pagination needed)
         const now = new Date();
@@ -297,6 +310,19 @@ async function paginateGmail(composioClient, query) {
  */
 export function normalizeItems(sourceData) {
   const items = [];
+  for (const m of sourceData.slack?.messages || []) {
+    const ch = m.channel || {};
+    const isDm = !!(ch.is_im || ch.is_mpim);
+    const ws = (m.permalink || '').match(/https:\/\/([^.]+)\.slack\.com/)?.[1] || '';
+    items.push({
+      source: 'slack', type: isDm ? 'slack-dm' : 'slack-message',
+      sourceId: `slack:msg:${ch.id}:${m.ts || m.iid}`,
+      title: String(m.text || '').replace(/\s+/g, ' ').slice(0, 140),
+      url: m.permalink, body: String(m.text || '').slice(0, 500),
+      metadata: { channelId: ch.id, channelName: ch.name || ch.id, isDm, user: m.username || m.user_profile?.display_name || m.user_profile?.real_name || m.user || '', ts: m.ts, workspace: ws },
+      timestamp: m.ts ? new Date(parseFloat(m.ts) * 1000).toISOString() : new Date().toISOString(),
+    });
+  }
   
   // GitHub PRs requiring review (highest priority)
   if (sourceData.github?.reviewRequested) {
@@ -611,7 +637,7 @@ export function dedupeItems(items) {
       continue;
     }
     
-    const urlKey = item.url ? new URL(item.url).pathname : null;
+    const urlKey = item.url ? (() => { try { const u = new URL(item.url); return u.host + u.pathname + u.search + u.hash; } catch { return item.url; } })() : null;
     
     if (seen.has(key)) {
       // Already seen, skip
@@ -829,7 +855,7 @@ export function clusterByProjectTheme(items) {
       type: 'email-cluster',
       source: 'gmail',
       sourceId: `gmail:cluster:${sender}:${today}`,
-      title: `${sender}`,
+      title: (lastGithubIdentity?.name && sender === lastGithubIdentity.name) ? '我自己发出/抄送的邮件' : `${sender} 的邮件`,
       subtitle: 'Emails',
       body: `最近 24h 收到 ${senderItems.length} 封邮件${unreadCount > 0 ? `，其中 ${unreadCount} 封未读` : ''}`,
       url: `https://mail.google.com/mail/u/0/#search/from:${encodeURIComponent(sender)}`,
@@ -917,6 +943,28 @@ export function clusterByProjectTheme(items) {
     console.log(`[Clustering] Gmail: category donut (GitHub:${categories.GitHub}, News:${categories.Newsletters}, People:${categories.People})`);
   }
   
+  // Slack: cluster per channel / DM
+  const slackItems = items.filter(i => i.source === 'slack');
+  const byChan = new Map();
+  for (const it of slackItems) { const k = it.metadata.channelId || 'unknown'; if (!byChan.has(k)) byChan.set(k, []); byChan.get(k).push(it); }
+  for (const [chanId, chItems] of byChan) {
+    const m0 = chItems[0].metadata;
+    const people = [...new Set(chItems.map(i => i.metadata.user).filter(Boolean))];
+    const today = new Date().toISOString().split('T')[0];
+    clusters.push({
+      id: `cluster_slack_${chanId}_${Date.now()}`,
+      type: 'slack-cluster', source: 'slack', sourceId: `slack:cluster:${chanId}:${today}`,
+      title: m0.isDm ? `私信 · ${people[0] || ''}` : `#${m0.channelName}`,
+      subtitle: m0.workspace || 'Slack',
+      body: `最近 24h 有 ${chItems.length} 条消息${people.length ? `，来自 ${people.slice(0, 3).join('、')}${people.length > 3 ? ` 等 ${people.length} 人` : ''}` : ''}。`,
+      url: chItems[0].url, priority: m0.isDm ? 'high' : chItems.length >= 5 ? 'medium' : 'low', status: 'active',
+      clusterSize: chItems.length, items: chItems, topItems: chItems.slice(0, 3),
+      metadata: { channel: m0.channelName, isDm: m0.isDm, people, messageCount: chItems.length },
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    });
+  }
+  if (slackItems.length) console.log(`[Clustering] Slack: ${byChan.size} channel clusters from ${slackItems.length} messages`);
+
   // Calendar events: cluster today's events
   const calendarItems = items.filter(i => i.source === 'googlecalendar');
   if (calendarItems.length > 0) {
@@ -1076,6 +1124,11 @@ export function classifyClusters(clusters) {
       category = 'fyi';
       score = 40;
       reasoning = 'Newsletters';
+    }
+    else if (cluster.type === 'slack-cluster') {
+      category = cluster.metadata?.isDm ? 'needs-action' : 'fyi';
+      score = cluster.metadata?.isDm ? 82 : 55 + Math.min(20, cluster.clusterSize);
+      reasoning = `${cluster.clusterSize} Slack messages`;
     }
     // Calendar cluster with upcoming: urgent
     else if (cluster.type === 'calendar-cluster' && cluster.metadata?.upcomingCount > 0) {
@@ -1253,6 +1306,7 @@ function generateClusterCards(grouped) {
       actions: [],
       createdAt: cluster.createdAt,
       updatedAt: cluster.updatedAt,
+      suggestedQuestions: Array.isArray(cluster.suggestedQuestions) ? cluster.suggestedQuestions.slice(0, 3) : undefined,
     };
     
     // Add status pill for project clusters (Chinese, waiting-on-you vs others)
@@ -1483,6 +1537,11 @@ function generateClusterCards(grouped) {
       });
     }
     
+    else if (cluster.type === 'slack-cluster') {
+      card.blocks.push({ type: 'stat', value: cluster.clusterSize, label: '条消息' });
+      if (cluster.metadata.people?.length) card.blocks.push({ type: 'tags', tags: cluster.metadata.people.slice(0, 3).map(p => ({ text: p, color: 'gray' })) });
+      card.actions.push({ label: cluster.metadata.isDm ? '回复私信' : `打开 #${cluster.metadata.channel}`, value: cluster.url, primary: true });
+    }
     // Calendar cluster
     else if (cluster.type === 'calendar-cluster') {
       card.blocks.push({
@@ -1621,6 +1680,39 @@ JSON: {"headline": "英文标题", "summary": "中文摘要"}`;
 }
 
 /**
+ * One batched LLM call: 3 card-specific follow-up questions per cluster, grounded in real item titles/people.
+ */
+async function generateSuggestedQuestions(grouped, llmClient) {
+  const all = [...grouped.urgent, ...grouped.action, ...grouped.fyi].slice(0, 30);
+  if (!all.length || !llmClient) return;
+  const brief = all.map((c, i) => {
+    const items = (c.topItems || c.items || []).slice(0, 4).map(it => `「${String(it.title || '').slice(0, 70)}」${it.metadata?.from ? ' from ' + extractSenderName(it.metadata.from) : ''}${it.metadata?.user ? ' by ' + it.metadata.user : ''}`).join('; ');
+    return `${i}. [${c.source}/${c.type}] ${c.metadata?.repo || c.title} — ${items}`;
+  }).join('\n');
+  const prompt = `下面是今天的信息卡片（真实数据）。为每张卡片写 3 个用户可能想追问助手的中文问题（每个 ≤22 字），必须点名卡片里的具体 PR/issue 标题、人名、频道或仓库，不要泛泛而谈，不要编造不存在的条目。可以是"总结/起草回复/判断优先级/下一步"类问题。
+
+${brief}
+
+只输出 JSON: {"cards":[{"i":0,"q":["...","...","..."]}, ...]}`;
+  try {
+    let text = '';
+    for await (const chunk of llmClient.stream({ messages: [{ role: 'user', content: prompt }], maxTokens: 4000, responseFormat: { type: 'json_object' } })) {
+      if (chunk.type === 'text' && chunk.text) text += chunk.text;
+    }
+    const m = text.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(m ? m[0] : text);
+    let n = 0;
+    for (const row of parsed.cards || []) {
+      const c = all[row.i];
+      if (c && Array.isArray(row.q)) { c.suggestedQuestions = row.q.filter(q => typeof q === 'string' && q.trim()).slice(0, 3); n++; }
+    }
+    console.log(`[Suggestions] card-specific questions for ${n}/${all.length} clusters`);
+  } catch (err) {
+    console.warn('[Suggestions] LLM failed, client will use domain fallback:', err.message);
+  }
+}
+
+/**
  * Main aggregation pipeline
  */
 export async function runAggregationPipeline(composioClient, activeSources, llmClient, profileContextIn) {
@@ -1649,6 +1741,7 @@ export async function runAggregationPipeline(composioClient, activeSources, llmC
   
   console.log('[Aggregation] Stage 5.5: Generating project headlines and summaries...');
   await generateProjectHeadlinesAndSummaries(grouped, llmClient);
+  await generateSuggestedQuestions(grouped, llmClient);
   
   console.log('[Aggregation] Stage 6: Writing brief with LLM...');
   profileContext.name = resolveDisplayName(profileContext.name) || '你';
@@ -1829,13 +1922,14 @@ RULES:
 - Start/end times in HH:MM format (24h, Asia/Shanghai timezone)
 - Never overlap with fixed events
 - Mark all as type: "suggested"
+- Titles MUST be short Simplified Chinese (<=14 chars), e.g. "专注：评审 PR #42", "午餐", "散步休息"
 - Realistic durations (focus 1-2h, meals 30-60min, breaks 15-30min)
 - Respect user's active hours
 - If no calendar: still build reasonable schedule from tasks
 
 JSON: {
   "suggestedBlocks": [
-    {"type": "suggested", "category": "focus|meal|break|exercise|winddown", "start": "09:00", "end": "11:00", "title": "Focus: Review PR #42", "color": "green"},
+    {"type": "suggested", "category": "focus|meal|break|exercise|winddown", "start": "09:00", "end": "11:00", "title": "专注：评审 PR #42", "color": "green"},
     ...
   ]
 }`;
@@ -1857,7 +1951,7 @@ JSON: {
     // Fallback: just add lunch and a focus block
     suggestedBlocks = [
       {type: 'suggested', category: 'meal', start: '12:00', end: '13:00', title: 'Lunch break', color: 'orange'},
-      {type: 'suggested', category: 'focus', start: '14:00', end: '16:00', title: 'Focus time', color: 'green'},
+      {type: 'suggested', category: 'focus', start: '14:00', end: '16:00', title: '专注时段', color: 'green'},
     ];
   }
   

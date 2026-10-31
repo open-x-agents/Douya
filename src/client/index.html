@@ -60,6 +60,166 @@
   .card p{margin:0;font-size:13px;color:var(--ink2);line-height:1.6}
   .card .meta{font-size:11.5px;color:var(--ink3);margin-top:8px}
   .card .actions{display:flex;gap:8px;margin-top:12px}
+  
+  /* Windows 8 style tile grid */
+  .cards-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));
+    grid-auto-rows:180px;
+    grid-auto-flow:dense;
+    gap:12px;
+    margin-top:24px;
+  }
+  @media (max-width:1200px){.cards-grid{grid-template-columns:repeat(auto-fill, minmax(180px, 1fr));grid-auto-rows:160px}}
+  @media (max-width:760px){.cards-grid{grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));grid-auto-rows:140px}}
+  @media (max-width:480px){.cards-grid{grid-template-columns:1fr 1fr;grid-auto-rows:120px}}
+  
+  .tile{
+    background:#fff;
+    border-radius:10px;
+    padding:16px;
+    transition:.25s var(--ease);
+    cursor:pointer;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+    position:relative;
+    border:2px solid transparent;
+  }
+  .tile:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(21,23,28,.12)}
+  
+  /* Tile sizes */
+  .tile.small{grid-column:span 1;grid-row:span 1}
+  .tile.normal{grid-column:span 1;grid-row:span 1}
+  .tile.wide{grid-column:span 2;grid-row:span 1}
+  .tile.large{grid-column:span 2;grid-row:span 2}
+  @media (max-width:480px){
+    .tile.wide{grid-column:span 2}
+    .tile.large{grid-column:span 2;grid-row:span 2}
+  }
+  
+  /* Tile colors by type/priority */
+  .tile.hero{background:linear-gradient(135deg,#4a6cf7 0%,#3d5ce8 100%);color:#fff;border-color:rgba(255,255,255,.2)}
+  .tile.hero *{color:#fff}
+  .tile.timetable{background:linear-gradient(135deg,#2f9e6b 0%,#27845a 100%);color:#fff;border-color:rgba(255,255,255,.2)}
+  .tile.timetable *{color:#fff}
+  .tile.project-cluster{background:linear-gradient(135deg,#eef2ff 0%,#e0e7ff 100%);border-color:var(--blue-line)}
+  .tile.email-cluster{background:linear-gradient(135deg,#fdf4e6 0%,#f9ead1 100%);border-color:#efd9a8}
+  .tile.calendar-cluster{background:linear-gradient(135deg,#eaf7f0 0%,#d5efe2 100%);border-color:#b8e2cf}
+  .tile.newsletter-cluster{background:var(--gray-soft);border-color:var(--line)}
+  .tile.urgent{border-color:var(--red);border-width:3px}
+  
+  .tile-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;gap:8px}
+  .tile-title{font-size:15px;font-weight:700;letter-spacing:-.01em;line-height:1.3;margin:0;word-break:break-word}
+  .tile-subtitle{font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:.08em;margin:2px 0 8px;font-weight:600}
+  .tile-body{font-size:12.5px;line-height:1.5;opacity:.85;margin:4px 0;flex:1;overflow:hidden}
+  
+  /* Visual blocks in tiles */
+  .tile-blocks{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px;align-items:center}
+  .tile-blocks .stat-block{display:flex;flex-direction:column;align-items:flex-start;min-width:0}
+  .tile-blocks .stat-block .value{font-size:24px;font-weight:700;line-height:1;letter-spacing:-.02em}
+  .tile-blocks .stat-block .label{font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+  
+  .tile-blocks .tags{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+  .tile-blocks .tag{font-size:10px;padding:3px 8px;border-radius:999px;font-weight:600;letter-spacing:.03em;white-space:nowrap;flex-shrink:0}
+  .tile-blocks .tag.blue{background:var(--blue-soft);color:var(--blue);border:1px solid var(--blue-line)}
+  .tile-blocks .tag.red{background:var(--red-soft);color:var(--red);border:1px solid var(--red)}
+  .tile-blocks .tag.green{background:var(--green-soft);color:var(--green);border:1px solid var(--green)}
+  .tile-blocks .tag.orange{background:var(--amber-soft);color:var(--amber);border:1px solid var(--amber)}
+  .tile-blocks .tag.gray{background:var(--gray-soft);color:var(--ink3);border:1px solid var(--line)}
+  
+  /* Charts in tiles */
+  .tile-chart{width:100%;height:50px;margin:6px 0}
+  .tile-chart svg{width:100%;height:100%}
+  
+  /* Donut chart */
+  .donut-chart{display:flex;align-items:center;justify-content:center;gap:12px;margin:6px 0}
+  .donut-chart svg{width:60px;height:60px;flex-shrink:0}
+  .donut-legend{display:flex;flex-direction:column;gap:4px;font-size:11px}
+  .donut-legend-item{display:flex;align-items:center;gap:6px}
+  .donut-legend-item .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  
+  /* Timeline in tiles */
+  .tile-timeline{display:flex;flex-direction:column;gap:6px;margin:8px 0;font-size:11.5px}
+  .timeline-event{display:grid;grid-template-columns:48px 1fr;gap:8px;align-items:center}
+  .timeline-event .time{font-weight:700;font-variant-numeric:tabular-nums;font-family:ui-monospace,monospace;color:var(--ink)}
+  .timeline-event .event-title{line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  
+  /* Timetable strip */
+  .timetable-strip{display:flex;height:40px;border-radius:6px;overflow:hidden;margin:12px 0;position:relative}
+  .timetable-block{flex:1;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:rgba(255,255,255,.9);
+    border-right:1px solid rgba(255,255,255,.3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px}
+  .timetable-block.fixed{background:rgba(255,255,255,.25)}
+  .timetable-block.suggested{background:rgba(255,255,255,.15);font-style:italic;opacity:.8}
+  .timetable-now{position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 4px rgba(255,255,255,.8);z-index:1}
+  
+  /* Tile actions */
+  .tile-actions{display:flex;gap:6px;margin-top:auto;padding-top:8px}
+  .tile-action{border:1px solid rgba(0,0,0,.15);background:rgba(255,255,255,.5);border-radius:6px;padding:6px 12px;font-size:11.5px;
+    font-weight:600;cursor:pointer;transition:.2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tile-action:hover{background:rgba(255,255,255,.8);transform:translateY(-1px)}
+  .tile.hero .tile-action,
+  .tile.timetable .tile-action{border-color:rgba(255,255,255,.4);background:rgba(255,255,255,.2);color:#fff}
+  .tile.hero .tile-action:hover,
+  .tile.timetable .tile-action:hover{background:rgba(255,255,255,.35)}
+  
+  /* Bottom input for chat */
+  .today-chat-input{
+    position:sticky;
+    bottom:0;
+    left:0;
+    right:0;
+    padding:16px;
+    background:rgba(255,255,255,.95);
+    backdrop-filter:blur(10px);
+    border-top:1px solid var(--line);
+    margin:24px -40px -40px;
+  }
+  @media (max-width:620px){.today-chat-input{margin:16px -16px -24px;padding:12px 16px}}
+  
+  .today-chat-input .input-wrap{
+    max-width:720px;
+    margin:0 auto;
+    display:flex;
+    gap:10px;
+    align-items:center;
+    background:#fff;
+    border:2px solid var(--line);
+    border-radius:12px;
+    padding:4px 4px 4px 16px;
+    transition:.25s var(--ease);
+  }
+  .today-chat-input .input-wrap:focus-within{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+  
+  .today-chat-input input{
+    flex:1;
+    border:0;
+    outline:none;
+    font:inherit;
+    font-size:14px;
+    padding:10px 0;
+    color:var(--ink);
+    background:none;
+    min-width:0;
+  }
+  .today-chat-input input::placeholder{color:var(--ink3)}
+  
+  .today-chat-input .send-btn{
+    width:40px;
+    height:40px;
+    border-radius:8px;
+    background:var(--blue);
+    color:#fff;
+    border:0;
+    font-size:18px;
+    cursor:pointer;
+    display:grid;
+    place-items:center;
+    flex-shrink:0;
+    transition:.2s var(--ease);
+  }
+  .today-chat-input .send-btn:hover{background:var(--blue);transform:scale(1.05)}
+  .today-chat-input .send-btn:active{transform:scale(.95)}
   .btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 14px;font-size:12.5px;color:var(--ink);font-weight:500;font-family:inherit;cursor:pointer;transition:.2s}
   .btn:hover{border-color:#cfd3db}
   .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
@@ -612,179 +772,234 @@
     const container = $('cardList');
     
     if (cards.length === 0) {
-      container.innerHTML = '<div class="card a in" style="text-align:center;padding:40px;color:var(--ink3)"><p>暂无待办卡片</p><p style="font-size:12px;margin-top:8px">点击上方「立即汇聚」从数据源获取最新动态</p></div>';
+      container.innerHTML = `
+        <div class="cards-grid">
+          <div class="tile normal" style="text-align:center;padding:32px 16px;background:var(--gray-soft);grid-column:span 2">
+            <p style="color:var(--ink3);margin:0 0 8px">暂无待办卡片</p>
+            <p style="font-size:12px;color:var(--ink3);margin:0">点击上方「立即汇聚」从数据源获取最新动态</p>
+          </div>
+        </div>
+        <div class="today-chat-input">
+          <div class="input-wrap">
+            <input type="text" id="todayChatInput" placeholder="Make sense of Today..." />
+            <button class="send-btn" id="todayChatSend">↑</button>
+          </div>
+        </div>
+      `;
+      setupTodayChatInput();
       return;
     }
     
-    const html = cards.map(card => {
-      let cardHtml = `<div class="card a in" data-card-id="${escapeHtml(card.id)}" style="position:relative">`;
+    // Render tiles in grid
+    const tilesHtml = cards.map(card => {
+      const size = card.size || 'normal';
+      const type = card.type || '';
+      const priority = card.priority || '';
+      let tileClass = `tile ${size} ${type}`;
+      if (priority === 'urgent') tileClass += ' urgent';
       
-      // Priority indicator
-      if (card.priority === 'high') {
-        cardHtml += '<div style="position:absolute;top:12px;right:12px;width:8px;height:8px;border-radius:50%;background:var(--red)"></div>';
+      let tileHtml = `<div class="${tileClass}" data-card-id="${escapeHtml(card.id)}" data-url="${escapeHtml(card.url || '')}">`;
+      
+      // Header with title and subtitle
+      tileHtml += '<div class="tile-header">';
+      tileHtml += `<div style="flex:1;min-width:0">`;
+      if (card.subtitle) {
+        tileHtml += `<div class="tile-subtitle">${escapeHtml(card.subtitle)}</div>`;
       }
+      tileHtml += `<h3 class="tile-title">${escapeHtml(card.title)}</h3>`;
+      tileHtml += `</div>`;
+      tileHtml += '</div>';
       
-      // Title
-      cardHtml += `<h4 style="margin:0 0 8px">${escapeHtml(card.title)}</h4>`;
-      
-      // Body (if present and short)
-      if (card.body && card.body.length < 100) {
-        cardHtml += `<p style="font-size:13px;color:var(--ink2);margin:0 0 12px">${escapeHtml(card.body)}</p>`;
+      // Body text
+      if (card.body && type !== 'hero' && type !== 'timetable') {
+        tileHtml += `<div class="tile-body">${escapeHtml(card.body)}</div>`;
       }
       
       // Visual blocks
       if (card.blocks && card.blocks.length > 0) {
-        cardHtml += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin:12px 0">';
+        tileHtml += '<div class="tile-blocks">';
         
         for (const block of card.blocks) {
-          if (block.type === 'stat') {
-            const colorMap = {red:'var(--red)',yellow:'var(--yellow)',green:'var(--green)',blue:'var(--blue)',gray:'var(--ink3)'};
-            const color = colorMap[block.color] || 'var(--blue)';
-            cardHtml += `
-              <div style="padding:12px 16px;background:var(--bg2);border-radius:8px;text-align:center;min-width:80px">
-                <div style="font-size:24px;font-weight:600;color:${color}">${escapeHtml(String(block.value))}</div>
-                <div style="font-size:11px;color:var(--ink3);margin-top:4px">${escapeHtml(block.label)}</div>
+          if (block.type === 'narrative') {
+            // Hero narrative
+            tileHtml += `<div style="font-size:13.5px;line-height:1.5;margin:8px 0;opacity:.95">${escapeHtml(block.text)}</div>`;
+          } else if (block.type === 'stat') {
+            tileHtml += `
+              <div class="stat-block">
+                <div class="value">${escapeHtml(String(block.value))}</div>
+                <div class="label">${escapeHtml(block.label)}</div>
               </div>
             `;
           } else if (block.type === 'tags') {
-            cardHtml += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
-            for (const tag of block.items || []) {
-              const bgMap = {red:'#fee',yellow:'#ffa',green:'#efe',blue:'#eef',orange:'#fed',gray:'#f5f5f5'};
-              const bg = bgMap[tag.color] || '#eee';
-              cardHtml += `<span style="font-size:11px;padding:4px 8px;background:${bg};border-radius:4px;color:var(--ink1);white-space:nowrap;flex-shrink:0">${escapeHtml(tag.label)}</span>`;
+            tileHtml += '<div class="tags">';
+            for (const tag of block.tags || []) {
+              const color = tag.color || 'gray';
+              tileHtml += `<span class="tag ${color}">${escapeHtml(tag.text)}</span>`;
             }
-            cardHtml += '</div>';
-          } else if (block.type === 'chart') {
-            // Render mini chart using inline SVG
+            tileHtml += '</div>';
+          } else if (block.type === 'chart' && block.chartType === 'donut') {
+            // Donut chart
+            const data = block.data || [];
+            const labels = block.labels || [];
+            const total = data.reduce((s, v) => s + v, 0);
+            const pct = total > 0 ? (data[0] / total * 100).toFixed(0) : 0;
+            const circumference = 2 * Math.PI * 18;
+            const offset = circumference - (pct / 100 * circumference);
+            
+            tileHtml += `
+              <div class="donut-chart">
+                <svg viewBox="0 0 40 40" style="width:60px;height:60px">
+                  <circle cx="20" cy="20" r="18" fill="none" stroke="rgba(0,0,0,.08)" stroke-width="4"/>
+                  <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="4"
+                          stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"
+                          transform="rotate(-90 20 20)" stroke-linecap="round" opacity=".8"/>
+                  <text x="20" y="24" font-size="10" font-weight="700" text-anchor="middle" fill="currentColor">${pct}%</text>
+                </svg>
+              </div>
+            `;
+          } else if (block.type === 'chart' && block.chartType === 'bar') {
+            // Bar chart
             const data = block.data || [];
             const labels = block.labels || [];
             const max = Math.max(...data, 1);
             
-            if (block.chartType === 'bar' && data.length > 0) {
-              const barWidth = 100 / data.length;
-              cardHtml += `
-                <div style="flex:1;min-width:200px">
-                  <svg width="100%" height="80" style="max-width:300px">
+            tileHtml += '<svg class="tile-chart" viewBox="0 0 100 50">';
+            data.forEach((value, i) => {
+              const height = (value / max) * 35;
+              const x = (i / data.length) * 100 + 2;
+              const width = (100 / data.length) * 0.7;
+              tileHtml += `
+                <rect x="${x}" y="${40 - height}" width="${width}" height="${height}" 
+                      fill="currentColor" opacity=".7" rx="1"/>
+                <text x="${x + width / 2}" y="49" font-size="6" text-anchor="middle" fill="currentColor" opacity=".6">${escapeHtml(labels[i] || '')}</text>
               `;
-              
-              data.forEach((value, i) => {
-                const height = (value / max) * 60;
-                const x = i * (100 / data.length);
-                const barColor = block.color === 'blue' ? '#667eea' : '#94a3b8';
-                
-                cardHtml += `
-                  <rect x="${x}%" y="${60 - height}" width="${barWidth * 0.8}%" height="${height}" 
-                        fill="${barColor}" rx="2"/>
-                  <text x="${x + barWidth / 2}%" y="75" text-anchor="middle" 
-                        font-size="10" fill="var(--ink3)">${escapeHtml(labels[i] || i)}</text>
-                  <text x="${x + barWidth / 2}%" y="${55 - height}" text-anchor="middle" 
-                        font-size="11" font-weight="600" fill="var(--ink1)">${value}</text>
-                `;
-              });
-              
-              cardHtml += `</svg></div>`;
-            } else if (block.chartType === 'sparkline' && data.length > 1) {
-              // Simple sparkline
-              const points = data.map((v, i) => {
-                const x = (i / (data.length - 1)) * 100;
-                const y = 40 - ((v / max) * 30);
-                return `${x},${y}`;
-              }).join(' ');
-              
-              cardHtml += `
-                <svg width="100" height="40" style="display:inline-block;vertical-align:middle">
-                  <polyline points="${points}" fill="none" stroke="#667eea" stroke-width="2"/>
-                </svg>
-              `;
-            } else if (block.chartType === 'donut' && data.length > 0) {
-              // Donut chart with proper SVG ring
-              const total = data.reduce((sum, v) => sum + v, 0);
-              const pct = total > 0 ? (data[0] / total * 100).toFixed(0) : 0;
-              const circumference = 2 * Math.PI * 40;
-              const offset = circumference - (pct / 100 * circumference);
-              
-              cardHtml += `
-                <div style="position:relative;width:100px;height:100px;display:inline-block">
-                  <svg width="100" height="100" viewBox="0 0 100 100">
-                    <circle cx="50" cy="50" r="40" fill="none" stroke="var(--bg2)" stroke-width="12"/>
-                    <circle cx="50" cy="50" r="40" fill="none" stroke="#667eea" stroke-width="12"
-                            stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"
-                            transform="rotate(-90 50 50)" stroke-linecap="round"/>
-                  </svg>
-                  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:20px;font-weight:600;color:var(--ink1)">${pct}%</div>
-                </div>
-              `;
-            }
+            });
+            tileHtml += '</svg>';
           } else if (block.type === 'timeline') {
-            cardHtml += '<div style="font-size:12px;color:var(--ink2)">';
-            for (const item of block.items || []) {
-              cardHtml += `<div style="padding:4px 0;display:flex;gap:8px"><span style="color:var(--blue);font-weight:500">${escapeHtml(item.time)}</span><span>${escapeHtml(item.title)}</span></div>`;
-            }
-            cardHtml += '</div>';
-          } else if (block.type === 'progress') {
-            const pct = block.max > 0 ? (block.value / block.max * 100).toFixed(0) : 0;
-            cardHtml += `
-              <div style="flex:1">
-                <div style="height:8px;background:var(--bg2);border-radius:4px;overflow:hidden">
-                  <div style="height:100%;width:${pct}%;background:var(--blue);transition:width 0.3s"></div>
+            tileHtml += '<div class="tile-timeline">';
+            for (const item of (block.items || []).slice(0, 4)) {
+              tileHtml += `
+                <div class="timeline-event">
+                  <span class="time">${escapeHtml(item.time)}</span>
+                  <span class="event-title">${escapeHtml(item.title)}</span>
                 </div>
-                <div style="font-size:11px;color:var(--ink3);margin-top:4px">${escapeHtml(block.label || '')}</div>
-              </div>
-            `;
-          } else if (block.type === 'avatars') {
-            cardHtml += '<div style="display:flex;align-items:center;gap:4px">';
-            for (const avatar of (block.items || []).slice(0, 5)) {
-              if (avatar.url) {
-                cardHtml += `<img src="${escapeHtml(avatar.url)}" alt="${escapeHtml(avatar.name)}" style="width:24px;height:24px;border-radius:50%;object-fit:cover" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div style="display:none;width:24px;height:24px;border-radius:50%;background:var(--blue);color:white;align-items:center;justify-content:center;font-size:10px;font-weight:600">${escapeHtml(avatar.name.charAt(0).toUpperCase())}</div>`;
-              } else {
-                cardHtml += `<div style="width:24px;height:24px;border-radius:50%;background:var(--blue);color:white;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600">${escapeHtml(avatar.name.charAt(0).toUpperCase())}</div>`;
-              }
-            }
-            if (block.overflow > 0) {
-              cardHtml += `<span style="font-size:11px;color:var(--ink3)">+${block.overflow}</span>`;
-            }
-            cardHtml += '</div>';
-          } else if (block.type === 'image') {
-            if (block.url) {
-              cardHtml += `
-                <img src="${escapeHtml(block.url)}" alt="${escapeHtml(block.alt || '')}" 
-                     style="width:100%;max-width:300px;border-radius:8px;margin:8px 0" 
-                     onerror="this.style.display='none'" />
               `;
             }
-          } else if (block.type === 'link') {
-            if (block.url) {
-              cardHtml += `
-                <a href="${escapeHtml(block.url)}" target="_blank" 
-                   style="display:block;padding:8px;background:var(--bg2);border-radius:6px;text-decoration:none;color:inherit;margin:8px 0">
-                  ${block.favicon ? `<img src="${escapeHtml(block.favicon)}" style="width:16px;height:16px;display:inline-block;vertical-align:middle;margin-right:6px" onerror="this.style.display='none'" />` : ''}
-                  <span style="font-size:13px;font-weight:500;color:var(--ink1)">${escapeHtml(block.title || block.url)}</span>
-                  ${block.description ? `<div style="font-size:11px;color:var(--ink3);margin-top:4px">${escapeHtml(block.description)}</div>` : ''}
-                </a>
+            tileHtml += '</div>';
+          } else if (block.type === 'timetable') {
+            // Timetable strip
+            const allBlocks = [...(block.fixedBlocks || []), ...(block.suggestedBlocks || [])].sort((a, b) => {
+              const getMinutes = (t) => {
+                if (typeof t === 'string' && t.includes(':')) {
+                  const [h, m] = t.split(':').map(Number);
+                  return h * 60 + m;
+                }
+                return new Date(t).getHours() * 60 + new Date(t).getMinutes();
+              };
+              return getMinutes(a.start) - getMinutes(b.end);
+            });
+            
+            tileHtml += '<div class="timetable-strip">';
+            allBlocks.forEach(tb => {
+              const duration = 60; // simplified: 1 hour each
+              tileHtml += `
+                <div class="timetable-block ${tb.type}" title="${escapeHtml(tb.title)}" style="flex:${duration}">
+                  ${escapeHtml(tb.title.substring(0, 12))}
+                </div>
               `;
+            });
+            
+            // Now indicator
+            const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+            const dayStart = 8 * 60;
+            const dayEnd = 22 * 60;
+            const nowPct = ((nowMinutes - dayStart) / (dayEnd - dayStart)) * 100;
+            if (nowPct >= 0 && nowPct <= 100) {
+              tileHtml += `<div class="timetable-now" style="left:${nowPct}%"></div>`;
             }
+            
+            tileHtml += '</div>';
           }
         }
         
-        cardHtml += '</div>';
+        tileHtml += '</div>';
       }
       
-      // URL link
-      if (card.url) {
-        cardHtml += `<a href="${escapeHtml(card.url)}" target="_blank" style="font-size:12px;color:var(--blue);text-decoration:none;margin-top:8px;display:inline-block">查看详情 →</a>`;
+      // Actions
+      if (card.actions && card.actions.length > 0) {
+        tileHtml += '<div class="tile-actions">';
+        for (const action of card.actions.slice(0, 2)) {
+          const isPrimary = action.primary ? 'primary' : '';
+          tileHtml += `<button class="tile-action ${isPrimary}" data-action-url="${escapeHtml(action.value || card.url)}">${escapeHtml(action.label)}</button>`;
+        }
+        tileHtml += '</div>';
       }
       
-      // Status badge
-      if (card.status && card.status !== 'active') {
-        const statusMap = {done:'✓ 完成',snoozed:'💤 已推迟',pinned:'📌 置顶'};
-        cardHtml += `<div style="margin-top:8px;font-size:11px;color:var(--ink3)">${statusMap[card.status] || card.status}</div>`;
-      }
-      
-      cardHtml += '</div>';
-      return cardHtml;
+      tileHtml += '</div>';
+      return tileHtml;
     }).join('');
     
-    container.innerHTML = html;
+    container.innerHTML = `
+      <div class="cards-grid">${tilesHtml}</div>
+      <div class="today-chat-input">
+        <div class="input-wrap">
+          <input type="text" id="todayChatInput" placeholder="Make sense of Today..." />
+          <button class="send-btn" id="todayChatSend">↑</button>
+        </div>
+      </div>
+    `;
+    
+    // Add click handlers
+    container.querySelectorAll('.tile').forEach(tile => {
+      const url = tile.getAttribute('data-url');
+      tile.addEventListener('click', (e) => {
+        // Don't trigger if clicking an action button
+        if (e.target.classList.contains('tile-action')) return;
+        if (url && url !== 'undefined' && url !== '') {
+          window.open(url, '_blank');
+        }
+      });
+    });
+    
+    container.querySelectorAll('.tile-action').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const actionUrl = btn.getAttribute('data-action-url');
+        if (actionUrl && actionUrl !== 'undefined' && actionUrl !== '') {
+          window.open(actionUrl, '_blank');
+        }
+      });
+    });
+    
+    setupTodayChatInput();
+  }
+  
+  function setupTodayChatInput() {
+    const input = $('todayChatInput');
+    const sendBtn = $('todayChatSend');
+    
+    if (!input || !sendBtn) return;
+    
+    const send = () => {
+      const msg = input.value.trim();
+      if (!msg) return;
+      
+      // Open dock and send message
+      openDock();
+      $('dockInput').value = msg;
+      sendMessage();
+      
+      input.value = '';
+    };
+    
+    sendBtn.onclick = send;
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        send();
+      }
+    };
+  }
   }
 
   // Manual digest generation

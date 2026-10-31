@@ -115,7 +115,6 @@ export async function fetchFromSources(composioClient, activeSources) {
         
         console.log(`[Calendar] Fetched ${sourceData.googlecalendar.today.length} today, ${sourceData.googlecalendar.tomorrow.length} tomorrow`);
       }
-      }
     } catch (err) {
       console.warn(`[fetchFromSources] Failed to fetch ${slug}:`, err.message);
     }

@@ -54,65 +54,93 @@ const COMPOSIO_APPS = [
 const chatSessions = new Map();
 
 /**
- * Call LLM - NO FALLBACK
- * If LLM not configured, return prompt to configure it
+ * Call LLM - Build client from config store on-demand
  */
 async function callLLM(ctx, messages, sessionId = 'web-chat') {
-  // Check if LLM is configured
-  if (!ctx?.llm?.stream) {
-    return {
-      text: '模型未配置',
-      cards: [
-        {
-          type: 'action',
-          title: '需要配置 AI 模型才能对话',
-          description: '请点击下方按钮前往配置页面',
-          actions: [
-            { label: '前往配置', value: 'goto_settings' },
-          ],
-        },
-      ],
-    };
+  // Try to get LLM from context first (ds-bot mode)
+  if (ctx?.llm?.stream) {
+    try {
+      let fullText = '';
+      for await (const chunk of ctx.llm.stream({
+        messages,
+        maxTokens: 1000,
+      })) {
+        if (chunk.type === 'text' && chunk.text) {
+          fullText += chunk.text;
+        }
+      }
+
+      if (fullText.trim()) {
+        const cards = parseResponseToCards(fullText);
+        return { text: fullText, cards };
+      }
+    } catch (error) {
+      console.error('LLM error:', error);
+    }
   }
 
-  // Try real LLM
-  try {
-    let fullText = '';
-    for await (const chunk of ctx.llm.stream({
-      messages,
-      maxTokens: 1000,
-    })) {
-      if (chunk.type === 'text' && chunk.text) {
-        fullText += chunk.text;
+  // Standalone mode: build client from config store
+  const configStore = callLLM.configStore;
+  if (configStore?.get) {
+    const cfg = configStore.get()?.llm;
+    if (cfg?.apiKey && cfg?.provider) {
+      try {
+        const { createLLMClient } = await import('./llm-client.js');
+        const client = createLLMClient({
+          provider: cfg.provider,
+          baseURL: cfg.baseURL,
+          apiKey: cfg.apiKey,
+          model: cfg.model,
+          log: () => {},
+        });
+
+        let fullText = '';
+        for await (const chunk of client.stream({
+          messages,
+          maxTokens: 1000,
+        })) {
+          if (chunk.type === 'text' && chunk.text) {
+            fullText += chunk.text;
+          }
+        }
+
+        if (fullText.trim()) {
+          const cards = parseResponseToCards(fullText);
+          return { text: fullText, cards };
+        }
+      } catch (error) {
+        console.error('LLM error:', error);
+        return {
+          text: '调用模型时出错',
+          cards: [
+            {
+              type: 'error',
+              title: '错误: ' + error.message,
+              description: '请检查模型配置是否正确',
+              actions: [
+                { label: '检查配置', value: 'goto_settings' },
+              ],
+            },
+          ],
+        };
       }
     }
-
-    if (fullText.trim()) {
-      // Parse response for structured cards
-      const cards = parseResponseToCards(fullText);
-      return { text: fullText, cards };
-    } else {
-      return {
-        text: '(模型返回空响应)',
-        cards: [],
-      };
-    }
-  } catch (error) {
-    console.error('LLM error:', error);
-    return {
-      text: '调用模型时出错',
-      cards: [
-        {
-          type: 'error',
-          title: '错误: ' + error.message,
-          description: '请检查模型配置是否正确',
-          actions: [
-            { label: '检查配置', value: 'goto_settings' },
-          ],
-        },
-      ],
-    };
   }
+
+  // No model configured
+  return {
+    text: '模型未配置',
+    cards: [
+      {
+        type: 'action',
+        title: '需要配置 AI 模型才能对话',
+        description: '请点击下方按钮前往配置页面',
+        actions: [
+          { label: '前往配置', value: 'goto_settings' },
+        ],
+      },
+    ],
+  };
 }
 
 /**
@@ -162,7 +190,10 @@ function parseResponseToCards(text) {
 
 export function createApiRouter(ctx) {
   const { store, composioClient, config, configStore } = ctx;
-  const llmCtx = ctx.llmCtx || ctx.ctx;  // Use llmCtx consistently
+  const llmCtx = ctx.llmCtx || ctx.ctx;
+
+  // Export configStore for callLLM to access
+  callLLM.configStore = configStore;
 
   return {
     /**
@@ -619,7 +650,7 @@ export function createApiRouter(ctx) {
 
       await configStore.save(updates);
 
-      // Update runtime LLM client if callback provided
+      // Rebuild LLM client immediately from saved config
       if (typeof updateLLMClient === 'function') {
         updateLLMClient();
       }
@@ -634,12 +665,24 @@ export function createApiRouter(ctx) {
      * POST /api/llm/test - Test LLM connection
      */
     async testLLM() {
-      if (!llmCtx?.llm?.testConnection) {
-        return { ok: false, error: 'LLM not configured' };
+      // Build LLM client from saved config on-demand
+      const cfg = configStore.get()?.llm;
+      if (!cfg?.apiKey || !cfg?.provider) {
+        return { ok: false, error: 'LLM not configured in config store' };
       }
 
       try {
-        const result = await llmCtx.llm.testConnection();
+        // Create temporary client for testing
+        const { createLLMClient } = await import('./llm-client.js');
+        const testClient = createLLMClient({
+          provider: cfg.provider,
+          baseURL: cfg.baseURL,
+          apiKey: cfg.apiKey,
+          model: cfg.model,
+          log: () => {},
+        });
+
+        const result = await testClient.testConnection();
         return result;
       } catch (error) {
         return { ok: false, error: error.message };

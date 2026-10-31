@@ -432,15 +432,21 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text, sessionId: 'web-default' }),
       });
-      
+
+      // Remove typing indicator
+      typing.remove();
+
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
       
       const data = await res.json();
 
-      // Remove typing indicator
-      typing.remove();
+      // Check for error in response
+      if (data.error) {
+        addBotMessage(data.error, data.time);
+        return;
+      }
 
       // Check for empty response
       if (!data.text && (!data.cards || data.cards.length === 0)) {
@@ -449,12 +455,9 @@
         return;
       }
 
-      // Add response
-      if (data.error) {
-        addBotMessage(data.error, data.time);
-      } else {
-        addBotMessage(data.text, data.time, data.cards);
-      }
+      // Add successful response
+      addBotMessage(data.text, data.time, data.cards);
+      
     } catch (err) {
       typing.remove();
       console.error('[Chat Error]', err);
@@ -465,49 +468,105 @@
   function addBotMessage(text, time, cards) {
     const body = $('dockBody');
     
-    // Add text bubble
-    const reply = document.createElement('div');
-    reply.className = 'bubble';
-    reply.innerHTML = `${escapeHtml(text)}<small>${time || new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'})}</small>`;
-    body.appendChild(reply);
+    // Add text bubble if present
+    if (text) {
+      const reply = document.createElement('div');
+      reply.className = 'bubble';
+      reply.innerHTML = `${escapeHtml(text)}<small>${time || new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'})}</small>`;
+      body.appendChild(reply);
+    }
 
     // Add interactive cards if present
     if (cards && cards.length > 0) {
       cards.forEach(card => {
-        const cardEl = document.createElement('div');
-        cardEl.className = 'chat-card';
-        
-        if (card.type === 'action') {
-          cardEl.innerHTML = `
-            <div class="card-title">${escapeHtml(card.title)}</div>
-            <div class="card-actions">
-              ${card.actions.map(a => `<button class="card-btn" data-value="${escapeHtml(a.value)}">${escapeHtml(a.label)}</button>`).join('')}
-            </div>
-          `;
-        } else if (card.type === 'choice') {
-          cardEl.innerHTML = `
-            <div class="card-title">${escapeHtml(card.title)}</div>
-            <div class="card-choices">
-              ${card.choices.map(c => `<button class="card-btn choice" data-value="${escapeHtml(c.value)}">${escapeHtml(c.label)}</button>`).join('')}
-            </div>
-          `;
-        }
-        
-        body.appendChild(cardEl);
-        
-        // Add click handlers to card buttons
-        cardEl.querySelectorAll('.card-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const value = btn.getAttribute('data-value');
-            const label = btn.textContent;
-            $('dockInput').value = label;
-            sendMessage();
+        try {
+          const cardEl = document.createElement('div');
+          cardEl.className = 'chat-card';
+          cardEl.style.cssText = 'background:#f8f9fa;border:1px solid #e0e0e0;border-radius:8px;padding:12px;margin:8px 0;max-width:400px;';
+          
+          let html = '';
+          
+          // Title
+          if (card.title) {
+            html += `<h4 style="margin:0 0 8px;font-size:14px;font-weight:600;color:#333">${escapeHtml(card.title)}</h4>`;
+          }
+          
+          // Description
+          if (card.description) {
+            html += `<p style="margin:0 0 8px;font-size:13px;color:#666;line-height:1.4">${escapeHtml(card.description)}</p>`;
+          }
+          
+          // Time + Status (for event/task)
+          if (card.time || card.status) {
+            html += '<div style="font-size:12px;color:#888;margin-bottom:8px">';
+            if (card.time) html += `<span>${escapeHtml(card.time)}</span>`;
+            if (card.status) html += `<span style="margin-left:8px">${escapeHtml(card.status)}</span>`;
+            html += '</div>';
+          }
+          
+          // Items list (for info cards)
+          if (card.items && Array.isArray(card.items) && card.items.length > 0) {
+            html += '<ul style="margin:8px 0;padding-left:20px;list-style:disc">';
+            card.items.forEach(item => {
+              html += `<li style="font-size:13px;color:#555;margin:4px 0">${escapeHtml(String(item))}</li>`;
+            });
+            html += '</ul>';
+          }
+          
+          // Actions (for action/choice cards) - handle both 'actions' and 'choices' fields
+          const actionList = card.actions || card.choices;
+          if (actionList && Array.isArray(actionList) && actionList.length > 0) {
+            html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">';
+            actionList.forEach(action => {
+              const label = escapeHtml(action.label || action.text || 'Action');
+              const value = escapeHtml(action.value || action.action || action.label || '');
+              html += `<button class="card-btn" data-value="${value}" style="padding:6px 12px;background:#007bff;color:white;border:none;border-radius:4px;font-size:13px;cursor:pointer;transition:background 0.2s">${label}</button>`;
+            });
+            html += '</div>';
+          }
+          
+          cardEl.innerHTML = html;
+          
+          // Add click handlers for action buttons
+          cardEl.querySelectorAll('.card-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const actionValue = btn.getAttribute('data-value');
+              handleCardAction(actionValue);
+            });
+            // Hover effects
+            btn.addEventListener('mouseenter', () => { btn.style.background = '#0056b3'; });
+            btn.addEventListener('mouseleave', () => { btn.style.background = '#007bff'; });
           });
-        });
+          
+          body.appendChild(cardEl);
+        } catch (err) {
+          console.error('[Card Render Error]', err, card);
+          // Don't show error bubble if HTTP succeeded
+        }
       });
     }
 
     body.scrollTop = body.scrollHeight;
+  }
+
+  function handleCardAction(value) {
+    console.log('[Card Action]', value);
+    
+    // Special actions
+    if (value === 'goto_settings') {
+      closeAllViews();
+      showView('settings');
+      return;
+    }
+    
+    if (value === 'retry') {
+      $('dockInput').focus();
+      return;
+    }
+    
+    // Send action value as message
+    $('dockInput').value = value;
+    sendMessage();
   }
 
   function escapeHtml(text) {

@@ -32,7 +32,7 @@ async function test() {
 
     // Open chat
     console.log('→ Opening chat...');
-    await page.click('#dockOpen');
+    await page.click('#dockBtn');
     await page.waitForSelector('#dockPanel.open', { timeout: 2000 });
     console.log('✓ Chat opened\n');
 
@@ -46,7 +46,9 @@ async function test() {
     await page.waitForFunction(
       () => {
         const bubbles = document.querySelectorAll('.bubble:not(.me)');
-        return bubbles.length > 1; // Initial typing + response
+        const cards = document.querySelectorAll('.chat-card');
+        // Wait for either non-me bubble or card (not just typing indicator)
+        return (bubbles.length > 1 && !bubbles[bubbles.length - 1].textContent.includes('⋯')) || cards.length > 0;
       },
       { timeout: 10000 }
     );

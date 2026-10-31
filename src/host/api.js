@@ -1051,8 +1051,8 @@ export function createApiRouter(ctx) {
           return { error: 'Composio 未配置。请先设置 API Key' };
         }
 
-        const { appId } = data;
-        const app = COMPOSIO_APPS.find(a => a.id === appId || a.key === appId);
+        const appId = data.appKey || data.appId;
+        const app = appId && COMPOSIO_APPS.find(a => a.key === appId || a.id === appId);
         
         if (!app) {
           return { error: '未知应用' };

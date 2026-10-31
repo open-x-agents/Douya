@@ -37,6 +37,7 @@ export function createComposioTools(composioClient) {
             'GITHUB_LIST_REPOSITORIES_FOR_THE_AUTHENTICATED_USER',
             { per_page, sort }
           )
+          result.items = result.items || result.data?.repositories || result.repositories || result.data?.data?.repositories
           
           if (!result.data?.repositories || result.data.repositories.length === 0) {
             return { repos: [], count: 0 }

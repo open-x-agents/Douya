@@ -24,20 +24,48 @@ export async function fetchFromSources(composioClient, activeSources) {
     try {
       if (slug === 'github') {
         // GitHub: paginate through ALL items in last 48h
-        const cutoff = new Date(Date.now() - 48*60*60*1000).toISOString().split('T')[0];
+        const yesterday = new Date(Date.now() - 24*60*60*1000).toISOString().split('T')[0];
+        const twoDaysAgo = new Date(Date.now() - 48*60*60*1000).toISOString().split('T')[0];
+        
+        // Gather multiple types of GitHub activity
+        const [
+          myOpenPRs,
+          myRecentPRs,
+          reviewRequested,
+          assigned,
+          recentActivity,
+          mentions,
+          mergedPRs,
+        ] = await Promise.all([
+          paginateGitHubSearch(composioClient, `is:pr is:open author:@me`),
+          paginateGitHubSearch(composioClient, `is:pr author:@me updated:>=${yesterday}`),
+          paginateGitHubSearch(composioClient, `is:pr is:open review-requested:@me`),
+          paginateGitHubIssues(composioClient),
+          paginateGitHubSearch(composioClient, `involves:@me updated:>=${twoDaysAgo}`),
+          paginateGitHubSearch(composioClient, `mentions:@me updated:>=${yesterday}`),
+          paginateGitHubSearch(composioClient, `is:pr is:merged author:@me merged:>=${yesterday}`),
+        ]);
         
         sourceData.github = {
-          myPRs: await paginateGitHubSearch(composioClient, `is:pr is:open author:@me`),
-          reviewRequested: await paginateGitHubSearch(composioClient, `is:pr is:open review-requested:@me`),
-          assigned: await paginateGitHubIssues(composioClient),
-          recentActivity: await paginateGitHubSearch(composioClient, `involves:@me updated:>${cutoff}`),
-          mentions: await paginateGitHubSearch(composioClient, `mentions:@me is:open`),
+          myOpenPRs,
+          myRecentPRs,
+          reviewRequested,
+          assigned,
+          recentActivity,
+          mentions,
+          mergedPRs,
         };
         
-        const totalGithub = sourceData.github.myPRs.length + sourceData.github.reviewRequested.length + 
-                           sourceData.github.assigned.length + sourceData.github.recentActivity.length + 
-                           sourceData.github.mentions.length;
-        console.log(`[GitHub] Fetched ${totalGithub} items (myPRs:${sourceData.github.myPRs.length}, review:${sourceData.github.reviewRequested.length}, assigned:${sourceData.github.assigned.length}, activity:${sourceData.github.recentActivity.length}, mentions:${sourceData.github.mentions.length})`);
+        const totalGithub = myOpenPRs.length + myRecentPRs.length + reviewRequested.length + 
+                           assigned.length + recentActivity.length + mentions.length + mergedPRs.length;
+        console.log(`[GitHub] Fetched ${totalGithub} items total:`);
+        console.log(`  - My open PRs: ${myOpenPRs.length}`);
+        console.log(`  - My recent PRs (updated): ${myRecentPRs.length}`);
+        console.log(`  - Review requested: ${reviewRequested.length}`);
+        console.log(`  - Assigned issues: ${assigned.length}`);
+        console.log(`  - Recent activity (involves): ${recentActivity.length}`);
+        console.log(`  - Mentions: ${mentions.length}`);
+        console.log(`  - Merged PRs: ${mergedPRs.length}`);
         
       } else if (slug === 'gmail') {
         // Gmail: paginate through ALL messages from last 24h
@@ -172,18 +200,23 @@ async function paginateGitHubIssues(composioClient) {
 }
 
 /**
- * Helper: Paginate Gmail (uncapped)
+ * Helper: Paginate Gmail (uncapped, with 413 payload fix)
  */
 async function paginateGmail(composioClient, query) {
   const messages = [];
   let pageToken = null;
-  const maxResults = 100;
+  const maxResults = 20; // Smaller pages to avoid 413 Payload Too Large
+  
+  // Add 'newer_than:1d' to query to limit scope
+  const enhancedQuery = query.includes('newer_than') ? query : `${query} newer_than:1d`;
   
   while (true) {
     try {
       const params = {
         max_results: maxResults,
-        query,
+        query: enhancedQuery,
+        include_payload: false,  // Metadata only, no body
+        verbose: false,          // Minimal response
       };
       if (pageToken) params.page_token = pageToken;
       
@@ -197,9 +230,9 @@ async function paginateGmail(composioClient, query) {
       pageToken = result?.data?.nextPageToken;
       if (!pageToken) break;
       
-      // Safety: stop after 500 messages
+      // Safety: stop after 25 pages (500 messages)
       if (messages.length >= 500) {
-        console.warn(`[Gmail] Hit pagination limit (500 messages) for query: ${query}`);
+        console.warn(`[Gmail] Hit pagination limit (500 messages) for query: ${enhancedQuery}`);
         break;
       }
     } catch (err) {
@@ -259,8 +292,8 @@ export function normalizeItems(sourceData) {
   }
   
   // My open PRs (for tracking CI/feedback)
-  if (sourceData.github?.myPRs) {
-    for (const pr of sourceData.github.myPRs) {
+  if (sourceData.github?.myOpenPRs) {
+    for (const pr of sourceData.github.myOpenPRs) {
       items.push({
         source: 'github',
         type: 'pr-mine',
@@ -272,8 +305,102 @@ export function normalizeItems(sourceData) {
         updatedAt: pr.updated_at,
         metadata: {
           state: pr.state,
+          repository: pr.repository_url?.split('/').slice(-2).join('/'),
         },
       });
+    }
+  }
+  
+  // My recently updated PRs
+  if (sourceData.github?.myRecentPRs) {
+    for (const pr of sourceData.github.myRecentPRs) {
+      // Skip if already added as open PR
+      const existing = items.find(i => i.sourceId === `github:pr:${pr.id}`);
+      if (!existing) {
+        items.push({
+          source: 'github',
+          type: 'pr-mine-recent',
+          sourceId: `github:pr:${pr.id}`,
+          title: pr.title,
+          url: pr.html_url,
+          body: `#${pr.number} recently updated`,
+          createdAt: pr.created_at,
+          updatedAt: pr.updated_at,
+          metadata: {
+            state: pr.state,
+            repository: pr.repository_url?.split('/').slice(-2).join('/'),
+          },
+        });
+      }
+    }
+  }
+  
+  // My merged PRs (achievements)
+  if (sourceData.github?.mergedPRs) {
+    for (const pr of sourceData.github.mergedPRs) {
+      items.push({
+        source: 'github',
+        type: 'pr-merged',
+        sourceId: `github:pr:${pr.id}`,
+        title: pr.title,
+        url: pr.html_url,
+        body: `#${pr.number} merged`,
+        createdAt: pr.created_at,
+        updatedAt: pr.updated_at,
+        metadata: {
+          state: pr.state,
+          repository: pr.repository_url?.split('/').slice(-2).join('/'),
+        },
+      });
+    }
+  }
+  
+  // Recent activity (involves:@me)
+  if (sourceData.github?.recentActivity) {
+    for (const item of sourceData.github.recentActivity) {
+      // Skip if already added
+      const key = item.pull_request ? `github:pr:${item.id}` : `github:issue:${item.id}`;
+      const existing = items.find(i => i.sourceId === key);
+      if (!existing) {
+        items.push({
+          source: 'github',
+          type: item.pull_request ? 'pr-activity' : 'issue-activity',
+          sourceId: key,
+          title: item.title,
+          url: item.html_url,
+          body: `#${item.number} recent activity`,
+          createdAt: item.created_at,
+          updatedAt: item.updated_at,
+          metadata: {
+            state: item.state,
+            repository: item.repository_url?.split('/').slice(-2).join('/'),
+          },
+        });
+      }
+    }
+  }
+  
+  // Mentions
+  if (sourceData.github?.mentions) {
+    for (const item of sourceData.github.mentions) {
+      const key = item.pull_request ? `github:pr:${item.id}` : `github:issue:${item.id}`;
+      const existing = items.find(i => i.sourceId === key);
+      if (!existing) {
+        items.push({
+          source: 'github',
+          type: item.pull_request ? 'pr-mention' : 'issue-mention',
+          sourceId: key,
+          title: item.title,
+          url: item.html_url,
+          body: `#${item.number} mentioned you`,
+          createdAt: item.created_at,
+          updatedAt: item.updated_at,
+          metadata: {
+            state: item.state,
+            repository: item.repository_url?.split('/').slice(-2).join('/'),
+          },
+        });
+      }
     }
   }
   
@@ -440,11 +567,14 @@ export function clusterByProjectTheme(items) {
     const [owner, name] = repo.split('/');
     const projectName = (name || repo).toUpperCase();
     
+    // Use date-based sourceId to avoid replacing old individual items
+    const today = new Date().toISOString().split('T')[0];
+    
     clusters.push({
-      id: `cluster_github_${repo.replace(/\//g, '_')}`,
+      id: `cluster_github_${repo.replace(/\//g, '_')}_${Date.now()}`,
       type: 'project-cluster',
       source: 'github',
-      sourceId: `github:repo:${repo}`,
+      sourceId: `github:cluster:${repo}:${today}`,
       title: projectName,
       subtitle: owner ? `${owner}` : '',
       body: `${prCount} PRs, ${issueCount} issues`,
@@ -466,6 +596,8 @@ export function clusterByProjectTheme(items) {
       updatedAt: new Date().toISOString(),
     });
   }
+  
+  console.log(`[Clustering] GitHub: ${githubByRepo.size} repo clusters from ${items.filter(i => i.source === 'github').length} items`);
   
   // Cluster Gmail by sender category
   const emailItems = items.filter(i => i.source === 'gmail');
@@ -497,11 +629,13 @@ export function clusterByProjectTheme(items) {
     const unreadCount = senderItems.filter(i => i.type === 'email-unread').length;
     const importantCount = senderItems.filter(i => i.type === 'email-important').length;
     
+    const today = new Date().toISOString().split('T')[0];
+    
     clusters.push({
-      id: `cluster_gmail_${sender.replace(/[^a-z0-9]/gi, '_')}`,
+      id: `cluster_gmail_${sender.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}`,
       type: 'email-cluster',
       source: 'gmail',
-      sourceId: `gmail:sender:${sender}`,
+      sourceId: `gmail:cluster:${sender}:${today}`,
       title: `${sender}`,
       subtitle: 'Emails',
       body: `${senderItems.length} messages${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`,
@@ -521,13 +655,17 @@ export function clusterByProjectTheme(items) {
     });
   }
   
+  console.log(`[Clustering] Gmail: ${emailBySender.size} sender clusters from ${emailItems.length} emails`);
+  
   // Newsletter cluster
   if (newsletters.length > 1) {
+    const today = new Date().toISOString().split('T')[0];
+    
     clusters.push({
-      id: `cluster_gmail_newsletters`,
+      id: `cluster_gmail_newsletters_${Date.now()}`,
       type: 'newsletter-cluster',
       source: 'gmail',
-      sourceId: `gmail:newsletters`,
+      sourceId: `gmail:newsletters:${today}`,
       title: 'Newsletters & Updates',
       subtitle: '',
       body: `${newsletters.length} newsletters`,
@@ -543,6 +681,8 @@ export function clusterByProjectTheme(items) {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
+    
+    console.log(`[Clustering] Gmail: ${newsletters.length} newsletters in cluster`);
   }
   
   // Calendar events: cluster today's events
@@ -551,11 +691,13 @@ export function clusterByProjectTheme(items) {
     const upcomingCount = calendarItems.filter(i => i.type === 'event-soon').length;
     const todayCount = calendarItems.filter(i => i.type === 'event-today').length;
     
+    const today = new Date().toISOString().split('T')[0];
+    
     clusters.push({
-      id: `cluster_calendar_today`,
+      id: `cluster_calendar_today_${Date.now()}`,
       type: 'calendar-cluster',
       source: 'googlecalendar',
-      sourceId: `calendar:today`,
+      sourceId: `calendar:today:${today}`,
       title: "Today's Schedule",
       subtitle: '',
       body: `${todayCount} events${upcomingCount > 0 ? `, ${upcomingCount} starting soon` : ''}`,
@@ -572,6 +714,8 @@ export function clusterByProjectTheme(items) {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
+    
+    console.log(`[Clustering] Calendar: ${calendarItems.length} events in today cluster`);
   }
   
   // Add remaining individual items that didn't cluster
@@ -579,11 +723,12 @@ export function clusterByProjectTheme(items) {
     clusters.flatMap(c => c.items.map(i => i.sourceId))
   );
   
+  let singleCount = 0;
   items.forEach(item => {
     if (!clusteredSourceIds.has(item.sourceId)) {
       // Convert to cluster format for consistency
       clusters.push({
-        id: `cluster_single_${item.sourceId}`,
+        id: `cluster_single_${item.sourceId}_${Date.now()}`,
         type: 'single-item',
         source: item.source,
         sourceId: item.sourceId,
@@ -600,8 +745,11 @@ export function clusterByProjectTheme(items) {
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
       });
+      singleCount++;
     }
   });
+  
+  console.log(`[Clustering] Total: ${clusters.length} tiles (${clusters.length - singleCount} multi-item clusters + ${singleCount} single items)`);
   
   return clusters;
 }
@@ -1122,7 +1270,7 @@ JSON: {"narrative": "your 1-2 sentence narrative here"}`;
     title: `${date} · ${timeOfDay}`,
     body: `${greeting}, ${profileContext?.name || 'there'}`,
     source: 'system',
-    sourceId: 'hero',
+    sourceId: `hero:${new Date().toISOString().split('T')[0]}`,
     priority: 'high',
     status: 'active',
     size: 'large',
@@ -1219,7 +1367,7 @@ JSON: {
     title: 'My Day',
     body: events.length > 0 ? `${events.length} events scheduled` : 'Plan your day',
     source: 'system',
-    sourceId: 'timetable',
+    sourceId: `timetable:${new Date().toISOString().split('T')[0]}`,
     priority: 'high',
     status: 'active',
     size: 'wide',

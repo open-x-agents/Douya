@@ -308,11 +308,52 @@ function parseResponseToCards(text) {
 }
 
 export function createApiRouter(ctx) {
-  const { store, composioClient, config, configStore } = ctx;
+  const { store, config, configStore } = ctx;
   const llmCtx = ctx.llmCtx || ctx.ctx;
 
   // Export configStore for callLLM to access
   callLLM.configStore = configStore;
+
+  /**
+   * Get Composio client - builds lazily from saved config or env
+   */
+  function getComposioClient() {
+    // Check if already built in context
+    if (ctx.composioClient) {
+      return ctx.composioClient;
+    }
+
+    // Build from saved config
+    const cfg = configStore?.get();
+    if (cfg?.composio?.apiKey) {
+      try {
+        ctx.composioClient = createComposioClient({
+          apiKey: cfg.composio.apiKey,
+          entityId: cfg.composio.entityId || 'default',
+        });
+        console.log('[Composio] Client built from saved config');
+        return ctx.composioClient;
+      } catch (err) {
+        console.error('[Composio] Failed to build client from config:', err);
+      }
+    }
+
+    // Build from environment
+    if (process.env.COMPOSIO_API_KEY) {
+      try {
+        ctx.composioClient = createComposioClient({
+          apiKey: process.env.COMPOSIO_API_KEY,
+          entityId: process.env.COMPOSIO_ENTITY_ID || 'default',
+        });
+        console.log('[Composio] Client built from environment');
+        return ctx.composioClient;
+      } catch (err) {
+        console.error('[Composio] Failed to build client from env:', err);
+      }
+    }
+
+    return null;
+  }
 
   return {
     /**
@@ -427,14 +468,15 @@ export function createApiRouter(ctx) {
      */
     async getDigest() {
       try {
-        if (!composioClient) {
+        const client = getComposioClient();
+        if (!client) {
           return {
-            error: 'Composio 未配置。请设置 COMPOSIO_API_KEY 环境变量',
+            error: 'Composio 未配置。请设置 API Key',
             items: [],
           };
         }
 
-        const digest = await generateDailyDigest(composioClient);
+        const digest = await generateDailyDigest(client);
         return digest;
       } catch (err) {
         console.error('API /digest error:', err);
@@ -450,7 +492,8 @@ export function createApiRouter(ctx) {
      */
     async getSources() {
       try {
-        if (!composioClient) {
+        const client = getComposioClient();
+        if (!client) {
           return {
             sources: [
               { name: 'Composio', connected: false, description: '未配置 API Key' },
@@ -458,7 +501,7 @@ export function createApiRouter(ctx) {
           };
         }
 
-        const status = await getSourcesStatus(composioClient);
+        const status = await getSourcesStatus(client);
         return status;
       } catch (err) {
         console.error('API /sources error:', err);
@@ -473,10 +516,11 @@ export function createApiRouter(ctx) {
      * GET /api/config/check - Check if Composio is configured
      */
     async checkConfig() {
+      const client = getComposioClient();
       return {
-        configured: !!composioClient,
-        composioApiKey: !!config?.composioApiKey,
-        composioEntityId: config?.composioEntityId || 'default',
+        configured: !!client,
+        composioApiKey: !!(configStore?.get()?.composio?.apiKey || process.env.COMPOSIO_API_KEY),
+        composioEntityId: configStore?.get()?.composio?.entityId || process.env.COMPOSIO_ENTITY_ID || 'default',
         digestSchedule: config?.digestSchedule || '08:00',
         llmConfigured: !!(llmCtx?.llm?.stream),
       };
@@ -574,11 +618,12 @@ export function createApiRouter(ctx) {
      */
     async pushDigest() {
       try {
-        if (!composioClient) {
+        const client = getComposioClient();
+        if (!client) {
           return { error: 'Composio 未配置' };
         }
 
-        const digest = await generateDailyDigest(composioClient);
+        const digest = await generateDailyDigest(client);
         
         // Deliver via available channels
         const results = await pushDailyDigest({
@@ -605,24 +650,13 @@ export function createApiRouter(ctx) {
      * GET /api/composio/config - Get current Composio configuration (masked)
      */
     async getComposioConfig() {
-      if (!configStore) {
-        return {
-          configured: false,
-          apiKeyMasked: null,
-          entityId: 'default',
-          digestSchedule: '08:00',
-          digestSources: [],
-        };
-      }
-
-      const cfg = configStore.get();
+      const cfg = configStore?.get()?.composio || {};
+      const client = getComposioClient();
+      
       return {
-        configured: configStore.isConfigured(),
-        apiKeyMasked: configStore.getMaskedKey(),
-        entityId: cfg.composioEntityId || 'default',
-        digestSchedule: cfg.digestSchedule || '08:00',
-        digestSources: cfg.digestSources || [],
-        updatedAt: cfg.updatedAt,
+        configured: !!client,
+        apiKey: cfg.apiKey ? '***' + cfg.apiKey.slice(-4) : null,
+        entityId: cfg.entityId || 'default',
       };
     },
 
@@ -630,46 +664,29 @@ export function createApiRouter(ctx) {
      * POST /api/composio/config - Update Composio configuration
      */
     async updateComposioConfig(data) {
-      if (!configStore) {
-        return { error: '配置存储未初始化' };
-      }
-
       try {
-        const updates = {};
-        
-        if (data.apiKey && typeof data.apiKey === 'string') {
-          updates.composioApiKey = data.apiKey.trim();
-        }
-        
-        if (data.entityId) {
-          updates.composioEntityId = data.entityId;
-        }
-        
-        if (data.digestSchedule) {
-          updates.digestSchedule = data.digestSchedule;
-        }
-        
-        if (Array.isArray(data.digestSources)) {
-          updates.digestSources = data.digestSources;
-        }
+        const { apiKey, entityId } = data;
 
-        await configStore.save(updates);
-        
-        // Recreate Composio client if API key changed
-        if (updates.composioApiKey) {
-          ctx.composioClient = createComposioClient({
-            composioApiKey: updates.composioApiKey,
-            composioEntityId: updates.composioEntityId || 'default',
-          });
-        }
+        // Save to config store
+        await configStore.save({
+          composio: {
+            apiKey,
+            entityId: entityId || 'default',
+          },
+        });
+
+        // Rebuild client immediately
+        ctx.composioClient = null; // Clear old client
+        const client = getComposioClient(); // Build new client
+
+        console.log('[Composio] Config saved, client rebuilt:', !!client);
 
         return {
           success: true,
-          configured: configStore.isConfigured(),
-          apiKeyMasked: configStore.getMaskedKey(),
+          configured: !!client,
         };
       } catch (err) {
-        console.error('Update config error:', err);
+        console.error('[Composio] Update config error:', err);
         return { error: err.message };
       }
     },
@@ -679,6 +696,8 @@ export function createApiRouter(ctx) {
      */
     async getComposioApps() {
       try {
+        const client = getComposioClient();
+        
         // Return app list even without client
         const apps = COMPOSIO_APPS.map(app => ({
           ...app,
@@ -686,13 +705,13 @@ export function createApiRouter(ctx) {
           connectionId: null,
         }));
 
-        if (!composioClient || !configStore?.isConfigured()) {
+        if (!client) {
           return { apps, configured: false };
         }
 
         // Fetch actual connection status
         try {
-          const accounts = await composioClient.getConnectedAccounts();
+          const accounts = await client.getConnectedAccounts();
           const connectedApps = new Map();
           
           accounts.items?.forEach(account => {
@@ -706,7 +725,7 @@ export function createApiRouter(ctx) {
           });
 
           apps.forEach(app => {
-            const conn = connectedApps.get(app.id);
+            const conn = connectedApps.get(app.id || app.key);
             if (conn) {
               app.connected = true;
               app.connectionId = conn.connectionId;
@@ -714,12 +733,12 @@ export function createApiRouter(ctx) {
             }
           });
         } catch (err) {
-          console.error('Failed to fetch connections:', err);
+          console.error('[Composio] Failed to fetch connections:', err);
         }
 
         return { apps, configured: true };
       } catch (err) {
-        console.error('Get apps error:', err);
+        console.error('[Composio] Get apps error:', err);
         return { error: err.message, apps: [] };
       }
     },
@@ -728,21 +747,22 @@ export function createApiRouter(ctx) {
      * POST /api/composio/connect - Initiate OAuth connection for an app
      */
     async connectComposioApp(data) {
-      if (!composioClient || !configStore?.isConfigured()) {
-        return { error: 'Composio 未配置。请先设置 API Key' };
-      }
-
       try {
+        const client = getComposioClient();
+        if (!client) {
+          return { error: 'Composio 未配置。请先设置 API Key' };
+        }
+
         const { appId } = data;
-        const app = COMPOSIO_APPS.find(a => a.id === appId);
+        const app = COMPOSIO_APPS.find(a => a.id === appId || a.key === appId);
         
         if (!app) {
           return { error: '未知应用' };
         }
 
         // Create connection link
-        const redirectUrl = `${config.baseUrl || 'http://localhost:7777'}/composio-callback`;
-        const result = await composioClient.createConnection(appId, redirectUrl);
+        const redirectUrl = `${config?.baseUrl || 'http://localhost:7777'}/composio-callback`;
+        const result = await client.createConnection(appId, redirectUrl);
 
         return {
           success: true,
@@ -750,7 +770,7 @@ export function createApiRouter(ctx) {
           appName: app.name,
         };
       } catch (err) {
-        console.error('Connect app error:', err);
+        console.error('[Composio] Connect app error:', err);
         return { error: err.message };
       }
     },
@@ -832,16 +852,16 @@ export function createApiRouter(ctx) {
      * POST /api/composio/disconnect - Disconnect an app
      */
     async disconnectComposioApp(data) {
-      if (!composioClient || !configStore?.isConfigured()) {
-        return { error: 'Composio 未配置' };
-      }
-
       try {
+        const client = getComposioClient();
+        if (!client) {
+          return { error: 'Composio 未配置' };
+        }
+
         const { appId, connectionId } = data;
         
         if (connectionId) {
-          // TODO: Implement disconnect via Composio API
-          // await composioClient.deleteConnection(connectionId);
+          await client.deleteConnection(connectionId);
         }
 
         return {
@@ -849,7 +869,7 @@ export function createApiRouter(ctx) {
           appId,
         };
       } catch (err) {
-        console.error('Disconnect app error:', err);
+        console.error('[Composio] Disconnect app error:', err);
         return { error: err.message };
       }
     },

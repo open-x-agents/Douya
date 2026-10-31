@@ -9,33 +9,67 @@ name: merge-tree
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  # 守卫说 merge-tree 的绿比 main 旧时，「重跑一次再排队」原来做不到：Actions 的 Re-run
+  # 复用原始事件 payload，base 还停在旧 sha。这个入口按**调用时的 main** 重新合一次，
+  # 并把结论写成 PR head 上的 `merge-tree` check run —— 守卫看的是 head 上的 check。
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'PR 号：把它的 head 合到当前 main 上，再跑一遍 L0'
+        required: true
+        type: number
 
 permissions:
   contents: read
+  # 手动入口要把结论写回 PR head 的 check run 上。
+  checks: write
+  # 手动入口没有 pull_request payload，要现查 PR 拿 head sha（pulls.get），没有这条就是
+  # 「Resource not accessible by integration」，run 在第一步就红。
+  pull-requests: read
 
 concurrency:
-  group: merge-tree-${{ github.event.pull_request.number }}
+  group: merge-tree-${{ github.event.inputs.pr || github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   # job 名就是 PR 上的 check 上下文：准入守卫要求的正是 `merge-tree`。
+  # 手动入口那次 run 挂在 main 上，不该在 main 的 check 列表里冒充「main 的 merge-tree」，
+  # 所以它的 check 叫 `merge-tree (dispatch)`；真正的结论会写到 PR head 上。
   merge-tree:
+    name: ${{ github.event_name == 'workflow_dispatch' && 'merge-tree (dispatch)' || 'merge-tree' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          # pull_request 用 base.sha；手动入口固定 main —— 也就是「点按钮时的 main」。
+          ref: ${{ github.event.pull_request.base.sha || 'main' }}
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
 
+      # 手动入口没有 pull_request payload，PR 号与 head sha 只能现查。
+      - name: 解析 PR 号与 head sha
+        id: pr
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/github-script@v7
+        env:
+          PR: ${{ github.event.inputs.pr }}
+        with:
+          script: |
+            const number = Number(process.env.PR)
+            if (!Number.isInteger(number) || number <= 0) throw new Error(`pr 输入不是正整数：${process.env.PR}`)
+            const pull = await github.rest.pulls.get({ ...context.repo, pull_number: number })
+            core.setOutput('number', String(number))
+            core.setOutput('head_sha', pull.data.head.sha)
+
       # 冲突在这里就该红：PR 页面会说「有冲突」，但那不是 check，进不了守卫的判断。
       - name: 把 PR head 合到 main 上
+        id: merge
         env:
-          PR: ${{ github.event.pull_request.number }}
+          PR: ${{ github.event.inputs.pr || github.event.pull_request.number }}
         run: |
           set -eu
           git config user.name "merge-tree"
@@ -54,4 +88,36 @@ jobs:
       # 和 tests.yml 同一条命令：这一层要证明的是「合起来也绿」，
       # 不是另起一套测试 —— 换一套就等于没测同一个东西。
       - name: 在合并结果上跑单元测试
+        id: unit
         run: node --test test/*.test.js 'acceptance-cases/**/*.test.js'
+
+      # 手动入口的结论必须落在 PR head 上，否则守卫（只看同一 sha 的 check）看不见。
+      - name: 把结果写成 PR head 上的 merge-tree check
+        if: always() && github.event_name == 'workflow_dispatch' && steps.pr.outputs.head_sha != ''
+        uses: actions/github-script@v7
+        env:
+          PR: ${{ steps.pr.outputs.number }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          MERGE: ${{ steps.merge.outcome }}
+          UNIT: ${{ steps.unit.outcome }}
+        with:
+          script: |
+            const mergeOk = process.env.MERGE === 'success'
+            const unitOk = process.env.UNIT === 'success'
+            const conclusion = mergeOk && unitOk ? 'success' : 'failure'
+            const summary = [
+              `对当前 main 重跑：PR #${process.env.PR}，head \`${process.env.HEAD_SHA}\``,
+              '',
+              `- 合并到当前 main：${process.env.MERGE}`,
+              `- 合并结果上跑 L0：${process.env.UNIT}`,
+              '',
+              `run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            ].join('\n')
+            await github.rest.checks.create({
+              ...context.repo,
+              name: 'merge-tree',
+              head_sha: process.env.HEAD_SHA,
+              status: 'completed',
+              conclusion,
+              output: { title: 'merge-tree @ 当前 main', summary },
+            })

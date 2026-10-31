@@ -849,6 +849,10 @@
   .src-btn.ghost{background:#fff;color:var(--ink2);box-shadow:0 0 0 1px var(--line)}
 
   .dockPanel{width:420px;max-height:min(680px,calc(100vh - 32px))}
+  /* flex column children default to flex-shrink:1; with overflow:hidden their min-height becomes 0,
+     so a tall reply squashes every card. Never shrink dock messages; the body scrolls instead. */
+  .dockBody{min-height:0;overscroll-behavior:contain}
+  .dockBody > *{flex-shrink:0}
   .gcard{flex-shrink:0;max-width:100%;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:8px 0;box-shadow:0 1px 2px rgba(30,40,80,.04);position:relative;overflow:hidden}
   .gcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:#d7dbe3}
   .gcard.g-you::before{background:var(--rose)} .gcard.g-others::before{background:var(--sky)}

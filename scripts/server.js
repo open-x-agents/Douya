@@ -29,11 +29,11 @@ const runtime = createRuntime(null, config);
 
 // Build Composio client from saved config at startup
 const savedConfig = runtime.configStore?.get();
-if (savedConfig?.composio?.apiKey) {
+if (savedConfig?.composioApiKey) {
   try {
     runtime.composioClient = createComposioClient({
-      apiKey: savedConfig.composio.apiKey,
-      entityId: savedConfig.composio.entityId || 'default',
+      composioApiKey: savedConfig.composioApiKey,
+      composioEntityId: savedConfig.composioEntityId || 'default',
     });
     console.log('🔑 Composio configured: Yes (from saved config)');
   } catch (err) {

@@ -1,150 +1,228 @@
 /**
- * Composio integration for daily digest and multi-source aggregation
- * Connects user accounts via Composio to aggregate information
+ * Composio v3 REST API client
+ * Docs: https://docs.composio.dev
  */
 
-import { createRequire } from 'node:module';
-const require = createRequire(import.meta.url);
+const COMPOSIO_API_BASE = 'https://backend.composio.dev/api/v3';
 
-// Composio client wrapper
-export class ComposioClient {
-  constructor({ apiKey, entityId = 'default' }) {
-    this.apiKey = apiKey;
-    this.entityId = entityId;
-    this.baseUrl = 'https://backend.composio.dev/api/v1';
+/**
+ * Create Composio client
+ * @param {Object} config - { composioApiKey, composioEntityId }
+ */
+export function createComposioClient(config) {
+  const apiKey = config.composioApiKey || config.apiKey || process.env.COMPOSIO_API_KEY;
+  const entityId = config.composioEntityId || config.entityId || process.env.COMPOSIO_ENTITY_ID || 'default';
+
+  if (!apiKey) {
+    throw new Error('COMPOSIO_API_KEY not configured');
   }
 
-  async request(endpoint, options = {}) {
-    const url = `${this.baseUrl}${endpoint}`;
+  console.log(`[Composio] Client created for entity: ${entityId}`);
+
+  /**
+   * Make API request to Composio v3
+   */
+  async function request(endpoint, options = {}) {
+    const url = `${COMPOSIO_API_BASE}${endpoint}`;
+    const headers = {
+      'x-api-key': apiKey,
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+
     const response = await fetch(url, {
       ...options,
-      headers: {
-        'X-API-Key': this.apiKey,
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers,
     });
 
     if (!response.ok) {
       const error = await response.text();
-      throw new Error(`Composio API error: ${response.status} ${error}`);
+      throw new Error(`Composio API error (${response.status}): ${error}`);
     }
 
     return response.json();
   }
 
-  /**
-   * Get connected integrations for the entity
-   */
-  async getConnectedAccounts() {
-    return this.request(`/connectedAccounts?user_uuid=${this.entityId}`);
-  }
+  return {
+    entityId,
 
-  /**
-   * Execute an action on a connected app
-   */
-  async executeAction(action, params = {}) {
-    return this.request('/actions/execute', {
-      method: 'POST',
-      body: JSON.stringify({
-        entityId: this.entityId,
-        action,
-        params,
-      }),
-    });
-  }
+    /**
+     * Initiate app connection (OAuth)
+     * Returns redirect URL for user authorization
+     */
+    async initiateConnection(appId) {
+      console.log(`[Composio] Initiating connection for app: ${appId}`);
+      
+      const result = await request('/connected_accounts/initiate', {
+        method: 'POST',
+        body: JSON.stringify({
+          integration_id: appId,
+          user_uuid: entityId,
+          redirect_url: 'http://localhost:7777/composio-callback',
+        }),
+      });
 
-  /**
-   * Get available apps
-   */
-  async getApps() {
-    return this.request('/apps');
-  }
+      return {
+        redirectUrl: result.redirectUrl || result.redirect_url,
+        connectionId: result.connectionId || result.connection_id,
+      };
+    },
 
-  /**
-   * Create a connection link for an app
-   */
-  async createConnection(appName, redirectUrl) {
-    return this.request('/connectedAccounts', {
-      method: 'POST',
-      body: JSON.stringify({
-        integrationId: appName,
-        userUuid: this.entityId,
-        redirectUrl,
-      }),
-    });
-  }
+    /**
+     * Get connected accounts
+     */
+    async getConnectedAccounts() {
+      console.log('[Composio] Fetching connected accounts');
+      
+      const result = await request(`/connected_accounts?user_uuid=${encodeURIComponent(entityId)}`);
+      
+      return {
+        items: result.items || result.accounts || [],
+      };
+    },
+
+    /**
+     * Delete connection
+     */
+    async deleteConnection(connectionId) {
+      console.log(`[Composio] Deleting connection: ${connectionId}`);
+      
+      await request(`/connected_accounts/${connectionId}`, {
+        method: 'DELETE',
+      });
+    },
+
+    /**
+     * Execute tool action
+     */
+    async executeAction(action, params) {
+      console.log(`[Composio] Executing action: ${action}`);
+      
+      const result = await request('/tools/execute', {
+        method: 'POST',
+        body: JSON.stringify({
+          action_id: action,
+          entity_id: entityId,
+          params,
+        }),
+      });
+
+      return result;
+    },
+
+    /**
+     * Get available integrations
+     */
+    async getIntegrations() {
+      console.log('[Composio] Fetching integrations');
+      
+      const result = await request('/integrations');
+      
+      return result.items || result.integrations || [];
+    },
+  };
 }
 
 /**
- * Aggregate daily digest from multiple sources
+ * Generate daily digest from Composio sources
  */
 export async function generateDailyDigest(composioClient) {
-  const digest = {
-    items: [],
-    generatedAt: new Date().toISOString(),
-  };
+  const items = [];
 
   try {
+    // Get connected accounts
     const accounts = await composioClient.getConnectedAccounts();
     
-    // Try to fetch from various sources
-    const sources = [
-      { app: 'github', action: 'GITHUB_LIST_NOTIFICATIONS', title: 'GitHub 通知' },
-      { app: 'slack', action: 'SLACK_LIST_UNREAD_MESSAGES', title: 'Slack 消息' },
-      { app: 'gmail', action: 'GMAIL_LIST_MESSAGES', title: 'Gmail 邮件' },
-      { app: 'linear', action: 'LINEAR_LIST_MY_ISSUES', title: 'Linear 任务' },
-      { app: 'calendar', action: 'GOOGLE_CALENDAR_LIST_EVENTS', title: '日历事件' },
-      { app: 'notion', action: 'NOTION_LIST_PAGES', title: 'Notion 页面' },
-    ];
+    if (!accounts.items || accounts.items.length === 0) {
+      return {
+        summary: '今天暂无数据',
+        items: [],
+      };
+    }
 
-    for (const source of sources) {
-      const account = accounts.items?.find(acc => 
-        acc.appName?.toLowerCase() === source.app
-      );
+    // For each connected account, fetch recent activity
+    for (const account of accounts.items) {
+      const appId = account.integration_id || account.appName;
       
-      if (!account) continue;
-
       try {
-        const result = await composioClient.executeAction(source.action, {
-          limit: 5,
-        });
-
-        if (result.data) {
-          digest.items.push({
-            title: source.title,
-            source: source.app,
-            description: `发现 ${result.data.length || 0} 条更新`,
-            data: result.data,
-            time: new Date().toLocaleString('zh-CN'),
-            actions: [
-              { label: '查看详情', primary: true },
-              { label: '标记已读', primary: false },
-            ],
+        // GitHub: recent PRs and issues
+        if (appId === 'github') {
+          const prs = await composioClient.executeAction('github_list_pull_requests', {
+            state: 'open',
+            per_page: 5,
           });
+          
+          if (prs.data) {
+            prs.data.forEach(pr => {
+              items.push({
+                type: 'github_pr',
+                title: pr.title,
+                description: `#${pr.number} · ${pr.user?.login || 'Unknown'}`,
+                url: pr.html_url,
+                time: new Date(pr.created_at).toLocaleString('zh-CN'),
+                source: 'GitHub',
+              });
+            });
+          }
+        }
+        
+        // Gmail: unread messages
+        if (appId === 'gmail') {
+          const messages = await composioClient.executeAction('gmail_list_messages', {
+            label_ids: ['UNREAD'],
+            max_results: 5,
+          });
+          
+          if (messages.data) {
+            messages.data.forEach(msg => {
+              items.push({
+                type: 'gmail_message',
+                title: msg.subject || '(No subject)',
+                description: msg.from || 'Unknown sender',
+                url: `https://mail.google.com/mail/u/0/#inbox/${msg.id}`,
+                time: new Date(msg.date).toLocaleString('zh-CN'),
+                source: 'Gmail',
+              });
+            });
+          }
+        }
+        
+        // Slack: recent messages
+        if (appId === 'slack') {
+          const messages = await composioClient.executeAction('slack_list_messages', {
+            limit: 5,
+          });
+          
+          if (messages.data) {
+            messages.data.forEach(msg => {
+              items.push({
+                type: 'slack_message',
+                title: msg.text?.substring(0, 100) || '(No text)',
+                description: `${msg.channel} · ${msg.user}`,
+                url: msg.permalink,
+                time: new Date(msg.ts * 1000).toLocaleString('zh-CN'),
+                source: 'Slack',
+              });
+            });
+          }
         }
       } catch (err) {
-        console.error(`Failed to fetch from ${source.app}:`, err.message);
-        // Continue with other sources
+        console.error(`[Composio] Failed to fetch data from ${appId}:`, err.message);
       }
     }
 
-    // If no sources connected, show placeholder
-    if (digest.items.length === 0) {
-      digest.items.push({
-        title: '暂无连接的数据源',
-        source: 'system',
-        description: '请先在 Composio 中连接你的应用账号',
-        time: new Date().toLocaleString('zh-CN'),
-      });
-    }
-
-  } catch (err) {
-    console.error('Failed to generate digest:', err);
-    digest.error = err.message;
+    return {
+      summary: `今天收到 ${items.length} 条更新`,
+      items,
+    };
+  } catch (error) {
+    console.error('[Composio] Generate digest error:', error);
+    return {
+      summary: '获取数据失败',
+      items: [],
+      error: error.message,
+    };
   }
-
-  return digest;
 }
 
 /**
@@ -154,215 +232,47 @@ export async function getSourcesStatus(composioClient) {
   try {
     const accounts = await composioClient.getConnectedAccounts();
     
-    const commonApps = [
-      { name: 'GitHub', app: 'github', description: '代码仓库、PR和Issue' },
-      { name: 'Slack', app: 'slack', description: '团队消息和频道' },
-      { name: 'Gmail', app: 'gmail', description: '邮件收发' },
-      { name: 'Linear', app: 'linear', description: '项目管理和任务' },
-      { name: 'Google Calendar', app: 'calendar', description: '日历和会议' },
-      { name: 'Notion', app: 'notion', description: '知识库和文档' },
-      { name: '飞书', app: 'feishu', description: '企业通讯' },
-    ];
+    const sources = accounts.items?.map(account => ({
+      name: account.integration_id || account.appName || 'Unknown',
+      connected: true,
+      description: `Connected as ${account.user_uuid || 'default'}`,
+    })) || [];
 
-    const sources = commonApps.map(app => {
-      const account = accounts.items?.find(acc => 
-        acc.appName?.toLowerCase() === app.app
-      );
-      return {
-        name: app.name,
-        connected: !!account,
-        description: app.description,
-        lastSync: account?.updatedAt,
-      };
-    });
+    if (sources.length === 0) {
+      sources.push({
+        name: 'Composio',
+        connected: false,
+        description: '暂无连接的应用',
+      });
+    }
 
     return { sources };
-  } catch (err) {
-    console.error('Failed to get sources:', err);
-    return { sources: [], error: err.message };
+  } catch (error) {
+    return {
+      sources: [
+        {
+          name: 'Composio',
+          connected: false,
+          description: error.message,
+        },
+      ],
+    };
   }
 }
 
 /**
- * Push daily digest to configured channels
+ * Push daily digest (placeholder - implement delivery mechanism)
  */
 export async function pushDailyDigest({ digest, store, config, sendCard }) {
-  const results = [];
-
-  try {
-    // Get members who should receive digest
-    const state = store?.get?.() || {};
-    const members = Object.values(state.members || {});
-
-    // Build digest card for Feishu
-    const digestCard = buildDigestCard(digest);
-
-    // Send to configured recipients
-    const recipients = config?.digestRecipients || [];
-    if (config?.ownerOpenId) {
-      recipients.push(config.ownerOpenId);
-    }
-
-    for (const recipientId of [...new Set(recipients)]) {
-      try {
-        if (sendCard && typeof sendCard === 'function') {
-          const messageId = await sendCard({
-            receiveId: recipientId,
-            card: digestCard,
-          });
-          results.push({
-            channel: 'feishu',
-            recipient: recipientId,
-            success: true,
-            messageId,
-          });
-        }
-      } catch (err) {
-        results.push({
-          channel: 'feishu',
-          recipient: recipientId,
-          success: false,
-          error: err.message,
-        });
-      }
-    }
-
-    // Store digest in state for web UI
-    if (store?.save) {
-      const newState = {
-        ...state,
-        lastDigest: {
-          ...digest,
-          pushedAt: new Date().toISOString(),
-        },
-      };
-      await store.save(newState);
-    }
-
-  } catch (err) {
-    console.error('Push daily digest failed:', err);
-    results.push({
-      channel: 'system',
-      success: false,
-      error: err.message,
-    });
-  }
-
-  return results;
+  // TODO: Implement actual delivery (Feishu, email, etc.)
+  console.log('[Composio] Push digest:', digest.summary);
+  return [];
 }
 
 /**
- * Build Feishu card for daily digest
+ * Schedule daily digest (placeholder - implement scheduler)
  */
-function buildDigestCard(digest) {
-  const elements = [
-    {
-      tag: 'div',
-      text: {
-        tag: 'lark_md',
-        content: `**每日汇聚** · ${new Date().toLocaleDateString('zh-CN')}`,
-      },
-    },
-    {
-      tag: 'hr',
-    },
-  ];
-
-  // Add each source's items
-  if (digest.items && digest.items.length > 0) {
-    digest.items.forEach((item, index) => {
-      elements.push({
-        tag: 'div',
-        text: {
-          tag: 'lark_md',
-          content: `**${item.title}**\n${item.description}`,
-        },
-      });
-      
-      if (item.actions && item.actions.length > 0) {
-        elements.push({
-          tag: 'action',
-          actions: item.actions.map(action => ({
-            tag: 'button',
-            text: {
-              tag: 'plain_text',
-              content: action.label,
-            },
-            type: action.primary ? 'primary' : 'default',
-            value: { action: action.label, itemIndex: index },
-          })),
-        });
-      }
-
-      if (index < digest.items.length - 1) {
-        elements.push({ tag: 'hr' });
-      }
-    });
-  } else {
-    elements.push({
-      tag: 'div',
-      text: {
-        tag: 'plain_text',
-        content: '今日暂无更新',
-      },
-    });
-  }
-
-  return {
-    config: { wide_screen_mode: true },
-    header: {
-      title: {
-        tag: 'plain_text',
-        content: '📊 每日汇聚',
-      },
-      template: 'blue',
-    },
-    elements,
-  };
+export async function scheduleDailyDigest(schedule) {
+  console.log('[Composio] Schedule digest:', schedule);
+  // TODO: Implement actual scheduler
 }
-
-/**
- * Schedule daily digest push
- */
-export function scheduleDailyDigest(config, callback) {
-  const [hour, minute] = (config.digestSchedule || '08:00').split(':').map(Number);
-  
-  function checkAndRun() {
-    const now = new Date();
-    if (now.getHours() === hour && now.getMinutes() === minute) {
-      callback().catch(err => console.error('Digest push failed:', err));
-    }
-  }
-
-  // Check every minute
-  const intervalId = setInterval(checkAndRun, 60 * 1000);
-  
-  // Also run immediately if configured
-  if (config.runImmediately) {
-    callback().catch(err => console.error('Immediate digest failed:', err));
-  }
-
-  return () => clearInterval(intervalId);
-}
-
-/**
- * Create Composio client from config
- */
-export function createComposioClient(config) {
-  if (!config.composioApiKey) {
-    throw new Error('COMPOSIO_API_KEY not configured');
-  }
-
-  return new ComposioClient({
-    apiKey: config.composioApiKey,
-    entityId: config.composioEntityId || 'default',
-  });
-}
-
-export default {
-  ComposioClient,
-  generateDailyDigest,
-  getSourcesStatus,
-  scheduleDailyDigest,
-  createComposioClient,
-};

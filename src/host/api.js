@@ -323,13 +323,13 @@ export function createApiRouter(ctx) {
       return ctx.composioClient;
     }
 
-    // Build from saved config
+    // Build from saved config (configStore saves flat keys)
     const cfg = configStore?.get();
-    if (cfg?.composio?.apiKey) {
+    if (cfg?.composioApiKey) {
       try {
         ctx.composioClient = createComposioClient({
-          apiKey: cfg.composio.apiKey,
-          entityId: cfg.composio.entityId || 'default',
+          composioApiKey: cfg.composioApiKey,
+          composioEntityId: cfg.composioEntityId || 'default',
         });
         console.log('[Composio] Client built from saved config');
         return ctx.composioClient;
@@ -342,8 +342,8 @@ export function createApiRouter(ctx) {
     if (process.env.COMPOSIO_API_KEY) {
       try {
         ctx.composioClient = createComposioClient({
-          apiKey: process.env.COMPOSIO_API_KEY,
-          entityId: process.env.COMPOSIO_ENTITY_ID || 'default',
+          composioApiKey: process.env.COMPOSIO_API_KEY,
+          composioEntityId: process.env.COMPOSIO_ENTITY_ID || 'default',
         });
         console.log('[Composio] Client built from environment');
         return ctx.composioClient;
@@ -667,12 +667,10 @@ export function createApiRouter(ctx) {
       try {
         const { apiKey, entityId } = data;
 
-        // Save to config store
+        // Save to config store (flat keys for compatibility)
         await configStore.save({
-          composio: {
-            apiKey,
-            entityId: entityId || 'default',
-          },
+          composioApiKey: apiKey,
+          composioEntityId: entityId || 'default',
         });
 
         // Rebuild client immediately

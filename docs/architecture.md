@@ -12,6 +12,7 @@ DSH（DeepSeek Harness）
         ├── 日报组装 + 卡片      src/host/report.js, cards.js
         ├── 日程提醒规划 + 投递  src/host/reminders.js, index.js
         ├── 面板接口 + 页面      src/host/panel.js, src/client/panel.html
+        ├── 面板坏状态（纯函数） src/host/panel-states.js
         └── 状态                 <DSH_HOME>/opendigitalmate/state.json
 ```
 
@@ -30,6 +31,9 @@ DSH（DeepSeek Harness）
 | `done` | `{ eventId: ISO }` |
 | `upcoming` | 最近一次 tick 算出的计划（面板读它） |
 | `deliveries` | 最近 200 条投递结果，成功和失败都在 |
+| `days` | `{ "YYYY-MM-DD": { events[] } }` —— 某一天的事，面板首屏从它读；`state.days` 的日键是本地日，不是 UTC 日 |
+| `sources` | `{ [source]: { connected, last_read_at, last_error } }` —— 六个信源的连接状态与最后一次读结果，`state.sources` 是坏状态判定的唯一输入 |
+| `prefs` | `{ brevity{level, since_day}, weekend_send }` —— 长短与周末偏好；`state.prefs` 改一次立刻生效 |
 
 report 的形状：`{ date, memberId, memberName, schedule[], done[], plan[], notes, stats{meetings, meetingMinutes, done, planned} }`。
 
@@ -58,6 +62,23 @@ report 的形状：`{ date, memberId, memberName, schedule[], done[], plan[], no
 - `kind` 由信源决定：有日历是 `meeting`，否则有云文档是 `document`，否则 `thread`。
 - `subtractStats(events, { day, tz })` 的 `closed` / `dropped` / `waiting` 由事件重算；`day` 走 `Intl.DateTimeFormat('en-CA', { timeZone: tz })`，不读进程 `TZ`。`dropped` 认 `defer`，`closed` 的「关掉必须有出处」随 #13 第 3 步收紧。
 - 只读边界：`src/host/normalize.js` 不联网、不写盘、不读环境变量；夹具在 `test/fixtures/`，用例在 `test/normalize.test.js`。
+
+## 面板坏状态（#15）
+
+`src/host/panel-states.js` 是一层纯函数：事件 + `state.sources` 进，卡片片段出；不读时钟、不读盘、不联网。七幕页面本身归 #33，这里只定「坏掉的时候画成什么样」。
+
+| 状态 | 判定 | 画法 |
+| --- | --- | --- |
+| 缺源 | `state.sources[name].connected !== true` | 事卡虚线琥珀边（`SRCLESS_STYLE = border:1px dashed #c8862a`）+「<源>没连上，这条只有<活源>依据」 |
+| 读失败 | `connected === true` 且 `last_error !== null` | 红色实线（`READFAIL_STYLE`，`#c0392b`），**不是**琥珀；红只给「连上了但读失败」 |
+| 部分失败 | 有一件事的全部源都没取到 | 页面 banner「N 项未取到」（`bannerText()` / `renderBanner()`）；同页其余事照常出 |
+| 一件活源都没有 | 全部源都是死源 / 读失败 / 没有源 | 固定句式「这条我答不了，缺的是 X。」；不给动作按钮 |
+
+- 首屏的三种空态文案必须分开：空日（「今天没有必须今天的事」）、周末（「周末不打扰，今天不推」，偏好开 `weekend_send` 时写「周末也照常发」）、第一天（「这是第一天，还没有基线」）。空日不画数字节点（`data-numbers` 计数为 0）。
+- 「太长了」由 `state.prefs.brevity.since_day` 决定：`since_day <= 当天` 时 `badStates().brief === true`，下一张卡末尾回一行「已按你说的改了」。
+- 数字与结论只认重算值：`closed` 是 0 就打印 `0`，不写「未知」；`renderNumbers()` 的三个数字带口径（件在手 / 会议 / 件在等别人），`renderConclusion()` 写「今天关掉 N 件，M 件在等别人」。
+- 每条卡片断言都带 `data-evidence="<ref>"`，`ref` 是来源自己的 id，形如 `<source>:<id>`（`gmail:thread/9`、`feishu_cal:event/77`、`github:pr/42`）；承载证据的 `<details class="evi" id="ev-<eventId>">` 可点开后追到同一条事件的 `sources[]`。一张卡最多一个 `data-act`。
+- 夹具：`test/fixtures/panel-five.json` 一份 `base_events`（8 条，覆盖 open / waiting_other / 改过时间 / 已关）+ `normal / empty / srcless / partial / weekend` 五场景 + 一个 brevity 对照日；用例在 `test/panel-states.test.js`。
 
 ## 与 ds-bot 的边界
 

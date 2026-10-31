@@ -7,7 +7,18 @@ import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
 export function emptyState() {
-  return { revision: 0, members: {}, reports: {}, sent: {}, manual: [], deliveries: [], upcoming: [] }
+  return {
+    revision: 0,
+    members: {},
+    reports: {},
+    sent: {},
+    manual: [],
+    deliveries: [],
+    upcoming: [],
+    days: {},
+    sources: {},
+    prefs: {},
+  }
 }
 
 // Older files may miss a key a later version reads; the shape is filled in on load.
@@ -23,6 +34,9 @@ export function normalizeState(raw) {
     manual: Array.isArray(raw.manual) ? raw.manual : [],
     deliveries: Array.isArray(raw.deliveries) ? raw.deliveries : [],
     upcoming: Array.isArray(raw.upcoming) ? raw.upcoming : [],
+    days: raw.days ?? {},
+    sources: raw.sources ?? {},
+    prefs: raw.prefs ?? {},
   }
 }
 

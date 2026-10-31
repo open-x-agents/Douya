@@ -20,6 +20,8 @@ import { BtwCardView } from './btw.js'
 import { partIndexOf, withBtwRows } from './btw-model.js'
 import { layoutOf, thinkingShown } from './themes.js'
 import { draftForDisplay } from '../shared/room-draft.js'
+import { applyScroll, pinnedToBottom, projectRelay, scrollAction, scrollGroup } from '../shared/work-line-complete.js'
+import { groupUserBubble } from '../host/group-steer.js'
 
 export { clockLabel }
 
@@ -872,50 +874,136 @@ function scanReplies(text, start, replies) {
 
 function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi, useWork }) {
   const [live, setLive] = useState({ replies: [], speaking: null, draft: null })
+  const tailRef = useRef(null)
+  const scrollSnap = useRef(null)
+  const scrollLock = useRef(null)
+  const roomBusy = useWork?.(work => (work.rooms?.[sessionId]?.length ?? 0) > 0) ?? false
+  const completions = useWork?.(work => work.completions?.[sessionId])
   useEffect(() => {
-    if (done) return undefined
+    // A finished relay with nobody still working paints from the tool result.
+    // A kept tail (the probe landed after the slot yielded) keeps polling.
+    if (done && !roomBusy && !tailRef.current?.live) return undefined
     let stop = false
     let timer
     let seen = ''
     const tick = async () => {
       const result = await actions.roomProgress(sessionId)
       if (stop) return
-      const entry = (result ?? []).find(item => item.callId === callId) ?? (result ?? [])[0]
+      const matched = (result ?? []).find(item => item.callId === callId)
+      const entry = matched ?? (tailRef.current ? undefined : (result ?? [])[0])
       // Include draft text so text-delta growth re-renders without waiting for a post.
-      const key = entry ? JSON.stringify([entry.replies, entry.speaking, entry.draft]) : ''
+      const key = entry ? JSON.stringify([entry.replies, entry.speaking, entry.draft, entry.live]) : ''
       if (entry && key !== seen) {
         seen = key
-        setLive({ replies: entry.replies ?? [], speaking: entry.speaking ?? null, draft: entry.draft ?? null })
+        const next = { replies: entry.replies ?? [], speaking: entry.speaking ?? null, draft: entry.draft ?? null }
+        if (entry.live) next.live = true
+        setLive(next)
+        if (entry.live) tailRef.current = next
       }
+      const keep = !done || roomBusy || Boolean(entry?.draft?.text)
+      if (!keep) return
       // Poll faster while a draft is growing so the bubble tracks tokens.
       timer = setTimeout(tick, document.hidden ? 5000 : (entry?.draft?.text ? 250 : 1000))
     }
     void tick()
     return () => { stop = true; clearTimeout(timer) }
-  }, [done, sessionId, callId])
+  }, [done, sessionId, callId, roomBusy])
+  const tail = tailRef.current
+  const follow = live.live === true || tail?.live === true
   let replies = live.replies
   let broken = false
-  if (done) {
+  if (done && !(follow && replies.length > 0)) {
     const parsed = parseReplies(contentText(content))
-    replies = parsed.replies.length ? parsed.replies : live.replies
+    replies = parsed.replies.length ? parsed.replies : replies
     broken = parsed.broken
   }
-  const draft = done ? undefined : draftForDisplay(live.draft, replies)
+  const shownDraft = !done || follow ? live.draft : undefined
+  const projected = projectRelay({ replies, draft: shownDraft, completions: completions ?? [], roomId: sessionId })
+  const draft = draftForDisplay(projected.draft, projected.replies)
+  if (typeof document !== 'undefined' && typeof document.querySelector === 'function') {
+    const scroller = document.querySelector('[data-conversation-scroll]')
+    scrollSnap.current = scroller
+      ? { scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight }
+      : null
+  } else scrollSnap.current = null
+  const completeKey = projected.completions.map(item => `${item.exchangeId}:${item.completedAt}`).join('\n')
+  const rawWorkingKey = replies.map(row => (row?.kind === 'working' ? `${row.workLineId ?? ''}:${row.exchangeId ?? ''}:${row.botId ?? ''}` : '')).join('\n')
+  useLayoutEffect(() => {
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return undefined
+    const scroller = document.querySelector('[data-conversation-scroll]')
+    const snapshot = scrollSnap.current
+    if (!scroller || snapshot == null) return undefined
+    const list = projected.completions
+    if (!scrollGroup({ replies, completions: list })) return undefined
+    let lockedTop = scrollLock.current
+    if (typeof lockedTop === 'number' && Math.abs(snapshot.scrollTop - lockedTop) > 2) {
+      lockedTop = null
+      scrollLock.current = null
+    }
+    const roomMatches = list.every(item => item.roomId == null || item.roomId === sessionId)
+    const pinned = typeof lockedTop === 'number' ? true : pinnedToBottom(snapshot)
+    const action = scrollAction({ pinned, roomMatches })
+    const node = scroller.querySelector('[data-work-complete-first]')
+    let firstOffset
+    let firstHeight = 0
+    if (typeof node?.getBoundingClientRect === 'function' && typeof scroller.getBoundingClientRect === 'function') {
+      const nodeRect = node.getBoundingClientRect()
+      const scrollerRect = scroller.getBoundingClientRect()
+      firstOffset = nodeRect.top - scrollerRect.top + scroller.scrollTop
+      firstHeight = nodeRect.height
+    }
+    const next = applyScroll({
+      action,
+      scrollTop: snapshot.scrollTop,
+      clientHeight: snapshot.clientHeight,
+      firstOffset,
+      firstHeight,
+      lockedTop,
+    })
+    if (next.scrollTop !== scroller.scrollTop) scroller.scrollTop = next.scrollTop
+    scrollLock.current = next.lockedTop
+    return undefined
+  }, [completeKey, rawWorkingKey, sessionId])
   // Members speak one at a time. A live draft replaces the bare typing row.
   const pending = done || !live.speaking || (draft?.text && draft.botId === live.speaking) ? [] : [live.speaking]
   const speakerTool = useWork?.(work => work.bots?.[live.speaking]?.tool) ?? undefined
   const speakerDoing = useWork?.(work => (work.bots?.[live.speaking]?.tool ? workPhrase(work.bots[live.speaking]) : undefined)) ?? undefined
-  if (replies.length === 0 && pending.length === 0 && !(draft?.text)) {
+  if (projected.replies.length === 0 && pending.length === 0 && !(draft?.text)) {
     // A pruned tool result left nothing to draw; keep a marker row instead of an
     // empty turn, which reads as a blank gap on a narrow first paint.
     return broken ? h('div', { className: 'bt-group-replies' }, h('div', { className: 'bt-event' }, t('The group replies could not be shown'))) : null
   }
   const room = roster.roomsById[sessionId]
   return h('div', { className: 'bt-group-replies' },
-    stackReplies(replies).map(({ reply, index, texts, time, duration }) => {
+    stackReplies(projected.replies).map(({ reply, index, texts, time, duration }) => {
       const bot = roster.byId[reply.botId] ?? { id: reply.botId, name: reply.name, color: reply.color ?? 'gray' }
-      if (reply.kind === 'user') {
-        return h('div', { key: `user-${index}`, className: 'bt-urow' }, h('div', { className: 'bt-ububble' },
+      const userBubble = groupUserBubble(reply)
+      if (reply.kind === 'completion-quote') {
+        return h('div', {
+          key: `complete-q-${reply.exchangeId}-${index}`,
+          className: 'bt-urow',
+          'data-work-complete': reply.exchangeId,
+          ...(reply.first === true ? { 'data-work-complete-first': '' } : {}),
+        }, h('div', { className: 'bt-ububble' },
+          h(MarkdownText, { text: reply.text, labels: mdLabels(), variant: 'compact' })))
+      }
+      if (reply.kind === 'completion-reply') {
+        return h('div', {
+          key: `complete-a-${reply.exchangeId}-${index}`,
+          'data-work-complete': reply.exchangeId,
+          ...(reply.first === true ? { 'data-work-complete-first': '' } : {}),
+        }, h(GroupMessage, {
+          bot,
+          texts: [reply.text],
+          room,
+          roster,
+          actions,
+          msgKey: callId ? `${sessionId}:${callId}:complete:${reply.exchangeId}` : undefined,
+          useUi,
+        }))
+      }
+      if (userBubble) {
+        return h('div', { key: `user-${index}`, className: 'bt-urow', ...(userBubble.steering ? { 'data-steering': true } : {}) }, h('div', { className: 'bt-ububble' },
           h(MarkdownText, { text: reply.text, labels: mdLabels(), variant: 'compact' }),
           Number.isFinite(time) ? h('div', { className: 'bt-utime', title: clockLabel(time) }, messageClock(time)) : null))
       }

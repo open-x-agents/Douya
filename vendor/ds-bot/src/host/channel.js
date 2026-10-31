@@ -9,6 +9,8 @@ import { validateViewAnswer } from 'deep-view/core'
 import { COLORS, EXTRA_COLORS, ROUTE } from './constants.js'
 import { resolveSendMode } from '../shared/send-mode.js'
 import { clearDraftIfPosted } from '../shared/room-draft.js'
+import { decideRoomSteer, roomMembers, textNamesMember } from './group-steer.js'
+import { routeTakesEffect } from './route-inbound.js'
 
 const LANGUAGES = { zh: 'Chinese (简体中文)', en: 'English' }
 const RUN_STATS = ['sessionStats', 'tokenUsage', 'contextPressure']
@@ -58,6 +60,8 @@ export function install(rt) {
     privateArchives: rt.archivesView(),
     exchangeTurns: state.exchangeTurns,
     questions: state.questions,
+    // Inbound ask cards. The desktop reads these from /api state; a timeout does not send them.
+    pendingRoutes: state.pendingRoutes ?? {},
     views: state.views ?? {},
     // Aside answers of each Bot's current part, newest first. Not part of the
     // model-visible history; earlier parts send their cards on their own pages.
@@ -92,7 +96,7 @@ export function install(rt) {
   // and per Session, when its running turn began.
   const live = () => ({
     activity: rt.activityView(),
-    work: { bots: rt.workView(), rooms: rt.roomWorkView(), approvals: rt.approvalsView(), waiting: rt.waitingView?.() ?? {}, turns: rt.turnsView?.() ?? {}, steered: rt.steeredView?.() ?? {} },
+    work: { bots: rt.workView(), rooms: rt.roomWorkView(), approvals: rt.approvalsView(), waiting: rt.waitingView?.() ?? {}, turns: rt.turnsView?.() ?? {}, steered: rt.steeredView?.() ?? {}, completions: rt.completionView?.() ?? {} },
     memoryNews: rt.memoryNews(),
     memoryReviews: rt.memoryReviews(),
     learning: rt.learningView(),
@@ -228,16 +232,21 @@ export function install(rt) {
         case 'usage':
           await rt.load()
           return ok(await rt.usageView({ timeZone: typeof body.timeZone === 'string' ? body.timeZone.slice(0, 64) : undefined }))
-        case 'room-progress':
-          return ok([...rt.roomProgress.entries()].filter(([, entry]) => entry.roomId === body.roomId).map(([callId, entry]) => {
+        case 'room-progress': {
+          const rows = [...rt.roomProgress.entries()].filter(([, entry]) => entry.roomId === body.roomId)
+          const kept = rt.keptRounds?.get(body.roomId)
+          if (kept !== undefined && !rows.some(([callId]) => callId === kept.callId)) rows.push([kept.callId, kept.round])
+          return ok(rows.map(([callId, entry]) => {
             const replies = entry.replies ?? []
             // clearDraftIfPosted keeps empty start seeds (attemptId) so later
             // text-deltas still accumulate. Only write back when it drops a
             // posted/ended draft — never wipe an active empty seed here.
             const draft = clearDraftIfPosted(entry.draft, replies)
             if (draft !== entry.draft) entry.draft = draft
-            return { callId, replies, speaking: entry.speaking ?? null, ...(draft ? { draft } : {}) }
+            const live = rt.roomProgress.has(callId) ? undefined : true
+            return { callId, replies, speaking: entry.speaking ?? null, ...(draft ? { draft } : {}), ...(live ? { live: true } : {}) }
           }))
+        }
         case 'create-bot': {
           await rt.bootstrap()
           const bot = await rt.createBot({ name: body.name, role: body.role, color: body.color, instructions: body.instructions, brief: body.brief, avatar: body.avatar, model: body.model, effort: body.effort, workDir: body.workDir })
@@ -446,6 +455,47 @@ export function install(rt) {
           // otherwise a running Session defaults to steer so a busy follow-up can
           // join this turn. Explicit queue still queues.
           const requested = body.mode === 'steer' || body.mode === 'queue' ? body.mode : undefined
+          const room = rt.roomOf(sessionId)
+          if (room !== undefined) {
+            const members = roomMembers(room, id => rt.live.get(id), id => rt.botOf(id))
+            const routed = rt.routeRoomUser?.({
+              room,
+              text,
+              explicitQueue: requested === 'queue',
+              explicitNew: body.mode === 'new',
+              plain: !text.includes('dsh-session:'),
+              via: 'channel',
+            })
+            if (routeTakesEffect(routed)) {
+              rt.suppressRelayText?.(room.id, text)
+              rt.holdRoomRoute?.(room.id)
+              await rt.applyRouteDecision(room, routed, { text: routed.text ?? text })
+              return ok(true)
+            }
+            rt.releaseRoomRoute?.(room.id)
+            if (!(routed?.action === 'queue' && routed.relay === true)) {
+              const decision = decideRoomSteer({
+                members,
+                explicitQueue: requested === 'queue',
+                explicitNew: body.mode === 'new',
+                named: textNamesMember(text, members),
+                plain: !text.includes('dsh-session:'),
+              })
+              switch (decision.action) {
+                case 'steer':
+                  await rt.acceptRoomSteer(room, decision.member, { text })
+                  return ok(true)
+                case 'relay':
+                  break
+                default: {
+                  /** @type {never} */
+                  const unexpected = decision.action
+                  throw new Error(`Unknown room steer action ${String(unexpected)}`)
+                }
+              }
+            }
+            rt.noteRelayIntent(sessionId, text)
+          }
           let running = rt.live.get(sessionId)?.turn !== undefined
           if (requested === undefined && !running) {
             const agent = await rt.resolveAgent(sessionId).catch(() => undefined)

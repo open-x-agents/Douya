@@ -5,7 +5,7 @@
 ## 顺序
 
 1. **pre-release 预检**（`scripts/pre-release.mjs --skip-version`，全绿才往下走）：
-   - **单元测试**：`node --test test/*.test.js`，跟 `tests.yml` 同一条命令；
+   - **单元测试**：`node --test test/*.test.js 'acceptance-cases/**/*.test.js'`，跟 `tests.yml` 同一条命令；
    - **干净安装**：`npm pack` → 装进空目录 → 真的 `import` 一次，并检查 `package.json.files` 里没写不存在的路径；
    - **真实模型 e2e**：结论必须每条都可追源，缺一个信源必须说「还没读到」而不能编。
 2. **新东西闸**：上一个 `v*` tag 之后没有提交，就**不发**，日志与 step summary 里写一行「今天不发」。空版本不是进展。

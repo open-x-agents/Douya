@@ -123,10 +123,16 @@ report 的形状：`{ date, memberId, memberName, schedule[], done[], plan[], no
 `assertReadOnlyRegistry()` 在 `createRuntime()` 返回之前跑：任一行任一动作不是读动作或不在快照里就同步抛
 `E_WRITE_ACTION`——**启动失败**，不是一条告警。`node scripts/composio-check.mjs [--registry <file>]` 是同一个校验的 CLI 形态。
 
-**按人授权（S2 起）。** 每个 app × 每个人一个 connected account，状态 `ok | missing | expired | ambiguous | scope`；
+**按人授权（S2）。** 每个 app × 每个人一个 connected account，状态 `ok | missing | expired | ambiguous | scope`；
 解析键是 `(toolkit, userId)`，账号表必须用复数参数 `toolkit_slugs` / `user_ids` 取（单数参数会被静默忽略，
-「按人」会悄悄变成「按所有人」）。掉一个 app 时该源进 `unread_sources`，早报照出并点名缺的是哪个 app；
-`ambiguous` 绝不允许静默挑一个。
+「按人」会悄悄变成「按所有人」）。`src/sources/composio/accounts.js` 是纯函数（账号表由调用方传，不联网）：
+`resolveAccount(accounts, { toolkit, userId })` 给出 `{ state, reason, account_id }`——恰好 1 个 ACTIVE 是 `ok`；
+没给 `userId` 是 `missing`/`no-person`，这个人名下没有账号是 `missing`/`no-account`（有账号但还没连好的
+`INITIALIZING` 也算这里）；只有 EXPIRED 是 `expired`/`expired`；同一 (toolkit,user) 有 2 个以上 ACTIVE 是
+`ambiguous`、`account_id` 恒为 `null`，**绝不允许静默挑一个**。`authOf()` 把它折成适配器契约要的 `{ ok, reason }`
+（`reason` 用 `state` 的值，`ambiguous` 也是合法的 reason）。`scope` 不由账号表判：账号是好的、只是子请求被 403
+`insufficientPermissions` 拒了，由 `authReasonOf(error)` 得出——那是少了权限，不是 `missing`。
+掉一个 app 时该源进 `unread_sources`，早报照出并点名缺的是哪个 app。
 
 **多源同时在线（S4 起）。** 每个 app 单独一个 3 秒预算，超时只让该源 `partial`（记 `latency_ms`），
 其它 app 照常进早报。每条 fact 的证据 ref 固定为 `composio:<toolkit>:<object>/<record_id>`，

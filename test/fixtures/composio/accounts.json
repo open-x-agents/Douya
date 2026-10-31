@@ -1,0 +1,17 @@
+{
+  "at": "2026-10-31T12:15:56.454Z",
+  "note": "脱敏自 2026-10-31T12:15–12:19Z 的 GET /connected_accounts 真探测：只留 id、status、user_id、toolkit slug，没有邮箱、没有 key、没有账号 token。gmail 与 slack 各跨多个 user_id，notion / googlecalendar 只有 EXPIRED —— 这四种状态都在真数据里出现过。",
+  "accounts": [
+    { "id": "ca_gmail_default_1", "status": "ACTIVE", "toolkit": { "slug": "gmail", "name": "Gmail" }, "user_id": "default" },
+    { "id": "ca_gmail_default_2", "status": "ACTIVE", "toolkit": { "slug": "gmail", "name": "Gmail" }, "user_id": "default" },
+    { "id": "ca_gmail_flybot_1", "status": "ACTIVE", "toolkit": { "slug": "gmail", "name": "Gmail" }, "user_id": "flybot-7743" },
+    { "id": "ca_gmail_flybot_2", "status": "EXPIRED", "toolkit": { "slug": "gmail", "name": "Gmail" }, "user_id": "flybot-7743" },
+    { "id": "ca_slack_flybot_1", "status": "ACTIVE", "toolkit": { "slug": "slack", "name": "Slack" }, "user_id": "flybot-187b" },
+    { "id": "ca_slack_flybot_2", "status": "EXPIRED", "toolkit": { "slug": "slack", "name": "Slack" }, "user_id": "flybot-187b" },
+    { "id": "ca_slack_default_1", "status": "ACTIVE", "toolkit": { "slug": "slack", "name": "Slack" }, "user_id": "default" },
+    { "id": "ca_notion_default_1", "status": "EXPIRED", "toolkit": { "slug": "notion", "name": "Notion" }, "user_id": "default" },
+    { "id": "ca_googlecalendar_default_1", "status": "EXPIRED", "toolkit": { "slug": "googlecalendar", "name": "Google Calendar" }, "user_id": "default" },
+    { "id": "ca_notion_pending_1", "status": "INITIALIZING", "toolkit": { "slug": "notion", "name": "Notion" }, "user_id": "flybot-7743" },
+    { "id": "ca_linear_default_1", "status": "EXPIRED", "toolkit": { "slug": "linear", "name": "Linear" }, "user_id": "default" }
+  ]
+}

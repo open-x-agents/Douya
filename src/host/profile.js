@@ -11,7 +11,7 @@ import { dirname } from 'node:path';
  */
 export function emptyProfile() {
   return {
-    name: 'Danyang',
+    name: '', // resolved at runtime from profile / Composio identity
     preferences: {
       // Learned from data
       topRepos: {},           // {repo: count}

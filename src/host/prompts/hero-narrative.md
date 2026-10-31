@@ -12,7 +12,7 @@ Based on Sunsama, Motion, Superhuman:
 
 ## Input Variables
 
-- `{{userName}}`: User's name (e.g., "Danyang")
+- `{{userName}}`: User's name (e.g., "Alex")
 - `{{urgentCount}}`: Number of urgent items (review-requested PRs, imminent meetings)
 - `{{actionCount}}`: Number of actionable items (assigned, today's meetings, emails)
 - `{{meetings}}`: Number of calendar events today

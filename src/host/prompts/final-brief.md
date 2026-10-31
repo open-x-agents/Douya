@@ -68,8 +68,8 @@ Based on Linear Pulse, Superhuman AI Triage, Shortwave, Motion:
   "id": "cluster_xxx",
   "type": "project-cluster",
   "source": "github",
-  "sourceId": "github:cluster:repo:ThinkFlowLab/FlyBot",
-  "title": "ThinkFlowLab/FlyBot",
+  "sourceId": "github:cluster:repo:acme/repo-a",
+  "title": "acme/repo-a",
   "subtitle": "Project Activity",
   "body": "...",
   "priority": "high" | "medium" | "low",
@@ -104,7 +104,7 @@ Based on Linear Pulse, Superhuman AI Triage, Shortwave, Motion:
       "links": [
         {
           "title": "Re-implement task read model (#1915)",
-          "url": "https://github.com/ThinkFlowLab/FlyBot/pull/1915",
+          "url": "https://github.com/acme/repo-a/pull/1915",
           "type": "pr-review"
         }
       ]
@@ -113,12 +113,12 @@ Based on Linear Pulse, Superhuman AI Triage, Shortwave, Motion:
   "actions": [
     {
       "label": "去 review #1915",
-      "value": "https://github.com/ThinkFlowLab/FlyBot/pull/1915/files",
+      "value": "https://github.com/acme/repo-a/pull/1915/files",
       "primary": true
     }
   ],
   "metadata": {
-    "repo": "ThinkFlowLab/FlyBot",
+    "repo": "acme/repo-a",
     "prCount": 5,
     "reviewCount": 3,
     "issueCount": 3

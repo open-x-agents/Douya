@@ -14,43 +14,39 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Static list of popular Composio apps
 const COMPOSIO_APPS = [
-  {
-    key: 'github',
-    name: 'GitHub',
-    logo: 'https://logos.composio.dev/api/github',
-    description: 'Repositories and issues',
-  },
-  {
-    key: 'slack',
-    name: 'Slack',
-    logo: 'https://logos.composio.dev/api/slack',
-    description: 'Team messages',
-  },
-  {
-    key: 'gmail',
-    name: 'Gmail',
-    logo: 'https://logos.composio.dev/api/gmail',
-    description: 'Email access',
-  },
-  {
-    key: 'notion',
-    name: 'Notion',
-    logo: 'https://logos.composio.dev/api/notion',
-    description: 'Workspace docs',
-  },
-  {
-    key: 'linear',
-    name: 'Linear',
-    logo: 'https://logos.composio.dev/api/linear',
-    description: 'Issue tracking',
-  },
-  {
-    key: 'calendar',
-    toolkitSlug: 'googlecalendar',
-    name: 'Google Calendar',
-    logo: 'https://logos.composio.dev/api/googlecalendar',
-    description: 'Calendar events',
-  },
+  { key: 'github', name: 'GitHub', category: '开发协作', logo: 'https://logos.composio.dev/api/github', description: 'PR、issue 与 review 请求，汇总到每日项目卡片', authMode: 'OAUTH2' },
+  { key: 'gitlab', name: 'GitLab', category: '开发协作', logo: 'https://logos.composio.dev/api/gitlab', description: '合并请求与 issue 动态', authMode: 'OAUTH2' },
+  { key: 'linear', name: 'Linear', category: '开发协作', logo: 'https://logos.composio.dev/api/linear', description: '分配给你的 Linear 任务与进度', authMode: 'OAUTH2' },
+  { key: 'jira', name: 'Jira', category: '开发协作', logo: 'https://logos.composio.dev/api/jira', description: 'Jira 工单、冲刺与指派', authMode: 'OAUTH2' },
+  { key: 'figma', name: 'Figma', category: '开发协作', logo: 'https://logos.composio.dev/api/figma', description: '设计文件评论与更新', authMode: 'OAUTH2' },
+  { key: 'gmail', name: 'Gmail', category: '邮件与消息', logo: 'https://logos.composio.dev/api/gmail', description: '未读与重要邮件，提醒你该回谁', authMode: 'OAUTH2' },
+  { key: 'outlook', name: 'Outlook', category: '邮件与消息', logo: 'https://logos.composio.dev/api/outlook', description: 'Outlook 邮件与日程', authMode: 'OAUTH2' },
+  { key: 'slack', name: 'Slack', category: '邮件与消息', logo: 'https://logos.composio.dev/api/slack', description: '频道 @你 的消息与私信', authMode: 'OAUTH2' },
+  { key: 'microsoft_teams', name: 'Microsoft Teams', category: '邮件与消息', logo: 'https://logos.composio.dev/api/microsoft_teams', description: 'Teams 聊天与频道消息', authMode: 'OAUTH2' },
+  { key: 'discord', name: 'Discord', category: '邮件与消息', logo: 'https://logos.composio.dev/api/discord', description: '服务器频道里提到你的消息', authMode: 'OAUTH2' },
+  { key: 'telegram', name: 'Telegram', category: '邮件与消息', logo: 'https://logos.composio.dev/api/telegram', description: 'Telegram 机器人消息（需 Bot Token）', authMode: 'API_KEY' },
+  { key: 'whatsapp', name: 'WhatsApp', category: '邮件与消息', logo: 'https://logos.composio.dev/api/whatsapp', description: 'WhatsApp Business 消息', authMode: 'OAUTH2' },
+  { key: 'googlecalendar', name: 'Google 日历', category: '日程与会议', logo: 'https://logos.composio.dev/api/googlecalendar', description: '今天的会议，自动排进「我的一天」', authMode: 'OAUTH2' },
+  { key: 'calendly', name: 'Calendly', category: '日程与会议', logo: 'https://logos.composio.dev/api/calendly', description: '别人在你日历上预约的时段', authMode: 'OAUTH2' },
+  { key: 'zoom', name: 'Zoom', category: '日程与会议', logo: 'https://logos.composio.dev/api/zoom', description: '即将开始的 Zoom 会议与录制', authMode: 'OAUTH2' },
+  { key: 'notion', name: 'Notion', category: '文档与知识', logo: 'https://logos.composio.dev/api/notion', description: 'Notion 页面与数据库更新', authMode: 'OAUTH2' },
+  { key: 'googledrive', name: 'Google Drive', category: '文档与知识', logo: 'https://logos.composio.dev/api/googledrive', description: '最近修改与共享给你的文件', authMode: 'OAUTH2' },
+  { key: 'googledocs', name: 'Google Docs', category: '文档与知识', logo: 'https://logos.composio.dev/api/googledocs', description: '文档评论与 @提及', authMode: 'OAUTH2' },
+  { key: 'googlesheets', name: 'Google Sheets', category: '文档与知识', logo: 'https://logos.composio.dev/api/googlesheets', description: '表格数据变化', authMode: 'OAUTH2' },
+  { key: 'confluence', name: 'Confluence', category: '文档与知识', logo: 'https://logos.composio.dev/api/confluence', description: '团队 Wiki 页面更新', authMode: 'OAUTH2' },
+  { key: 'dropbox', name: 'Dropbox', category: '文档与知识', logo: 'https://logos.composio.dev/api/dropbox', description: 'Dropbox 文件变动', authMode: 'OAUTH2' },
+  { key: 'one_drive', name: 'OneDrive', category: '文档与知识', logo: 'https://logos.composio.dev/api/one_drive', description: 'OneDrive 文件变动', authMode: 'OAUTH2' },
+  { key: 'asana', name: 'Asana', category: '任务与项目', logo: 'https://logos.composio.dev/api/asana', description: 'Asana 任务与截止日期', authMode: 'OAUTH2' },
+  { key: 'trello', name: 'Trello', category: '任务与项目', logo: 'https://logos.composio.dev/api/trello', description: 'Trello 看板卡片变动', authMode: 'OAUTH1' },
+  { key: 'clickup', name: 'ClickUp', category: '任务与项目', logo: 'https://logos.composio.dev/api/clickup', description: 'ClickUp 任务与提醒', authMode: 'OAUTH2' },
+  { key: 'todoist', name: 'Todoist', category: '任务与项目', logo: 'https://logos.composio.dev/api/todoist', description: '今天到期的 Todoist 待办', authMode: 'OAUTH2' },
+  { key: 'airtable', name: 'Airtable', category: '任务与项目', logo: 'https://logos.composio.dev/api/airtable', description: 'Airtable 表格记录', authMode: 'OAUTH2' },
+  { key: 'twitter', name: 'X / Twitter', category: '资讯与社区', logo: 'https://logos.composio.dev/api/twitter', description: '提及、私信与关注的动态', authMode: 'OAUTH2' },
+  { key: 'reddit', name: 'Reddit', category: '资讯与社区', logo: 'https://logos.composio.dev/api/reddit', description: '订阅版块的热门帖子', authMode: 'OAUTH2' },
+  { key: 'youtube', name: 'YouTube', category: '资讯与社区', logo: 'https://logos.composio.dev/api/youtube', description: '订阅频道的新视频', authMode: 'OAUTH2' },
+  { key: 'hackernews', name: 'Hacker News', category: '资讯与社区', logo: 'https://logos.composio.dev/api/hackernews', description: 'HN 热门与你关注的话题（无需授权）', authMode: 'NO_AUTH' },
+  { key: 'spotify', name: 'Spotify', category: '生活', logo: 'https://logos.composio.dev/api/spotify', description: '最近播放与歌单', authMode: 'OAUTH2' },
+  { key: 'strava', name: 'Strava', category: '生活', logo: 'https://logos.composio.dev/api/strava', description: '运动记录，用于「我的一天」节奏建议', authMode: 'OAUTH2' },
 ];
 
 // Simple in-memory chat history for demo
@@ -515,6 +511,7 @@ export function createApiRouter(ctx) {
   // Initialize profile manager
   const profilePath = join(config?.dataDir || './.odm-data', 'profile.json');
   const profileManager = createProfileManager(profilePath);
+  const identityCache = { tried: false, value: null };
   
   // Load profile on startup
   profileManager.load().catch(err => {
@@ -606,7 +603,20 @@ export function createApiRouter(ctx) {
             }).join('、')
           : '暂无数据';
 
-        const userName = resolveDisplayName(profileManager.getPersonalizationContext().name);
+        let userName = resolveDisplayName(profileManager.getPersonalizationContext().name, identityCache.value || lastGithubIdentity);
+        if (!userName && !identityCache.tried) {
+          identityCache.tried = true;
+          try {
+            const c = getComposioClient();
+            const r = c && await c.executeAction('GITHUB_GET_THE_AUTHENTICATED_USER', {});
+            const d = r?.data?.data || r?.data;
+            if (d?.login) {
+              identityCache.value = { login: d.login, name: d.name || '' };
+              userName = resolveDisplayName('', identityCache.value);
+              if (userName) await profileManager.save({ name: userName });
+            }
+          } catch (e) { console.warn('[Identity] lookup failed:', e.message); }
+        }
 
         return {
           summary: activeCards.length === 0
@@ -1243,10 +1253,14 @@ export function createApiRouter(ctx) {
           const result = await client.getConnectedAccounts();
           const accounts = result?.items || [];
           const connectedApps = new Map();
+          const pendingApps = new Set();
           
           // v3 API response: {items: [...]}, items contain {id, status, toolkit: {slug}, ...}
           accounts.forEach(account => {
             // Only count ACTIVE connections, skip INITIATED (pending OAuth)
+            if (account.status !== 'ACTIVE' && account.toolkit?.slug && !connectedApps.has(account.toolkit.slug)) {
+              pendingApps.add(account.toolkit.slug);
+            }
             if (account.status === 'ACTIVE' && account.toolkit?.slug) {
               connectedApps.set(account.toolkit.slug, {
                 connectionId: account.id,
@@ -1263,6 +1277,8 @@ export function createApiRouter(ctx) {
               app.connected = true;
               app.connectionId = conn.connectionId;
               app.connectedAt = conn.connectedAt;
+            } else if (pendingApps.has(toolkitSlug)) {
+              app.pending = true;
             }
           });
         } catch (err) {
@@ -1287,7 +1303,7 @@ export function createApiRouter(ctx) {
         }
 
         const appId = data.appKey || data.appId;
-        const app = appId && COMPOSIO_APPS.find(a => a.key === appId || a.id === appId);
+        const app = appId && COMPOSIO_APPS.find(a => a.key === appId || a.id === appId || (appId === 'calendar' && a.key === 'googlecalendar'));
         
         if (!app) {
           return { error: '未知应用' };

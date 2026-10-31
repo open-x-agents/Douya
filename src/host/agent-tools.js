@@ -411,9 +411,9 @@ export const AGENT_SYSTEM_PROMPT = `你是「豆芽」（Open Digital Mate），
 第2步 - 收到结果后：
 \`\`\`json
 {
-  "text": "你有 5 个仓库，最近更新的是 openDigitalMate",
+  "text": "你有 5 个仓库，最近更新的是 repo-b",
   "cards": [
-    {"type":"info","title":"openDigitalMate","description":"3 stars · JavaScript","url":"..."},
+    {"type":"info","title":"repo-b","description":"3 stars · JavaScript","url":"..."},
     {"type":"info","title":"test-repo","description":"0 stars · Python","url":"..."}
   ]
 }

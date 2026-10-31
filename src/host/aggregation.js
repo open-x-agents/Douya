@@ -643,7 +643,7 @@ export function dedupeItems(items) {
 
 /**
  * Stage 3.5: Cluster items by project/theme (NEW)
- * Groups items into themed tiles: e.g., "FLYBOT · RELEASE" with aggregated stats
+ * Groups items into themed tiles: e.g., "REPO-A · RELEASE" with aggregated stats
  */
 export function clusterByProjectTheme(items) {
   const clusters = [];
@@ -692,7 +692,7 @@ export function clusterByProjectTheme(items) {
       sourceId: `github:cluster:${repo}:${today}`,
       title: projectName,
       subtitle: owner ? `${owner}` : '',
-      body: `${prCount} PRs, ${issueCount} issues`,
+      body: `目前有 ${prCount} 个 PR、${issueCount} 个 issue 待跟进。`,
       url: `https://github.com/${repo}`,
       priority,
       status: reviewCount > 0 ? 'needs-review' : 'active',
@@ -725,7 +725,7 @@ export function clusterByProjectTheme(items) {
     const senderName = extractSenderName(sender);
     const subject = item.title || '';
     
-    // Detect GitHub notification emails (e.g., "Re: [ThinkFlowLab/FlyBot] ... PR #1915")
+    // Detect GitHub notification emails (e.g., "Re: [acme/repo-a] ... PR #1915")
     const githubRepoMatch = subject.match(/\[([\w-]+\/[\w-]+)\]/);
     if (githubRepoMatch || sender.includes('notifications@github.com')) {
       const repo = githubRepoMatch ? githubRepoMatch[1] : null;
@@ -793,7 +793,7 @@ export function clusterByProjectTheme(items) {
       sourceId: `github:cluster:${repo}:${today}`,
       title: projectName,  // Will be replaced with LLM headline
       subtitle: owner ? `${owner}` : '',
-      body: `${prCount} PRs, ${issueCount} issues${emailCount > 0 ? `, ${emailCount} emails` : ''}`,
+      body: `目前有 ${prCount} 个 PR、${issueCount} 个 issue 待跟进${emailCount > 0 ? `，另有 ${emailCount} 封相关通知邮件` : ''}。`,
       url: `https://github.com/${repo}`,
       priority,
       status: reviewCount > 0 ? 'needs-review' : 'active',
@@ -1584,8 +1584,8 @@ async function generateProjectHeadlinesAndSummaries(grouped, llmClient) {
    - 必须基于真实数据（数字、PR 标题）
    - 说明具体工作内容（如果有热点项目名称就提）
    - 说明需要的行动（如果有待 review 的）
-   - 示例: "FlyBot 过去 24h 合并了 17 个 PR，主要是 task-read-model 重构工作；还有 3 个 PR 等待 review。"
-   - 示例: "openDigitalMate 今天没有新 PR，有 2 个 issue 待处理，包括 UI 性能优化。"
+   - 示例: "repo-a 过去 24h 合并了 17 个 PR，主要是 task-read-model 重构工作；还有 3 个 PR 等待 review。"
+   - 示例: "repo-b 今天没有新 PR，有 2 个 issue 待处理，包括 UI 性能优化。"
 
 JSON: {"headline": "英文标题", "summary": "中文摘要"}`;
       

@@ -12,7 +12,7 @@ Based on Superhuman, Motion, Linear, Sunsama:
 
 ## Input Variables
 
-- `{{repoName}}`: Repository name (e.g., "ThinkFlowLab/FlyBot")
+- `{{repoName}}`: Repository name (e.g., "acme/repo-a")
 - `{{openPRs}}`: Number of open PRs
 - `{{mergedPRs}}`: Number of merged PRs in last 24h
 - `{{openIssues}}`: Number of open issues
@@ -44,12 +44,12 @@ Based on Superhuman, Motion, Linear, Sunsama:
    - 具体数字和工作内容（基于真实数据）
    - **为什么重要**: 如果有阻塞发版的、性能相关的、安全问题的，明确说明影响
    - **谁在等**: 如果有 PR 等待 review，说明"X 个 PR 等待你 review"
-   - **建议行动**: "先 review #1915，它阻塞了 core-host 发版"
+   - **建议行动**: "先 review #1915，它阻塞了 core 发版"
    
    **示例**:
-   - "FlyBot 过去 24h 合并了 17 个 PR，主要是 task-read-model 重构工作；还有 3 个 PR 等待 review。"
-   - "openDigitalMate 有 2 个 PR 正在进行中，主要是 UI 重构；#42 阻塞了下周的 demo，建议优先 review。"
-   - "AgentDescent 今天没有新 PR，有 2 个 issue 待处理，包括内存泄漏问题（高优先级）。"
+   - "repo-a 过去 24h 合并了 17 个 PR，主要是 task-read-model 重构工作；还有 3 个 PR 等待 review。"
+   - "repo-b 有 2 个 PR 正在进行中，主要是 UI 重构；#42 阻塞了下周的 demo，建议优先 review。"
+   - "repo-c 今天没有新 PR，有 2 个 issue 待处理，包括内存泄漏问题（高优先级）。"
 
 JSON: {"headline": "英文标题", "summary": "中文摘要",
   "nextAction": "先审 #N …", "nextAction": "动词+对象的下一步（中文）"}
@@ -60,6 +60,6 @@ JSON: {"headline": "英文标题", "summary": "中文摘要",
 ```json
 {
   "headline": "Major refactor shipped, 3 reviews pending",
-  "summary": "FlyBot 过去 24h 合并了 17 个 PR，主要是 task-read-model 重构工作；还有 3 个 PR 等待你 review，其中 #1915 阻塞了 core-host 发版。"
+  "summary": "repo-a 过去 24h 合并了 17 个 PR，主要是 task-read-model 重构工作；还有 3 个 PR 等待你 review，其中 #1915 阻塞了 core 发版。"
 }
 ```

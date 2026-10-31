@@ -819,6 +819,34 @@
   .z-item{min-width:0;flex-wrap:nowrap}
   .z-item-b>*{white-space:normal!important;overflow-wrap:anywhere;word-break:break-word}
   .tile-zoom-title,.tile-zoom-content p,.tile-zoom-content div{overflow-wrap:anywhere}
+
+  /* sources grid */
+  #v-sources,#v-settings{padding:36px 44px 60px}
+  .src-summary{display:flex;align-items:center;gap:28px;margin:4px 0 22px}
+  .src-summary b{display:block;font-size:28px;font-weight:650;line-height:1.1}
+  .src-summary span{font-size:12px;color:var(--ink3)}
+  .src-warn{margin:0;font-size:13px;color:var(--rose)}
+  .src-group{margin-bottom:26px}
+  .src-group-h{display:flex;align-items:baseline;gap:10px;margin:0 0 10px}
+  .src-group-h b{font-size:15px;font-weight:650}
+  .src-group-h span{font-size:12px;color:var(--ink3)}
+  .src-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
+  .src-tile{background:rgba(255,255,255,.82);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.95);border-radius:18px;padding:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;min-width:0;transition:.2s var(--ease)}
+  .src-tile:hover{box-shadow:var(--shadow-hi);transform:translateY(-1px)}
+  .src-tile.is-on{background:linear-gradient(160deg,#fff,rgba(227,246,243,.9))}
+  .src-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .src-top img,.src-fb{width:36px;height:36px;border-radius:10px;object-fit:contain;background:#fff;box-shadow:0 0 0 1px var(--line)}
+  .src-fb{display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--ink2)}
+  .src-pill{font-size:11px;font-weight:650;padding:3px 9px;border-radius:999px}
+  .src-pill.on{background:var(--teal-soft);color:var(--teal)}
+  .src-pill.wait{background:var(--peach-soft);color:var(--peach)}
+  .src-pill.off{background:#eef0f4;color:var(--ink3)}
+  .src-tile h4{margin:0 0 4px;font-size:14.5px;font-weight:650}
+  .src-tile p{margin:0 0 14px;font-size:12.5px;line-height:1.55;color:var(--ink2);flex:1}
+  .src-foot{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .src-auth{font-size:11px;color:var(--ink3)}
+  .src-btn{border:0;cursor:pointer;font:600 12.5px/1 inherit;color:#fff;padding:8px 14px;border-radius:999px;background:linear-gradient(135deg,#6f8df5,#8a74d0)}
+  .src-btn.ghost{background:#fff;color:var(--ink2);box-shadow:0 0 0 1px var(--line)}
 </style>
 </head>
 <body>
@@ -1326,8 +1354,30 @@
     if (iss) parts.push(`${iss} 个 issue 待处理`);
     return parts.length ? parts.join(' · ') : (card.title || '');
   }
+  function zhBody(card) {
+    const b = String(card.body || '').trim();
+    if (/[\u4e00-\u9fa5]/.test(b)) return b;
+    const r = repoOf(card);
+    const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
+    const mails = linksOf(card).filter(l => linkKind(l).k === 'mail').length;
+    const parts = [];
+    if (pr) parts.push(`${pr} 个你开的 PR 还没合并`);
+    if (iss) parts.push(`${iss} 个 issue 仍开着`);
+    if (!parts.length) return b;
+    return `${r ? r.name : '这个项目'} 目前有 ${parts.join('、')}${mails ? `，另有 ${mails} 封相关通知邮件` : ''}。${iss > 20 ? 'issue 积压较多，建议先按标签分拣出今天必须回的。' : pr ? '先把最接近合并的 PR 推过去。' : ''}`;
+  }
   function nextAction(card) {
-    if (card.nextAction) return card.nextAction;
+    const isGh = card.source === 'github' || !!repoOf(card);
+    if (card.nextAction && !(isGh && /邮件|Re:/i.test(card.nextAction))) return card.nextAction;
+    if (isGh) {
+      const ghLinks = linksOf(card).filter(l => linkKind(l).k !== 'mail');
+      const prL = ghLinks.find(l => linkKind(l).k === 'pr'), isL = ghLinks.find(l => linkKind(l).k === 'issue');
+      const pr0 = statOf(card, 'PR'), iss0 = statOf(card, 'issue');
+      if (prL) return `先推进 PR「${clip(prL.title, 30)}」，催 review 或合并`;
+      if (pr0) return `打开 PR 列表，推进 ${pr0} 个待合并 PR`;
+      if (isL) return `先回复 issue「${clip(isL.title, 30)}」`;
+      if (iss0) return `分拣 ${iss0} 个 issue，挑出今天要回复的 1–2 个`;
+    }
     const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
     const review = statOf(card, '待你审') || statOf(card, '审');
     const links = linksOf(card);
@@ -1342,7 +1392,7 @@
 
   function deepLinks(card) {
     const out = [], seen = new Set();
-    for (const l of linksOf(card)) {
+    for (const l of [...linksOf(card)].sort((a, b) => (repoOf(card) ? (linkKind(a).k === 'mail') - (linkKind(b).k === 'mail') : 0))) {
       if (seen.has(l.url)) continue; seen.add(l.url);
       const kind = linkKind(l);
       out.push({ url: l.url, title: l.title, kind });
@@ -1482,7 +1532,7 @@
     const r = repoOf(card);
     const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
     const big = card.priority === 'high' || card.priority === 'urgent';
-    const desc = explain(card);
+    const desc = explain(card) || zhBody(card);
     const links = deepLinks(card);
     const spark = blockOf(card, 'sparkline');
     const hasSpark = spark && (spark.data || []).some(v => v > 0);
@@ -1543,7 +1593,11 @@
     if (!work.length) html += `<div class="tile empty size-wide"><div class="eyebrow">还没有卡片</div><p class="w-desc">点击右上角「立即汇聚」，豆芽会从已连接的数据源拉取最新动态。</p></div>`;
     html += '</div>';
     html += `<div class="today-chat-input"><div class="input-wrap"><input type="text" id="todayChatInput" placeholder="问豆芽：今天先做哪件？帮我总结一下…" /><button class="send-btn" id="todayChatSend">↑</button></div></div>`;
+    const prevAsk = $('todayChatInput') ? $('todayChatInput').value : '';
+    const hadFocus = document.activeElement && document.activeElement.id === 'todayChatInput';
     container.innerHTML = html;
+    if (prevAsk) $('todayChatInput').value = prevAsk;
+    if (hadFocus) $('todayChatInput').focus();
 
     const track = async (card, action) => {
       if (!card || !card.id) return;
@@ -1570,6 +1624,11 @@
   }
 
 
+  function openDock() {
+    $('dockPanel').classList.add('open');
+    $('dockBtn').classList.remove('has');
+  }
+
   function setupTodayChatInput() {
     const input = $('todayChatInput');
     const sendBtn = $('todayChatSend');
@@ -1581,11 +1640,10 @@
       if (!msg) return;
       
       // Open dock and send message
+      input.value = '';
       openDock();
       $('dockInput').value = msg;
       sendMessage();
-      
-      input.value = '';
     };
     
     sendBtn.onclick = send;
@@ -1638,62 +1696,41 @@
   // Load Composio digest
 
   // Load sources status
+  function renderAppTiles(apps) {
+    const groups = {};
+    apps.forEach(a => { (groups[a.category || '其他'] = groups[a.category || '其他'] || []).push(a); });
+    const authZh = { OAUTH2: 'OAuth 授权', OAUTH1: 'OAuth 授权', API_KEY: '需 API Key', NO_AUTH: '无需授权' };
+    return Object.entries(groups).map(([cat, list]) => {
+      const n = list.filter(a => a.connected).length;
+      return `<section class="src-group"><div class="src-group-h"><b>${escapeHtml(cat)}</b><span>${n ? `${n}/${list.length} 已连接` : `${list.length} 个可连接`}</span></div>
+      <div class="src-grid">${list.map(a => {
+        const st = a.connected ? ['on', '已连接'] : a.pending ? ['wait', '授权中'] : ['off', '未连接'];
+        return `<div class="src-tile ${a.connected ? 'is-on' : ''}">
+          <div class="src-top"><img src="${escapeHtml(a.logo)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'src-fb',textContent:'${escapeHtml(a.name.charAt(0))}'}))"><span class="src-pill ${st[0]}">${st[1]}</span></div>
+          <h4>${escapeHtml(a.name)}</h4>
+          <p>${escapeHtml(a.description || '')}</p>
+          <div class="src-foot"><span class="src-auth">${authZh[a.authMode] || ''}</span>
+          <button class="src-btn ${a.connected ? 'ghost' : ''}" onclick="handleAppAction('${escapeHtml(a.key)}', ${a.connected ? 'true' : 'false'})">${a.connected ? '断开' : '连接'}</button></div>
+        </div>`;
+      }).join('')}</div></section>`;
+    }).join('');
+  }
+
   async function loadSources() {
     const content = $('sourcesContent');
     content.innerHTML = '<div class="loading">加载中...</div>';
-    
     try {
-      const res = await fetch('/api/sources');
+      const res = await fetch('/api/composio/apps');
       const data = await res.json();
-      
-      const cards = data.sources?.map(source => {
-        const initial = source.name.charAt(0).toUpperCase();
-        const logoFallback = `data:image/svg+xml,${encodeURIComponent(`
-          <svg width="56" height="56" xmlns="http://www.w3.org/2000/svg">
-            <rect width="56" height="56" rx="12" fill="#667eea"/>
-            <text x="28" y="38" font-family="sans-serif" font-size="24" font-weight="600" fill="white" text-anchor="middle">${initial}</text>
-          </svg>
-        `)}`;
-        
-        return `
-        <div class="card a in" style="display:flex;align-items:start;gap:16px;padding:20px">
-          <img src="${escapeHtml(source.logo)}" 
-               alt="${escapeHtml(source.name)}" 
-               style="width:56px;height:56px;border-radius:12px;flex-shrink:0" 
-               onerror="this.src='${logoFallback}'">
-          <div style="flex:1;min-width:0">
-            <h3 style="margin:0 0 6px;font-size:16px">${escapeHtml(source.name)}</h3>
-            <p style="margin:0 0 12px;font-size:13px;color:var(--ink2);line-height:1.5">${escapeHtml(source.description)}</p>
-            ${source.connected ? `
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:var(--green-soft);color:var(--green);border-radius:8px;font-size:13px;font-weight:600">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M13.5 4L6 11.5L2.5 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                  已连接
-                </span>
-                ${source.identity && source.identity !== 'default' ? `
-                  <span style="padding:6px 12px;background:var(--gray-soft);color:var(--ink2);border-radius:8px;font-size:12px;font-family:ui-monospace,monospace">
-                    ${escapeHtml(source.identity)}
-                  </span>
-                ` : ''}
-              </div>
-            ` : `
-              <span style="display:inline-block;padding:6px 12px;background:var(--line);color:var(--ink3);border-radius:8px;font-size:13px">
-                未连接
-              </span>
-            `}
-          </div>
-        </div>
-      `;
-      }).join('') || '';
-      
-      content.innerHTML = cards || '<div class="card a in"><p>暂无信源</p></div>';
+      const apps = data.apps || [];
+      const on = apps.filter(a => a.connected).length;
+      content.innerHTML = `<div class="src-summary"><div><b>${on}</b><span>已连接</span></div><div><b>${apps.length}</b><span>可用信源</span></div>${data.configured ? '' : '<p class="src-warn">尚未配置 Composio API Key，请先到「配置」页填写后再连接。</p>'}</div>` + renderAppTiles(apps);
     } catch (err) {
       console.error('Failed to load sources:', err);
       content.innerHTML = '<div class="error">加载失败</div>';
     }
   }
+  window.__reloadSources = () => { if ($('v-sources').classList.contains('on')) loadSources(); };
 
   // LLM Settings handlers
   async function loadLLMSettings() {
@@ -1847,44 +1884,8 @@
       const appsData = await appsRes.json();
       
       const grid = $('appsGrid');
-      if (appsData.apps && appsData.apps.length > 0) {
-        grid.innerHTML = appsData.apps.map(app => {
-          const initial = app.name.charAt(0).toUpperCase();
-          const logoFallback = `data:image/svg+xml,${encodeURIComponent(`
-            <svg width="48" height="48" xmlns="http://www.w3.org/2000/svg">
-              <rect width="48" height="48" rx="8" fill="#667eea"/>
-              <text x="24" y="32" font-family="sans-serif" font-size="20" font-weight="600" fill="white" text-anchor="middle">${initial}</text>
-            </svg>
-          `)}`;
-          
-          return `
-          <div class="app-card" style="border:1px solid var(--line);border-radius:12px;padding:16px;text-align:center;position:relative">
-            <img src="${escapeHtml(app.logo)}" 
-                 alt="${escapeHtml(app.name)}" 
-                 style="width:48px;height:48px;margin:0 auto 12px;display:block;border-radius:8px" 
-                 onerror="this.src='${logoFallback}'">
-            <h4 style="margin:0 0 4px;font-size:14px;font-weight:600">${escapeHtml(app.name)}</h4>
-            <p style="font-size:12px;color:var(--ink3);margin:0 0 12px;line-height:1.4">${escapeHtml(app.description || '')}</p>
-            ${app.connected ? `
-              <div style="margin-bottom:8px">
-                <span style="display:inline-block;padding:4px 10px;background:var(--green-soft);color:var(--green);border-radius:6px;font-size:12px;font-weight:600">✓ 已连接</span>
-              </div>
-              <button class="btn secondary" style="width:100%;font-size:12px"
-                onclick="handleAppAction('${escapeHtml(app.key)}', true)">
-                断开连接
-              </button>
-            ` : `
-              <button class="btn primary" style="width:100%;font-size:12px"
-                onclick="handleAppAction('${escapeHtml(app.key)}', false)">
-                连接
-              </button>
-            `}
-          </div>
-        `;
-        }).join('');
-      } else {
-        grid.innerHTML = '<p style="color:var(--ink3);padding:20px;text-align:center">暂无可用应用</p>';
-      }
+      grid.className = '';
+      grid.innerHTML = (appsData.apps && appsData.apps.length) ? renderAppTiles(appsData.apps) : '<p style="color:var(--ink3);padding:20px;text-align:center">暂无可用应用</p>';
     } catch (error) {
       console.error('Failed to load Composio settings:', error);
     }
@@ -1948,7 +1949,7 @@
         const result = await res.json();
         if (result.success) {
           alert('已断开连接');
-          loadComposioSettings();
+          loadComposioSettings(); window.__reloadSources && window.__reloadSources();
         } else {
           alert('断开失败: ' + result.error);
         }
@@ -1972,7 +1973,7 @@
           let attempts = 0;
           const pollInterval = setInterval(() => {
             attempts++;
-            loadComposioSettings();
+            loadComposioSettings(); window.__reloadSources && window.__reloadSources();
             if (attempts >= 3) {
               clearInterval(pollInterval);
             }
@@ -2055,8 +2056,8 @@
       const all = [...(tt.fixedBlocks || []), ...(tt.suggestedBlocks || [])].sort((a, b) => (toMin(a.start) || 0) - (toMin(b.start) || 0));
       html += `<div class="z-sec"><h4>时间表</h4><div class="z-items">${all.map(b => `<div class="z-item"><span class="z-time">${escapeHtml(b.start)}–${escapeHtml(b.end)}</span><div class="z-item-b"><b>${escapeHtml(b.title)}</b><span>${escapeHtml(CAT_ZH[b.category] || (b.type === 'suggested' ? '建议' : '日程'))}</span></div></div>`).join('') || '<p class="w-desc">暂无日程</p>'}</div></div>`;
     } else {
-      if (card.body) html += `<p class="z-body">${escapeHtml(card.body)}</p>`;
-      if (card.title && card.title !== headline(card)) html += `<p class="z-orig">原始摘要：${escapeHtml(card.title)}</p>`;
+      if (card.body) html += `<p class="z-body">${escapeHtml(zhBody(card))}</p>`;
+      if (card.title && card.title !== headline(card) && !(r && card.title.toLowerCase() === r.name.toLowerCase())) html += `<p class="z-orig">原始摘要：${escapeHtml(card.title)}</p>`;
       const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
       if (pr || iss) html += `<div class="z-kpis">${pr ? `<div><b class="c-teal">${pr}</b><span>待推进 PR</span></div>` : ''}${iss ? `<div><b class="c-violet">${iss}</b><span>待处理 issue</span></div>` : ''}</div>`;
       const dl = deepLinks(card);

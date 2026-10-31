@@ -58,8 +58,13 @@ export function checkVersionConsistency({ version, tag = null, changelog = '', e
 }
 
 // 1. 单元测试：跟 tests.yml / merge-tree.yml 同一条命令。
+// 这一串是给 node 的 argv（不是 shell 命令），所以元素里不能带引号：
+// 带引号的 'test/**/*.test.js' 会被 node 当成字面路径，跑 0 条还 exit 0。
+// 导出它，是为了让 test/ci-test-command.test.js 能断言发版闸与 CI 是同一条命令。
+export const UNIT_TEST_ARGS = ['--test', 'test/**/*.test.js', 'acceptance-cases/**/*.test.js'];
+
 function stepUnitTests() {
-  const args = ['--test', 'test/*.test.js', 'acceptance-cases/**/*.test.js'];
+  const args = UNIT_TEST_ARGS;
   try {
     run('node', args);
     return report('单元测试', true, args.slice(1).join(' '));

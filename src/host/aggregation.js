@@ -1322,12 +1322,54 @@ function generateClusterCards(grouped) {
         });
       }
       
-      // Add action button
-      card.actions.push({
-        label: cluster.metadata.reviewCount > 0 ? '查看待 Review PR' : '打开仓库',
-        value: cluster.url,
-        primary: true,
-      });
+      // Add specific action buttons with deep links (1-3 concrete actions)
+      const actions = [];
+      
+      // If there are PRs needing review, add specific review actions
+      const reviewPRs = cluster.topItems.filter(i => i.type === 'pr-review').slice(0, 2);
+      if (reviewPRs.length > 0) {
+        reviewPRs.forEach(pr => {
+          const prNumber = pr.url.match(/\/pull\/(\d+)/)?.[1];
+          actions.push({
+            label: `去 review #${prNumber}`,
+            value: pr.url.replace(/\/pull\//, '/pull/') + '/files', // Deep link to files tab
+            primary: true,
+          });
+        });
+      }
+      
+      // If there are assigned issues, add issue action
+      const assignedIssues = cluster.topItems.filter(i => i.type === 'issue-assigned').slice(0, 1);
+      if (assignedIssues.length > 0 && actions.length < 2) {
+        const issue = assignedIssues[0];
+        const issueNumber = issue.url.match(/\/issues\/(\d+)/)?.[1];
+        actions.push({
+          label: `处理 issue #${issueNumber}`,
+          value: issue.url,
+          primary: false,
+        });
+      }
+      
+      // If there are multiple PRs but not specifically for review, add batch action
+      if (actions.length === 0 && cluster.metadata.prCount > 1) {
+        const repo = cluster.metadata.repo;
+        actions.push({
+          label: `查看 ${cluster.metadata.prCount} 个 PR`,
+          value: `https://github.com/${repo}/pulls`,
+          primary: true,
+        });
+      }
+      
+      // Fallback: single action to repo
+      if (actions.length === 0) {
+        actions.push({
+          label: '打开仓库',
+          value: cluster.url,
+          primary: true,
+        });
+      }
+      
+      card.actions.push(...actions.slice(0, 3)); // Max 3 actions
     }
     
     // Email clusters
@@ -1345,11 +1387,25 @@ function generateClusterCards(grouped) {
         });
       }
       
-      card.actions.push({
-        label: '在 Gmail 中打开',
-        value: cluster.url,
-        primary: true,
-      });
+      // Add specific action - link to most recent unread email
+      const unreadEmail = cluster.items.find(i => i.type === 'email-unread');
+      const actions = [];
+      
+      if (unreadEmail && unreadEmail.metadata?.threadId) {
+        actions.push({
+          label: `回复 ${cluster.metadata.sender}`,
+          value: `https://mail.google.com/mail/u/0/#inbox/${unreadEmail.metadata.threadId}`,
+          primary: true,
+        });
+      } else {
+        actions.push({
+          label: `查看 ${cluster.metadata.sender} 的邮件`,
+          value: cluster.url,
+          primary: true,
+        });
+      }
+      
+      card.actions.push(...actions);
     }
     
     // Newsletter cluster

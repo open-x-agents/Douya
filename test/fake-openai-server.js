@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
- * Fake OpenAI-compatible server for testing
- * Responds to POST /v1/chat/completions with structured JSON
+ * Fake OpenAI-compatible server that mimics DeepSeek behavior
+ * - Supports streaming with response_format: json_object
+ * - Returns structured JSON split across SSE chunks
+ * - Also supports non-streaming mode
  */
 
 import { createServer } from 'node:http';
@@ -21,51 +23,76 @@ const server = createServer((req, res) => {
         console.log(`  Authorization: ${authHeader}`);
         console.log(`  Model: ${data.model}`);
         console.log(`  Response format: ${data.response_format?.type || 'none'}`);
+        console.log(`  Stream: ${data.stream ? 'yes' : 'no'}`);
         console.log(`  Messages: ${data.messages.length} messages`);
         
-        // Structured JSON response with cards
+        // Structured JSON response (mimics DeepSeek JSON mode output)
         const structuredResponse = JSON.stringify({
           text: '这是一条简短的回复',
           cards: [
             {
               type: 'info',
-              title: '测试卡片',
-              description: '这是来自假服务器的结构化响应',
-              items: ['项目 1', '项目 2', '项目 3'],
+              title: '今日日程',
+              description: '您今天下午的工作安排',
+              items: ['14:00 - 项目评审会', '15:30 - 代码审查', '17:00 - 团队同步'],
             },
             {
               type: 'action',
-              title: '可用操作',
+              title: '建议操作',
               actions: [
                 { label: '查看详情', value: 'view_details' },
-                { label: '关闭', value: 'close' },
+                { label: '添加任务', value: 'add_task' },
               ],
             },
           ],
         });
 
-        // Return fake streaming response
         if (data.stream) {
-          res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+          // Streaming mode: split JSON across multiple SSE chunks (like DeepSeek)
+          res.writeHead(200, { 
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          });
           
-          // Split response into chunks for streaming
-          const chunks = structuredResponse.match(/.{1,20}/g) || [];
-          for (const chunk of chunks) {
-            res.write(`data: ${JSON.stringify({choices:[{delta:{content:chunk}}]})}\n\n`);
+          // Split response into realistic chunks (20-30 chars each)
+          const chunkSize = 25;
+          for (let i = 0; i < structuredResponse.length; i += chunkSize) {
+            const chunk = structuredResponse.slice(i, i + chunkSize);
+            res.write(`data: ${JSON.stringify({
+              choices: [{
+                delta: { content: chunk },
+                index: 0,
+              }],
+            })}\n\n`);
           }
           
           res.write('data: [DONE]\n\n');
           res.end();
+          
+          console.log(`[FAKE SERVER] Streamed ${structuredResponse.length} chars in ${Math.ceil(structuredResponse.length / chunkSize)} chunks`);
         } else {
-          // Non-streaming
+          // Non-streaming mode
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
+            id: 'fake-' + Date.now(),
+            object: 'chat.completion',
+            created: Math.floor(Date.now() / 1000),
+            model: data.model,
             choices: [{
-              message: { content: structuredResponse }
-            }]
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: structuredResponse,
+              },
+              finish_reason: 'stop',
+            }],
           }));
+          
+          console.log(`[FAKE SERVER] Returned ${structuredResponse.length} chars (non-streaming)`);
         }
       } catch (err) {
+        console.error('[FAKE SERVER] Error:', err);
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err.message }));
       }
@@ -77,8 +104,9 @@ const server = createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`✅ Fake OpenAI server running at http://localhost:${PORT}`);
+  console.log(`✅ Fake DeepSeek-like server running at http://localhost:${PORT}`);
   console.log(`   Endpoint: http://localhost:${PORT}/v1/chat/completions`);
+  console.log(`   Supports: streaming + response_format json_object`);
   console.log('');
   console.log('Press Ctrl+C to stop');
 });

@@ -131,10 +131,36 @@ async function callLLM(ctx, messages, sessionId = 'web-chat') {
       }
 
       if (fullText.trim()) {
-        return parseResponseToCards(fullText);
+        const result = parseResponseToCards(fullText);
+        console.log(`[LLM] Response: text=${result.text?.length || 0} chars, cards=${result.cards?.length || 0}`);
+        return result;
+      } else {
+        console.warn('[LLM] Empty response from ds-bot LLM');
+        return {
+          text: '模型返回了空响应',
+          cards: [
+            {
+              type: 'error',
+              title: '模型返回空白',
+              description: '请重试或检查模型配置',
+              actions: [{ label: '重试', value: 'retry' }],
+            },
+          ],
+        };
       }
     } catch (error) {
-      console.error('LLM error:', error);
+      console.error('[LLM] ds-bot error:', error);
+      return {
+        text: '调用模型时出错',
+        cards: [
+          {
+            type: 'error',
+            title: '错误: ' + error.message,
+            description: '请检查模型配置',
+            actions: [{ label: '检查配置', value: 'goto_settings' }],
+          },
+        ],
+      };
     }
   }
 
@@ -150,7 +176,7 @@ async function callLLM(ctx, messages, sessionId = 'web-chat') {
           baseURL: cfg.baseURL,
           apiKey: cfg.apiKey,
           model: cfg.model,
-          log: () => {},
+          log: console.log,
         });
 
         let fullText = '';
@@ -164,11 +190,28 @@ async function callLLM(ctx, messages, sessionId = 'web-chat') {
           }
         }
 
+        console.log(`[LLM] Received ${fullText.length} chars from ${cfg.provider}`);
+
         if (fullText.trim()) {
-          return parseResponseToCards(fullText);
+          const result = parseResponseToCards(fullText);
+          console.log(`[LLM] Parsed: text=${result.text?.length || 0} chars, cards=${result.cards?.length || 0}`);
+          return result;
+        } else {
+          console.warn('[LLM] Empty response from model');
+          return {
+            text: '模型返回了空响应',
+            cards: [
+              {
+                type: 'error',
+                title: '模型返回空白',
+                description: '请重试或检查模型配置',
+                actions: [{ label: '重试', value: 'retry' }],
+              },
+            ],
+          };
         }
       } catch (error) {
-        console.error('LLM error:', error);
+        console.error('[LLM] Standalone mode error:', error);
         return {
           text: '调用模型时出错',
           cards: [
@@ -187,6 +230,7 @@ async function callLLM(ctx, messages, sessionId = 'web-chat') {
   }
 
   // No model configured
+  console.warn('[LLM] No model configured');
   return {
     text: '模型未配置',
     cards: [
@@ -206,45 +250,61 @@ async function callLLM(ctx, messages, sessionId = 'web-chat') {
  * Parse LLM response for structured cards
  * Looks for JSON blocks or action patterns in the response
  */
+/**
+ * Parse LLM response to extract structured cards
+ * Expects JSON response: { text: "...", cards: [...] }
+ */
 function parseResponseToCards(text) {
-  const cards = [];
+  // First try: parse as pure JSON
+  try {
+    const parsed = JSON.parse(text.trim());
+    if (parsed.cards && Array.isArray(parsed.cards)) {
+      return {
+        text: parsed.text || '',
+        cards: parsed.cards,
+      };
+    }
+  } catch (err) {
+    // Not pure JSON, continue
+  }
 
-  // Try to find JSON card definitions in the response
-  const jsonMatch = text.match(/```json\s*(\[[\s\S]*?\])\s*```/);
+  // Second try: extract JSON from markdown code block
+  const jsonBlockMatch = text.match(/```json\s*\n([\s\S]*?)\n```/);
+  if (jsonBlockMatch) {
+    try {
+      const parsed = JSON.parse(jsonBlockMatch[1]);
+      if (parsed.cards && Array.isArray(parsed.cards)) {
+        return {
+          text: parsed.text || '',
+          cards: parsed.cards,
+        };
+      }
+    } catch (err) {
+      // Invalid JSON in block
+    }
+  }
+
+  // Third try: extract any JSON object with cards field
+  const jsonMatch = text.match(/\{[\s\S]*?"cards"\s*:\s*\[[\s\S]*?\]\s*[\s\S]*?\}/);
   if (jsonMatch) {
     try {
-      const parsed = JSON.parse(jsonMatch[1]);
-      if (Array.isArray(parsed)) {
-        return parsed;
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed.cards && Array.isArray(parsed.cards)) {
+        return {
+          text: parsed.text || '',
+          cards: parsed.cards,
+        };
       }
-    } catch {
-      // Ignore parse errors, continue with pattern matching
+    } catch (err) {
+      // Invalid JSON
     }
   }
 
-  // Pattern: "选项：1. xxx 2. yyy"
-  const optionPattern = /选项[：:]\s*(?:\d+[.、]\s*([^\n]+))+/gi;
-  const optionMatch = text.match(optionPattern);
-  if (optionMatch) {
-    const options = [];
-    const numPattern = /\d+[.、]\s*([^\n\d]+)/g;
-    let match;
-    while ((match = numPattern.exec(text)) !== null) {
-      options.push(match[1].trim());
-    }
-    if (options.length > 0) {
-      cards.push({
-        type: 'choice',
-        title: '请选择',
-        choices: options.map((opt, i) => ({
-          label: opt,
-          value: `option_${i}`,
-        })),
-      });
-    }
-  }
-
-  return cards;
+  // Fallback: return text as-is with no cards
+  return {
+    text: text.trim(),
+    cards: [],
+  };
 }
 
 export function createApiRouter(ctx) {
@@ -436,9 +496,7 @@ export function createApiRouter(ctx) {
         let session = chatSessions.get(sessionId);
         if (!session) {
           session = {
-            messages: [
-              { role: 'system', content: '你是「豆芽」，一个智能数字同事助手。你帮助用户管理任务、日程和信息。回复要简洁、实用，重点是行动建议。如果有具体建议，使用「建议：」开头列出。如果需要用户选择，使用编号列出选项。' },
-            ],
+            messages: [],
             history: [],
           };
           chatSessions.set(sessionId, session);
@@ -452,39 +510,61 @@ export function createApiRouter(ctx) {
           time: new Date().toISOString(),
         });
 
-        // Get LLM response (pass full ctx, not just llmCtx)
+        // Get LLM response
         const response = await callLLM({ llm: llmCtx?.llm }, session.messages, sessionId);
 
+        // Ensure response is valid
+        if (!response || typeof response !== 'object') {
+          console.error('[sendChatMessage] Invalid response from callLLM:', response);
+          return {
+            text: '系统错误',
+            cards: [{
+              type: 'error',
+              title: '内部错误',
+              description: 'LLM 返回了无效响应',
+            }],
+            time: new Date().toLocaleTimeString('zh-CN', {
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+          };
+        }
+
         // Add assistant message
-        session.messages.push({ role: 'assistant', content: response.text });
+        session.messages.push({ role: 'assistant', content: response.text || '' });
         session.history.push({
           role: 'assistant',
-          content: response.text,
-          cards: response.cards,
+          content: response.text || '',
+          cards: response.cards || [],
           time: new Date().toISOString(),
         });
 
         // Limit session size
         if (session.messages.length > 20) {
-          session.messages = [
-            session.messages[0], // Keep system message
-            ...session.messages.slice(-19),
-          ];
+          session.messages = session.messages.slice(-20);
         }
 
         return {
-          text: response.text,
-          cards: response.cards,
+          text: response.text || '',
+          cards: response.cards || [],
           time: new Date().toLocaleTimeString('zh-CN', {
             hour: '2-digit',
             minute: '2-digit',
           }),
         };
       } catch (err) {
-        console.error('API /chat error:', err);
+        console.error('[sendChatMessage] Error:', err);
         return {
-          error: `处理失败: ${err.message}`,
-          text: '抱歉，处理您的消息时出错了。',
+          text: '系统错误',
+          cards: [{
+            type: 'error',
+            title: '聊天失败',
+            description: err.message,
+          }],
+          time: new Date().toLocaleTimeString('zh-CN', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
         };
       }
     },

@@ -316,6 +316,12 @@ function GroupMessage({ bot, text, texts = [text], room, roster, actions, msgKey
 // works comes one message at a time. A block carries the last message's time and run.
 const citedReply = (reply) => reply?.late === true && citeTexts(reply).length > 0
 
+// The late cite already paints this sentence. A steering row or a completion
+// quote of the same words would be a second copy.
+function coveredByLateCite(replies, text) {
+  return replies.some(other => other?.late === true && citeTexts(other).includes(text))
+}
+
 export function stackReplies(replies) {
   const items = []
   replies.forEach((reply, index) => {
@@ -997,8 +1003,7 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
       const bot = roster.byId[reply.botId] ?? { id: reply.botId, name: reply.name, color: reply.color ?? 'gray' }
       const userBubble = groupUserBubble(reply)
       if (reply.kind === 'completion-quote') {
-        const covered = projected.replies.some(other => other?.late === true && citeTexts(other).includes(reply.text))
-        if (covered) return null
+        if (coveredByLateCite(projected.replies, reply.text)) return null
         return h('div', {
           key: `complete-q-${reply.exchangeId}-${index}`,
           className: reply.who === 'User' ? 'bt-urow' : 'bt-route-cite',
@@ -1024,6 +1029,7 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
         }))
       }
       if (userBubble) {
+        if (userBubble.steering && coveredByLateCite(projected.replies, reply.text)) return null
         return h('div', { key: `user-${index}`, className: 'bt-urow', ...(userBubble.steering ? { 'data-steering': true } : {}) }, h('div', { className: 'bt-ububble' },
           h(MarkdownText, { text: reply.text, labels: mdLabels(), variant: 'compact' }),
           Number.isFinite(time) ? h('div', { className: 'bt-utime', title: clockLabel(time) }, messageClock(time)) : null))

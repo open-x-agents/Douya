@@ -107,6 +107,85 @@ export function logQuotes(named, roomId) {
 }
 
 /**
+ * Room-log pointer for a cite. One sentence is `quote`. Two or more also store `quotes`.
+ * @param {{ quoteSeq?: number, quoteRoomId?: string, quotes?: { seq?: number, roomId?: string }[] } | undefined} named
+ * @param {string} [roomId]
+ */
+export function logPointer(named, roomId) {
+  const fallback = typeof named?.quoteRoomId === 'string' && named.quoteRoomId !== '' ? named.quoteRoomId
+    : (typeof roomId === 'string' && roomId !== '' ? roomId : undefined)
+  const pointer = typeof named?.quoteSeq === 'number' && Number.isFinite(named.quoteSeq) && fallback !== undefined
+    ? { quote: { roomId: fallback, seq: named.quoteSeq } }
+    : {}
+  const quotes = logQuotes(named, fallback)
+  return quotes.length > 1 ? { ...pointer, quotes } : pointer
+}
+
+/**
+ * What an in-round post quotes. A cite the caller already has wins.
+ * Otherwise the sentences this round is already showing as steering replies.
+ * @param {{ quoteText?: string, quoteSeq?: number, quoteRoomId?: string, quotes?: unknown[] } | undefined} cite
+ * @param {unknown[] | undefined} steerCites
+ */
+export function citeForPost(cite, steerCites) {
+  if (citesOf(cite).length > 0) return lateCite(cite)
+  if (Array.isArray(steerCites) && steerCites.length > 0) return lateCite({ quotes: steerCites })
+  return {}
+}
+
+/**
+ * One steered sentence. `seq` comes from the caller, or from the latest matching user row.
+ * @param {{ id?: string, log?: { who?: string, kind?: string, text?: string, seq?: number }[] } | undefined} room
+ * @param {{ text?: string, quoteText?: string, quoteSeq?: number, quoteRoomId?: string }} [fields]
+ */
+export function steerSentence(room, { text = '', quoteText, quoteSeq, quoteRoomId } = {}) {
+  const sentence = typeof quoteText === 'string' && quoteText !== '' ? quoteText : (typeof text === 'string' ? text : '')
+  if (sentence === '') return undefined
+  let seq = typeof quoteSeq === 'number' && Number.isFinite(quoteSeq) ? quoteSeq : undefined
+  const where = typeof quoteRoomId === 'string' && quoteRoomId !== '' ? quoteRoomId
+    : (typeof room?.id === 'string' && room.id !== '' ? room.id : undefined)
+  if (seq === undefined && Array.isArray(room?.log)) {
+    for (let index = room.log.length - 1; index >= 0; index -= 1) {
+      const row = room.log[index]
+      if (row?.who === 'User' && row.kind == null && row.text === sentence && typeof row.seq === 'number' && Number.isFinite(row.seq)) {
+        seq = row.seq
+        break
+      }
+    }
+  }
+  return asCite({
+    text: sentence,
+    ...(seq !== undefined ? { seq } : {}),
+    ...(where !== undefined ? { roomId: where } : {}),
+  })
+}
+
+/**
+ * Point a bot line already in the log at these sentences. Returns that row's index, or -1.
+ * A line from before `minSeq` stays as it was.
+ * @param {unknown[]} log
+ * @param {{ quote?: { roomId: string, seq: number }, quotes?: { roomId: string, seq: number }[] } | undefined} pointer
+ * @param {{ minSeq?: number }} [options]
+ */
+export function applyLogPointer(log, pointer, options = {}) {
+  if (pointer == null || pointer.quote == null) return -1
+  const rows = Array.isArray(log) ? log : []
+  const minSeq = typeof options.minSeq === 'number' && Number.isFinite(options.minSeq) ? options.minSeq : undefined
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index]
+    if (row == null || typeof row !== 'object') continue
+    if (row.botId == null || row.kind != null) continue
+    if (typeof row.text !== 'string' || row.text === '') continue
+    if (minSeq !== undefined && typeof row.seq === 'number' && row.seq < minSeq) continue
+    row.quote = pointer.quote
+    if (Array.isArray(pointer.quotes) && pointer.quotes.length > 1) row.quotes = pointer.quotes
+    else delete row.quotes
+    return index
+  }
+  return -1
+}
+
+/**
  * User sentences a room log's bot rows point at, plus the message ids on those rows.
  * Bot text is not a sentence.
  * @param {{ seq?: number, who?: string, kind?: string, text?: string, messageId?: string, quote?: { seq?: number, roomId?: string }, quotes?: { seq?: number, roomId?: string }[] }[]} [log]

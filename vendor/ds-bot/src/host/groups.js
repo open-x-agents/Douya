@@ -32,7 +32,7 @@ import { routeTakesEffect } from './route-inbound.js'
 import { createRoomHalt, dropLoggedRelays, haltDelivery } from './room-halt.js'
 import { applyRoomStreamFrame, clearDraftIfPosted } from '../shared/room-draft.js'
 import { lateCite } from '../shared/work-line-complete.js'
-import { logQuotes } from '../shared/cite.js'
+import { appendCite, applyLogPointer, citeForPost, citesOf, logPointer, steerSentence } from '../shared/cite.js'
 
 const ROOM_LOG_MAX = 60
 const ROOM_FIRST_LOOK = 12
@@ -289,19 +289,25 @@ export function install(rt) {
   // A member's message in the round: in the log, for the members after it, and in the
   // round's replies, for the user.
   // The first sentence stays the single `quote` pointer. A steered follow-up adds `quotes`.
-  const loggedQuote = (room, named) => {
-    const pointer = typeof named.quoteSeq === 'number'
-      ? { quote: { roomId: named.quoteRoomId ?? room.id, seq: named.quoteSeq } }
-      : {}
-    const quotes = logQuotes(named, named.quoteRoomId ?? room.id)
-    return quotes.length > 1 ? { ...pointer, quotes } : pointer
-  }
+  const loggedQuote = (room, named) => logPointer(named, room.id)
 
   const postInRound = (room, round, member, text, duration, cite = {}) => {
-    const named = lateCite(cite)
+    // Sentences already drawn as steering replies in this round are the cite.
+    // The log points at them so the history bubbles go away. They are not copied
+    // onto the member line: that would paint each sentence a second time.
+    const explicit = citesOf(cite).length > 0
+    const named = citeForPost(cite, round?.steerCites)
     const pointer = loggedQuote(room, named)
     appendRoom(room, { who: member.name, botId: member.id, text, ...pointer })
-    round.replies.push({ botId: member.id, name: member.name, color: member.color, text, time: Date.now(), ...(duration === undefined ? {} : { duration }), ...named })
+    round.replies.push({
+      botId: member.id,
+      name: member.name,
+      color: member.color,
+      text,
+      time: Date.now(),
+      ...(duration === undefined ? {} : { duration }),
+      ...(explicit ? named : {}),
+    })
     // Final (or step) text is in replies now: drop the live draft so the UI does not
     // keep a streaming row beside the committed bubble.
     round.draft = clearDraftIfPosted(round.draft, round.replies)
@@ -550,12 +556,23 @@ export function install(rt) {
     const sessionId = member?.sessionId ?? room?.sessions?.[member?.id]
     if (room == null || member == null || sessionId == null) return
     const reply = steeringReply({ text })
+    const sentence = steerSentence(room, { text, quoteText, quoteSeq, quoteRoomId })
+    const showSteer = (round) => {
+      if (sentence !== undefined) {
+        round.steerCites = appendCite(round.steerCites, sentence)
+        // A line this member already posted still has to point at the new sentence,
+        // or the history bubble stays beside the steering one.
+        const stamped = applyLogPointer(room.log, loggedQuote(room, citeForPost({}, round.steerCites)), { minSeq: round.startSeq })
+        if (stamped >= 0) void rt.save().catch(() => {})
+      }
+      round.replies.push(reply)
+    }
     const running = [...rt.roomProgress.values()].find(round => round.roomId === room.id)
-    if (running !== undefined) running.replies.push(reply)
+    if (running !== undefined) showSteer(running)
     else {
       const previous = lastRound.get(room.id)
       if (previous?.round !== undefined) {
-        previous.round.replies.push(reply)
+        showSteer(previous.round)
         keptRounds.set(room.id, previous)
       }
     }

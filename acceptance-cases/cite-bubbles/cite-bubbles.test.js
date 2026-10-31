@@ -12,10 +12,15 @@ import { createLine, indexOnly, noteTurnEnd } from '../../vendor/ds-bot/src/host
 import { isJoinedFollowUp } from '../../vendor/ds-bot/src/host/group-steer.js'
 import { lateCite, projectRelay } from '../../vendor/ds-bot/src/shared/work-line-complete.js'
 import {
+  appendCite,
+  applyLogPointer,
+  citeForPost,
   citeTexts,
   citedFromLog,
   hideCitedHistory,
+  logPointer,
   logQuotes,
+  steerSentence,
 } from '../../vendor/ds-bot/src/shared/cite.js'
 
 const root = dirname(dirname(dirname(fileURLToPath(import.meta.url))))
@@ -251,6 +256,69 @@ test('a completion lists both sentences and does not store them on the work line
   assert.deepEqual(alone.replies.filter(row => row.kind === 'completion-quote').map(row => row.text), [FIRST])
 })
 
+test('an in-round reply points at both steered sentences so each history bubble hides', () => {
+  const HI = 'hi'
+  const WHO = '你们是谁'
+  const hiId = 'c14b3022-a326-45ab-a79e-70841f4dba42'
+  const whoId = 'a444b74d-c4c0-4395-832f-8369c3468df7'
+  const room = {
+    id: 'room',
+    log: [
+      { seq: 1, who: 'User', text: HI, messageId: hiId },
+      { seq: 2, who: 'User', text: WHO, messageId: whoId },
+    ],
+  }
+  const hi = steerSentence(room, { text: HI, quoteText: HI, quoteSeq: 1, quoteRoomId: 'room' })
+  const who = steerSentence(room, { text: WHO, quoteSeq: 2 })
+  assert.equal(who.seq, 2)
+  assert.equal(who.roomId, 'room')
+  const steerCites = appendCite(appendCite([], hi), who)
+  const named = citeForPost({}, steerCites)
+  assert.equal(named.quoteText, HI)
+  assert.equal(named.quoteSeq, 1)
+  assert.equal(Object.hasOwn(named, 'late'), false)
+  assert.deepEqual(citeTexts(named), [HI, WHO])
+  const log = [
+    ...room.log,
+    { seq: 3, who: 'Chief', botId: 'chief', text: '你好', ...logPointer(named, 'room') },
+    { seq: 4, who: 'Chief', botId: 'chief', text: '介绍' },
+  ]
+  // The first member line is enough. A later line does not have to repeat it.
+  const cited = citedFromLog(log, 'room')
+  assert.deepEqual(cited.texts, [HI, WHO])
+  assert.deepEqual(cited.ids, [hiId, whoId])
+  assert.equal(hideCitedHistory({ text: HI, messageId: hiId, citedTexts: cited.texts, citedIds: cited.ids }), true)
+  assert.equal(hideCitedHistory({ text: WHO, messageId: whoId, citedTexts: cited.texts, citedIds: cited.ids }), true)
+  assert.equal(hideCitedHistory({ text: HI, messageId: 'later-send', citedTexts: cited.texts, citedIds: cited.ids }), false)
+  // One sentence stays the flat pointer.
+  const alone = citeForPost({}, [hi])
+  assert.equal(Object.hasOwn(alone, 'quotes'), false)
+  assert.deepEqual(logPointer(alone, 'room'), { quote: { roomId: 'room', seq: 1 } })
+  // A line posted after the first steer picks up the follow-up when it arrives.
+  const partial = [
+    { seq: 1, who: 'User', text: HI, messageId: hiId },
+    { seq: 2, who: 'Chief', botId: 'chief', text: '你好', ...logPointer(citeForPost({}, [hi]), 'room') },
+    { seq: 3, who: 'User', text: WHO, messageId: whoId },
+  ]
+  const partialNamed = citeForPost({}, appendCite([hi], { text: WHO, seq: 3, roomId: 'room' }))
+  assert.equal(applyLogPointer(partial, logPointer(partialNamed, 'room'), { minSeq: 1 }), 1)
+  assert.deepEqual(citedFromLog(partial, 'room').ids, [hiId, whoId])
+  const older = [{ seq: 1, who: 'Chief', botId: 'chief', text: '旧的' }]
+  assert.equal(applyLogPointer(older, logPointer(alone, 'room'), { minSeq: 4 }), -1)
+  assert.equal(older[0].quote, undefined)
+  // The busy follow-up cite still wins when the turn already has one.
+  const late = citeForPost({
+    quoteText: FIRST,
+    quoteSeq: 2,
+    quoteRoomId: 'room',
+    quotes: [
+      { text: FIRST, seq: 2, roomId: 'room' },
+      { text: FOLLOW, seq: 3, roomId: 'room' },
+    ],
+  }, steerCites)
+  assert.deepEqual(citeTexts(late), [FIRST, FOLLOW])
+})
+
 test('the late cite paints user bubbles and history hides a sentence that cite already shows', () => {
   const cells = source('vendor/ds-bot/src/client/cells.js')
   const user = source('vendor/ds-bot/src/client/user-message.js')
@@ -269,4 +337,20 @@ test('the late cite paints user bubbles and history hides a sentence that cite a
   const quoteAt = cells.indexOf("reply.kind === 'completion-quote'")
   const quoteEnd = cells.indexOf("reply.kind === 'completion-reply'", quoteAt)
   assert.match(cells.slice(quoteAt, quoteEnd), /reply\.who === 'User' \? 'bt-urow'/)
+  const bubbleAt = cells.indexOf('const userBubble = groupUserBubble(reply)')
+  const bubbleEnd = cells.indexOf("if (reply.kind === 'failed')", bubbleAt)
+  assert.ok(bubbleAt >= 0 && bubbleEnd > bubbleAt)
+  assert.match(cells.slice(bubbleAt, bubbleEnd), /userBubble\.steering && coveredByLateCite/)
+  const groups = source('vendor/ds-bot/src/host/groups.js')
+  const postAt = groups.indexOf('const postInRound = ')
+  const postEnd = groups.indexOf('async function roomTurn', postAt)
+  assert.ok(postAt >= 0 && postEnd > postAt)
+  const post = groups.slice(postAt, postEnd)
+  assert.match(post, /citeForPost\(cite, round\?\.steerCites\)/)
+  assert.match(post, /explicit \? named/)
+  const steerAt = groups.indexOf('async function acceptRoomSteer')
+  const steerEnd = groups.indexOf('rt.appendRoomLine', steerAt)
+  assert.match(groups.slice(steerAt, steerEnd), /steerCites/)
+  assert.match(groups.slice(steerAt, steerEnd), /steerSentence/)
+  assert.match(groups.slice(steerAt, steerEnd), /quoteText/)
 })

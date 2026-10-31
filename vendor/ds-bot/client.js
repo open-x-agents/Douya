@@ -7945,6 +7945,54 @@ function logQuotes(named, roomId) {
   }
   return out.length > 1 ? out : [];
 }
+function logPointer(named, roomId) {
+  const fallback = typeof named?.quoteRoomId === "string" && named.quoteRoomId !== "" ? named.quoteRoomId : typeof roomId === "string" && roomId !== "" ? roomId : void 0;
+  const pointer = typeof named?.quoteSeq === "number" && Number.isFinite(named.quoteSeq) && fallback !== void 0 ? { quote: { roomId: fallback, seq: named.quoteSeq } } : {};
+  const quotes = logQuotes(named, fallback);
+  return quotes.length > 1 ? { ...pointer, quotes } : pointer;
+}
+function citeForPost(cite, steerCites) {
+  if (citesOf(cite).length > 0) return lateCite(cite);
+  if (Array.isArray(steerCites) && steerCites.length > 0) return lateCite({ quotes: steerCites });
+  return {};
+}
+function steerSentence(room2, { text = "", quoteText, quoteSeq, quoteRoomId } = {}) {
+  const sentence = typeof quoteText === "string" && quoteText !== "" ? quoteText : typeof text === "string" ? text : "";
+  if (sentence === "") return void 0;
+  let seq = typeof quoteSeq === "number" && Number.isFinite(quoteSeq) ? quoteSeq : void 0;
+  const where = typeof quoteRoomId === "string" && quoteRoomId !== "" ? quoteRoomId : typeof room2?.id === "string" && room2.id !== "" ? room2.id : void 0;
+  if (seq === void 0 && Array.isArray(room2?.log)) {
+    for (let index = room2.log.length - 1; index >= 0; index -= 1) {
+      const row = room2.log[index];
+      if (row?.who === "User" && row.kind == null && row.text === sentence && typeof row.seq === "number" && Number.isFinite(row.seq)) {
+        seq = row.seq;
+        break;
+      }
+    }
+  }
+  return asCite({
+    text: sentence,
+    ...seq !== void 0 ? { seq } : {},
+    ...where !== void 0 ? { roomId: where } : {}
+  });
+}
+function applyLogPointer(log, pointer, options = {}) {
+  if (pointer == null || pointer.quote == null) return -1;
+  const rows2 = Array.isArray(log) ? log : [];
+  const minSeq = typeof options.minSeq === "number" && Number.isFinite(options.minSeq) ? options.minSeq : void 0;
+  for (let index = rows2.length - 1; index >= 0; index -= 1) {
+    const row = rows2[index];
+    if (row == null || typeof row !== "object") continue;
+    if (row.botId == null || row.kind != null) continue;
+    if (typeof row.text !== "string" || row.text === "") continue;
+    if (minSeq !== void 0 && typeof row.seq === "number" && row.seq < minSeq) continue;
+    row.quote = pointer.quote;
+    if (Array.isArray(pointer.quotes) && pointer.quotes.length > 1) row.quotes = pointer.quotes;
+    else delete row.quotes;
+    return index;
+  }
+  return -1;
+}
 function citedFromLog(log, roomId) {
   const rows2 = Array.isArray(log) ? log : [];
   const texts2 = [];
@@ -8633,6 +8681,9 @@ function GroupMessage({ bot, text, texts: texts2 = [text], room: room2, roster, 
   );
 }
 var citedReply = (reply) => reply?.late === true && citeTexts(reply).length > 0;
+function coveredByLateCite(replies, text) {
+  return replies.some((other) => other?.late === true && citeTexts(other).includes(text));
+}
 function stackReplies(replies) {
   const items = [];
   replies.forEach((reply, index) => {
@@ -9269,8 +9320,7 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
       const bot = roster.byId[reply.botId] ?? { id: reply.botId, name: reply.name, color: reply.color ?? "gray" };
       const userBubble = groupUserBubble(reply);
       if (reply.kind === "completion-quote") {
-        const covered = projected.replies.some((other) => other?.late === true && citeTexts(other).includes(reply.text));
-        if (covered) return null;
+        if (coveredByLateCite(projected.replies, reply.text)) return null;
         return (0, import_react17.createElement)("div", {
           key: `complete-q-${reply.exchangeId}-${index}`,
           className: reply.who === "User" ? "bt-urow" : "bt-route-cite",
@@ -9294,6 +9344,7 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
         }));
       }
       if (userBubble) {
+        if (userBubble.steering && coveredByLateCite(projected.replies, reply.text)) return null;
         return (0, import_react17.createElement)("div", { key: `user-${index}`, className: "bt-urow", ...userBubble.steering ? { "data-steering": true } : {} }, (0, import_react17.createElement)(
           "div",
           { className: "bt-ububble" },

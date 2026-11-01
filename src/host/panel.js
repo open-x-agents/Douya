@@ -4,14 +4,18 @@
 // store does not carry is written as 未知 instead of being filled in with a zero.
 
 import { readFile } from 'node:fs/promises'
+import { labelOf } from '../sources/composio/registry.js'
 import { PANEL_PAGE_ROUTE, PANEL_ROUTE } from './constants.js'
+import { conflictsOf } from './conflicts.js'
 import { localClock } from './normalize.js'
 
 export const BODY_MARKER = '<!--panel:body-->'
 export const UNKNOWN = '未知'
 
 // One name per source type, so the page, the tests and the missing-source sentence agree.
-// The keys are #9's SOURCE_TYPES; `composio:<toolkit>` falls through to its own name.
+// The keys are #9's SOURCE_TYPES; a `composio:<toolkit>` source asks the registry for its
+// label instead (that is why adding an app never touches this file), and only a source the
+// registry does not know falls back to its own id.
 export const SOURCE_NAMES = {
   gcal: '谷歌日历',
   gmail: '邮件',
@@ -67,7 +71,7 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"]/g, ch => ({
   '"': '&quot;',
 }[ch]))
 
-const sourceLabel = type => SOURCE_NAMES[type] ?? type
+const sourceLabel = type => SOURCE_NAMES[type] ?? labelOf(type) ?? type
 
 const sourceType = entry => (typeof entry === 'string'
   ? entry.trim() || null
@@ -115,6 +119,9 @@ function viewEvent(raw, sources, index) {
     unreadSources: unread,
     srcless: types.length === 0 || live.length === 0 || dead.length > 0 || unread.length > 0,
     noEvidence,
+    // Derived on every render from `sources[]`, never stored: two apps that disagree keep both
+    // values here, and the card shows both instead of one of them going missing.
+    conflicts: conflictsOf(event),
   }
 }
 
@@ -154,6 +161,49 @@ export function panelData(state, { today, timeZone, sources } = {}) {
 }
 
 const clockOf = (iso, timeZone) => (iso === null ? null : localClock(iso, timeZone) ?? null)
+
+const clockPart = (clock, label) => `${escapeHtml(clock)}（${escapeHtml(label)}）`
+
+// Two apps on one thing, two times: the `.due` line prints every value with the source that
+// said it, and the line under it says which one is trusted and why. A conflict whose clocks
+// cannot be drawn falls back to the plain line instead of printing a half sentence.
+function dueLines(event, timeZone) {
+  const conflicts = Array.isArray(event.conflicts) ? event.conflicts : []
+  const conflict = conflicts.find(item => item.field === 'due_at')
+  if (conflict !== undefined) {
+    const clocks = conflict.values
+      .map(item => ({ clock: clockOf(item.value, timeZone), label: sourceLabel(item.source) }))
+      .filter(item => item.clock !== null)
+    if (clocks.length >= 2) {
+      const line = `本地 ${clocks.map(item => clockPart(item.clock, item.label)).join(' / ')}`
+      const chosen = conflict.chosen
+      const chosenClock = chosen === null ? null : clockOf(chosen.value, timeZone)
+      return {
+        line,
+        trust: chosenClock === null
+          ? null
+          : `采信 ${clockPart(chosenClock, sourceLabel(chosen.source))}：${escapeHtml(chosen.why)}`,
+      }
+    }
+  }
+  const clock = clockOf(event.dueAt, timeZone)
+  return { line: clock === null ? '时刻未知' : `本地 ${escapeHtml(clock)}`, trust: null }
+}
+
+function renderItemCard(event, timeZone) {
+  const classes = ['item']
+  if (event.srcless) classes.push('srcless')
+  if (event.noEvidence) classes.push('no-evidence')
+  const due = dueLines(event, timeZone)
+  const lines = [`<article class="${classes.join(' ')}" id="item-${escapeHtml(event.id)}">`]
+  lines.push(`  <h4>${escapeHtml(event.title)}</h4>`)
+  lines.push(`  <p class="due">${due.line}</p>`)
+  if (due.trust !== null) lines.push(`  <p class="trust">${due.trust}</p>`)
+  const note = srclessNote(event)
+  if (note) lines.push(`  <p class="src-note">${note}</p>`)
+  lines.push('</article>')
+  return lines.join('\n')
+}
 
 function describeSources(sources) {
   const entries = Object.entries(sources)
@@ -225,20 +275,6 @@ function srclessNote(event) {
     return dead === '' ? '没有读到任何来源，这条没有依据' : `${escapeHtml(dead)}没连上，这条没有依据`
   }
   return `${escapeHtml(dead)}没连上，这条只有${escapeHtml(event.liveSources.map(sourceLabel).join('、'))}依据`
-}
-
-function renderItemCard(event, timeZone) {
-  const classes = ['item']
-  if (event.srcless) classes.push('srcless')
-  if (event.noEvidence) classes.push('no-evidence')
-  const lines = [`<article class="${classes.join(' ')}" id="item-${escapeHtml(event.id)}">`]
-  lines.push(`  <h4>${escapeHtml(event.title)}</h4>`)
-  const clock = clockOf(event.dueAt, timeZone)
-  lines.push(`  <p class="due">${clock === null ? '时刻未知' : `本地 ${escapeHtml(clock)}`}</p>`)
-  const note = srclessNote(event)
-  if (note) lines.push(`  <p class="src-note">${note}</p>`)
-  lines.push('</article>')
-  return lines.join('\n')
 }
 
 function renderItems(data) {

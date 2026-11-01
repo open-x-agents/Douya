@@ -148,8 +148,21 @@ report 的形状：`{ date, memberId, memberName, schedule[], done[], plan[], no
 其它 app 照常进早报。每条 fact 的证据 ref 固定为 `composio:<toolkit>:<object>/<record_id>`，
 面板上的 `data-evidence` 原样指向输入里存在的记录。
 
-**冲突（S5 起）。** 两个 app 对同一件事给出不同时间时，`conflicts` 并列两个值并写明采信哪条
-（`日程是硬时间` → 取日历那条），卡片上两个时间都写。
+**冲突并列与显示名（S5）。** 两个 app 对同一件事给出不同的 `due_at` 或 `state` 时，两个值都留着：
+`src/host/conflicts.js` 的 `conflictsOf(event)` 是纯函数，只在渲染时从 `event.sources[]` 派生
+`[{ field, values: [{ value, source, ref, at }], chosen: { value, source, ref, why } | null }]`——
+不读时钟 / 盘 / 网，不新增聚合层，也不改 `buildEvent()`（它仍然只写「各源都同意才取值」）。
+同一字段的非空值去重后不足 2 个就不算冲突。`values` 的排序写死三条：`due_kind === 'hard'` 的源在前 →
+`at` 更早的在前（`at` 是这条证据被看见的时刻，不是它说的时间；没有时间戳的排最后）→ `ref` 字典序小者在前。
+`due_at` 的 `chosen` 按同一顺序取第一条，`why` 是最后生效的那条规则的原话：`日程是硬时间` /
+`时间更早的那条` / `先按来源名`；`state` 冲突的 `chosen` 恒为 `null`——说法相反就记未知，不投票。
+卡片上两个时间都写：`viewEvent()` 带 `conflicts`，`renderItemCard()` 的 `.due` 行在冲突时写成
+`本地 16:00（谷歌日历） / 15:30（邮件）`，其后再一行 `采信 16:00（谷歌日历）：日程是硬时间`；
+只有被采信的那个时间出现在卡片上，就是这条做错了。
+
+显示名只做一次性接线：`panel.js` 的 `sourceLabel` 是 `SOURCE_NAMES[type] ?? labelOf(type) ?? type`，
+`ask.js` 的 `sourceLabel` 在 `composio:` 分支里同样先查 `labelOf()`。之后加一个 app 只加注册表一行的
+`label`，`src/host/**` 里不出现任何 app 名（写死的中文名只在注册表里）。
 
 ## 与 ds-bot 的边界
 

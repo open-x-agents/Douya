@@ -54,6 +54,54 @@ test('引用的 issue 已关闭', () => {
   assert.ok(codes(verdict).includes('issue-not-open'));
 });
 
+// 规则 1 的两半：`Fixes/Closes/Resolves` 会关单，指向的 issue 必须 open；`Refs` 只是指针，
+// 指向已关闭的父单也算数 —— 同一 issue 的后续刀就靠它（#90）。口径写在 docs/testing.md 的 L5 规则 1。
+test('Refs #N 指向已关闭的父单：后续刀可以进队', () => {
+  const verdict = judge(pull({ body: `Refs #23\n\nRan: node --test test/*.test.js\ntip ${SHA}`, issueStates: { 23: 'closed' } }));
+  assert.deepEqual(verdict.reasons, []);
+  assert.equal(verdict.ok, true);
+});
+
+test('只写 Refs #N（父单还开着）：不再算没对上 issue', () => {
+  const verdict = judge(pull({ body: `Refs #12\n\nRan: node --test test/*.test.js\ntip ${SHA}` }));
+  assert.ok(!codes(verdict).includes('missing-issue-ref'));
+  assert.equal(verdict.ok, true);
+});
+
+test('Fixes #N 与 Refs #N 同时出现：关的是 open 单就合格（#89 的形态）', () => {
+  const verdict = judge(
+    pull({
+      body: `Fixes #12\nRefs #23\n\nRan: node --test test/*.test.js\ntip ${SHA}`,
+      issueStates: { 12: 'open', 23: 'closed' },
+    }),
+  );
+  assert.deepEqual(codes(verdict), []);
+  assert.equal(verdict.ok, true);
+});
+
+test('Fixes 命中已关闭的单：Refs 再指一个也救不了', () => {
+  const verdict = judge(
+    pull({
+      body: `Fixes #12\nRefs #23\n\nRan: node --test test/*.test.js\ntip ${SHA}`,
+      issueStates: { 12: 'closed', 23: 'closed' },
+    }),
+  );
+  assert.deepEqual(codes(verdict), ['issue-not-open']);
+});
+
+test('Refs 后面没有 #N 不算引用：仍然 missing-issue-ref', () => {
+  const verdict = judge(pull({ body: `Refs 父单\n\nRan: node --test test/*.test.js\ntip ${SHA}` }));
+  assert.deepEqual(codes(verdict), ['missing-issue-ref']);
+});
+
+// 有意为之的弱化（#90 R1）：守卫不为 `Refs` 查状态，所以编号写错也放行。
+// 这条用例把它钉住 —— 以后谁想加 issue-not-found，必须先改掉这个期望，不能悄悄改。
+test('Refs 指向拿不到状态的编号：仍然合格（Refs 不查状态）', () => {
+  const verdict = judge(pull({ body: `Refs #999\n\nRan: node --test test/*.test.js\ntip ${SHA}`, issueStates: {} }));
+  assert.deepEqual(codes(verdict), []);
+  assert.equal(verdict.ok, true);
+});
+
 test('没有 Ran: 行', () => {
   const verdict = judge(pull({ body: `Fixes #12\n\ntip ${SHA}` }));
   assert.ok(codes(verdict).includes('missing-ran'));

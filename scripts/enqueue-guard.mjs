@@ -27,6 +27,8 @@ export const DEFAULT_CHECK_TIMEOUT_MS = 15 * 60 * 1000;
 export const DEFAULT_POLL_INTERVAL_MS = 15 * 1000;
 
 const ISSUE_REF = /\b(?:fixes|closes|resolves)\s+#(\d+)\b/i;
+// 纯指针：`Refs #N` 不关任何单，所以它可以指向已关闭的父单（同一 issue 的后续刀）。
+const REFS_REF = /\brefs\s+#(\d+)\b/i;
 const RAN_LINE = /^\s*Ran\s*:/im;
 const TIP_SHA = /\b([0-9a-f]{40})\b/;
 
@@ -59,10 +61,20 @@ function hasRanLine(body) {
   return false;
 }
 
-function issuesReferenced(body) {
+function refsMatching(body, pattern) {
   const out = [];
-  for (const m of body.matchAll(new RegExp(ISSUE_REF.source, 'gi'))) out.push(Number(m[1]));
+  for (const m of body.matchAll(new RegExp(pattern.source, 'gi'))) out.push(Number(m[1]));
   return out;
+}
+
+// 会关单的引用（`Fixes/Closes/Resolves #N`）：合入即关，那个 issue 必须还开着。
+function issuesReferenced(body) {
+  return refsMatching(body, ISSUE_REF);
+}
+
+// 纯指针（`Refs #N`）：不关任何单，指向已关闭的父单也算数 —— 后续刀靠它。
+function refsReferenced(body) {
+  return refsMatching(body, REFS_REF);
 }
 
 function runsAtHead(checks, name, headSha) {
@@ -168,7 +180,7 @@ export function timeoutVerdict({ number, states, waitedMs }) {
  * @param {string} pr.headSha
  * @param {Array<{name:string, conclusion:string|null, head_sha:string, status?:string}>} pr.checks
  * @param {string[]} pr.files           改动文件路径
- * @param {Record<number, 'open'|'closed'>} [pr.issueStates]  body 里引用到的 issue 的当前状态
+ * @param {Record<number, 'open'|'closed'>} [pr.issueStates]  只查会关单的引用（`Fixes/Closes/Resolves #N`）的当前状态；`Refs #N` 只是指针，不查
  * @returns {{ok: boolean, reasons: Array<{code: string, message: string}>}}
  */
 export function judge(pr) {
@@ -178,14 +190,19 @@ export function judge(pr) {
   const files = pr.files || [];
   const checks = pr.checks || [];
 
-  const refs = issuesReferenced(body);
-  if (refs.length === 0) {
-    reasons.push({ code: 'missing-issue-ref', message: 'body 里没有 `Fixes #N` / `Closes #N`：一次改动要对上一个 issue' });
-  } else {
+  // 两条分开：会关单的引用要求和开着，纯指针只要求「指得出一个单」。
+  const closing = issuesReferenced(body);
+  const pointers = refsReferenced(body);
+  if (closing.length === 0 && pointers.length === 0) {
+    reasons.push({ code: 'missing-issue-ref', message: 'body 里没有 `Fixes #N` / `Closes #N` / `Refs #N`：一次改动要对上一个 issue' });
+  } else if (closing.length > 0) {
     const states = pr.issueStates || {};
-    const closed = refs.filter((n) => states[n] === 'closed');
+    const closed = closing.filter((n) => states[n] === 'closed');
     if (closed.length > 0) {
-      reasons.push({ code: 'issue-not-open', message: `引用的 issue 已关闭：${closed.map((n) => '#' + n).join(', ')}` });
+      reasons.push({
+        code: 'issue-not-open',
+        message: `要关闭的 issue 已关闭：${closed.map((n) => '#' + n).join(', ')}；后续刀用 \`Refs #N\` 引用父单，不要写 \`Fixes\``,
+      });
     }
   }
 
@@ -345,6 +362,7 @@ async function snapshot(number) {
   } catch {
     mainPushedAt = null;
   }
+  // 只查会关单的引用：`Refs` 不关单，它的状态对判定没用，不为它多打一次 API。
   const refs = issuesReferenced(String(pull.body || ''));
   const issueStates = {};
   for (const n of refs) {

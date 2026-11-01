@@ -62,6 +62,18 @@ export const registry = [
       'SLACK_RETRIEVE_CONVERSATION_INFORMATION',
     ],
   },
+  {
+    toolkit: 'googledrive',
+    label: '谷歌云盘',
+    adapter: './googledrive.js',
+    readScope: 'metadata',
+    actions: [
+      'GOOGLEDRIVE_LIST_FILES',
+      'GOOGLEDRIVE_GET_FILE_METADATA',
+      'GOOGLEDRIVE_FIND_FILE',
+      'GOOGLEDRIVE_GET_ABOUT',
+    ],
+  },
 ]
 
 // 面板 / 卡片要显示的中文名从注册表来：`composio:notion` 与 `notion` 都认。

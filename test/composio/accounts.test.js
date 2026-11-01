@@ -9,9 +9,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { authOf, authReasonOf, resolveAccount } from '../src/sources/composio/accounts.js'
+import { authOf, authReasonOf, resolveAccount } from '../../src/sources/composio/accounts.js'
 
-const fixture = JSON.parse(readFileSync(new URL('./fixtures/composio/accounts.json', import.meta.url), 'utf8'))
+const fixture = JSON.parse(readFileSync(new URL('../fixtures/composio/accounts.json', import.meta.url), 'utf8'))
 const accounts = fixture.accounts
 
 test('one active account for this person is ok', () => {

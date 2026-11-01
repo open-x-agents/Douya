@@ -45,6 +45,9 @@ jobs:
           # pull_request 用 base.sha；手动入口固定 main —— 也就是「点按钮时的 main」。
           ref: ${{ github.event.pull_request.base.sha || 'main' }}
           fetch-depth: 0
+          # 撞号闸要的是真实的 v* tag 列表；fetch-depth: 0 本来就会带上 tag，
+          # 写出来是为了让「这个 workflow 依赖 tag」在 YAML 里看得见。
+          fetch-tags: true
 
       - uses: actions/setup-node@v4
         with:
@@ -77,6 +80,15 @@ jobs:
           git fetch --no-tags origin "+refs/pull/$PR/head:refs/remotes/pr-head"
           echo "base: $(git rev-parse HEAD)"
           echo "head: $(git rev-parse refs/remotes/pr-head)"
+          # 撞号闸要的两头版本：分叉点（这个 PR 从哪个版本切出来）与 PR head 自己。
+          # 必须在 git merge 之前记 —— 合完之后 HEAD 已经是合并结果，两头都读不到了。
+          MB=$(git merge-base HEAD refs/remotes/pr-head)
+          echo "merge-base: $MB"
+          MERGE_BASE_VERSION=$(git show "$MB:package.json" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")
+          HEAD_VERSION=$(git show "refs/remotes/pr-head:package.json" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")
+          echo "merge_base_version=$MERGE_BASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "head_version=$HEAD_VERSION" >> "$GITHUB_OUTPUT"
+          echo "版本号：merge-base $MERGE_BASE_VERSION → head $HEAD_VERSION"
           if ! git merge --no-ff --no-edit refs/remotes/pr-head; then
             echo "::error::合并冲突：这个 PR 合不到当前 main 上，先在分支上 rebase"
             git diff --name-only --diff-filter=U | sed 's/^/冲突文件: /'
@@ -84,6 +96,17 @@ jobs:
             exit 1
           fi
           echo "merged: $(git rev-parse HEAD)"
+
+      # 两个 PR 各自从 0.1.0 改成同一个 0.1.1 时，git 三方合并判定为「同一处改动」，
+      # 干净合上 —— 冲突检测和单测都看不见。只有对着已存在的 v* tag 才拦得住撞号。
+      # 判据与退出码在 scripts/merge-tree-gate.mjs（纯函数复用 L7 的同一条规则）；这里只负责把
+      # 合并前记下的两头版本喂进去，所以这一行不是 node --test。
+      - name: 版本号不能撞已有的 tag
+        id: gate
+        env:
+          MERGE_BASE_VERSION: ${{ steps.merge.outputs.merge_base_version }}
+          HEAD_VERSION: ${{ steps.merge.outputs.head_version }}
+        run: node scripts/merge-tree-gate.mjs --merge-base-version="$MERGE_BASE_VERSION" --head-version="$HEAD_VERSION"
 
       # 和 tests.yml 同一条命令：这一层要证明的是「合起来也绿」，
       # 不是另起一套测试 —— 换一套就等于没测同一个东西。
@@ -99,16 +122,19 @@ jobs:
           PR: ${{ steps.pr.outputs.number }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           MERGE: ${{ steps.merge.outcome }}
+          GATE: ${{ steps.gate.outcome }}
           UNIT: ${{ steps.unit.outcome }}
         with:
           script: |
             const mergeOk = process.env.MERGE === 'success'
+            const gateOk = process.env.GATE === 'success'
             const unitOk = process.env.UNIT === 'success'
-            const conclusion = mergeOk && unitOk ? 'success' : 'failure'
+            const conclusion = mergeOk && gateOk && unitOk ? 'success' : 'failure'
             const summary = [
               `对当前 main 重跑：PR #${process.env.PR}，head \`${process.env.HEAD_SHA}\``,
               '',
               `- 合并到当前 main：${process.env.MERGE}`,
+              `- 版本号撞已有 tag：${process.env.GATE}`,
               `- 合并结果上跑 L0：${process.env.UNIT}`,
               '',
               `run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,

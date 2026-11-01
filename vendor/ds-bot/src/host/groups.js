@@ -22,7 +22,7 @@ import { readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { GROUP_LINE_READ, ROOM_REPLY_TIMEOUT_MS, ROOM_STEP_GAP_MS, ROOM_WORK_GRACE_MS, SOURCE_KIND, TEAM_TOOLS, TEXT_KEPT } from './constants.js'
+import { GROUP_LINE_READ, roomReplyTimeoutMs, ROOM_STEP_GAP_MS, ROOM_WORK_GRACE_MS, SOURCE_KIND, TEAM_TOOLS, TEXT_KEPT } from './constants.js'
 import { escapeRegExp, headOf, splitRef, textOf } from './text.js'
 import { mentionSpans, speakerOf } from '../shared/mentions.js'
 import { GROUP_REF, output } from './tools.js'
@@ -32,6 +32,7 @@ import { routeTakesEffect } from './route-inbound.js'
 import { userLineFor } from './room-user-line.js'
 import { applyRoomStreamFrame, clearDraftIfPosted } from '../shared/room-draft.js'
 import { lateCite } from '../shared/work-line-complete.js'
+import { appendCite, applyLogPointer, citeForPost, citesOf, logPointer, markSteeredRow, steerSentence, steeredReplyPost } from '../shared/cite.js'
 import { postLine, relayFiles, relayMessages, relayText } from './group-stop.js'
 
 const ROOM_LOG_MAX = 60
@@ -288,13 +289,31 @@ export function install(rt) {
 
   // A member's message in the round: in the log, for the members after it, and in the
   // round's replies, for the user.
-  const postInRound = (room, round, member, text, duration, cite = {}) => {
-    const named = lateCite(cite)
-    const pointer = typeof named.quoteSeq === 'number'
-      ? { quote: { roomId: named.quoteRoomId ?? room.id, seq: named.quoteSeq } }
-      : {}
+  // The first sentence stays the single `quote` pointer. A steered follow-up adds `quotes`.
+  const loggedQuote = (room, named) => logPointer(named, room.id)
+
+  const postInRound = (room, round, member, text, duration, cite = {}, options = {}) => {
+    // Sentences already drawn as steering replies in this round are the cite.
+    // The log points at them so the history bubbles go away. The reply carries
+    // the same sentences, so the painter draws one late cite and hides the
+    // steering rows. A later chunk of this turn passes attachSteers false.
+    const attach = options.attachSteers !== false
+    const explicit = citesOf(cite).length > 0
+    const named = attach ? citeForPost(cite, round?.steerCites) : (explicit ? lateCite(cite) : {})
+    const pointer = loggedQuote(room, named)
+    // Two or more sentences are the late cite: user bubbles on this reply.
+    const multi = citesOf(named).length > 1
     appendRoom(room, { who: member.name, botId: member.id, text, ...pointer })
-    round.replies.push({ botId: member.id, name: member.name, color: member.color, text, time: Date.now(), ...(duration === undefined ? {} : { duration }), ...named })
+    round.replies.push({
+      botId: member.id,
+      name: member.name,
+      color: member.color,
+      text,
+      time: Date.now(),
+      ...(duration === undefined ? {} : { duration }),
+      ...(explicit || multi ? named : {}),
+      ...(multi ? { late: true } : {}),
+    })
     // Final (or step) text is in replies now: drop the live draft so the UI does not
     // keep a streaming row beside the committed bubble.
     round.draft = clearDraftIfPosted(round.draft, round.replies)
@@ -331,7 +350,7 @@ export function install(rt) {
       }
       const touch = () => {
         clearTimeout(timer)
-        timer = setTimeout(() => finish({ missed: true }), ROOM_REPLY_TIMEOUT_MS)
+        timer = setTimeout(() => finish({ missed: true }), roomReplyTimeoutMs())
       }
       const work = () => { grace ??= setTimeout(() => finish({ working: true }), ROOM_WORK_GRACE_MS) }
       const say = (raw) => {
@@ -437,6 +456,8 @@ export function install(rt) {
   const relayIntents = new Map()
   /** @type {Map<string, {roomId: string, botId: string}>} */
   const userSteered = new Map()
+  /** Sessions whose steered sentences are already on a visible late cite. */
+  const steeredCitesShown = new Set()
   /** @type {Map<string, {callId: string, round: any}>} */
   const keptRounds = new Map()
   /** @type {Map<string, {callId: string, round: any}>} */
@@ -515,16 +536,44 @@ export function install(rt) {
 
   // Steer the one busy member. The probe is a steering reply on the current
   // round, not a room-log opener and not a second group_relay.
-  async function acceptRoomSteer(room, member, { text = '', files = [], exchangeId, quoteText, quoteSeq, quoteRoomId } = {}) {
+  // The round is already showing this sentence. Take it out of the room inbox so the
+  // host does not keep a second bubble (the unread one) until the next step reads it.
+  const dropSteeredInbox = (roomId, messageId) => {
+    if (typeof messageId !== 'string' || messageId === '' || typeof rt.resolveAgent !== 'function') return
+    void rt.resolveAgent(roomId).then(agent => {
+      agent?.inbox?.remove?.(messageId)
+    }).catch(error => rt.warn('ds-bot: drop steered inbox line failed: %s', error))
+  }
+
+  async function acceptRoomSteer(room, member, { text = '', files = [], exchangeId, quoteText, quoteSeq, quoteRoomId, messageId } = {}) {
     const sessionId = member?.sessionId ?? room?.sessions?.[member?.id]
     if (room == null || member == null || sessionId == null) return
     const reply = steeringReply({ text })
+    const sentence = steerSentence(room, { text, quoteText, quoteSeq, quoteRoomId })
+    const showSteer = (round) => {
+      if (sentence !== undefined) {
+        round.steerCites = appendCite(round.steerCites, sentence)
+        // Only a bot row posted with or after this sentence can point at it.
+        // An earlier reply, such as the previous question's answer, stays as it was.
+        if (typeof sentence.seq === 'number') {
+          const stamped = applyLogPointer(room.log, loggedQuote(room, citeForPost({}, round.steerCites)), { minSeq: sentence.seq })
+          if (stamped >= 0) void rt.save().catch(() => {})
+        }
+      }
+      round.replies.push(reply)
+      // Shown now, even when this member has not posted yet. The history cell and
+      // the host's unread copy are the same send.
+      const marked = markSteeredRow(room.log, { seq: sentence?.seq, messageId, text: sentence?.text ?? text })
+      if (marked.changed) void rt.save().catch(() => {})
+      dropSteeredInbox(room.id, marked.messageId)
+      if (typeof messageId === 'string' && messageId !== '' && messageId !== marked.messageId) dropSteeredInbox(room.id, messageId)
+    }
     const running = [...rt.roomProgress.values()].find(round => round.roomId === room.id)
-    if (running !== undefined) running.replies.push(reply)
+    if (running !== undefined) showSteer(running)
     else {
       const previous = lastRound.get(room.id)
       if (previous?.round !== undefined) {
-        previous.round.replies.push(reply)
+        showSteer(previous.round)
         keptRounds.set(room.id, previous)
       }
     }
@@ -715,7 +764,7 @@ export function install(rt) {
           // The round moved on without this member: the log shows the call and then
           // silence, which reads as a lost message. The group is told the baton was
           // dropped, and what brings the member back.
-          appendRoom(room, { who: 'DS Bot', kind: 'notice', reason: 'missed', names: [member.name], minutes: Math.round(ROOM_REPLY_TIMEOUT_MS / 60000) })
+          appendRoom(room, { who: 'DS Bot', kind: 'notice', reason: 'missed', names: [member.name], minutes: Math.round(roomReplyTimeoutMs() / 60000) })
         }
       }
       const spoken = final === undefined ? said : [...said, final]
@@ -786,8 +835,9 @@ export function install(rt) {
         // The user's line keeps the inbox id of the message it came from, so that
         // row can leave the Session and never be posted here a second time.
         const files = post.files === undefined ? {} : { files: post.files }
+        const citePointer = post.botId ? loggedQuote(room, lateCite(post)) : {}
         appendRoom(room, post.botId
-          ? { who: rt.botOf(post.botId)?.name ?? post.name ?? 'Bot', botId: post.botId, text, ...files }
+          ? { who: rt.botOf(post.botId)?.name ?? post.name ?? 'Bot', botId: post.botId, text, ...files, ...citePointer }
           : userLineFor(post.inboxId, text, files))
       }
       // The user wrote here — or pressed Continue, which opens the same round
@@ -1002,9 +1052,7 @@ export function install(rt) {
       } else {
         const line = [text, ...files.map(fileLine)].filter(Boolean).join('\n')
         const cite = extra.late === true ? lateCite(extra) : {}
-        const pointer = typeof cite.quoteSeq === 'number'
-          ? { quote: { roomId: cite.quoteRoomId ?? room.id, seq: cite.quoteSeq } }
-          : {}
+        const pointer = loggedQuote(room, cite)
         appendRoom(room, { who: sender.name, botId: sender.id, text: line, ...(files.length > 0 ? { files } : {}), ...pointer })
         running.replies.push({
           botId: sender.id,
@@ -1035,6 +1083,49 @@ export function install(rt) {
   // inside a round. Work whose result already went out as a step line (`shown`) and
   // that ends with nothing more to say still tells the member that asked for it,
   // which answers the result: where the result sits in the turn decides nothing.
+  const steerCitesOf = (roomId) => {
+    const running = [...rt.roomProgress.values()].find(round => round.roomId === roomId)
+    if (Array.isArray(running?.steerCites) && running.steerCites.length > 0) return running.steerCites
+    const kept = keptRounds.get(roomId)?.round?.steerCites
+    return Array.isArray(kept) ? kept : []
+  }
+
+  // The round remembers the steered sentences. After a restart that memory is gone,
+  // and the turn end already carries the same sentences with the opening prompt removed.
+  const steeredSentences = (roomId, info) => {
+    const fromRound = steerCitesOf(roomId)
+    return fromRound.length > 0 ? fromRound : citesOf(info)
+  }
+
+  const releaseSteeredCopies = (roomId, cites) => {
+    const round = keptRounds.get(roomId)?.round
+    if (round == null || !Array.isArray(round.replies)) return
+    const texts = new Set((Array.isArray(cites) ? cites : []).map(item => item?.text).filter(text => typeof text === 'string' && text !== ''))
+    if (texts.size === 0) return
+    round.replies = round.replies.filter(reply => !(reply?.kind === 'steering' && texts.has(reply.text)))
+  }
+
+  // The round has already returned, so a kept-round draft would vanish on reload.
+  // Post into the room session instead. The first chunk carries the late cite.
+  async function postSteeredRemainder(room, member, sessionId, text, cites, { calls = false, done = false, askedBy, progress = false } = {}) {
+    const list = Array.isArray(cites) ? cites : []
+    const shown = steeredCitesShown.has(sessionId)
+    const extra = steeredReplyPost({ cites: list, shown, calls })
+    if (extra.late === true) {
+      steeredCitesShown.add(sessionId)
+      releaseSteeredCopies(room.id, list)
+    }
+    await postToRoom(room, member, text, {
+      ...extra,
+      // @mentions still reach those members. Without this flag a remainder that
+      // already showed its cite would call the whole room.
+      ...(calls ? { member: true } : {}),
+      ...(progress ? { progress: true } : {}),
+      ...(done ? { done: true } : {}),
+      ...(askedBy ? { askedBy } : {}),
+    }).catch(error => rt.warn('ds-bot: steered group reply from %s failed: %s', member.name, error))
+  }
+
   async function lateRoomReply(sessionId, info, reply, { shown = false } = {}) {
     const owner = rt.groupOwners.get(sessionId)
     const room = rt.roomOf(owner?.roomId ?? info.roomId)
@@ -1047,14 +1138,32 @@ export function install(rt) {
       userSteered.delete(sessionId)
       const calls = callsIn(room, member, text)
       const running = [...rt.roomProgress.values()].find(round => round.roomId === room.id)
-      const bubble = running ?? keptRounds.get(room.id)?.round
       const route = stepRoute({ userSteered: true, calls, hasRound: running !== undefined })
+      const steers = steeredSentences(room.id, info)
       switch (route) {
         case 'same':
-          if (bubble !== undefined && !isPass(text)) postInRound(room, bubble, member, text, undefined, lateCite(info))
+          if (running !== undefined && !isPass(text)) {
+            const already = steeredCitesShown.has(sessionId)
+            const cite = already ? {} : lateCite({ quotes: steers })
+            postInRound(room, running, member, text, undefined, cite, { attachSteers: !already })
+            steeredCitesShown.delete(sessionId)
+            return
+          }
+          if (!isPass(text)) {
+            await postSteeredRemainder(room, member, sessionId, text, steers, { calls: false })
+            steeredCitesShown.delete(sessionId)
+            return
+          }
+          steeredCitesShown.delete(sessionId)
           return
         case 'post':
-          break
+          if (!isPass(text) || done) {
+            await postSteeredRemainder(room, member, sessionId, done ? '' : text, steers, { calls: true, done, askedBy: info.askedBy })
+            steeredCitesShown.delete(sessionId)
+            return
+          }
+          steeredCitesShown.delete(sessionId)
+          return
         default: {
           /** @type {never} */
           const unexpected = route
@@ -1089,15 +1198,22 @@ export function install(rt) {
     const calls = callsIn(room, member, text)
     const steered = userSteered.has(sessionId)
     const running = [...rt.roomProgress.values()].find(round => round.roomId === room.id)
-    const bubble = running ?? (steered ? keptRounds.get(room.id)?.round : undefined)
     const route = stepRoute({ userSteered: steered, calls, hasRound: running !== undefined })
     switch (route) {
       case 'same':
-        if (bubble !== undefined) {
-          postInRound(room, bubble, member, text)
+        if (running !== undefined) {
+          if (steered) {
+            const already = steeredCitesShown.has(sessionId)
+            const cite = already ? {} : lateCite({ quotes: steerCitesOf(room.id) })
+            postInRound(room, running, member, text, undefined, cite, { attachSteers: !already })
+            if (!already && citesOf(cite).length > 1) steeredCitesShown.add(sessionId)
+          } else postInRound(room, running, member, text)
           return
         }
-        if (steered) return
+        if (steered) {
+          await postSteeredRemainder(room, member, sessionId, text, steerCitesOf(room.id), { calls: false, progress: true })
+          return
+        }
         break
       case 'post':
         break
@@ -1106,6 +1222,10 @@ export function install(rt) {
         const unexpected = route
         throw new Error(`Unknown step route ${String(unexpected)}`)
       }
+    }
+    if (steered) {
+      await postSteeredRemainder(room, member, sessionId, text, steerCitesOf(room.id), { calls, progress: true, askedBy: info?.askedBy })
+      return
     }
     const quiet = !calls
     await rt.save()

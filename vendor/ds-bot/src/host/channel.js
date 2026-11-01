@@ -11,6 +11,7 @@ import { resolveSendMode } from '../shared/send-mode.js'
 import { clearDraftIfPosted } from '../shared/room-draft.js'
 import { decideRoomSteer, roomMembers, textNamesMember } from './group-steer.js'
 import { routeTakesEffect } from './route-inbound.js'
+import { citedFromLog } from '../shared/cite.js'
 
 const LANGUAGES = { zh: 'Chinese (简体中文)', en: 'English' }
 const RUN_STATS = ['sessionStats', 'tokenUsage', 'contextPressure']
@@ -54,7 +55,15 @@ export function install(rt) {
     rooms: Object.values(state.rooms).map(({ log, seen, lateRounds, relays, sessions, segments, ...room }) => {
       const parts = [...Object.values(sessions ?? {}), ...Object.values(segments ?? {}).flat().map(segment => segment.sessionId)]
       const last = (log ?? []).filter(line => line.kind === undefined).at(-1)
-      return { ...room, relayLimitDefault: defaultRelayLimit(room), parts, ...(last ? { preview: last.who === 'User' ? last.text : `${last.who}：${last.text}` } : {}) }
+      const cited = citedFromLog(log, room.id)
+      return {
+        ...room,
+        relayLimitDefault: defaultRelayLimit(room),
+        parts,
+        ...(last ? { preview: last.who === 'User' ? last.text : `${last.who}：${last.text}` } : {}),
+        ...(cited.texts.length > 0 ? { citedTexts: cited.texts } : {}),
+        ...(cited.ids.length > 0 ? { citedIds: cited.ids } : {}),
+      }
     }),
     // Deleted private Bots whose folder, memory and chats stay closed to the others.
     privateArchives: rt.archivesView(),

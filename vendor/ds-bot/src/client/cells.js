@@ -21,6 +21,7 @@ import { partIndexOf, withBtwRows } from './btw-model.js'
 import { layoutOf, thinkingShown } from './themes.js'
 import { draftForDisplay } from '../shared/room-draft.js'
 import { anchoredCompletions, applyScroll, pinnedToBottom, projectRelay, scrollAction, scrollGroup } from '../shared/work-line-complete.js'
+import { citeTexts, groupCitedQuotes, isPendingSteerCopy, lateCiteSentences, watchCitedHostBubbles } from '../shared/cite.js'
 import { groupUserBubble } from '../host/group-steer.js'
 
 export { clockLabel }
@@ -313,7 +314,49 @@ function GroupMessage({ bot, text, texts = [text], room, roster, actions, msgKey
 
 // A member's messages in a row, as one block under its name: what it says while it
 // works comes one message at a time. A block carries the last message's time and run.
-const citedReply = (reply) => reply?.late === true && typeof reply.quoteText === 'string' && reply.quoteText !== ''
+const citedReply = (reply) => reply?.late === true && citeTexts(reply).length > 0
+
+// The late cite already paints this sentence. A steering row or a completion
+// quote of the same words would be a second copy.
+function coveredByLateCite(replies, text) {
+  return replies.some(other => other?.late === true && citeTexts(other).includes(text))
+}
+
+// The round already paints these sentences. The host's unread pending bubble is
+// the same send sitting in the room inbox until the next step.
+function hidePendingSteerCopies(texts) {
+  if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return undefined
+  const list = Array.isArray(texts) ? texts : []
+  let frame = 0
+  const apply = () => {
+    frame = 0
+    for (const node of document.querySelectorAll('[data-pending-steering]')) {
+      // The steering row inside the relay is the copy that stays.
+      if (node.closest?.('.bt-group-replies') || node.querySelector?.('.bt-group-replies,[data-steering]')) continue
+      const duplicate = isPendingSteerCopy(node.textContent, list)
+      if (duplicate) {
+        if (node.getAttribute('data-steer-copy') !== '1') node.setAttribute('data-steer-copy', '1')
+      } else if (node.hasAttribute('data-steer-copy')) node.removeAttribute('data-steer-copy')
+    }
+  }
+  apply()
+  if (list.length === 0) return undefined
+  if (typeof document.querySelector !== 'function' || typeof MutationObserver !== 'function' || typeof requestAnimationFrame !== 'function') return undefined
+  const root = document.querySelector('[data-conversation-scroll]') ?? document.body
+  if (root == null) return undefined
+  const schedule = () => {
+    if (frame !== 0) return
+    frame = requestAnimationFrame(apply)
+  }
+  const observer = new MutationObserver(schedule)
+  observer.observe(root, { childList: true, subtree: true, characterData: true })
+  return () => {
+    observer.disconnect()
+    if (frame !== 0) cancelAnimationFrame(frame)
+    if (typeof document === 'undefined') return
+    for (const node of document.querySelectorAll('[data-pending-steering][data-steer-copy]')) node.removeAttribute('data-steer-copy')
+  }
+}
 
 export function stackReplies(replies) {
   const items = []
@@ -328,10 +371,19 @@ export function stackReplies(replies) {
   return items
 }
 
-function LateCite({ text }) {
-  return h('div', { className: 'bt-route-cite', 'data-late-cite': '' },
+function LateCite({ text, texts }) {
+  const sentences = lateCiteSentences(text, texts)
+  // The desktop draws history with its own bubble, not UserMessageCell.
+  // Hiding runs from the cite that is actually on the page.
+  useLayoutEffect(() => watchCitedHostBubbles(), [sentences.join('\n')])
+  return h('div', {
+    className: 'bt-route-cite',
+    'data-late-cite': '',
+    ...(sentences.length > 0 ? { 'data-cite-texts': JSON.stringify(sentences) } : {}),
+  },
     h('div', { className: 'bt-route-cite-label' }, t('Replying to what you wrote earlier')),
-    h('div', { className: 'bt-route-cite-text' }, text))
+    sentences.map((sentence, index) => h('div', { key: index, className: 'bt-urow' },
+      h('div', { className: 'bt-ububble' }, h(MarkdownText, { text: sentence, labels: mdLabels(), variant: 'compact' })))))
 }
 
 // A centered event line that names a group chat and opens it.
@@ -621,8 +673,9 @@ export function TriggerCell({ node, sessionId, useRoster, useSessions, useTurnCl
           bot: poster, text: file ? stripLongNote(text) : text, room, roster, actions, msgKey: `${sessionId}:post:${data.seq ?? node.key}`, useUi, time: data.time,
           whole: file ? { length: source.length, load: () => actions.fileText(file) } : undefined,
         })
-        if (source.late === true && typeof source.quoteText === 'string' && source.quoteText !== '') {
-          return h(Fragment, null, h(LateCite, { text: source.quoteText }), message)
+        const sentences = citeTexts(source)
+        if (source.late === true && sentences.length > 0) {
+          return h(Fragment, null, h(LateCite, { texts: sentences }), message)
         }
         return message
       }
@@ -976,6 +1029,11 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
     scrollLock.current = next.lockedTop
     return undefined
   }, [completeKey, rawWorkingKey, sessionId])
+  const steeringTexts = projected.replies
+    .filter(reply => reply?.kind === 'steering' && typeof reply.text === 'string' && reply.text !== '')
+    .map(reply => reply.text)
+  const steeringKey = JSON.stringify(steeringTexts)
+  useLayoutEffect(() => hidePendingSteerCopies(JSON.parse(steeringKey)), [steeringKey])
   // Members speak one at a time. A live draft replaces the bare typing row.
   const pending = done || !live.speaking || (draft?.text && draft.botId === live.speaking) ? [] : [live.speaking]
   const speakerTool = useWork?.(work => work.bots?.[live.speaking]?.tool) ?? undefined
@@ -987,10 +1045,19 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
   }
   const room = roster.roomsById[sessionId]
   return h('div', { className: 'bt-group-replies' },
-    stackReplies(projected.replies).map(({ reply, index, texts, time, duration }) => {
+    stackReplies(groupCitedQuotes(projected.replies)).map(({ reply, index, texts, time, duration }) => {
       const bot = roster.byId[reply.botId] ?? { id: reply.botId, name: reply.name, color: reply.color ?? 'gray' }
       const userBubble = groupUserBubble(reply)
+      if (reply.kind === 'completion-cite') {
+        const cited = Array.isArray(reply.texts) ? reply.texts : []
+        if (cited.length > 1 && cited.every(sentence => coveredByLateCite(projected.replies, sentence))) return null
+        return h('div', {
+          key: `complete-cite-${reply.exchangeId ?? index}`,
+          ...(reply.first === true ? { 'data-work-complete-first': '' } : {}),
+        }, h(LateCite, { texts: cited }))
+      }
       if (reply.kind === 'completion-quote') {
+        if (coveredByLateCite(projected.replies, reply.text)) return null
         return h('div', {
           key: `complete-q-${reply.exchangeId}-${index}`,
           className: reply.who === 'User' ? 'bt-urow' : 'bt-route-cite',
@@ -1016,6 +1083,7 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
         }))
       }
       if (userBubble) {
+        if (userBubble.steering && coveredByLateCite(projected.replies, reply.text)) return null
         return h('div', { key: `user-${index}`, className: 'bt-urow', ...(userBubble.steering ? { 'data-steering': true } : {}) }, h('div', { className: 'bt-ububble' },
           h(MarkdownText, { text: reply.text, labels: mdLabels(), variant: 'compact' }),
           Number.isFinite(time) ? h('div', { className: 'bt-utime', title: clockLabel(time) }, messageClock(time)) : null))
@@ -1058,7 +1126,7 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
         return h('div', { key: `${reply.botId}-${index}`, className: 'bt-event' }, t('{name} finished its work', { name: bot.name }))
       }
       const message = h(GroupMessage, { key: `${reply.botId}-${index}`, bot, texts, room, roster, actions, msgKey: callId ? `${sessionId}:${callId}:${index}` : undefined, useUi, time, duration })
-      if (citedReply(reply)) return h(Fragment, { key: `late-${reply.botId}-${index}` }, h(LateCite, { text: reply.quoteText }), message)
+      if (citedReply(reply)) return h(Fragment, { key: `late-${reply.botId}-${index}` }, h(LateCite, { texts: citeTexts(reply) }), message)
       return message
     }),
     draft?.text ? (() => {

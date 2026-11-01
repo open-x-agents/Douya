@@ -8,6 +8,7 @@
 // fails either check is dropped, and an answer with no surviving claim refuses instead of
 // guessing. Nothing here touches the network or writes anything.
 
+import { labelOf } from '../sources/composio/registry.js'
 import { overlap, tokens } from './threads.js'
 
 export const DEFAULT_BUDGET_MS = 3_000
@@ -47,7 +48,9 @@ export function sourceLabel(source) {
   if (raw === '') return ''
   if (raw.startsWith('composio:')) {
     const toolkit = trimmed(raw.split(':')[1])
-    return (SOURCE_LABELS[toolkit] ?? toolkit) || 'Composio'
+    // The name comes from the registry row, so adding an app never edits this file; only a
+    // toolkit the registry does not know falls back to its own slug.
+    return (labelOf(toolkit) ?? SOURCE_LABELS[toolkit] ?? toolkit) || 'Composio'
   }
   return SOURCE_LABELS[raw.split(':')[0]] ?? raw.split(':')[0]
 }

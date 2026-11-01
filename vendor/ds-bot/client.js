@@ -3581,6 +3581,12 @@ div:has(> nav [class*="_marks"]){display:none!important}
    the host's bubble surface alone would otherwise leave the text unreadable. */
 [class*="_userRow"] [class*="_bubble"],[data-chat-flow-kind=question-reply] [class*="_bubble"],[data-chat-flow-kind=command-input] [class*="_bubble"]{background:var(--bt-user)!important;color:var(--bt-user-ink)!important;border-radius:18px!important;padding:7px 12px!important;font-size:var(--dsh-content-font-size,14px)!important;line-height:calc(var(--dsh-content-font-size,14px) + 8px)!important}
 [class*="_userRow"] [class*="_bubble"] [class*="_markdown"],[class*="_userRow"] [class*="_bubble"] a{color:inherit}
+/* A one-line send is one line. The host paints it as a paragraph in its bubble, and
+   that paragraph's own margin is a blank second line unless it is reset the way a
+   Bot bubble's paragraph already is. */
+[class*="_userRow"] [class*="_bubble"] [class*="_markdown"],[data-chat-flow-kind=question-reply] [class*="_bubble"] [class*="_markdown"],[data-chat-flow-kind=command-input] [class*="_bubble"] [class*="_markdown"]{font-size:inherit!important;line-height:inherit!important}
+[class*="_userRow"] [class*="_bubble"] p,[data-chat-flow-kind=question-reply] [class*="_bubble"] p,[data-chat-flow-kind=command-input] [class*="_bubble"] p{margin:0;line-height:inherit!important}
+[class*="_userRow"] [class*="_bubble"] p+p,[data-chat-flow-kind=question-reply] [class*="_bubble"] p+p,[data-chat-flow-kind=command-input] [class*="_bubble"] p+p{margin-top:6px}
 /* Sent messages get the hover toolbar below; steering and unsent bubbles keep none. */
 [class*="_userRow"] [class*="_actions"]{display:none!important}
 /* A steering message the Bot has not read yet shows a small unread label under
@@ -3588,6 +3594,12 @@ div:has(> nav [class*="_marks"]){display:none!important}
    the none fallback means no English can leak into a Chinese window. */
 [data-pending-steering]{flex-wrap:wrap}
 [data-pending-steering]::after{content:var(--bt-steer-unread,none);display:block;flex-basis:100%;width:100%;order:99;margin-top:4px;font-size:11px;line-height:14px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+[data-pending-steering][data-steer-copy]{display:none!important}
+[class*="_flowItem"]:has([data-pending-steering][data-steer-copy]){display:none!important}
+/* A late cite paints the sentence as the user's bubble. The host's earlier
+   copy of that send is the history bubble; it is not .bt-umsg on this desktop. */
+[data-cited-history]{display:none!important}
+[class*="_flowItem"]:has([data-cited-history]){display:none!important}
 [data-chat-flow-kind=user] [class*="_userRow"]{flex-direction:row-reverse;align-items:center;justify-content:flex-start}
 [data-chat-flow-kind=user] [class*="_actions"]{display:flex!important;height:24px!important;gap:2px!important;opacity:0!important;visibility:hidden;transition:opacity .12s ease,visibility .12s!important;flex:none}
 [data-chat-flow-kind=user] [class*="_userRow"]:hover [class*="_actions"],[data-chat-flow-kind=user] [class*="_userRow"]:focus-within [class*="_actions"]{opacity:1!important;visibility:visible}
@@ -3672,7 +3684,11 @@ div:has(> nav [class*="_marks"]){display:none!important}
 .bt-route-choice[data-highlight]{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--bt-accent) 45%,transparent)}
 .bt-route-choice-state{flex:none;color:var(--bt-ink-3);font-size:12px}
 .bt-route-miss{margin:8px 0 0;color:var(--bt-ink-3);font-size:12px;line-height:16px}
-.bt-route-cite{display:flex;flex-direction:column;gap:2px;max-width:min(550px,86%);margin:6px 0}
+/* The cite is the Bot quoting history, so it sits on the left. Its row is as wide as
+   the column: a shrink-wrapped row lets max-width:80% fold a short sentence in half.
+   A message the user sent keeps .bt-urow, which stays on the right. */
+.bt-route-cite{display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;margin:6px 0}
+.bt-route-cite .bt-urow{justify-content:flex-start;width:100%}
 .bt-route-cite-label{color:var(--bt-ink-3);font-size:12px;line-height:16px}
 .bt-route-cite-text{color:var(--bt-ink);font-size:14px;line-height:22px}
 `;
@@ -7873,6 +7889,432 @@ function draftForDisplay(draft, replies = []) {
   return kept;
 }
 
+// src/shared/cite.js
+function asCite(item) {
+  if (typeof item === "string") return item === "" ? void 0 : { text: item };
+  if (item == null || typeof item !== "object") return void 0;
+  const text = typeof item.quoteText === "string" && item.quoteText !== "" ? item.quoteText : typeof item.text === "string" && item.text !== "" ? item.text : "";
+  if (text === "") return void 0;
+  const seq = typeof item.quoteSeq === "number" && Number.isFinite(item.quoteSeq) ? item.quoteSeq : typeof item.seq === "number" && Number.isFinite(item.seq) ? item.seq : void 0;
+  const roomId = typeof item.quoteRoomId === "string" && item.quoteRoomId !== "" ? item.quoteRoomId : typeof item.roomId === "string" && item.roomId !== "" ? item.roomId : void 0;
+  return {
+    text,
+    ...seq !== void 0 ? { seq } : {},
+    ...roomId !== void 0 ? { roomId } : {}
+  };
+}
+function citeItem(source) {
+  return asCite(source);
+}
+function sameCite(left, right) {
+  const leftSeq = typeof left.seq === "number";
+  const rightSeq = typeof right.seq === "number";
+  if (leftSeq && rightSeq) return left.seq === right.seq && (left.roomId ?? "") === (right.roomId ?? "");
+  return left.text === right.text;
+}
+function appendCite(list, item) {
+  const cite = asCite(item);
+  const base = Array.isArray(list) ? list.filter((other) => other != null) : [];
+  if (cite === void 0) return base.slice();
+  if (base.some((other) => sameCite(asCite(other) ?? { text: "" }, cite))) return base.slice();
+  return [...base, cite];
+}
+function mergeCites(left, right) {
+  let out = [];
+  for (const item of [...Array.isArray(left) ? left : [], ...Array.isArray(right) ? right : []]) {
+    out = appendCite(out, item);
+  }
+  return out;
+}
+function sameOpening(item, opening) {
+  if (item == null || opening == null || typeof opening !== "object") return false;
+  const seq = typeof opening.seq === "number" && Number.isFinite(opening.seq) ? opening.seq : typeof opening.quoteSeq === "number" && Number.isFinite(opening.quoteSeq) ? opening.quoteSeq : void 0;
+  const roomId = typeof opening.roomId === "string" && opening.roomId !== "" ? opening.roomId : typeof opening.quoteRoomId === "string" && opening.quoteRoomId !== "" ? opening.quoteRoomId : void 0;
+  if (seq === void 0 || roomId === void 0) return false;
+  return item.seq === seq && (item.roomId ?? "") === roomId;
+}
+function visibleRoomCites(info, steers, opening) {
+  const follow = [];
+  for (const item of Array.isArray(steers) ? steers : []) {
+    const cite = asCite(item);
+    if (cite !== void 0) follow.push(cite);
+  }
+  if (follow.length === 0) return citesOf(info);
+  const trigger = citesOf(info).filter((item) => !sameOpening(item, opening));
+  return mergeCites(trigger, follow);
+}
+function citeCarrier(info, quotes) {
+  const list = [];
+  for (const item of Array.isArray(quotes) ? quotes : []) {
+    const cite = asCite(item);
+    if (cite !== void 0) list.push(cite);
+  }
+  if (list.length === 0) return info;
+  const next = { ...info ?? {} };
+  delete next.quoteText;
+  delete next.quoteSeq;
+  delete next.quoteRoomId;
+  next.quotes = list;
+  return next;
+}
+function citesOf(info) {
+  if (info == null || typeof info !== "object") return [];
+  const listed = Array.isArray(info.quotes) ? info.quotes : [];
+  const flat = asCite({ quoteText: info.quoteText, quoteSeq: info.quoteSeq, quoteRoomId: info.quoteRoomId });
+  return mergeCites(listed, flat === void 0 ? [] : [flat]);
+}
+function lateCite(info) {
+  const list = citesOf(info);
+  if (list.length === 0) return {};
+  const first = list[0];
+  const cite = { quoteText: first.text };
+  if (typeof first.seq === "number") cite.quoteSeq = first.seq;
+  if (typeof first.roomId === "string") cite.quoteRoomId = first.roomId;
+  if (list.length > 1) cite.quotes = list;
+  return cite;
+}
+function lateCiteSentences(text, texts2) {
+  if (Array.isArray(texts2) && texts2.length > 0) {
+    return texts2.filter((sentence) => typeof sentence === "string" && sentence !== "");
+  }
+  return typeof text === "string" && text !== "" ? [text] : [];
+}
+function escapeCiteText(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function escapeAttr(text) {
+  return text.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function lateCiteHtml(texts2) {
+  const sentences = lateCiteSentences(void 0, texts2);
+  const bubbles = sentences.map((sentence) => `<div class="bt-urow"><div class="bt-ububble">${escapeCiteText(sentence)}</div></div>`).join("");
+  const marked = sentences.length > 0 ? ` data-cite-texts="${escapeAttr(JSON.stringify(sentences))}"` : "";
+  return `<div class="bt-route-cite" data-late-cite=""${marked}>${bubbles}</div>`;
+}
+function groupCitedQuotes(replies) {
+  const rows2 = Array.isArray(replies) ? replies : [];
+  const out = [];
+  let batch = [];
+  const flush = () => {
+    if (batch.length === 0) return;
+    if (batch.length === 1) out.push(batch[0]);
+    else {
+      const first = batch[0];
+      out.push({
+        kind: "completion-cite",
+        ...first.exchangeId !== void 0 ? { exchangeId: first.exchangeId } : {},
+        ...first.workLineId !== void 0 ? { workLineId: first.workLineId } : {},
+        texts: batch.map((row) => row.text).filter((text) => typeof text === "string" && text !== ""),
+        ...batch.some((row) => row.first === true) ? { first: true } : {},
+        ...first.completedAt !== void 0 ? { completedAt: first.completedAt } : {}
+      });
+    }
+    batch = [];
+  };
+  for (const reply of rows2) {
+    if (reply?.kind === "completion-quote" && reply.who === "User") batch.push(reply);
+    else {
+      flush();
+      out.push(reply);
+    }
+  }
+  flush();
+  return out;
+}
+function steeredReplyPost({ cites = [], shown = false, calls = false } = {}) {
+  const list = [];
+  for (const item of Array.isArray(cites) ? cites : []) {
+    const cite = asCite(item);
+    if (cite !== void 0) list.push(cite);
+  }
+  const late = shown !== true && list.length > 1;
+  return {
+    quiet: calls !== true,
+    ...late ? { late: true, ...lateCite({ quotes: list }) } : {}
+  };
+}
+function citeTexts(source) {
+  if (Array.isArray(source?.quotes) && source.quotes.length > 0) {
+    return source.quotes.map((item) => typeof item === "string" ? item : item?.text).filter((text) => typeof text === "string" && text !== "");
+  }
+  return typeof source?.quoteText === "string" && source.quoteText !== "" ? [source.quoteText] : [];
+}
+function logQuotes(named, roomId) {
+  const list = Array.isArray(named?.quotes) ? named.quotes : [];
+  if (list.length <= 1) return [];
+  const fallback = typeof roomId === "string" && roomId !== "" ? roomId : void 0;
+  const out = [];
+  for (const item of list) {
+    if (typeof item?.seq !== "number" || !Number.isFinite(item.seq)) continue;
+    const where = typeof item.roomId === "string" && item.roomId !== "" ? item.roomId : fallback;
+    if (where === void 0) continue;
+    out.push({ roomId: where, seq: item.seq });
+  }
+  return out.length > 1 ? out : [];
+}
+function logPointer(named, roomId) {
+  const fallback = typeof named?.quoteRoomId === "string" && named.quoteRoomId !== "" ? named.quoteRoomId : typeof roomId === "string" && roomId !== "" ? roomId : void 0;
+  const pointer = typeof named?.quoteSeq === "number" && Number.isFinite(named.quoteSeq) && fallback !== void 0 ? { quote: { roomId: fallback, seq: named.quoteSeq } } : {};
+  const quotes = logQuotes(named, fallback);
+  return quotes.length > 1 ? { ...pointer, quotes } : pointer;
+}
+function citeForPost(cite, steerCites) {
+  if (citesOf(cite).length > 0) return lateCite(cite);
+  if (Array.isArray(steerCites) && steerCites.length > 0) return lateCite({ quotes: steerCites });
+  return {};
+}
+function steerSentence(room2, { text = "", quoteText, quoteSeq, quoteRoomId } = {}) {
+  const sentence = typeof quoteText === "string" && quoteText !== "" ? quoteText : typeof text === "string" ? text : "";
+  if (sentence === "") return void 0;
+  let seq = typeof quoteSeq === "number" && Number.isFinite(quoteSeq) ? quoteSeq : void 0;
+  const where = typeof quoteRoomId === "string" && quoteRoomId !== "" ? quoteRoomId : typeof room2?.id === "string" && room2.id !== "" ? room2.id : void 0;
+  if (seq === void 0 && Array.isArray(room2?.log)) {
+    for (let index = room2.log.length - 1; index >= 0; index -= 1) {
+      const row = room2.log[index];
+      if (row?.who === "User" && row.kind == null && row.text === sentence && typeof row.seq === "number" && Number.isFinite(row.seq)) {
+        seq = row.seq;
+        break;
+      }
+    }
+  }
+  return asCite({
+    text: sentence,
+    ...seq !== void 0 ? { seq } : {},
+    ...where !== void 0 ? { roomId: where } : {}
+  });
+}
+function applyLogPointer(log, pointer, options = {}) {
+  if (pointer == null || pointer.quote == null) return -1;
+  const rows2 = Array.isArray(log) ? log : [];
+  const minSeq = typeof options.minSeq === "number" && Number.isFinite(options.minSeq) ? options.minSeq : void 0;
+  for (let index = rows2.length - 1; index >= 0; index -= 1) {
+    const row = rows2[index];
+    if (row == null || typeof row !== "object") continue;
+    if (row.botId == null || row.kind != null) continue;
+    if (typeof row.text !== "string" || row.text === "") continue;
+    if (minSeq !== void 0 && typeof row.seq === "number" && row.seq < minSeq) continue;
+    row.quote = pointer.quote;
+    if (Array.isArray(pointer.quotes) && pointer.quotes.length > 1) row.quotes = pointer.quotes;
+    else delete row.quotes;
+    return index;
+  }
+  return -1;
+}
+function markSteeredRow(log, { seq, messageId, text } = {}) {
+  const rows2 = Array.isArray(log) ? log : [];
+  let row;
+  if (typeof seq === "number" && Number.isFinite(seq)) {
+    row = rows2.find((item) => item?.seq === seq && item?.who === "User" && item.kind == null);
+  }
+  if (row == null && typeof messageId === "string" && messageId !== "") {
+    row = rows2.find((item) => item?.messageId === messageId && item?.who === "User" && item.kind == null);
+  }
+  if (row == null && typeof text === "string" && text !== "") {
+    for (let index = rows2.length - 1; index >= 0; index -= 1) {
+      const item = rows2[index];
+      if (item?.who === "User" && item.kind == null && item.text === text) {
+        row = item;
+        break;
+      }
+    }
+  }
+  const passedId = typeof messageId === "string" && messageId !== "" ? messageId : void 0;
+  if (row == null) return { changed: false, ...passedId !== void 0 ? { messageId: passedId } : {} };
+  let changed = row.steered !== true;
+  if (changed) row.steered = true;
+  if (passedId !== void 0 && row.messageId !== passedId && (typeof row.messageId !== "string" || row.messageId === "")) {
+    row.messageId = passedId;
+    changed = true;
+  }
+  const id = typeof row.messageId === "string" && row.messageId !== "" ? row.messageId : passedId;
+  return { changed, ...id !== void 0 ? { messageId: id } : {} };
+}
+function steerCopyText(raw) {
+  return String(raw ?? "").replace(/\u00a0/g, " ").replace(/\s*(?:未读|Not read yet)\s*$/u, "").trim();
+}
+function isPendingSteerCopy(raw, steeringTexts) {
+  const text = steerCopyText(raw);
+  const list = (Array.isArray(steeringTexts) ? steeringTexts : []).filter((item) => typeof item === "string" && item !== "");
+  if (text === "" || list.length === 0) return false;
+  if (list.includes(text)) return true;
+  return text.split(/\n+/).map((line) => steerCopyText(line)).some((line) => line !== "" && list.includes(line));
+}
+function citedFromLog(log, roomId) {
+  const rows2 = Array.isArray(log) ? log : [];
+  const texts2 = [];
+  const ids = [];
+  const seenText = /* @__PURE__ */ new Set();
+  const seenId = /* @__PURE__ */ new Set();
+  const add = (row) => {
+    if (row == null || row.who !== "User" || row.kind != null) return;
+    if (typeof row.text === "string" && row.text !== "" && !seenText.has(row.text)) {
+      seenText.add(row.text);
+      texts2.push(row.text);
+    }
+    if (typeof row.messageId === "string" && row.messageId !== "" && !seenId.has(row.messageId)) {
+      seenId.add(row.messageId);
+      ids.push(row.messageId);
+    }
+  };
+  for (const row of rows2) {
+    if (row?.steered === true) add(row);
+  }
+  for (const line of rows2) {
+    const pointers = [];
+    if (line?.quote != null && typeof line.quote === "object") pointers.push(line.quote);
+    if (Array.isArray(line?.quotes)) pointers.push(...line.quotes);
+    for (const pointer of pointers) {
+      if (typeof pointer?.seq !== "number" || !Number.isFinite(pointer.seq)) continue;
+      if (typeof roomId === "string" && roomId !== "" && typeof pointer.roomId === "string" && pointer.roomId !== "" && pointer.roomId !== roomId) continue;
+      add(rows2.find((row) => row?.seq === pointer.seq));
+    }
+  }
+  return { texts: texts2, ids };
+}
+function hideCitedHistory({ text, messageId, citedTexts, citedIds } = {}) {
+  const cited = Array.isArray(citedIds) ? citedIds : [];
+  const sentences = Array.isArray(citedTexts) ? citedTexts : [];
+  if (typeof messageId === "string" && messageId !== "" && cited.includes(messageId)) return true;
+  if (typeof messageId === "string" && messageId !== "" && cited.length > 0) return false;
+  return typeof text === "string" && text !== "" && sentences.includes(text);
+}
+var CLOCK_LINE = /^(?:\d{1,2}:\d{2}(?:\s*[AP]M)?|未读|Not read yet)$/i;
+var GLUED_TAIL = /(?:\s*(?:\d{1,2}:\d{2}(?:\s*[AP]M)?|未读|Not read yet))+$/i;
+function citeSentences(cite) {
+  const raw = cite.getAttribute?.("data-cite-texts");
+  if (typeof raw === "string" && raw !== "") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.filter((item) => typeof item === "string" && item !== "");
+    } catch {
+    }
+  }
+  const out = [];
+  for (const bubble of cite.querySelectorAll(".bt-ububble")) {
+    const text = String(bubble.textContent ?? "").replace(/\u00a0/g, " ").trim();
+    if (text !== "" && !out.includes(text)) out.push(text);
+  }
+  return out;
+}
+function candidateTexts(node) {
+  const raw = String(node?.textContent ?? "").replace(/\u00a0/g, " ").trim();
+  if (raw === "") return [];
+  const out = [];
+  const add = (value) => {
+    const text = String(value ?? "").replace(/[ \t]+/g, " ").trim();
+    if (text !== "" && !out.includes(text)) out.push(text);
+  };
+  add(raw);
+  const lines = raw.split(/\n+/).map((line) => line.trim()).filter((line) => line !== "" && !CLOCK_LINE.test(line));
+  if (lines.length === 1) add(lines[0]);
+  add(raw.replace(GLUED_TAIL, ""));
+  return out;
+}
+function isBefore(node, other) {
+  if (node == null || other == null || typeof node.compareDocumentPosition !== "function") return false;
+  const following = node.DOCUMENT_POSITION_FOLLOWING ?? 4;
+  return (node.compareDocumentPosition(other) & following) !== 0;
+}
+function userRow(node) {
+  return node.closest?.('[data-chat-flow-kind="user"]') ?? node.closest?.(".bt-umsg") ?? node.closest?.("[data-pending-steering]") ?? node.closest?.('[class*="_userRow"]') ?? null;
+}
+function hideRow(node) {
+  return node.closest?.('[class*="_flowItem"]') ?? node.closest?.('[data-chat-flow-kind="user"]') ?? node.closest?.(".bt-umsg") ?? node.closest?.("[data-pending-steering]") ?? node;
+}
+function skippedCopy(node) {
+  return node.closest?.("[data-late-cite]") != null || node.closest?.(".bt-route-dock") != null || node.closest?.("[data-route-dock]") != null;
+}
+function hideCitedHostBubbles(doc = globalThis.document) {
+  if (doc == null || typeof doc.querySelectorAll !== "function") return 0;
+  const cites = [...doc.querySelectorAll("[data-late-cite]")];
+  const byText = /* @__PURE__ */ new Map();
+  for (const cite of cites) {
+    for (const text of citeSentences(cite)) {
+      const list = byText.get(text) ?? [];
+      list.push(cite);
+      byText.set(text, list);
+    }
+  }
+  const roots = /* @__PURE__ */ new Set();
+  for (const cite of cites) roots.add(cite.closest?.("[data-conversation-scroll]") ?? doc.body ?? doc);
+  if (roots.size === 0) roots.add(doc.body ?? doc);
+  const hide = /* @__PURE__ */ new Set();
+  for (const root of roots) {
+    if (root == null || typeof root.querySelectorAll !== "function") continue;
+    for (const node of root.querySelectorAll("*")) {
+      if (skippedCopy(node)) continue;
+      const row = userRow(node);
+      if (row == null) continue;
+      const candidates = candidateTexts(node);
+      const text = candidates.find((item) => byText.has(item));
+      const owners = text === void 0 ? void 0 : byText.get(text);
+      if (owners == null || owners.length === 0) continue;
+      const tighter = [...node.querySelectorAll("*")].some((child) => {
+        if (skippedCopy(child) || userRow(child) == null) return false;
+        return candidateTexts(child).includes(text);
+      });
+      if (tighter) continue;
+      const citedAfter = owners.some((cite) => isBefore(node, cite));
+      const citedBefore = owners.some((cite) => isBefore(cite, node));
+      if (!citedAfter || citedBefore) continue;
+      hide.add(hideRow(node));
+    }
+  }
+  for (const root of roots) {
+    if (root == null || typeof root.querySelectorAll !== "function") continue;
+    for (const node of root.querySelectorAll("[data-cited-history]")) {
+      if (!hide.has(node)) node.removeAttribute("data-cited-history");
+    }
+  }
+  for (const node of hide) {
+    if (node.getAttribute?.("data-cited-history") !== "1") node.setAttribute("data-cited-history", "1");
+  }
+  return hide.size;
+}
+var citedWatchers = 0;
+var citedObserver;
+var citedFrame = 0;
+function watchCitedHostBubbles(doc = globalThis.document) {
+  if (doc == null || typeof doc.querySelectorAll !== "function") return () => {
+  };
+  citedWatchers += 1;
+  hideCitedHostBubbles(doc);
+  if (citedWatchers === 1 && typeof MutationObserver === "function") {
+    const root = (typeof doc.querySelector === "function" ? doc.querySelector("[data-conversation-scroll]") : null) ?? doc.body;
+    if (root != null) {
+      const schedule = () => {
+        if (citedFrame !== 0) return;
+        const raf = doc.defaultView?.requestAnimationFrame ?? globalThis.requestAnimationFrame;
+        if (typeof raf !== "function") {
+          hideCitedHostBubbles(doc);
+          return;
+        }
+        citedFrame = raf(() => {
+          citedFrame = 0;
+          hideCitedHostBubbles(doc);
+        });
+      };
+      citedObserver = new MutationObserver(schedule);
+      citedObserver.observe(root, { childList: true, subtree: true, characterData: true });
+    }
+  }
+  return () => {
+    citedWatchers = Math.max(0, citedWatchers - 1);
+    if (citedWatchers > 0) {
+      hideCitedHostBubbles(doc);
+      return;
+    }
+    citedObserver?.disconnect();
+    citedObserver = void 0;
+    const cancel = doc.defaultView?.cancelAnimationFrame ?? globalThis.cancelAnimationFrame;
+    if (citedFrame !== 0 && typeof cancel === "function") cancel(citedFrame);
+    citedFrame = 0;
+    if (typeof doc.querySelectorAll === "function") {
+      for (const node of doc.querySelectorAll("[data-cited-history]")) node.removeAttribute("data-cited-history");
+    }
+  };
+}
+
 // src/shared/work-line-complete.js
 var PIN_GAP = 48;
 function pinnedToBottom({ scrollTop = 0, scrollHeight = 0, clientHeight = 0, threshold = PIN_GAP } = {}) {
@@ -7926,13 +8368,6 @@ function quoteSentence(quote, logs) {
   if (row == null || row.who !== "User" || row.kind != null) return "";
   return typeof row.text === "string" && row.text !== "" ? row.text : "";
 }
-function lateCite(info) {
-  if (typeof info?.quoteText !== "string" || info.quoteText === "") return {};
-  const cite = { quoteText: info.quoteText };
-  if (typeof info.quoteSeq === "number" && Number.isFinite(info.quoteSeq)) cite.quoteSeq = info.quoteSeq;
-  if (typeof info.quoteRoomId === "string" && info.quoteRoomId !== "") cite.quoteRoomId = info.quoteRoomId;
-  return cite;
-}
 var eventRoom = (event) => {
   if (hasId(event?.roomId)) return event.roomId;
   if (hasId(event?.quote?.roomId)) return event.quote.roomId;
@@ -7949,6 +8384,11 @@ function orderedCompletions(events, { roomId, logs } = {}) {
     const fromLog = quoteSentence(event.quote, logs);
     const quoteText = fromLog !== "" ? fromLog : typeof event.quoteText === "string" ? event.quoteText : "";
     const replyText = typeof event.reply === "string" ? event.reply : typeof event.replyText === "string" ? event.replyText : "";
+    const quotes = Array.isArray(event.quotes) ? event.quotes.filter((item) => typeof item?.text === "string" && item.text !== "").map((item) => ({
+      text: item.text,
+      ...typeof item.seq === "number" && Number.isFinite(item.seq) ? { seq: item.seq } : {},
+      ...typeof item.roomId === "string" && item.roomId !== "" ? { roomId: item.roomId } : {}
+    })) : [];
     return {
       exchangeId: event.exchangeId,
       workLineId: event.workLineId,
@@ -7956,6 +8396,7 @@ function orderedCompletions(events, { roomId, logs } = {}) {
       roomId: eventRoom(event),
       completedAt: event.completedAt,
       quoteText,
+      ...quotes.length > 1 ? { quotes } : {},
       replyText
     };
   });
@@ -7997,17 +8438,20 @@ function scrollGroup({ replies = [], completions = [] } = {}) {
   const item = completions[0];
   return (Array.isArray(replies) ? replies : []).some((row) => row?.kind === "working" && !isWorkingRow(row, item, completions));
 }
-var quoteRow = (item) => {
-  if (item.quoteText === "") return void 0;
-  return {
-    kind: "completion-quote",
-    exchangeId: item.exchangeId,
-    workLineId: item.workLineId,
-    who: "User",
-    text: item.quoteText,
-    completedAt: item.completedAt
-  };
+var quoteTextsOf = (item) => {
+  if (Array.isArray(item?.quotes) && item.quotes.length > 1) {
+    return item.quotes.map((entry) => typeof entry === "string" ? entry : entry?.text).filter((text) => typeof text === "string" && text !== "");
+  }
+  return typeof item?.quoteText === "string" && item.quoteText !== "" ? [item.quoteText] : [];
 };
+var quoteRows = (item) => quoteTextsOf(item).map((text) => ({
+  kind: "completion-quote",
+  exchangeId: item.exchangeId,
+  workLineId: item.workLineId,
+  who: "User",
+  text,
+  completedAt: item.completedAt
+}));
 var replyRow = (item) => {
   if (item.replyText === "") return void 0;
   return {
@@ -8021,9 +8465,9 @@ var replyRow = (item) => {
 };
 var itemRows = (item, anchor) => {
   const rows2 = [];
-  const quote = quoteRow(item);
+  const quotes = quoteRows(item);
   const reply = replyRow(item);
-  if (quote !== void 0) rows2.push(quote);
+  if (quotes.length > 0) rows2.push(...quotes);
   if (reply !== void 0) rows2.push(reply);
   if (anchor && rows2[0] !== void 0) rows2[0].first = true;
   return rows2;
@@ -8047,10 +8491,10 @@ var projectSingle = (replies, draft, item) => {
     kept.push(reply);
   }
   if (postedAt >= 0) {
-    const quote = quoteRow(item);
-    if (quote !== void 0) {
-      quote.first = true;
-      kept.splice(postedAt, 0, quote);
+    const quotes = quoteRows(item);
+    if (quotes.length > 0) {
+      quotes[0].first = true;
+      kept.splice(postedAt, 0, ...quotes);
     }
   } else {
     const at = workingAt < 0 ? kept.length : workingAt;
@@ -8521,7 +8965,42 @@ function GroupMessage({ bot, text, texts: texts2 = [text], room: room2, roster, 
     (0, import_react17.createElement)(Bubbles, { texts: texts2, roster, selfId: bot.id, actions, streaming, sessionId: room2?.id, msgKey, useUi, lead: flat ? null : lead, whole })
   );
 }
-var citedReply = (reply) => reply?.late === true && typeof reply.quoteText === "string" && reply.quoteText !== "";
+var citedReply = (reply) => reply?.late === true && citeTexts(reply).length > 0;
+function coveredByLateCite(replies, text) {
+  return replies.some((other) => other?.late === true && citeTexts(other).includes(text));
+}
+function hidePendingSteerCopies(texts2) {
+  if (typeof document === "undefined" || typeof document.querySelectorAll !== "function") return void 0;
+  const list = Array.isArray(texts2) ? texts2 : [];
+  let frame = 0;
+  const apply2 = () => {
+    frame = 0;
+    for (const node of document.querySelectorAll("[data-pending-steering]")) {
+      if (node.closest?.(".bt-group-replies") || node.querySelector?.(".bt-group-replies,[data-steering]")) continue;
+      const duplicate = isPendingSteerCopy(node.textContent, list);
+      if (duplicate) {
+        if (node.getAttribute("data-steer-copy") !== "1") node.setAttribute("data-steer-copy", "1");
+      } else if (node.hasAttribute("data-steer-copy")) node.removeAttribute("data-steer-copy");
+    }
+  };
+  apply2();
+  if (list.length === 0) return void 0;
+  if (typeof document.querySelector !== "function" || typeof MutationObserver !== "function" || typeof requestAnimationFrame !== "function") return void 0;
+  const root = document.querySelector("[data-conversation-scroll]") ?? document.body;
+  if (root == null) return void 0;
+  const schedule = () => {
+    if (frame !== 0) return;
+    frame = requestAnimationFrame(apply2);
+  };
+  const observer = new MutationObserver(schedule);
+  observer.observe(root, { childList: true, subtree: true, characterData: true });
+  return () => {
+    observer.disconnect();
+    if (frame !== 0) cancelAnimationFrame(frame);
+    if (typeof document === "undefined") return;
+    for (const node of document.querySelectorAll("[data-pending-steering][data-steer-copy]")) node.removeAttribute("data-steer-copy");
+  };
+}
 function stackReplies(replies) {
   const items = [];
   replies.forEach((reply, index) => {
@@ -8534,12 +9013,22 @@ function stackReplies(replies) {
   });
   return items;
 }
-function LateCite({ text }) {
+function LateCite({ text, texts: texts2 }) {
+  const sentences = lateCiteSentences(text, texts2);
+  (0, import_react17.useLayoutEffect)(() => watchCitedHostBubbles(), [sentences.join("\n")]);
   return (0, import_react17.createElement)(
     "div",
-    { className: "bt-route-cite", "data-late-cite": "" },
+    {
+      className: "bt-route-cite",
+      "data-late-cite": "",
+      ...sentences.length > 0 ? { "data-cite-texts": JSON.stringify(sentences) } : {}
+    },
     (0, import_react17.createElement)("div", { className: "bt-route-cite-label" }, t("Replying to what you wrote earlier")),
-    (0, import_react17.createElement)("div", { className: "bt-route-cite-text" }, text)
+    sentences.map((sentence, index) => (0, import_react17.createElement)(
+      "div",
+      { key: index, className: "bt-urow" },
+      (0, import_react17.createElement)("div", { className: "bt-ububble" }, (0, import_react17.createElement)(import_dsh_client_ui_primitives.MarkdownText, { text: sentence, labels: mdLabels3(), variant: "compact" }))
+    ))
   );
 }
 function GroupEvent({ prefix, room: room2, name, roster, actions }) {
@@ -8803,8 +9292,9 @@ function TriggerCell({ node, sessionId, useRoster, useSessions, useTurnClock, us
           time: data.time,
           whole: file ? { length: source.length, load: () => actions.fileText(file) } : void 0
         });
-        if (source.late === true && typeof source.quoteText === "string" && source.quoteText !== "") {
-          return (0, import_react17.createElement)(import_react17.Fragment, null, (0, import_react17.createElement)(LateCite, { text: source.quoteText }), message);
+        const sentences = citeTexts(source);
+        if (source.late === true && sentences.length > 0) {
+          return (0, import_react17.createElement)(import_react17.Fragment, null, (0, import_react17.createElement)(LateCite, { texts: sentences }), message);
         }
         return message;
       }
@@ -9138,6 +9628,9 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
     scrollLock.current = next.lockedTop;
     return void 0;
   }, [completeKey, rawWorkingKey, sessionId]);
+  const steeringTexts = projected.replies.filter((reply) => reply?.kind === "steering" && typeof reply.text === "string" && reply.text !== "").map((reply) => reply.text);
+  const steeringKey = JSON.stringify(steeringTexts);
+  (0, import_react17.useLayoutEffect)(() => hidePendingSteerCopies(JSON.parse(steeringKey)), [steeringKey]);
   const pending = done || !live.speaking || draft?.text && draft.botId === live.speaking ? [] : [live.speaking];
   const speakerTool = useWork?.((work) => work.bots?.[live.speaking]?.tool) ?? void 0;
   const speakerDoing = useWork?.((work) => work.bots?.[live.speaking]?.tool ? workPhrase(work.bots[live.speaking]) : void 0) ?? void 0;
@@ -9148,10 +9641,19 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
   return (0, import_react17.createElement)(
     "div",
     { className: "bt-group-replies" },
-    stackReplies(projected.replies).map(({ reply, index, texts: texts2, time, duration }) => {
+    stackReplies(groupCitedQuotes(projected.replies)).map(({ reply, index, texts: texts2, time, duration }) => {
       const bot = roster.byId[reply.botId] ?? { id: reply.botId, name: reply.name, color: reply.color ?? "gray" };
       const userBubble = groupUserBubble(reply);
+      if (reply.kind === "completion-cite") {
+        const cited = Array.isArray(reply.texts) ? reply.texts : [];
+        if (cited.length > 1 && cited.every((sentence) => coveredByLateCite(projected.replies, sentence))) return null;
+        return (0, import_react17.createElement)("div", {
+          key: `complete-cite-${reply.exchangeId ?? index}`,
+          ...reply.first === true ? { "data-work-complete-first": "" } : {}
+        }, (0, import_react17.createElement)(LateCite, { texts: cited }));
+      }
       if (reply.kind === "completion-quote") {
+        if (coveredByLateCite(projected.replies, reply.text)) return null;
         return (0, import_react17.createElement)("div", {
           key: `complete-q-${reply.exchangeId}-${index}`,
           className: reply.who === "User" ? "bt-urow" : "bt-route-cite",
@@ -9175,6 +9677,7 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
         }));
       }
       if (userBubble) {
+        if (userBubble.steering && coveredByLateCite(projected.replies, reply.text)) return null;
         return (0, import_react17.createElement)("div", { key: `user-${index}`, className: "bt-urow", ...userBubble.steering ? { "data-steering": true } : {} }, (0, import_react17.createElement)(
           "div",
           { className: "bt-ububble" },
@@ -9239,7 +9742,7 @@ function GroupReplies({ sessionId, callId, done, content, roster, actions, useUi
         return (0, import_react17.createElement)("div", { key: `${reply.botId}-${index}`, className: "bt-event" }, t("{name} finished its work", { name: bot.name }));
       }
       const message = (0, import_react17.createElement)(GroupMessage, { key: `${reply.botId}-${index}`, bot, texts: texts2, room: room2, roster, actions, msgKey: callId ? `${sessionId}:${callId}:${index}` : void 0, useUi, time, duration });
-      if (citedReply(reply)) return (0, import_react17.createElement)(import_react17.Fragment, { key: `late-${reply.botId}-${index}` }, (0, import_react17.createElement)(LateCite, { text: reply.quoteText }), message);
+      if (citedReply(reply)) return (0, import_react17.createElement)(import_react17.Fragment, { key: `late-${reply.botId}-${index}` }, (0, import_react17.createElement)(LateCite, { texts: citeTexts(reply) }), message);
       return message;
     }),
     draft?.text ? (() => {
@@ -20783,6 +21286,13 @@ function UserMessageCell({ node, sessionId, useRoster, actions, renderMessageIma
     if (!noHover() || event.target instanceof Element && event.target.closest("a,button,input,textarea,select,pre,code,[role=button],[role=link]")) return;
     setToolsOpen((value) => !value);
   };
+  const room2 = roster.roomsById?.[sessionId];
+  if (hideCitedHistory({
+    text,
+    messageId: typeof data.id === "string" ? data.id : void 0,
+    citedTexts: room2?.citedTexts,
+    citedIds: room2?.citedIds
+  })) return null;
   return (0, import_react52.createElement)(
     "div",
     { ref: row, className: "bt-umsg", "data-steering": steering || void 0 },
@@ -20808,6 +21318,8 @@ var USER_MESSAGE_CSS = `
 .bt-ustack{min-width:0;max-width:calc(var(--bt-msg-w) * 100%);display:flex;flex-direction:column;align-items:flex-end;gap:8px}
 .bt-ubody{max-width:100%;box-sizing:border-box;background:var(--bt-user);color:var(--bt-user-ink);border-radius:18px;padding:7px 12px;font-size:var(--dsh-content-font-size,14px);line-height:calc(var(--dsh-content-font-size,14px) + 10px);white-space:pre-wrap;word-break:break-word;text-wrap:pretty;text-autospace:normal}
 .bt-ubody a{color:inherit}
+.bt-ubody p{margin:0}
+.bt-ubody p+p{margin-top:6px}
 .bt-umention{display:inline-flex;align-items:center;gap:3px;vertical-align:-3px;max-width:100%;padding:0 1px;border:0;background:none;color:inherit;font:inherit;font-weight:600;line-height:inherit;cursor:pointer;border-radius:6px;white-space:nowrap}
 .bt-umention:hover{text-decoration:underline;text-underline-offset:2px}
 .bt-umention>:first-child{flex:none}

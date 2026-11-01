@@ -183,21 +183,28 @@ test('G1 @Chief asks with Chief lines and logs the user sentence', async () => {
   assert.equal(added[0].text, ESSAY)
 })
 
-test('G2 a sentence that is not a choice holds the card and is not logged', async () => {
+test('G2 a sentence that is not a choice stays on the card and is logged once', async () => {
   const host = essayHost()
   host.busy()
   host.emit('essay', userMessage(ESSAY))
   await flush()
   const pending = host.rt.state.pendingRoutes.essay
-  const afterAsk = JSON.stringify(host.rooms.essay.log)
   host.emit('essay', userMessage(HOLD))
   await flush()
   assert.equal(host.rt.state.pendingRoutes.essay, pending)
   assert.equal(pending.text, ESSAY)
-  assert.equal(JSON.stringify(host.rooms.essay.log), afterAsk)
-  assert.equal(host.rooms.essay.log.some(entry => entry.text === HOLD), false)
+  assert.deepEqual(pending.texts, [ESSAY, HOLD])
+  assert.equal(host.rooms.essay.log.filter(entry => entry.text === HOLD).length, 1)
   assert.equal(host.delivered.length, 0)
   assert.equal(host.steered.length, 0)
+  host.emit('essay', userMessage('chief-beach'))
+  await flush()
+  assert.equal(host.rt.state.pendingRoutes.essay, undefined)
+  assert.deepEqual(host.steered.map(item => item.message.text), [ESSAY, HOLD])
+  assert.equal(host.steered.every(item => item.member.sessionId === 'sc2'), true)
+  assert.equal(host.delivered.length, 0)
+  assert.equal(host.rooms.essay.log.filter(entry => entry.text === HOLD).length, 1)
+  assert.equal(host.rooms.essay.log.some(entry => entry.text === 'chief-beach'), false)
 })
 
 test('G3 a choice id clears the saved card before steer and is not logged', async () => {

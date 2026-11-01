@@ -269,7 +269,7 @@ export function skipsCompletion(reason, { replay = false, switched = false } = {
  * Mark the turn finished for projection. The line stays open (`closedAt` is
  * only a user close). The same exchange emits at most one event.
  */
-export function noteTurnEnd(state, { sessionId, exchangeId, turn, reason, replay = false, switched = false, now = Date.now() } = {}) {
+export function noteTurnEnd(state, { sessionId, exchangeId, turn, reason, replay = false, switched = false, now = Date.now(), quotes } = {}) {
   const line = lineBySession(state, sessionId)
   if (line === undefined) return { line: undefined, event: undefined }
   if (skipsCompletion(reason, { replay, switched })) return { line, event: undefined }
@@ -281,11 +281,19 @@ export function noteTurnEnd(state, { sessionId, exchangeId, turn, reason, replay
   seen[key] = true
   line.updatedAt = now
   const sentence = quoteSentence(line.quote, logsByRoom(state))
+  const listed = Array.isArray(quotes)
+    ? quotes.filter(item => item != null && typeof item.text === 'string' && item.text !== '').map(item => ({
+      text: item.text,
+      ...(typeof item.seq === 'number' && Number.isFinite(item.seq) ? { seq: item.seq } : {}),
+      ...(typeof item.roomId === 'string' && item.roomId !== '' ? { roomId: item.roomId } : {}),
+    }))
+    : []
   const event = {
     workLineId: line.id,
     completedAt: now,
     ...(line.quote !== undefined ? { quote: line.quote } : {}),
     ...(sentence !== '' ? { quoteText: sentence } : {}),
+    ...(listed.length > 1 ? { quotes: listed } : {}),
     exchangeId: key,
   }
   return { line, event }

@@ -9,6 +9,8 @@ import { isUserLineLogged } from './room-user-line.js'
 import { absoluteLinks } from './links.js'
 import { textOf } from './text.js'
 import { reminderText } from './schedules.js'
+import { appendCite, citeCarrier, citeItem, citesOf, mergeCites, visibleRoomCites } from '../shared/cite.js'
+import { lineBySession } from './work-lines.js'
 
 // A failed turn's `LlmFailure`, kept to what can be shown and logged. Like DSH's own
 // error row, an AUTH failure loses its message: providers may echo part of the key.
@@ -238,6 +240,8 @@ export function install(rt) {
   // package that only opens a part is acknowledged with a fixed line, also hidden.
   const claimTrigger = (sessionId, entry, info) => {
     entry.info = info
+    // The opening sentence stays first. A steer that arrived before this claim stays after it.
+    entry.cites = mergeCites(citesOf(info), entry.cites)
     // A turn that was stopped for a part switch brings its joined requests along.
     if (Array.isArray(info.joined) && info.joined.length > 0) {
       entry.joined = info.joined.filter(item => item?.info !== undefined && item.info !== null)
@@ -434,9 +438,10 @@ export function install(rt) {
       via: 'user',
     })
     // The message id rides with the queued post, so the line the relay writes for it
-    // can be matched back to the row it came from.
+    // can be matched back to the row it came from. The same id is the cite send id.
     const inboxId = typeof data?.id === 'string' && data.id !== '' ? { inboxId: data.id } : {}
     const queued = { text, ...(images.length > 0 ? { images } : {}), ...(files.length > 0 ? { files } : {}), ...inboxId }
+    const messageId = typeof data?.id === 'string' && data.id !== '' ? data.id : undefined
     if (routeTakesEffect(routed)) {
       composerSteerPending.set(roomId, rememberComposerSteer(paired.pending, text, via))
       rt.noteSteeredRoomLine?.(roomId, text)
@@ -445,8 +450,9 @@ export function install(rt) {
       rt.suppressRelayText?.(roomId, text)
       rt.holdRoomRoute?.(roomId)
       // The id goes to the route so the line it writes is this row, and the row leaves
-      // the inbox only once that line is really in the log: `hold` writes none.
-      const applied = rt.applyRouteDecision?.(room, routed, { text: routed.text ?? text, files, ...inboxId })
+      // the inbox only once that line is really in the log. A hold that keepHeld
+      // writes is logged, so that copy can leave; a hold that writes nothing stays.
+      const applied = rt.applyRouteDecision?.(room, routed, { text: routed.text ?? text, files, ...inboxId, ...(messageId !== undefined ? { id: messageId } : {}) })
       void Promise.resolve(applied)
         .then(() => {
           if (inboxId.inboxId !== undefined && isUserLineLogged(room.log, inboxId.inboxId)) dropInboxLine(roomId, inboxId.inboxId)
@@ -468,7 +474,7 @@ export function install(rt) {
         if (canSteer) {
           composerSteerPending.set(roomId, rememberComposerSteer(paired.pending, text, via))
           rt.noteSteeredRoomLine?.(roomId, text)
-          void rt.acceptRoomSteer(room, decision.member, { text, files }).catch(error => rt.warn('ds-bot: group steer failed: %s', error))
+          void rt.acceptRoomSteer(room, decision.member, { text, files, ...(messageId !== undefined ? { messageId } : {}) }).catch(error => rt.warn('ds-bot: group steer failed: %s', error))
           return
         }
         if (via === 'splice') return
@@ -487,6 +493,16 @@ export function install(rt) {
         throw new Error(`Unknown room steer action ${String(unexpected)}`)
       }
     }
+  }
+
+  // A follow-up steered into this turn is part of the same reply's cite.
+  // It is not a joined request: joining would open another turn for that sentence.
+  const rememberSteerCite = (entry, source) => {
+    if (entry.turn === undefined || source?.userSteer !== true) return
+    const item = citeItem(source)
+    if (item === undefined) return
+    entry.steers = appendCite(entry.steers, item)
+    entry.cites = appendCite(mergeCites(citesOf(entry.info), entry.cites), item)
   }
 
   const noteTurnFailure = (id, failure) => {
@@ -540,6 +556,8 @@ export function install(rt) {
         entry.shown = 0
         entry.step = undefined
         entry.info = undefined
+        entry.cites = undefined
+        entry.steers = undefined
         // A turn turned away before its first step may end without a turn/end.
         entry.switched = false
         entry.answers = false
@@ -592,6 +610,10 @@ export function install(rt) {
             ...(source.late ? { late: true } : {}),
             ...(source.progress ? { progress: true } : {}),
             ...(source.quiet ? { quiet: true } : {}),
+            ...(typeof source.quoteText === 'string' && source.quoteText !== '' ? { quoteText: source.quoteText } : {}),
+            ...(typeof source.quoteSeq === 'number' && Number.isFinite(source.quoteSeq) ? { quoteSeq: source.quoteSeq } : {}),
+            ...(typeof source.quoteRoomId === 'string' && source.quoteRoomId !== '' ? { quoteRoomId: source.quoteRoomId } : {}),
+            ...(Array.isArray(source.quotes) && source.quotes.length > 0 ? { quotes: source.quotes } : {}),
             ...(source.failed ? { failed: source.failed } : {}),
             ...(source.resumed ? { resumed: true } : {}),
             ...(source.again ? { again: true } : {}),
@@ -608,7 +630,9 @@ export function install(rt) {
           queueRoomMessage(id, { text: '', resume: true })
         } else if (source?.kind === SOURCE_KIND) {
           if (entry.turn === undefined) entry.pending = source
-          else if (!opened) claimTrigger(id, entry, source)
+          // A follow-up steered into a turn that already has its trigger is another
+          // sentence of the same cite. Claiming it would keep only that sentence.
+          else if (!opened && source.userSteer !== true) claimTrigger(id, entry, source)
           else if (source.work !== undefined && source.work !== rt.workOf?.(entry.info) && !expectsReply(source)) {
             // A result for other work than this turn's informs it, and comes back in a
             // turn of its own once this one ends, which goes on with that work.
@@ -624,6 +648,7 @@ export function install(rt) {
             const text = textOf(event.data.content).replace(/^\[(?:[^\r\n]*\]\r?\n|[^\]\r\n]*\])/, '')
             entry.joined = [...(entry.joined ?? []), { info: source, text }]
           }
+          rememberSteerCite(entry, source)
           // A mid-turn relay that owes no reply only informs the turn: it neither
           // claims the running turn nor queues as the next one's trigger.
         } else if (source?.kind === 'schedule' && rt.roomOf(id)) {
@@ -653,8 +678,11 @@ export function install(rt) {
         // A message the user steered into the running turn is fresh input, like
         // a send that never queued.
         const inserted = (event.data?.inserted ?? []).filter(message => message?.source?.kind === 'user')
-        if (event.data?.target === 'next-step' && entry.turn !== undefined && inserted.length > 0) {
-          entry.steeredAt = event.time ?? Date.now()
+        if (event.data?.target === 'next-step' && entry.turn !== undefined) {
+          for (const message of event.data?.inserted ?? []) {
+            if (message?.source?.userSteer === true) rememberSteerCite(entry, message.source)
+          }
+          if (inserted.length > 0) entry.steeredAt = event.time ?? Date.now()
         }
         // busyEnter=steer calls agent.steer on the room session. The line is in
         // next-step immediately; user/message waits until that session's next
@@ -700,6 +728,12 @@ export function install(rt) {
         // The unshown remainder is what the group still posts. It rides on the
         // in-memory completion only; the work line itself stays metadata.
         const reply = texts.join('\n\n').trim()
+        // The opening sentence first, then any follow-up steered into this same turn.
+        // A follow-up into a line that already had a prompt cites the follow-ups only.
+        const steers = Array.isArray(entry.steers) ? entry.steers : []
+        const opening = lineBySession(rt.state, id)?.quote
+        const cites = steers.length > 0 ? visibleRoomCites(info, steers, opening) : mergeCites(entry.cites, citesOf(info))
+        const citedInfo = steers.length > 0 ? citeCarrier(info, cites) : (cites.length === 0 ? info : { ...(info ?? {}), quotes: cites })
         // Idle is the absence of this turn. A resume replay or a part switch does
         // not emit a second completion for the same exchange.
         rt.noteWorkTurnEnd?.({
@@ -710,9 +744,12 @@ export function install(rt) {
           switched,
           now: event.time ?? Date.now(),
           ...(reply !== '' ? { reply } : {}),
+          ...(cites.length > 1 ? { quotes: cites } : {}),
         })
         entry.turn = undefined
         entry.info = undefined
+        entry.cites = undefined
+        entry.steers = undefined
         entry.texts = []
         entry.shown = 0
         entry.step = undefined
@@ -797,14 +834,14 @@ export function install(rt) {
           } else if (!stopped && reason?.kind !== 'aborted') {
             // The round moved on without this member; how its turn ends still reaches the group.
             if (failure !== undefined) void rt.lateRoomFailure?.(id, info, failure)
-            else void rt.lateRoomReply?.(id, info, groupReply(), { shown })
+            else void rt.lateRoomReply?.(id, citedInfo, groupReply(), { shown })
           }
         } else if (!retry && speaksInGroup(id, info)) {
           // A turn that failed before it took any input (DSH can turn it down before its
           // first step) never names its call, so the call waiting on this Session fails.
           const inRound = failure !== undefined && info === undefined && rt.failRoomTurn?.(id, failure) === true
           if (failure !== undefined) { if (!inRound) void rt.lateRoomFailure?.(id, info ?? {}, failure) }
-          else if (reason?.kind !== 'aborted') void rt.lateRoomReply?.(id, info ?? {}, groupReply(), { shown })
+          else if (reason?.kind !== 'aborted') void rt.lateRoomReply?.(id, citedInfo ?? {}, groupReply(), { shown })
         } else if (!retry && info !== undefined) {
           finish(info, replyText())
         }

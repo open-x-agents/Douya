@@ -3,6 +3,8 @@
 
 import { clearDraftIfPosted } from './room-draft.js'
 
+export { lateCite } from './cite.js'
+
 /** Distance from the bottom, in pixels, that still counts as pinned. */
 export const PIN_GAP = 48
 
@@ -86,19 +88,6 @@ export function quoteSentence(quote, logs) {
   return typeof row.text === 'string' && row.text !== '' ? row.text : ''
 }
 
-/**
- * Cite carried on a late room reply. Empty when this turn did not log a user sentence.
- * @param {{ quoteText?: string, quoteSeq?: number, quoteRoomId?: string } | undefined} info
- */
-export function lateCite(info) {
-  if (typeof info?.quoteText !== 'string' || info.quoteText === '') return {}
-  /** @type {{ quoteText: string, quoteSeq?: number, quoteRoomId?: string }} */
-  const cite = { quoteText: info.quoteText }
-  if (typeof info.quoteSeq === 'number' && Number.isFinite(info.quoteSeq)) cite.quoteSeq = info.quoteSeq
-  if (typeof info.quoteRoomId === 'string' && info.quoteRoomId !== '') cite.quoteRoomId = info.quoteRoomId
-  return cite
-}
-
 const eventRoom = (event) => {
   if (hasId(event?.roomId)) return event.roomId
   if (hasId(event?.quote?.roomId)) return event.quote.roomId
@@ -122,6 +111,13 @@ export function orderedCompletions(events, { roomId, logs } = {}) {
     const quoteText = fromLog !== '' ? fromLog : (typeof event.quoteText === 'string' ? event.quoteText : '')
     const replyText = typeof event.reply === 'string' ? event.reply
       : (typeof event.replyText === 'string' ? event.replyText : '')
+    const quotes = Array.isArray(event.quotes)
+      ? event.quotes.filter(item => typeof item?.text === 'string' && item.text !== '').map(item => ({
+        text: item.text,
+        ...(typeof item.seq === 'number' && Number.isFinite(item.seq) ? { seq: item.seq } : {}),
+        ...(typeof item.roomId === 'string' && item.roomId !== '' ? { roomId: item.roomId } : {}),
+      }))
+      : []
     return {
       exchangeId: event.exchangeId,
       workLineId: event.workLineId,
@@ -129,6 +125,7 @@ export function orderedCompletions(events, { roomId, logs } = {}) {
       roomId: eventRoom(event),
       completedAt: event.completedAt,
       quoteText,
+      ...(quotes.length > 1 ? { quotes } : {}),
       replyText,
     }
   })
@@ -192,17 +189,23 @@ export function scrollGroup({ replies = [], completions = [] } = {}) {
   return (Array.isArray(replies) ? replies : []).some(row => row?.kind === 'working' && !isWorkingRow(row, item, completions))
 }
 
-const quoteRow = (item) => {
-  if (item.quoteText === '') return undefined
-  return {
-    kind: 'completion-quote',
-    exchangeId: item.exchangeId,
-    workLineId: item.workLineId,
-    who: 'User',
-    text: item.quoteText,
-    completedAt: item.completedAt,
+const quoteTextsOf = (item) => {
+  if (Array.isArray(item?.quotes) && item.quotes.length > 1) {
+    return item.quotes
+      .map(entry => (typeof entry === 'string' ? entry : entry?.text))
+      .filter(text => typeof text === 'string' && text !== '')
   }
+  return typeof item?.quoteText === 'string' && item.quoteText !== '' ? [item.quoteText] : []
 }
+
+const quoteRows = (item) => quoteTextsOf(item).map(text => ({
+  kind: 'completion-quote',
+  exchangeId: item.exchangeId,
+  workLineId: item.workLineId,
+  who: 'User',
+  text,
+  completedAt: item.completedAt,
+}))
 
 const replyRow = (item) => {
   if (item.replyText === '') return undefined
@@ -218,9 +221,9 @@ const replyRow = (item) => {
 
 const itemRows = (item, anchor) => {
   const rows = []
-  const quote = quoteRow(item)
+  const quotes = quoteRows(item)
   const reply = replyRow(item)
-  if (quote !== undefined) rows.push(quote)
+  if (quotes.length > 0) rows.push(...quotes)
   if (reply !== undefined) rows.push(reply)
   if (anchor && rows[0] !== undefined) rows[0].first = true
   return rows
@@ -249,10 +252,10 @@ const projectSingle = (replies, draft, item) => {
     kept.push(reply)
   }
   if (postedAt >= 0) {
-    const quote = quoteRow(item)
-    if (quote !== undefined) {
-      quote.first = true
-      kept.splice(postedAt, 0, quote)
+    const quotes = quoteRows(item)
+    if (quotes.length > 0) {
+      quotes[0].first = true
+      kept.splice(postedAt, 0, ...quotes)
     }
   } else {
     const at = workingAt < 0 ? kept.length : workingAt

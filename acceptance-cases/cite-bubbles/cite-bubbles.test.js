@@ -1,0 +1,767 @@
+// A late reply quotes the user's own sentences once, including a follow-up
+// that was steered into the same turn. No @deepseek-ai import.
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { ROOM_REPLY_TIMEOUT_MS, roomReplyTimeoutMs, SOURCE_KIND } from '../../vendor/ds-bot/src/host/constants.js'
+import { install as installTurns } from '../../vendor/ds-bot/src/host/turns.js'
+import { install as installWorkLines } from '../../vendor/ds-bot/src/host/work-lines.js'
+import { applyRouteDecision, install as installRoute } from '../../vendor/ds-bot/src/host/route-inbound.js'
+import { createLine, indexOnly, noteTurnEnd } from '../../vendor/ds-bot/src/host/work-lines.js'
+import { isJoinedFollowUp } from '../../vendor/ds-bot/src/host/group-steer.js'
+import { lateCite, projectRelay } from '../../vendor/ds-bot/src/shared/work-line-complete.js'
+import {
+  appendCite,
+  applyLogPointer,
+  citeForPost,
+  citesOf,
+  citeTexts,
+  citedFromLog,
+  groupCitedQuotes,
+  hideCitedHistory,
+  isPendingSteerCopy,
+  lateCiteHtml,
+  logPointer,
+  logQuotes,
+  markSteeredRow,
+  steerSentence,
+  steeredReplyPost,
+} from '../../vendor/ds-bot/src/shared/cite.js'
+
+const root = dirname(dirname(dirname(fileURLToPath(import.meta.url))))
+const source = (path) => readFileSync(join(root, path), 'utf8')
+
+const FIRST = '你们是谁'
+const FOLLOW = '在干嘛'
+
+function host() {
+  const handlers = []
+  const delivered = []
+  const rt = {
+    ctx: { on: (type, fn) => { if (type === 'session/event') handlers.push(fn) } },
+    state: { questions: {}, views: {}, exchanges: [] },
+    warn() {},
+    save: async () => {},
+    dropKickoff() {},
+    roomOf: () => undefined,
+    botOf: () => undefined,
+    isBotSession: (id) => id === 'ga',
+    groupOwners: new Set(['ga']),
+    chatOwners: new Map(),
+    selfOf: (id) => id,
+    switchJobs: () => [],
+    roomWaiters: new Map(),
+    lateRoomReply() {},
+    takeRoomSteps: () => '',
+    withRoomSteps: (_held, reply) => reply,
+    noteFailure() {},
+    deliver: async (payload) => { delivered.push(payload) },
+  }
+  installTurns(rt)
+  const cited = []
+  rt.lateRoomReply = (_sessionId, info) => { cited.push(info) }
+  const emit = (sessionId, event) => {
+    for (const fn of handlers) fn({ id: sessionId }, event)
+  }
+  return { rt, emit, delivered, cited }
+}
+
+function roomSource(text, extra) {
+  return {
+    kind: SOURCE_KIND,
+    role: 'room',
+    roomId: 'room',
+    quoteText: text,
+    quoteRoomId: 'room',
+    ...extra,
+  }
+}
+
+function userMessage(text, extra) {
+  return {
+    type: 'user/message',
+    data: {
+      source: roomSource(text, extra),
+      content: [{ type: 'text', text: `[Group chat "You" · the user said]\n${text}` }],
+    },
+  }
+}
+
+test('one quoted sentence keeps the flat cite', () => {
+  assert.deepEqual(lateCite({}), {})
+  assert.deepEqual(lateCite({ quoteText: FIRST, quoteSeq: 2, quoteRoomId: 'room' }), {
+    quoteText: FIRST,
+    quoteSeq: 2,
+    quoteRoomId: 'room',
+  })
+  assert.equal(Object.hasOwn(lateCite({ quoteText: FIRST, quoteSeq: 2, quoteRoomId: 'room' }), 'quotes'), false)
+  assert.deepEqual(citeTexts({ quoteText: FIRST, late: true }), [FIRST])
+})
+
+test('two quotes keep the first sentence flat and list both in order', () => {
+  const cite = lateCite({
+    quoteText: FIRST,
+    quoteSeq: 2,
+    quoteRoomId: 'room',
+    quotes: [
+      { text: FIRST, seq: 2, roomId: 'room' },
+      { text: FOLLOW, seq: 3, roomId: 'room' },
+      { text: FOLLOW, seq: 3, roomId: 'room' },
+    ],
+  })
+  assert.equal(cite.quoteText, FIRST)
+  assert.equal(cite.quoteSeq, 2)
+  assert.deepEqual(cite.quotes.map(item => item.text), [FIRST, FOLLOW])
+  assert.equal(cite.quotes[1].seq, 3)
+  assert.deepEqual(citeTexts(cite), [FIRST, FOLLOW])
+  assert.deepEqual(logQuotes(cite, 'room'), [
+    { roomId: 'room', seq: 2 },
+    { roomId: 'room', seq: 3 },
+  ])
+})
+
+test('a bot row that quotes two user seqs names those sentences and their message ids', () => {
+  const log = [
+    { seq: 2, who: 'User', text: FIRST, messageId: 'm1' },
+    { seq: 3, who: 'User', text: FOLLOW, messageId: 'm2' },
+    {
+      seq: 4,
+      who: 'Chief',
+      botId: 'chief',
+      text: '我是 Chief',
+      quote: { roomId: 'room', seq: 2 },
+      quotes: [{ roomId: 'room', seq: 2 }, { roomId: 'room', seq: 3 }],
+    },
+  ]
+  assert.deepEqual(citedFromLog(log, 'room'), { texts: [FIRST, FOLLOW], ids: ['m1', 'm2'] })
+  assert.deepEqual(citedFromLog(log, 'other'), { texts: [], ids: [] })
+  assert.equal(citedFromLog(log).texts.includes('我是 Chief'), false)
+  assert.deepEqual(citedFromLog([{ seq: 2, who: 'User', text: FIRST }]), { texts: [], ids: [] })
+})
+
+test('a cited send is hidden, and a later send of the same words stays', () => {
+  const cited = { citedTexts: [FIRST, FOLLOW], citedIds: ['m1', 'm2'] }
+  assert.equal(hideCitedHistory({ text: FIRST, messageId: 'm1', ...cited }), true)
+  assert.equal(hideCitedHistory({ text: FIRST, messageId: 'm9', ...cited }), false)
+  assert.equal(hideCitedHistory({ text: FIRST, citedTexts: [FIRST], citedIds: [] }), true)
+  assert.equal(hideCitedHistory({ text: '还没被引用', messageId: 'm3', ...cited }), false)
+})
+
+test('the user log row records the send id when the route saw one', async () => {
+  const room = { id: 'room', log: [], seq: 0 }
+  await applyRouteDecision({}, room, { action: 'steer', botId: 'chief', text: FIRST }, { id: 'm1', text: FIRST })
+  assert.deepEqual(room.log.at(-1), { who: 'User', text: FIRST, seq: 1, messageId: 'm1' })
+  const plain = { id: 'room', log: [], seq: 0 }
+  await applyRouteDecision({}, plain, { action: 'steer', botId: 'chief', text: FOLLOW }, { text: FOLLOW })
+  assert.equal(plain.log.at(-1).messageId, undefined)
+  assert.equal(plain.log.at(-1).text, FOLLOW)
+})
+
+test('a steered follow-up is cited with the opening sentence and does not open another reply', () => {
+  assert.equal(isJoinedFollowUp({ role: 'room', userSteer: true }), false)
+  const { emit, delivered, cited } = host()
+  emit('ga', { type: 'turn/start', data: { turn: 4 }, time: 1 })
+  emit('ga', userMessage(FIRST, { exchangeId: 'e1', quoteSeq: 2 }))
+  emit('ga', userMessage(FOLLOW, { exchangeId: 'e2', quoteSeq: 3, userSteer: true }))
+  emit('ga', { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '我是 Chief' }] } } })
+  emit('ga', { type: 'turn/end', data: { reason: { kind: 'completed' } }, time: 5 })
+  assert.equal(cited.length, 1)
+  const cite = lateCite(cited[0])
+  assert.deepEqual(citeTexts(cite), [FIRST, FOLLOW])
+  assert.equal(cite.quoteText, FIRST)
+  assert.equal(cite.quotes[1].seq, 3)
+  assert.equal(delivered.some(item => item.deferred === true || item.exchangeId === 'e2'), false)
+})
+
+test('a next-step splice of the follow-up is the same cite, once', () => {
+  const { emit, delivered, cited } = host()
+  emit('ga', { type: 'turn/start', data: { turn: 4 }, time: 1 })
+  emit('ga', userMessage(FIRST, { exchangeId: 'e1', quoteSeq: 2 }))
+  emit('ga', {
+    type: 'agent/inbox/spliced',
+    time: 2,
+    data: {
+      target: 'next-step',
+      inserted: [{
+        id: 'm2',
+        source: roomSource(FOLLOW, { exchangeId: 'e2', quoteSeq: 3, userSteer: true }),
+        content: [{ type: 'text', text: FOLLOW }],
+      }],
+    },
+  })
+  emit('ga', userMessage(FOLLOW, { exchangeId: 'e2', quoteSeq: 3, userSteer: true }))
+  emit('ga', { type: 'turn/end', data: { reason: { kind: 'completed' } }, time: 5 })
+  assert.deepEqual(citeTexts(lateCite(cited[0])), [FIRST, FOLLOW])
+  assert.equal(delivered.some(item => item.exchangeId === 'e2'), false)
+})
+
+test('a follow-up that is not steered stays out of this reply cite', () => {
+  const { emit, delivered, cited } = host()
+  emit('ga', { type: 'turn/start', data: { turn: 4 }, time: 1 })
+  emit('ga', userMessage(FIRST, { exchangeId: 'e1', quoteSeq: 2 }))
+  emit('ga', userMessage('另一句', { exchangeId: 'e3', quoteSeq: 9 }))
+  emit('ga', { type: 'turn/end', data: { reason: { kind: 'completed' } }, time: 5 })
+  assert.equal(Object.hasOwn(lateCite(cited[0]), 'quotes'), false)
+  assert.equal(lateCite(cited[0]).quoteText, FIRST)
+  assert.equal(delivered.some(item => item.exchangeId === 'e3' && item.deferred === true), true)
+})
+
+test('a completion lists both sentences and does not store them on the work line', () => {
+  const state = {
+    bots: {},
+    rooms: { room: { id: 'room', log: [{ seq: 2, who: 'User', text: FIRST }] } },
+    workLines: {},
+    workLineCompleted: {},
+  }
+  const line = createLine(state, {
+    id: 'wl', botId: 'chief', sessionId: 'ga', roomId: 'room',
+    quote: { roomId: 'room', seq: 2 }, now: 1,
+  })
+  const ended = noteTurnEnd(state, {
+    sessionId: 'ga',
+    exchangeId: 'e1',
+    turn: 4,
+    reason: { kind: 'completed' },
+    now: 5,
+    quotes: [
+      { text: FIRST, seq: 2, roomId: 'room' },
+      { text: FOLLOW, seq: 3, roomId: 'room' },
+    ],
+  })
+  assert.equal(line.quotes, undefined)
+  assert.equal(indexOnly(line), true)
+  assert.equal(JSON.stringify(state.workLines).includes(FOLLOW), false)
+  assert.equal(ended.event.quoteText, FIRST)
+  assert.deepEqual(ended.event.quotes.map(item => item.text), [FIRST, FOLLOW])
+  const logs = { room: state.rooms.room.log }
+  const projected = projectRelay({
+    replies: [{ kind: 'working', botId: 'chief', workLineId: 'wl' }],
+    completions: [{ ...ended.event, botId: 'chief', roomId: 'room', reply: '我是 Chief' }],
+    roomId: 'room',
+    logs,
+  })
+  assert.deepEqual(
+    projected.replies.filter(row => row.kind === 'completion-quote').map(row => row.text),
+    [FIRST, FOLLOW],
+  )
+  assert.deepEqual(
+    projected.replies.filter(row => row.kind === 'completion-reply').map(row => row.text),
+    ['我是 Chief'],
+  )
+  const alone = projectRelay({
+    replies: [{ kind: 'working', botId: 'chief', workLineId: 'wl' }],
+    completions: [{
+      exchangeId: 'e1', workLineId: 'wl', botId: 'chief', roomId: 'room', completedAt: 5,
+      quote: { roomId: 'room', seq: 2 }, reply: '我是 Chief',
+    }],
+    roomId: 'room',
+    logs,
+  })
+  assert.equal(Object.hasOwn(alone.completions[0], 'quotes'), false)
+  assert.deepEqual(alone.replies.filter(row => row.kind === 'completion-quote').map(row => row.text), [FIRST])
+})
+
+test('an in-round reply points at both steered sentences so each history bubble hides', () => {
+  const HI = 'hi'
+  const WHO = '你们是谁'
+  const hiId = 'c14b3022-a326-45ab-a79e-70841f4dba42'
+  const whoId = 'a444b74d-c4c0-4395-832f-8369c3468df7'
+  const room = {
+    id: 'room',
+    log: [
+      { seq: 1, who: 'User', text: HI, messageId: hiId },
+      { seq: 2, who: 'User', text: WHO, messageId: whoId },
+    ],
+  }
+  const hi = steerSentence(room, { text: HI, quoteText: HI, quoteSeq: 1, quoteRoomId: 'room' })
+  const who = steerSentence(room, { text: WHO, quoteSeq: 2 })
+  assert.equal(who.seq, 2)
+  assert.equal(who.roomId, 'room')
+  const steerCites = appendCite(appendCite([], hi), who)
+  const named = citeForPost({}, steerCites)
+  assert.equal(named.quoteText, HI)
+  assert.equal(named.quoteSeq, 1)
+  assert.equal(Object.hasOwn(named, 'late'), false)
+  assert.deepEqual(citeTexts(named), [HI, WHO])
+  const log = [
+    ...room.log,
+    { seq: 3, who: 'Chief', botId: 'chief', text: '你好', ...logPointer(named, 'room') },
+    { seq: 4, who: 'Chief', botId: 'chief', text: '介绍' },
+  ]
+  // The first member line is enough. A later line does not have to repeat it.
+  const cited = citedFromLog(log, 'room')
+  assert.deepEqual(cited.texts, [HI, WHO])
+  assert.deepEqual(cited.ids, [hiId, whoId])
+  assert.equal(hideCitedHistory({ text: HI, messageId: hiId, citedTexts: cited.texts, citedIds: cited.ids }), true)
+  assert.equal(hideCitedHistory({ text: WHO, messageId: whoId, citedTexts: cited.texts, citedIds: cited.ids }), true)
+  assert.equal(hideCitedHistory({ text: HI, messageId: 'later-send', citedTexts: cited.texts, citedIds: cited.ids }), false)
+  // One sentence stays the flat pointer.
+  const alone = citeForPost({}, [hi])
+  assert.equal(Object.hasOwn(alone, 'quotes'), false)
+  assert.deepEqual(logPointer(alone, 'room'), { quote: { roomId: 'room', seq: 1 } })
+  // A line posted after the first steer picks up the follow-up when it arrives.
+  const partial = [
+    { seq: 1, who: 'User', text: HI, messageId: hiId },
+    { seq: 2, who: 'Chief', botId: 'chief', text: '你好', ...logPointer(citeForPost({}, [hi]), 'room') },
+    { seq: 3, who: 'User', text: WHO, messageId: whoId },
+  ]
+  const partialNamed = citeForPost({}, appendCite([hi], { text: WHO, seq: 3, roomId: 'room' }))
+  assert.equal(applyLogPointer(partial, logPointer(partialNamed, 'room'), { minSeq: 1 }), 1)
+  assert.deepEqual(citedFromLog(partial, 'room').ids, [hiId, whoId])
+  const older = [{ seq: 1, who: 'Chief', botId: 'chief', text: '旧的' }]
+  assert.equal(applyLogPointer(older, logPointer(alone, 'room'), { minSeq: 4 }), -1)
+  assert.equal(older[0].quote, undefined)
+  // The busy follow-up cite still wins when the turn already has one.
+  const late = citeForPost({
+    quoteText: FIRST,
+    quoteSeq: 2,
+    quoteRoomId: 'room',
+    quotes: [
+      { text: FIRST, seq: 2, roomId: 'room' },
+      { text: FOLLOW, seq: 3, roomId: 'room' },
+    ],
+  }, steerCites)
+  assert.deepEqual(citeTexts(late), [FIRST, FOLLOW])
+})
+
+test('an opening relay still running shows hi and 你们是谁 once each before anyone posts', () => {
+  const HI = 'hi'
+  const WHO = '你们是谁'
+  const hiId = 'bd93af0a-e491-4566-8bae-c72afc96f41d'
+  const whoId = 'd9d1524b-d566-4abc-9593-041f873387c9'
+  // Room log from the 21:14 accept: both user rows, no Chief line (still typing, then TIMEOUT).
+  const log = [
+    { seq: 1, who: 'User', text: HI, messageId: hiId },
+    { seq: 2, who: 'User', text: WHO, messageId: whoId },
+  ]
+  assert.deepEqual(citedFromLog(log, 'room'), { texts: [], ids: [] })
+  const hi = markSteeredRow(log, { seq: 1, messageId: hiId, text: HI })
+  const who = markSteeredRow(log, { seq: 2, messageId: whoId, text: WHO })
+  assert.equal(hi.changed, true)
+  assert.equal(hi.messageId, hiId)
+  assert.equal(who.changed, true)
+  assert.equal(who.messageId, whoId)
+  assert.equal(log[0].steered, true)
+  assert.equal(log[1].steered, true)
+  assert.equal(markSteeredRow(log, { seq: 1, messageId: hiId, text: HI }).changed, false)
+  const cited = citedFromLog(log, 'room')
+  assert.deepEqual(cited, { texts: [HI, WHO], ids: [hiId, whoId] })
+  assert.equal(hideCitedHistory({ text: HI, messageId: hiId, citedTexts: cited.texts, citedIds: cited.ids }), true)
+  assert.equal(hideCitedHistory({ text: WHO, messageId: whoId, citedTexts: cited.texts, citedIds: cited.ids }), true)
+  // A later send of the same words, with its own id, stays.
+  assert.equal(hideCitedHistory({ text: HI, messageId: 'later-hi', citedTexts: cited.texts, citedIds: cited.ids }), false)
+  const bare = [{ seq: 1, who: 'User', text: HI }]
+  const filled = markSteeredRow(bare, { seq: 1, messageId: hiId, text: HI })
+  assert.equal(filled.changed, true)
+  assert.equal(bare[0].messageId, hiId)
+  assert.deepEqual(citedFromLog(bare).ids, [hiId])
+  assert.deepEqual(markSteeredRow([], { messageId: hiId, text: HI }), { changed: false, messageId: hiId })
+  const botOnly = [{ seq: 1, who: 'Chief', botId: 'chief', text: HI }]
+  assert.equal(markSteeredRow(botOnly, { seq: 1, messageId: hiId, text: HI }).changed, false)
+  assert.equal(botOnly[0].steered, undefined)
+  const repeated = [
+    { seq: 1, who: 'User', text: HI, messageId: 'old' },
+    { seq: 3, who: 'User', text: HI, messageId: 'new' },
+  ]
+  assert.equal(markSteeredRow(repeated, { text: HI }).messageId, 'new')
+  assert.equal(repeated[0].steered, undefined)
+  assert.equal(repeated[1].steered, true)
+  assert.equal(isPendingSteerCopy('hi', [HI, WHO]), true)
+  assert.equal(isPendingSteerCopy('hi\u00a0未读', [HI, WHO]), true)
+  assert.equal(isPendingSteerCopy('你们是谁\n未读', [HI, WHO]), true)
+  assert.equal(isPendingSteerCopy('hi\n21:14', [HI, WHO]), true)
+  assert.equal(isPendingSteerCopy('Not read yet', [HI, WHO]), false)
+  assert.equal(isPendingSteerCopy('在干嘛', [HI, WHO]), false)
+  assert.equal(isPendingSteerCopy('hi', []), false)
+
+  const groups = source('vendor/ds-bot/src/host/groups.js')
+  const showAt = groups.indexOf('const showSteer = ')
+  const showEnd = groups.indexOf('const running = [...rt.roomProgress.values()]', showAt)
+  assert.ok(showAt >= 0 && showEnd > showAt)
+  const show = groups.slice(showAt, showEnd)
+  assert.ok(show.indexOf('replies.push(reply)') < show.indexOf('markSteeredRow'))
+  assert.ok(show.indexOf('markSteeredRow') < show.indexOf('dropSteeredInbox'))
+  assert.match(groups, /inbox\?\.remove\?\.\(messageId\)/)
+  const router = source('vendor/ds-bot/src/host/route-inbound.js')
+  const steerCase = router.slice(router.indexOf("case 'steer': {"), router.indexOf("case 'continue':", router.indexOf("case 'steer': {")))
+  assert.match(steerCase, /acceptRoomSteer\(room, member,/)
+  assert.match(steerCase, /messageId: itemId/)
+  const turns = source('vendor/ds-bot/src/host/turns.js')
+  assert.match(turns, /acceptRoomSteer\(room, decision\.member, \{ text, files, \.\.\.\(messageId/)
+  const cells = source('vendor/ds-bot/src/client/cells.js')
+  assert.match(cells, /useLayoutEffect\(\(\) => hidePendingSteerCopies/)
+  assert.match(cells, /data-steer-copy/)
+  assert.match(cells, /isPendingSteerCopy/)
+  const styles = source('vendor/ds-bot/src/client/styles.js')
+  assert.match(styles, /\[data-pending-steering\]\[data-steer-copy\]\{display:none!important\}/)
+  assert.match(styles, /_flowItem"\]:has\(\[data-pending-steering\]\[data-steer-copy\]\)/)
+})
+
+test('the late cite paints user bubbles and history hides a sentence that cite already shows', () => {
+  const cells = source('vendor/ds-bot/src/client/cells.js')
+  const user = source('vendor/ds-bot/src/client/user-message.js')
+  const router = source('vendor/ds-bot/src/host/route-inbound.js')
+  const lateAt = cells.indexOf('function LateCite')
+  const lateEnd = cells.indexOf('function GroupEvent', lateAt)
+  assert.ok(lateAt >= 0 && lateEnd > lateAt)
+  const late = cells.slice(lateAt, lateEnd)
+  assert.match(late, /data-late-cite/)
+  assert.match(late, /Replying to what you wrote earlier/)
+  assert.match(late, /bt-ububble/)
+  assert.match(late, /bt-urow/)
+  assert.doesNotMatch(late, /bt-route-cite-text/)
+  assert.match(user, /hideCitedHistory/)
+  assert.doesNotMatch(router, /work-line-complete/)
+  const quoteAt = cells.indexOf("reply.kind === 'completion-quote'")
+  const quoteEnd = cells.indexOf("reply.kind === 'completion-reply'", quoteAt)
+  assert.match(cells.slice(quoteAt, quoteEnd), /reply\.who === 'User' \? 'bt-urow'/)
+  const bubbleAt = cells.indexOf('const userBubble = groupUserBubble(reply)')
+  const bubbleEnd = cells.indexOf("if (reply.kind === 'failed')", bubbleAt)
+  assert.ok(bubbleAt >= 0 && bubbleEnd > bubbleAt)
+  assert.match(cells.slice(bubbleAt, bubbleEnd), /userBubble\.steering && coveredByLateCite/)
+  const groups = source('vendor/ds-bot/src/host/groups.js')
+  const postAt = groups.indexOf('const postInRound = ')
+  const postEnd = groups.indexOf('async function roomTurn', postAt)
+  assert.ok(postAt >= 0 && postEnd > postAt)
+  const post = groups.slice(postAt, postEnd)
+  assert.match(post, /citeForPost\(cite, round\?\.steerCites\)/)
+  assert.match(post, /explicit \|\| multi \? named/)
+  assert.match(cells, /groupCitedQuotes/)
+  assert.match(cells, /lateCiteSentences/)
+  const steerAt = groups.indexOf('async function acceptRoomSteer')
+  const steerEnd = groups.indexOf('rt.appendRoomLine', steerAt)
+  assert.match(groups.slice(steerAt, steerEnd), /steerCites/)
+  assert.match(groups.slice(steerAt, steerEnd), /steerSentence/)
+  assert.match(groups.slice(steerAt, steerEnd), /quoteText/)
+  assert.match(groups.slice(steerAt, steerEnd), /minSeq: sentence\.seq/)
+  assert.doesNotMatch(groups.slice(steerAt, steerEnd), /minSeq: round\.startSeq/)
+  assert.match(groups, /steeredReplyPost/)
+  assert.match(groups, /lateCite\(post\)/)
+})
+
+function focusRoom(lines) {
+  const handlers = []
+  const steered = []
+  const delivered = []
+  const cited = []
+  const created = []
+  const rooms = {
+    r1: {
+      id: 'r1',
+      name: 'F2',
+      admin: 'chief',
+      members: ['chief'],
+      sessions: { chief: 'ga' },
+      seq: 1,
+      log: [{ seq: 1, who: 'User', text: '新开 请写一篇约900字散文《秋水》', messageId: 'm-essay' }],
+    },
+  }
+  const bots = { chief: { id: 'chief', name: 'Chief' } }
+  const rt = {
+    ctx: { on: (type, fn) => { if (type === 'session/event') handlers.push(fn) } },
+    state: {
+      questions: {},
+      views: {},
+      exchanges: [],
+      exchangeTurns: {},
+      workLines: lines,
+      workLineCompleted: {},
+      pendingRoutes: {},
+      rooms,
+      bots,
+    },
+    warn() {},
+    save: async () => {},
+    dropKickoff() {},
+    roomOf: (id) => rooms[id],
+    botOf: (id) => bots[id],
+    isBotSession: (id) => id === 'ga' || id === 'work' || id === 'work-b',
+    groupOwners: new Map([
+      ['ga', { botId: 'chief', roomId: 'r1' }],
+      ['work', { botId: 'chief', roomId: 'r1', workLineId: 'essay-line' }],
+    ]),
+    chatOwners: new Map(),
+    selfOf: (id) => id,
+    switchJobs: () => [],
+    roomWaiters: new Map(),
+    lateRoomReply() {},
+    takeRoomSteps: () => '',
+    withRoomSteps: (_held, reply) => reply,
+    noteFailure() {},
+    deliver: async (payload) => { delivered.push(payload) },
+    acceptRoomSteer: async (room, member, message) => { steered.push({ room, member, message }) },
+    noteSteeredRoomLine() {},
+    suppressRelayText() {},
+    holdRoomRoute() {},
+    releaseRoomRoute() {},
+    takeRelayIntent: () => false,
+    allowRelayText() {},
+    createSession: async () => { created.push('session-new'); return 'session-new' },
+    isAdminOf: (room, botId) => room?.admin === botId,
+    roomProgress: new Map(),
+  }
+  installTurns(rt)
+  installWorkLines(rt)
+  installRoute(rt)
+  rt.lateRoomReply = (_sessionId, info) => { cited.push(info) }
+  const emit = (sessionId, event) => {
+    for (const fn of handlers) fn({ id: sessionId }, event)
+  }
+  return { rt, emit, steered, delivered, cited, created, rooms }
+}
+
+function roomSend(text, id) {
+  return { type: 'user/message', data: { id, source: { kind: 'user' }, content: [{ type: 'text', text }] } }
+}
+
+async function settle() {
+  for (let step = 0; step < 8; step += 1) await new Promise(resolve => setImmediate(resolve))
+}
+
+test('a busy essay line takes 你们是谁 then 在干嘛 while the group session is also busy', async () => {
+  const essay = {
+    id: 'essay-line',
+    botId: 'chief',
+    sessionId: 'work',
+    lastRoomId: 'r1',
+    quote: { roomId: 'r1', seq: 1 },
+    label: '秋水',
+    updatedAt: 5,
+    segments: [],
+  }
+  // ensureLegacy indexes room.sessions.chief as its own line. That line is the
+  // round, and it is busy at the same time as the essay. It must not raise a card.
+  const group = {
+    id: 'group-line',
+    botId: 'chief',
+    sessionId: 'ga',
+    lastRoomId: 'r1',
+    updatedAt: 4,
+    segments: [],
+  }
+  const { rt, emit, steered, delivered, cited, created, rooms } = focusRoom({ essay, group })
+  emit('work', userMessage('新开 请写一篇约900字散文《秋水》', { exchangeId: 'e0', quoteSeq: 1, quoteRoomId: 'r1' }))
+  emit('work', { type: 'turn/start', data: { turn: 4 }, time: 1 })
+  emit('ga', { type: 'turn/start', data: { turn: 1 }, time: 1 })
+  emit('r1', roomSend(FIRST, 'm-who'))
+  emit('r1', roomSend(FOLLOW, 'm-do'))
+  await settle()
+  assert.equal(rt.state.pendingRoutes.r1, undefined)
+  assert.equal(created.length, 0)
+  assert.equal(delivered.length, 0)
+  assert.equal(Object.keys(rt.state.workLines).length, 2)
+  assert.deepEqual(steered.map(item => item.message.text), [FIRST, FOLLOW])
+  assert.deepEqual(steered.map(item => item.member.sessionId), ['work', 'work'])
+  assert.deepEqual(steered.map(item => item.message.quoteSeq), [2, 3])
+  assert.deepEqual(steered.map(item => item.message.quoteText), [FIRST, FOLLOW])
+  assert.deepEqual(steered.map(item => item.message.messageId), ['m-who', 'm-do'])
+  for (const item of steered) {
+    emit('work', userMessage(item.message.text, {
+      exchangeId: `e-${item.message.quoteSeq}`,
+      quoteSeq: item.message.quoteSeq,
+      quoteRoomId: 'r1',
+      userSteer: true,
+    }))
+  }
+  emit('work', { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '秋水' }] } } })
+  emit('work', { type: 'turn/end', data: { reason: { kind: 'completed' } }, time: 9 })
+  const named = lateCite(cited.at(-1))
+  assert.deepEqual(citeTexts(named), [FIRST, FOLLOW])
+  assert.equal(citeTexts(named).some(text => text.includes('秋水')), false)
+  assert.equal(named.quotes[0].seq, 2)
+  assert.equal(named.quotes[1].seq, 3)
+  assert.equal(Object.hasOwn(named, 'late'), false)
+  const posted = { ...named, late: citesOf(named).length > 1 }
+  assert.equal(posted.late, true)
+  assert.deepEqual(citeTexts(posted), citeTexts(named))
+  const pointer = logPointer(named, 'r1')
+  assert.equal(pointer.quotes.length, citeTexts(named).length)
+  const log = [...rooms.r1.log, { seq: 4, who: 'Chief', botId: 'chief', text: '秋水', ...pointer }]
+  const hidden = citedFromLog(log, 'r1')
+  assert.equal(hidden.ids.includes('m-who'), true)
+  assert.equal(hidden.ids.includes('m-do'), true)
+  assert.equal(hideCitedHistory({ text: FIRST, messageId: 'm-who', citedTexts: hidden.texts, citedIds: hidden.ids }), true)
+  assert.equal(hideCitedHistory({ text: FOLLOW, messageId: 'm-do', citedTexts: hidden.texts, citedIds: hidden.ids }), true)
+  const html = lateCiteHtml(citeTexts(named))
+  assert.equal(html.split('data-late-cite=').length - 1, 1)
+  assert.equal(html.split('bt-ububble').length - 1, 2)
+  assert.ok(html.indexOf(FIRST) >= 0 && html.indexOf(FIRST) < html.indexOf(FOLLOW))
+  assert.equal(html.includes('秋水'), false)
+  const grouped = groupCitedQuotes([
+    { kind: 'completion-quote', who: 'User', text: FIRST, exchangeId: 'e-essay' },
+    { kind: 'completion-quote', who: 'User', text: FOLLOW, exchangeId: 'e-essay' },
+    { kind: 'completion-reply', text: '秋水', exchangeId: 'e-essay' },
+  ])
+  assert.equal(grouped.length, 2)
+  assert.equal(grouped[0].kind, 'completion-cite')
+  assert.deepEqual(grouped[0].texts, [FIRST, FOLLOW])
+  assert.equal(grouped[1].kind, 'completion-reply')
+  assert.equal(groupCitedQuotes([{ kind: 'completion-quote', who: 'User', text: FIRST }])[0].kind, 'completion-quote')
+  const durable = steeredReplyPost({ cites: named.quotes })
+  assert.equal(durable.quiet, true)
+  assert.equal(durable.late, true)
+  assert.deepEqual(citeTexts(durable), [FIRST, FOLLOW])
+  const remainder = steeredReplyPost({ cites: named.quotes, shown: true })
+  assert.equal(remainder.late, undefined)
+  assert.equal(remainder.quiet, true)
+  assert.equal(steeredReplyPost({ cites: named.quotes, calls: true }).quiet, false)
+  assert.match(source('vendor/ds-bot/src/host/groups.js'), /multi \? \{ late: true \}/)
+})
+
+test('leftover lines in other rooms do not ask while the round is busy', async () => {
+  const round = {
+    id: 'group-line',
+    botId: 'chief',
+    sessionId: 'ga',
+    lastRoomId: 'r1',
+    updatedAt: 3,
+    segments: [],
+  }
+  const hit = {
+    id: 'far-hit',
+    botId: 'chief',
+    sessionId: 'remote',
+    lastRoomId: 'r2',
+    quote: { roomId: 'r2', seq: 1 },
+    updatedAt: 2,
+    segments: [],
+  }
+  const other = {
+    id: 'far-other',
+    botId: 'chief',
+    sessionId: 'remote-2',
+    lastRoomId: 'r2',
+    quote: { roomId: 'r2', seq: 2 },
+    updatedAt: 1,
+    segments: [],
+  }
+  const own = {
+    id: 'own-line',
+    botId: 'chief',
+    sessionId: 'own',
+    updatedAt: 1,
+    segments: [],
+  }
+  const { rt, emit, steered, delivered, rooms } = focusRoom({ round, hit, other, own })
+  rooms.r2 = {
+    id: 'r2',
+    log: [
+      { seq: 1, who: 'User', text: FIRST },
+      { seq: 2, who: 'User', text: `${FIRST}呀` },
+    ],
+  }
+  emit('ga', { type: 'turn/start', data: { turn: 1 }, time: 1 })
+  emit('r1', roomSend(FIRST, 'm-who'))
+  await settle()
+  assert.equal(rt.state.pendingRoutes.r1, undefined)
+  assert.equal(delivered.length, 0)
+  assert.equal(steered.length, 1)
+  assert.equal(steered[0].member.sessionId, 'ga')
+  assert.equal(steered[0].message.text, FIRST)
+  assert.equal(rooms.r1.log.filter(row => row.who === 'User' && row.text === FIRST).length, 1)
+})
+
+test('confirming a busy line does not stamp the cite onto an earlier reply', () => {
+  const idiom = '好。秋高气爽，落叶归根'
+  const log = [
+    { seq: 1, who: 'User', text: '新开 帮我列3个秋天的成语' },
+    { seq: 2, who: 'Chief', botId: 'chief', text: idiom },
+    { seq: 3, who: 'User', text: '新开 请写一篇约900字散文《秋水》', messageId: 'm-essay' },
+    { seq: 4, who: 'User', text: FIRST, messageId: 'm-who' },
+    { seq: 5, who: 'User', text: FOLLOW, messageId: 'm-do' },
+  ]
+  const named = lateCite({
+    quotes: [
+      { text: FIRST, seq: 4, roomId: 'r1' },
+      { text: FOLLOW, seq: 5, roomId: 'r1' },
+    ],
+  })
+  const pointer = logPointer(named, 'r1')
+  assert.equal(applyLogPointer(log, pointer, { minSeq: 4 }), -1)
+  assert.equal(log[1].quotes, undefined)
+  assert.equal(log[1].quote, undefined)
+  assert.equal(log[1].text, idiom)
+  log.push({ seq: 6, who: 'Chief', botId: 'chief', text: '秋水正文', ...pointer })
+  const hidden = citedFromLog(log, 'r1')
+  assert.deepEqual(hidden.texts, [FIRST, FOLLOW])
+  assert.equal(hidden.ids.includes('m-who'), true)
+  assert.equal(hidden.ids.includes('m-do'), true)
+  assert.equal(hideCitedHistory({ text: FIRST, messageId: 'm-who', citedTexts: hidden.texts, citedIds: hidden.ids }), true)
+  assert.equal(hideCitedHistory({ text: FOLLOW, messageId: 'm-do', citedTexts: hidden.texts, citedIds: hidden.ids }), true)
+  assert.equal(hideCitedHistory({ text: '新开 帮我列3个秋天的成语', messageId: 'm-old', citedTexts: hidden.texts, citedIds: hidden.ids }), false)
+  const html = lateCiteHtml(citeTexts(named))
+  const bubbles = [...html.matchAll(/<div class="bt-ububble">([^<]*)<\/div>/g)].map(match => match[1])
+  assert.deepEqual(bubbles, [FIRST, FOLLOW])
+  assert.equal(html.includes(idiom), false)
+  assert.equal(html.includes('秋水正文'), false)
+})
+
+test('confirming the busy line after an ask still cites 你们是谁 and 在干嘛 in send order', async () => {
+  const lines = {
+    essay: {
+      id: 'essay-line',
+      botId: 'chief',
+      sessionId: 'work',
+      lastRoomId: 'r1',
+      quote: { roomId: 'r1', seq: 1 },
+      label: '秋水',
+      updatedAt: 5,
+      segments: [],
+    },
+    other: {
+      id: 'other-line',
+      botId: 'chief',
+      sessionId: 'work-b',
+      lastRoomId: 'r1',
+      quote: { roomId: 'r1', seq: 1 },
+      label: '另一件',
+      updatedAt: 4,
+      segments: [],
+    },
+  }
+  const { rt, emit, steered, delivered, created } = focusRoom(lines)
+  emit('work', { type: 'turn/start', data: { turn: 4 }, time: 1 })
+  emit('work-b', { type: 'turn/start', data: { turn: 5 }, time: 1 })
+  emit('r1', roomSend(FIRST, 'm-who'))
+  await settle()
+  assert.equal(rt.state.pendingRoutes.r1?.text, FIRST)
+  emit('r1', roomSend(FOLLOW, 'm-do'))
+  await settle()
+  assert.equal(steered.length, 0)
+  assert.equal(delivered.length, 0)
+  assert.deepEqual(rt.state.pendingRoutes.r1.texts, [FIRST, FOLLOW])
+  emit('r1', roomSend('essay-line', 'm-choice'))
+  await settle()
+  assert.equal(rt.state.pendingRoutes.r1, undefined)
+  assert.equal(created.length, 0)
+  assert.equal(delivered.length, 0)
+  assert.deepEqual(steered.map(item => item.message.text), [FIRST, FOLLOW])
+  assert.deepEqual(steered.map(item => item.member.sessionId), ['work', 'work'])
+  assert.deepEqual(steered.map(item => item.message.quoteText), [FIRST, FOLLOW])
+  assert.ok(steered[0].message.quoteSeq < steered[1].message.quoteSeq)
+  assert.equal(steered.some(item => item.message.text === 'essay-line'), false)
+})
+
+test('member reply timeout stays four minutes unless a test override is set', () => {
+  assert.equal(ROOM_REPLY_TIMEOUT_MS, 240_000)
+  const previous = process.env.DSH_ROOM_REPLY_TIMEOUT_MS
+  delete process.env.DSH_ROOM_REPLY_TIMEOUT_MS
+  try {
+    assert.equal(roomReplyTimeoutMs(), 240_000)
+    process.env.DSH_ROOM_REPLY_TIMEOUT_MS = '1500'
+    assert.equal(roomReplyTimeoutMs(), 1500)
+    assert.equal(ROOM_REPLY_TIMEOUT_MS, 240_000)
+    process.env.DSH_ROOM_REPLY_TIMEOUT_MS = '0'
+    assert.equal(roomReplyTimeoutMs(), 240_000)
+    process.env.DSH_ROOM_REPLY_TIMEOUT_MS = 'nope'
+    assert.equal(roomReplyTimeoutMs(), 240_000)
+  } finally {
+    if (previous === undefined) delete process.env.DSH_ROOM_REPLY_TIMEOUT_MS
+    else process.env.DSH_ROOM_REPLY_TIMEOUT_MS = previous
+  }
+  const groups = source('vendor/ds-bot/src/host/groups.js')
+  assert.match(groups, /setTimeout\(\(\) => finish\(\{ missed: true \}\), roomReplyTimeoutMs\(\)\)/)
+  assert.match(groups, /minutes: Math\.round\(roomReplyTimeoutMs\(\) \/ 60000\)/)
+})

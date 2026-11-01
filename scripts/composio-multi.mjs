@@ -130,7 +130,9 @@ async function runOffline(options) {
   const outDir = path.resolve(options.out ?? path.join(os.homedir(), 'odm32-multi', name))
 
   const brief = await buildBrief({
-    registry,
+    // 离线重放只覆盖 fixture 里真的有路由的 app：注册表是产品级清单（S6 起 5 行），
+    // 没被这份 fixture 代表的 app 不该出现在 unread_sources 里。
+    registry: registry.filter(row => Boolean(apps[row.toolkit])),
     accountFor: accountForOf(accounts, userId),
     transport: createFixtureTransport({ apps, accountToolkit }),
     config: scenario.config ?? {},

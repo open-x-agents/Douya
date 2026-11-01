@@ -46,6 +46,13 @@ export function loadScenario(name) {
   return { name, dir, scenario, apps: loadApps(appsDir) }
 }
 
+// 4-app fixture 场景只回放 fixture 里真的有路由的 app：默认注册表是产品级清单（S6 起 5 行），
+// 不该让一个没有 fixture 的第 5 个 app 把「掉一个 app 只有它进 unread_sources」的断言拖红。
+export function fixtureRegistry(loaded) {
+  const apps = loaded?.apps ?? {}
+  return registry.filter(row => Boolean(apps[row.toolkit]))
+}
+
 export function accountsOf(scenario) {
   return Array.isArray(scenario.accounts) ? scenario.accounts : []
 }
@@ -144,7 +151,7 @@ export async function briefFromFixture(name, { build = {}, calls = [] } = {}) {
   const accounts = accountsOf(loaded.scenario)
   const userId = build.userId ?? loaded.scenario.userId
   const brief = await buildBrief({
-    registry,
+    registry: fixtureRegistry(loaded),
     accountFor: accountForOf(accounts, userId),
     transport: transportFor(loaded, calls),
     config: loaded.scenario.config ?? {},

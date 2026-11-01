@@ -5,14 +5,19 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { buildBrief } from '../../src/sources/composio/brief.js'
-import { registry } from '../../src/sources/composio/registry.js'
-import { accountForOf, accountsOf, loadScenario, transportFor } from './helpers.mjs'
+import {
+  accountForOf,
+  accountsOf,
+  fixtureRegistry,
+  loadScenario,
+  transportFor,
+} from './helpers.mjs'
 
 const loaded = loadScenario('all-ok')
 
 function briefWith(accounts) {
   return buildBrief({
-    registry,
+    registry: fixtureRegistry(loaded),
     accountFor: accountForOf(accounts, loaded.scenario.userId),
     transport: transportFor(loaded),
     config: loaded.scenario.config,

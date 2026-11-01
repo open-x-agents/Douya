@@ -9,7 +9,7 @@
 
 import { anchorsOf, sourceLabel } from '../../src/host/ask.js'
 
-export const KNOWN_SOURCES = ['gcal', 'gmail', 'feishu_doc', 'feishu_cal', 'feishu_msg', 'github']
+export const KNOWN_SOURCES = ['gcal', 'gmail', 'feishu_doc', 'feishu_cal', 'feishu_msg', 'github', 'composio']
 
 // A11 的唯一注入点：把它改成 false，E_FACT_REF 不再报，`judgePanel：编一个不存在的 ref 就红` 必须变红。
 export const REF_MEMBERSHIP_ENFORCED = true

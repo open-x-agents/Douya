@@ -1,0 +1,44 @@
+{
+  "toolkit": "notion",
+  "routes": [
+    {
+      "kind": "proxyGet",
+      "pattern": "^/v1/pages/p1$",
+      "body": {
+        "id": "p1",
+        "object": "page",
+        "type": "page",
+        "created_time": "2025-10-31T09:00:00.000Z",
+        "properties": { "Name": { "type": "title", "title": [{ "plain_text": "周会纪要" }] } }
+      }
+    },
+    {
+      "kind": "proxyGet",
+      "pattern": "^/v1/blocks/blk-root/children",
+      "body": {
+        "results": [
+          {
+            "id": "p1",
+            "type": "child_page",
+            "child_page": { "title": "周会纪要" },
+            "created_time": "2025-10-31T09:00:00.000Z"
+          },
+          {
+            "id": "p2",
+            "type": "child_page",
+            "child_page": { "title": "产品路线图" },
+            "created_time": "2025-10-30T14:00:00.000Z"
+          },
+          {
+            "id": "p3",
+            "type": "child_page",
+            "child_page": { "title": "上线清单" },
+            "created_time": "2025-10-29T08:30:00.000Z"
+          }
+        ],
+        "next_cursor": null,
+        "has_more": false
+      }
+    }
+  ]
+}

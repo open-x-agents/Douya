@@ -10,7 +10,7 @@
 | L3 一天真数据 e2e | 每晚 + 手动 | 「08:45 早报 → 关一件 → 18:30 晚报」这条路走不通 | 无（#16） |
 | L4 时延实测 | 随 L3 | 首屏 >1s、首字 >3s、提醒误差 >30s、日报偏差 >60s | 无 |
 | L5 准入 | 每 PR（`pr-guard.yml`） | 没资格排队的 PR 进了队列 | **有**（只报告，不阻断） |
-| L6 合并树 | 每 PR（`merge-tree.yml`） | 自己绿、合进 main 后破（含合不上） | **有**：每 PR 真合并一次再跑 L0（#23） |
+| L6 合并树 | 每 PR（`merge-tree.yml`） | 自己绿、合进 main 后破（含合不上）；合出来的版本号撞已有 tag | **有**：每 PR 真合并一次再跑 L0，再用 `scripts/merge-tree-gate.mjs` 查一次撞号（#23） |
 | L7 发布前 | 发版 job（`release.yml`） | 测试绿但装不起来；版本/tag/CHANGELOG 不自洽；模型开始编来源 | **有**（模型那项等 `MODEL_API_KEY`） |
 
 ## 本地怎么跑
@@ -70,5 +70,12 @@ completed（`waitForChecks`：15 分钟窗口、15 秒读一次真实状态）�
   差的是两点 —— 两个 PR 同时绿地合进来仍可能互相踩，合入还得有人（或 Bot）按一下。仓库是 internal，
   merge queue 实测可用（规则集 201），但开它意味着没人能直接推 main 且发版流程要改走 PR，所以 #23 先做这一层。
   本地没有 `git`，这一段只能在 CI 上验证。
+- **L6 的「版本号撞已有 tag」是保险，不是已发生的缺陷**：`package.json` 全史没有一次是 PR 顺手改版本号，
+  今天真撞号也只是 `release-plan.mjs` 判 `tag-exists` 跳过、当天不发版。判据只有一条 —— PR 真的动了版本号
+  （head 版本 ≠ merge-base 版本）时才拿 **head 的版本号** 去查 tag；写成「version ∈ tags 就红」会让所有 PR 变红，
+  写成「merged vs base」会放过两个 PR 各自 bump 到同一个号的形态。同一条规则在 L7 也查，这里复用 `checkVersionConsistency`，
+  L6 只报撞号，CHANGELOG 缺段属 L7。读不到任何 `v*` tag 时这道闸 `exit 2`（fail-closed）：没有 tag 列表就等于没判。
+- **vendor 的 pin 由 `test/vendor-pin.test.js` 订住**（#23 第一刀）：`vendor/ds-bot/VENDOR_FROM`、`docs/vendor-ds-bot.md`、
+  `vendor/ds-bot/package.json` 的版本、根 `package.json` 的 peer 下限四处是手写副本，一起改才一致，单改一处会红。
 - **L7 的模型项在等 key**：仓库 secrets 里还没有 `MODEL_API_KEY`，所以下一次定时发版会红在这一步。这是故意的：先让它红一次，人就知道这道闸真的在。
 - **L1 / L2 / L3 / L4 还没有**：随 #10、#13、#16 一起长。

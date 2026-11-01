@@ -134,6 +134,16 @@ report 的形状：`{ date, memberId, memberName, schedule[], done[], plan[], no
 `insufficientPermissions` 拒了，由 `authReasonOf(error)` 得出——那是少了权限，不是 `missing`。
 掉一个 app 时该源进 `unread_sources`，早报照出并点名缺的是哪个 app。
 
+**控制面（S3）。** `src/sources/composio/api.js` 是 v3 控制面的纯传输层：`listTools` / `listAccounts` /
+`proxyGet` / `executeTool`，不认识任何 app 的字段，key 只从调用方传入（不进日志、不进仓库、不进错误消息）。
+账号表只用复数参数 `toolkit_slugs` + `user_ids` 取（单数参数会被服务端静默忽略、回全部 30 条），
+传单数 `toolkitSlug` / `userId` 或只给 app 不给「人」都在发请求之前抛 `E_ACCOUNT_QUERY`。对第三方的读请求
+一律 `POST /tools/execute/proxy` 且 body 里 `method: 'GET'`——第三方永远只收到 GET；除 `/tools/execute/`
+之外一个 POST 都没有。`callError()` 把 401 / 403 / 404 / 429 / 5xx 分类成 `{ kind, status, reason }`：
+403 + `insufficientPermissions` 记 `scope`，限流记 `rate_limit`（`retry_after_ms` 挂在错误上），
+5xx 记 `server`，请求没发出去记 `network`——不把「限流」和「服务器坏了」混成同一条，调用方才好决定
+是重试、等一会儿，还是让该源 partial。
+
 **多源同时在线（S4 起）。** 每个 app 单独一个 3 秒预算，超时只让该源 `partial`（记 `latency_ms`），
 其它 app 照常进早报。每条 fact 的证据 ref 固定为 `composio:<toolkit>:<object>/<record_id>`，
 面板上的 `data-evidence` 原样指向输入里存在的记录。

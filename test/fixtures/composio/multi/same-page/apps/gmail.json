@@ -1,0 +1,33 @@
+{
+  "toolkit": "gmail",
+  "routes": [
+    {
+      "kind": "proxyGet",
+      "pattern": "^/gmail/v1/users/me/threads/t-same\\?format=metadata",
+      "body": {
+        "id": "t-same",
+        "messages": [
+          {
+            "id": "m-same",
+            "threadId": "t-same",
+            "payload": {
+              "mimeType": "text/plain",
+              "headers": [
+                { "name": "From", "value": "李娜 <lina@example.com>" },
+                { "name": "To", "value": "我 <me@example.com>" },
+                { "name": "Subject", "value": "产品评审会" },
+                { "name": "Date", "value": "Fri, 31 Oct 2025 15:30:00 +0800" },
+                { "name": "Message-ID", "value": "<t-same@example.com>" }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "proxyGet",
+      "pattern": "^/gmail/v1/users/me/threads\\?",
+      "body": { "threads": [{ "id": "t-same" }], "nextPageToken": null }
+    }
+  ]
+}

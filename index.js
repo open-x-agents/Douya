@@ -92,10 +92,17 @@ export function createRuntime(ctx, config = {}) {
       const plan = [...planned, ...(state.manual ?? [])].sort((a, b) => a.fireAt.localeCompare(b.fireAt))
       // `state.done` is what the 已完成 button writes. It has to reach the planner, or a meeting
       // the member ticked off still fires through its snoozed copy (#95).
-      const firing = due(plan, {
+      //
+      // The filtered plan is used twice on purpose. `due()` alone is not enough: `nextWake()`
+      // looks at `plan` for the next moment to wake up, and a ticked-off meeting that has already
+      // passed its fireAt keeps asking for `delayMs: 0` — `arm(0)` then ticks again immediately,
+      // forever, until the meeting starts (PR #96's Verdict: INC caught exactly that).
+      const finished = Object.keys(state.done ?? {})
+      const open = plan.filter(item => state.done?.[item.id] === undefined)
+      const firing = due(open, {
         now: moment,
         sent: Object.keys(state.sent ?? {}),
-        done: Object.keys(state.done ?? {}),
+        done: finished,
       })
       const deliveries = []
       const delivered = new Set()
@@ -128,7 +135,7 @@ export function createRuntime(ctx, config = {}) {
       }
       const sent = { ...(state.sent ?? {}) }
       for (const key of delivered) sent[key] = now().toISOString()
-      const next = rt.nextWake({ plan, sent: Object.keys(sent), moment })
+      const next = rt.nextWake({ plan: open, sent: Object.keys(sent), moment })
       await store.save({
         ...state,
         sources: { ...(state.sources ?? {}), feishu_cal: calendarSource },
@@ -246,7 +253,9 @@ export function createRuntime(ctx, config = {}) {
         }
         const result = await rt.onCardAction(body)
         return new Response(JSON.stringify({
-          toast: result.ok ? { type: 'success', content: TOASTS[result.op] ?? '已记录' } : { type: 'error', content: '这张卡片不认识这次点击' },
+          toast: result.ok
+            ? { type: 'success', content: TOASTS[result.op] ?? '已记录' }
+            : { type: 'error', content: REASONS[result.reason] ?? '这张卡片不认识这次点击' },
         }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
       },
     }), 'opendigitalmate: card callback')
@@ -258,6 +267,11 @@ export function createRuntime(ctx, config = {}) {
   }
 
   return rt
+}
+
+// 拒绝的理由说人话：点了已完成的日程再点推迟，不该是「不认识这次点击」。
+const REASONS = {
+  'already-done': '这件事已经标成完成了，不能再推迟',
 }
 
 const TOASTS = {

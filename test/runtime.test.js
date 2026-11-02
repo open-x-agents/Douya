@@ -187,3 +187,69 @@ test('start reads the store before the first pass, so a wake cannot save it empt
   assert.equal(JSON.parse(await readFile(join(dir, 'state.json'), 'utf8')).members.m1.name, '小王')
   rt.stop()
 })
+
+// #95: 先「推迟」再「已完成」，原来到点还会再发一张。`state.done` 只写没人读，`due()` 只看
+// 已投递的 key，于是被推迟的那份副本在 09:22 照样发出去。
+test('a meeting snoozed and then ticked off sends nothing at the snoozed moment', async () => {
+  const { rt, sent, setClock } = await runtime()
+  const press = (op, id) => rt.onCardAction({ operator: { open_id: 'ou_owner' }, action: { value: { k: 'reminder', id, op } } })
+
+  setClock('2026-10-30T09:12:00Z')
+  await rt.tick()
+  assert.equal(sent.length, 1, 'the 09:10 warning for the 09:20 meeting went out')
+
+  assert.deepEqual(await press('snooze', 'e1'), { ok: true, op: 'snooze', id: 'e1', openId: 'ou_owner' })
+  setClock('2026-10-30T09:13:00Z')
+  assert.deepEqual(await press('done', 'e1'), { ok: true, op: 'done', id: 'e1', openId: 'ou_owner' })
+
+  setClock('2026-10-30T09:22:00Z')
+  const after = await rt.tick()
+  assert.deepEqual(after.firing, [], 'a finished meeting is not due again at the snoozed moment')
+  assert.equal(sent.length, 1, 'no second card')
+})
+
+test('ticking a meeting off before its warning keeps it from firing at all', async () => {
+  const { rt, sent, setClock } = await runtime()
+  setClock('2026-10-30T09:05:00Z')
+  await rt.tick()
+  const press = (op, id) => rt.onCardAction({ operator: { open_id: 'ou_owner' }, action: { value: { k: 'reminder', id, op } } })
+  assert.equal((await press('done', 'e2')).ok, true)
+
+  setClock('2026-10-30T13:52:00Z')
+  const result = await rt.tick()
+  assert.deepEqual(result.firing.map(item => item.id), [], 'the 14:00 meeting was already handled')
+  assert.equal(sent.length, 0)
+})
+
+test('a finished meeting cannot be snoozed back to life', async () => {
+  const { rt } = await runtime()
+  const press = (op, id) => rt.onCardAction({ operator: { open_id: 'ou_owner' }, action: { value: { k: 'reminder', id, op } } })
+  await press('done', 'e1')
+  assert.deepEqual(await press('snooze', 'e1'), { ok: false, reason: 'already-done' })
+  assert.deepEqual(rt.store.get().manual ?? [], [])
+})
+
+test('pressing done twice keeps the first moment', async () => {
+  const { rt, setClock } = await runtime()
+  const press = op => rt.onCardAction({ operator: { open_id: 'ou_owner' }, action: { value: { k: 'reminder', id: 'e1', op } } })
+  setClock('2026-10-30T09:10:00Z')
+  await press('done')
+  const first = rt.store.get().done.e1
+  setClock('2026-10-30T09:20:00Z')
+  await press('done')
+  assert.equal(rt.store.get().done.e1, first)
+})
+
+// #96 的 Verdict: INC 抓到的第二个问题：`due()` 过滤了 done，但 `nextWake()` 还在看没过滤的
+// plan。会前点过「已完成」的日程一旦过了自己的 fireAt，每次唤醒都算出 `delayMs: 0`，
+// `arm(0)` 立刻再 tick 再算 0 —— 0ms 热循环，每次都打日历源并落盘，一直到会议开始。
+test('a ticked-off meeting does not arm a 0ms wake loop', async () => {
+  const { rt, setClock } = await runtime()
+  await rt.onCardAction({ operator: { open_id: 'ou_owner' }, action: { value: { k: 'reminder', id: 'e1', op: 'done' } } })
+
+  setClock('2026-10-30T09:11:00Z')
+  const result = await rt.tick()
+  assert.deepEqual(result.firing, [], 'the finished meeting is not due')
+  assert.ok(result.nextWake.delayMs > 0, `a finished meeting must not ask to wake now (got ${result.nextWake.delayMs}ms)`)
+  assert.equal(result.nextWake.id, 'e2', 'the next wake belongs to the afternoon meeting, not the finished one')
+})

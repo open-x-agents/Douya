@@ -90,7 +90,13 @@ export function createRuntime(ctx, config = {}) {
       }
       const planned = planFor(reading.ok ? reading.value : [], { now: moment, leadMinutes: config.leadMinutes })
       const plan = [...planned, ...(state.manual ?? [])].sort((a, b) => a.fireAt.localeCompare(b.fireAt))
-      const firing = due(plan, { now: moment, sent: Object.keys(state.sent ?? {}) })
+      // `state.done` is what the 已完成 button writes. It has to reach the planner, or a meeting
+      // the member ticked off still fires through its snoozed copy (#95).
+      const firing = due(plan, {
+        now: moment,
+        sent: Object.keys(state.sent ?? {}),
+        done: Object.keys(state.done ?? {}),
+      })
       const deliveries = []
       const delivered = new Set()
       for (const reminder of firing) {
@@ -182,13 +188,22 @@ export function createRuntime(ctx, config = {}) {
       const action = readAction(payload)
       if (!action.ok) return { ok: false, reason: action.reason }
       const state = store.get()
+      // A finished meeting cannot be pushed further down the day: the card that offers 推迟 is
+      // the one already ticked off, and re-planning it would resurrect a reminder the member
+      // just closed (#95).
+      if (action.op === 'snooze' && state.done?.[action.id] !== undefined) {
+        return { ok: false, reason: 'already-done' }
+      }
       if (action.op === 'snooze') {
         const found = (state.upcoming ?? []).find(item => item.id === action.id)
         const base = found ?? { id: action.id, title: '日程', startAt: now().toISOString(), fireAt: now().toISOString(), leadMinutes: 0 }
         state.manual = [...(state.manual ?? []), snooze(base, { now: now().getTime(), minutes: SNOOZE_MINUTES })]
       }
       if (action.op === 'done') {
-        state.done = { ...(state.done ?? {}), [action.id]: now().toISOString() }
+        // The first tick keeps its moment; pressing twice must not move it.
+        state.done = { ...(state.done ?? {}), [action.id]: state.done?.[action.id] ?? now().toISOString() }
+        // Snoozed copies of a finished meeting are dead weight; the plan never sees them again.
+        state.manual = (state.manual ?? []).filter(item => item.id !== action.id)
       }
       if (action.op === 'reschedule') {
         state.pendingReschedule = { ...(state.pendingReschedule ?? {}), [action.id]: action.openId }

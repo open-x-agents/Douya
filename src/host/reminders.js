@@ -45,9 +45,16 @@ export function planFor(events, { now = Date.now(), leadMinutes = DEFAULT_LEAD_M
 
 // Which planned reminders are due now and were not delivered yet. `sent` holds the keys of
 // what already fired; anything else due is returned oldest first.
-export function due(plan, { now = Date.now(), sent = [] } = {}) {
+//
+// `done` holds the ids the member already ticked off. A ticked-off meeting is over: it is not
+// due again, not even through a snoozed copy with a later fireAt, because the promise the card
+// made was about that meeting and that meeting is finished. Without this, pressing 推迟 and
+// then 已完成 sends the same reminder a third time (#95).
+export function due(plan, { now = Date.now(), sent = [], done = [] } = {}) {
   const delivered = new Set(sent)
+  const finished = new Set(done)
   return plan
+    .filter(reminder => !finished.has(reminder.id))
     .filter(reminder => !delivered.has(reminderKey(reminder)) && Date.parse(reminder.fireAt) <= now)
     .sort((a, b) => a.fireAt.localeCompare(b.fireAt))
 }

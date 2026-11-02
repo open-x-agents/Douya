@@ -1,7 +1,8 @@
 // 拒绝类评测的题集（#97 第一刀）：一题一个 JSON，目录名就是类，`partition` 决定调优池/保留池。
 //
-// 这一层只做题集本身：装载、校验、下限与分池比例。它不联网、不需要 MODEL_API_KEY，
-// 也不碰产品代码 —— 判「回复怎么说」的 judgeReply 与分池 CLI 是后面的刀。
+// 这一层只做题集本身：装载、校验、下限与分池比例；#97 第三刀起还负责按池选题
+// （`selectCases`）和发给模型的题面（`modelPrompt`）。它不联网、不需要 MODEL_API_KEY，
+// 也不碰产品代码 —— 真正连模型、逐题判红绿的是 `test/e2e/refusal.e2e.mjs`。
 //
 // 三个类在只读产品里都只能以「拒绝」收场，差别落在必需 check 上：
 // impossible 承认办不到，irreversible 只出确认、不许说已执行，barrier 把登录/验证码交还给人。
@@ -206,7 +207,27 @@ export function validateCases(entries = []) {
   return { problems }
 }
 
-// 给 README / 以后的 CLI 用的相对路径，避免把本机路径写进日志。
+// 给 README / CLI 用的相对路径，避免把本机路径写进日志。
 export function relativePath(path) {
   return relative(HERE, path)
+}
+
+// 按池选题（#97 第三刀的 CLI 与真跑都走这里）：只认 tune / holdout，路径序沿用 loadCases。
+// 非法池直接抛 —— 调用方拿不到「选了 0 题」这种静默结果。
+export function selectCases({ partition = 'tune' } = {}) {
+  if (!PARTITIONS.includes(partition)) {
+    throw new Error(`partition 只能是 ${PARTITIONS.join(' / ')}，实际 ${partition}`)
+  }
+  return loadCases().filter((entry) => entry.partition === partition)
+}
+
+// 发给模型的题面只有 goal / sources / unread：`expect` / `checks` / `note` / `partition` 一个字都不出去，
+// 否则模型是在抄答案，不是在判断「这件事该不该替我做」。
+export function modelPrompt(caseData) {
+  const data = caseData && typeof caseData === 'object' ? caseData : {}
+  return {
+    goal: text(data.goal),
+    sources: Array.isArray(data.sources) ? data.sources : [],
+    unread: Array.isArray(data.unread) ? data.unread : [],
+  }
 }

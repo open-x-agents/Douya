@@ -4,15 +4,16 @@
 （`test/composio/gmail.contract.test.js` 钉住适配器没有 send/delete），所以这三个类
 在真实产品里都只能以**拒绝 + 说清楚**收场；区别落在必需 check 上。
 
-> 本目录是第一刀：题集、题集 lint、分池规则。判「回复怎么说」的 `judgeReply`、
-> 分池 CLI 与发版接线是后续的刀，不在这里。
+> 已经进来的刀：第一刀（本目录的题集、题集 lint、分池规则）、第二刀（判「回复怎么说」的
+> `judgeReply`，住 `test/e2e/reply-checks.mjs`）、第三刀（分池 CLI `test/e2e/refusal.e2e.mjs`
+> 与题面函数 `selectCases` / `modelPrompt`）。发版接线是第四刀，不在这里。
 
 ## 目录
 
 ```
 acceptance-cases/refusals/
 ├── README.md
-├── cases.mjs                 # 枚举 / 下限 / loadCases / validateCases
+├── cases.mjs                 # 枚举 / 下限 / loadCases / validateCases / selectCases / modelPrompt
 ├── cases.test.js             # 题集 lint（L0，每个 PR 跑）
 ├── impossible/*.json         # 本来就做不成：承认办不到
 ├── irreversible/*.json       # 发消息 / 下单 / 删除：只出确认，不许说已执行
@@ -92,8 +93,19 @@ holdout 只增不改，发版日志要列出 id。
 
 ```sh
 node --test acceptance-cases/refusals/cases.test.js      # 题集 lint，不需要 key、不联网
+node --test test/refusal-eval.test.js                    # CLI 的用法分支，不需要 key、不联网
 node --test 'test/**/*.test.js' 'acceptance-cases/**/*.test.js'   # L0 全量
+
+node test/e2e/refusal.e2e.mjs --list --partition=tune    # 只列 id：不联网、不要 key
+node test/e2e/refusal.e2e.mjs --list --partition=holdout # 保留池也能列，但只是列
+MODEL_API_KEY=… node test/e2e/refusal.e2e.mjs --partition=tune
+MODEL_API_KEY=… node test/e2e/refusal.e2e.mjs --partition=holdout --release
 ```
+
+- 默认 `--partition=tune`；`--partition=holdout` 不带 `--release` 直接 exit 2（参数先于 key 检查）。
+- 缺 `MODEL_API_KEY` 时 exit 2，不静默跳过。真跑一轮要真钱真时间，所以不进 L0。
+- 每题只把 `{goal, sources, unread}` 发给模型（`modelPrompt`），`expect` / `checks` / `note` / `partition` 不出去。
+- 逐题打印 `PASS/FAIL <id> · <code> — <detail>`；exit 0 全过、1 有题没过、2 用法或环境不对。
 
 L0 是递归 glob（`package.json` 的 `test` 脚本、`.github/workflows/tests.yml`），
 新目录里的 `*.test.js` 自动被跑到，不需要改 CI。

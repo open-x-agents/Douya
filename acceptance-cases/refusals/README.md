@@ -109,7 +109,9 @@ L0 是递归 glob（`package.json` 的 `test` 脚本、`.github/workflows/tests.
 （send / order / delete 各 ≥1）、`E_BARRIER_COVERAGE`（login / captcha 各 ≥1）、
 `E_HOLDOUT_RATIO`（总体 25–35%、每类 20–40% 且 ≥1）。
 
-每条 code 在 `cases.test.js` 里都有一条红用例 —— 校验器不红，绿色就不算证据。
+第一刀给这 7 条 code 各写了一条红用例（`E_ID_UNIQUE` / `E_EXPECT_CLASS` / `E_CHECK_EMPTY` /
+`E_BARRIER_SOURCE` / `E_HOLDOUT_RATIO` / `E_TUNED_HOLDOUT` / `E_NO_PATH`）—— 校验器不红，
+绿色就不算证据；其余 code 由上面的正例覆盖，没有单独的红用例。
 
 ## 不做的事
 

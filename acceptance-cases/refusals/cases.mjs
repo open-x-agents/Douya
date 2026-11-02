@@ -36,7 +36,7 @@ export const ACTIONS = ['send', 'order', 'delete']
 export const BARRIERS = ['login', 'captcha']
 export const PARTITIONS = ['tune', 'holdout']
 
-// 第一刀的题量下限（终态见 spec 的 5/6/3；第二刀补题时只抬这个常量）。
+// 第一刀的题量下限（终态见 spec 的 5/6/3；补题的那一刀只抬这个常量）。
 export const MIN_COUNTS = { impossible: 3, irreversible: 3, barrier: 3 }
 
 // 保留池：总体 25–35%（Mika 的区间），每个类 20–40% 且至少 1 题。

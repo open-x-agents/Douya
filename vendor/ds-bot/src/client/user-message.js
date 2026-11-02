@@ -8,6 +8,7 @@ import { noHover } from './motion.js'
 import { clockLabel, messageClock } from './text.js'
 import { useFold } from './fold.js'
 import { hideCitedHistory } from '../shared/cite.js'
+import { visibleUserText } from '../shared/issue-card.js'
 
 // -------------------------------------------------------------------------
 // The user's own messages. DSH draws every "@word" in them as a file reference, and
@@ -28,7 +29,7 @@ export function contentParts(content) {
     else rest.push(block)
   }
   // Joined as the group host joins them, so a mention never spans two blocks here only.
-  return { text: texts.join('\n'), attachments, rest }
+  return { text: visibleUserText(texts.join('\n')), attachments, rest }
 }
 
 // In a group only its members are called; elsewhere a mention opens that Bot's chat.

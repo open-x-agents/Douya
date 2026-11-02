@@ -72,6 +72,8 @@ export function install(rt) {
     // Inbound ask cards. The desktop reads these from /api state; a timeout does not send them.
     pendingRoutes: state.pendingRoutes ?? {},
     views: state.views ?? {},
+    issueCards: state.issueCards ?? {},
+    issueWidgets: state.issueWidgets ?? {},
     // Aside answers of each Bot's current part, newest first. Not part of the
     // model-visible history; earlier parts send their cards on their own pages.
     btwCards: rt.btwView?.() ?? {},
@@ -633,6 +635,10 @@ export function install(rt) {
         case 'diagnostics-clear':
           await rt.diagnostics.clear()
           return ok(true)
+        case 'save-issue-widget': {
+          await rt.load()
+          return ok(await rt.saveIssueWidget(body.callId, body.widget))
+        }
         default:
           return fail(`Unknown endpoint ${endpoint}`, 'bot/not-found')
       }

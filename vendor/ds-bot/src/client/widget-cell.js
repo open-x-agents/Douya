@@ -7,6 +7,13 @@ import { SettledHandoff } from './handoff-card.js'
 import { heldCardKey } from './sources.js'
 import { WidgetCard, ViewUi, DEEP_VIEW_CSS, WidgetView as CoreWidgetView, ViewMenuList as CoreViewMenuList } from 'deep-view/react'
 import { checkShownView } from 'deep-view/core'
+import { createIssueViews, ISSUE_CSS as ISSUE_CARD_CSS } from './issue-card.js'
+
+const issueViews = createIssueViews(h)
+export const IssueCard = issueViews.IssueCard
+export const IssueTurnTail = issueViews.IssueTurnTail
+export const IssueScopeDock = issueViews.IssueScopeDock
+export const ISSUE_CSS = ISSUE_CARD_CSS
 
 // The core components draw with the host's labels: the submit keeps ds-bot's
 // wording, the rest resolve through ds-bot's dictionary.

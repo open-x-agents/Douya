@@ -20,6 +20,7 @@ import { openTurnAt } from './btw.js'
 import { HANDOFF_ACK, HISTORY_TIMEOUT_MS, REPLY_KIND, SOURCE_KIND } from './constants.js'
 import { CHECKPOINT_PROMPT, STEWARD_SYSTEM, checkpointCount, checkpointTail, checkpointTailNote, checkpointText, linesFor, parseDecision, stewardRequest } from './steward.js'
 import { RESUME_DELAY_MS } from './resume.js'
+import { issueCardForTurn, visibleUserText } from '../shared/issue-card.js'
 import { clip, createClock, escapeRegExp, estimateTokens, splitRef, textOf } from './text.js'
 import { checkShownView, normalizeView, readViewReply, viewCardText, viewReply, viewReplyText } from 'deep-view/core'
 
@@ -1258,7 +1259,7 @@ export function install(rt) {
       if (source?.kind === 'user') {
         const content = Array.isArray(event.data.content) ? event.data.content : []
         const images = content.filter(block => block?.type === 'image').length
-        stamp(event, { kind: 'user', text: textOf(content), ...(images > 0 ? { images } : {}), time: event.time })
+        stamp(event, { kind: 'user', text: visibleUserText(textOf(content)), ...(images > 0 ? { images } : {}), time: event.time })
       } else if (source?.kind === REPLY_KIND) {
         const text = textOf(event.data.content)
         const reply = readReply(text)
@@ -1269,7 +1270,34 @@ export function install(rt) {
         stamp(event, { kind: 'event', role: source.role, botId: source.senderSessionId ?? null, name: source.senderName ?? null, roomId: source.roomId ?? null, time: event.time })
       }
     }
-    return items
+    return events.length < 2 ? items : issueRows(partId, items)
+  }
+
+  // A card hangs on the turn it was read from. A one-event feed slice is the live
+  // stream; the card is not ready there, and the turn tail draws it instead.
+  function issueRows(partId, items) {
+    const cards = state.issueCards
+    if (cards == null || typeof cards !== 'object') return items
+    const last = new Map()
+    for (let index = 0; index < items.length; index += 1) {
+      const turn = items[index].turn
+      if (typeof turn === 'number') last.set(turn, index)
+    }
+    if (last.size === 0) return items
+    const extra = new Map()
+    for (const [turn, index] of last) {
+      const card = issueCardForTurn(cards, partId, turn)
+      if (card === undefined) continue
+      extra.set(index, { kind: 'issue', callId: card.callId, turn, time: items[index].time })
+    }
+    if (extra.size === 0) return items
+    const next = []
+    for (let index = 0; index < items.length; index += 1) {
+      next.push(items[index])
+      const row = extra.get(index)
+      if (row !== undefined) next.push(row)
+    }
+    return next
   }
 
   async function partPage(parts, index, cursor) {

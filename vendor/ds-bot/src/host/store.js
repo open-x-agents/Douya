@@ -19,7 +19,7 @@ export function install(rt) {
   const { ctx, home, statePath } = rt
 
   /** @type {{version:1, workspaceId?:string, mainBotIds:string[], bots:Record<string,any>, privateArchives:any[], rooms:Record<string,any>, agents:Record<string,any>, capabilities:{items:Record<string,any>}, exchanges:any[], exchangeTurns:Record<string,number[]>, workLines:Record<string,any>, workLineCompleted:Record<string,true>, pendingRoutes:Record<string,any>, revision:number}} */
-  const state = { version: 1, mainBotIds: [], bots: {}, privateArchives: [], rooms: {}, agents: {}, capabilities: { items: {} }, exchanges: [], exchangeTurns: {}, works: {}, requests: {}, questions: {}, views: {}, prefs: {}, switching: {}, workLines: {}, workLineCompleted: {}, pendingRoutes: {}, revision: 0 }
+  const state = { version: 1, mainBotIds: [], bots: {}, privateArchives: [], rooms: {}, agents: {}, capabilities: { items: {} }, exchanges: [], exchangeTurns: {}, works: {}, requests: {}, questions: {}, views: {}, issueCards: {}, issueWidgets: {}, prefs: {}, switching: {}, workLines: {}, workLineCompleted: {}, pendingRoutes: {}, revision: 0 }
   let loaded = null
   let writing = Promise.resolve()
   const { warn } = rt
@@ -163,6 +163,14 @@ export function install(rt) {
     if (state.works === null || typeof state.works !== 'object' || Array.isArray(state.works)) state.works = {}
     if (state.requests === null || typeof state.requests !== 'object' || Array.isArray(state.requests)) state.requests = {}
     if (state.views === null || typeof state.views !== 'object' || Array.isArray(state.views)) state.views = {}
+    if (state.issueCards === null || typeof state.issueCards !== 'object' || Array.isArray(state.issueCards)) {
+      state.issueCards = {}
+      migrated = true
+    }
+    if (state.issueWidgets === null || typeof state.issueWidgets !== 'object' || Array.isArray(state.issueWidgets)) {
+      state.issueWidgets = {}
+      migrated = true
+    }
     if (state.pendingRoutes === null || typeof state.pendingRoutes !== 'object' || Array.isArray(state.pendingRoutes)) {
       state.pendingRoutes = {}
       migrated = true

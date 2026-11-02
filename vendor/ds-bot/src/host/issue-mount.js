@@ -1,7 +1,8 @@
 // Issue card mount. After a turn already produced Issue rows, the host may hang a
-// native card beside that reply. The card is presentation: it reads the public
+// native card beside that reply. The card is presentation: it tries to read public
 // issue bodies for excerpts, and it never answers, never registers a tool, and
-// never writes back to GitHub. A failed read stores nothing.
+// never writes back to GitHub. A failed public read still stores the card from the
+// rows already in the turn, with those bodies left empty.
 import { matchesIssueScene, projectIssueScene } from '../shared/issue-scene.js'
 import {
   BODY_LIMIT,
@@ -80,6 +81,93 @@ async function readJson(rt, url) {
 }
 
 /**
+ * @param {unknown[]} values
+ * @returns {number | undefined}
+ */
+function knownCount(values) {
+  for (const value of values) {
+    if (Number.isInteger(value) && value >= 0) return value
+  }
+  return undefined
+}
+
+/**
+ * @param {{ comments?: number }} row
+ */
+function sessionEvidence(row) {
+  const count = knownCount([row.comments])
+  return {
+    publicRead: false,
+    commentsRead: false,
+    body: '',
+    excerpts: [],
+    labels: [],
+    commentCount: count ?? 0,
+    commentState: count === 0 ? 'none' : 'unread',
+  }
+}
+
+/**
+ * Best-effort public excerpt. A 404 or any other read failure keeps the row.
+ * @param {any} rt
+ * @param {{ owner: string, repo: string }} repo
+ * @param {{ number: number, comments?: number }} row
+ */
+async function publicEvidence(rt, repo, row) {
+  const root = `https://api.github.com/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.repo)}/issues/${row.number}`
+  let issueJson
+  try {
+    issueJson = await readJson(rt, root)
+  } catch (error) {
+    rt.warn('ds-bot: issue public read failed: %s', error)
+    return sessionEvidence(row)
+  }
+  if (issueJson == null || typeof issueJson !== 'object' || Array.isArray(issueJson)) {
+    rt.warn('ds-bot: issue public read failed: %s', 'issue read failed')
+    return sessionEvidence(row)
+  }
+  let commentsJson = []
+  let commentsRead = false
+  try {
+    commentsJson = await readJson(rt, `${root}/comments?per_page=${COMMENT_MAX}`)
+    if (!Array.isArray(commentsJson)) throw new Error('issue read failed')
+    commentsRead = true
+  } catch (error) {
+    rt.warn('ds-bot: issue public read failed: %s', error)
+    commentsJson = []
+  }
+  const count = knownCount([issueJson.comments, row.comments, commentsRead ? commentsJson.length : undefined])
+  const excerpts = !commentsRead || count === 0
+    ? []
+    : commentsJson.slice(0, COMMENT_MAX).map(comment => clipChars(comment?.body, COMMENT_LIMIT)).filter(excerpt => excerpt !== '')
+  const commentCount = count ?? 0
+  const commentState = commentsRead
+    ? commentStateOf(commentCount, excerpts.length)
+    : (count === 0 ? 'none' : 'unread')
+  return {
+    publicRead: true,
+    commentsRead,
+    body: clipChars(issueJson.body, BODY_LIMIT),
+    excerpts,
+    labels: labelNames(issueJson.labels),
+    commentCount,
+    commentState,
+  }
+}
+
+/**
+ * @param {number} total
+ * @param {number} issueReads
+ * @param {number} fullReads
+ * @returns {'public' | 'partial' | 'session'}
+ */
+function evidenceOf(total, issueReads, fullReads) {
+  if (total === 0 || issueReads === 0) return 'session'
+  if (fullReads === total) return 'public'
+  return 'partial'
+}
+
+/**
  * @param {any} rt
  * @param {string} sessionId
  */
@@ -123,18 +211,12 @@ async function settle(rt, sessionId, turn, text) {
   if (rows.length === 0) return
   const notes = parseCitations(text, rows.map(row => String(row.number)))
   const issues = []
+  let issueReads = 0
+  let fullReads = 0
   for (const row of rows) {
-    const root = `https://api.github.com/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.repo)}/issues/${row.number}`
-    const issueJson = await readJson(rt, root)
-    const commentsJson = await readJson(rt, `${root}/comments?per_page=${COMMENT_MAX}`)
-    if (issueJson == null || typeof issueJson !== 'object' || Array.isArray(issueJson)) throw new Error('issue read failed')
-    if (!Array.isArray(commentsJson)) throw new Error('issue read failed')
-    const count = Number.isInteger(issueJson.comments) && issueJson.comments >= 0
-      ? issueJson.comments
-      : (Number.isInteger(row.comments) && row.comments >= 0 ? row.comments : commentsJson.length)
-    const excerpts = count === 0
-      ? []
-      : commentsJson.slice(0, COMMENT_MAX).map(comment => clipChars(comment?.body, COMMENT_LIMIT)).filter(excerpt => excerpt !== '')
+    const evidence = await publicEvidence(rt, repo, row)
+    if (evidence.publicRead) issueReads += 1
+    if (evidence.publicRead && evidence.commentsRead) fullReads += 1
     const cited = notes.issues[String(row.number)] ?? {}
     /** @type {Record<string, string>} */
     const fields = {}
@@ -144,11 +226,11 @@ async function settle(rt, sessionId, turn, text) {
       number: row.number,
       title: row.title,
       url: row.url,
-      commentCount: count,
-      commentState: commentStateOf(count, excerpts.length),
-      body: clipChars(issueJson.body, BODY_LIMIT),
-      excerpts,
-      labels: labelNames(issueJson.labels),
+      commentCount: evidence.commentCount,
+      commentState: evidence.commentState,
+      body: evidence.body,
+      excerpts: evidence.excerpts,
+      labels: evidence.labels,
       ...fields,
     })
   }
@@ -160,6 +242,7 @@ async function settle(rt, sessionId, turn, text) {
     repo: repo.repo,
     fetchedAt: new Date().toISOString(),
     createdAt: Date.now(),
+    evidence: evidenceOf(issues.length, issueReads, fullReads),
     conclusion: notes.conclusion,
     issues,
   }

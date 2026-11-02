@@ -281,7 +281,9 @@ export function canShowIssueCard(roster, sessionId) {
 }
 
 export function headerLine(card) {
-  return `读于 ${card.fetchedAt} · ${card.owner}/${card.repo} · 公开 API · 只读`
+  const evidence = card?.evidence
+  const via = evidence === 'session' ? '会话列表' : (evidence === 'partial' ? '公开 API · 部分未读到' : '公开 API')
+  return `读于 ${card.fetchedAt} · ${card.owner}/${card.repo} · ${via} · 只读`
 }
 
 export const BODY_LIMIT = BODY_KEEP

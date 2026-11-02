@@ -13,6 +13,7 @@ import {
   parseCitations,
   planAction,
   repoOfRows,
+  headerLine,
   issueShown,
   visibleUserText,
 } from '../src/shared/issue-card.js'
@@ -259,6 +260,9 @@ test('a matching private turn mounts one card and keeps the reply text', async (
   assert.equal(card.repo, 'openDigitalMate')
   assert.equal(card.sessionId, 'chief')
   assert.equal(card.turn, 3)
+  assert.equal(card.evidence, 'public')
+  assert.match(headerLine(card), /公开 API · 只读/)
+  assert.equal(headerLine(card).includes('会话列表'), false)
   assert.equal(card.conclusion, '先做来源校验')
   assert.equal(JSON.stringify(card).includes('还没有提炼'), false)
   assert.equal(JSON.stringify(card).includes('REST TITLE'), false)
@@ -335,7 +339,7 @@ test('a matching private turn mounts one card and keeps the reply text', async (
   assert.equal(env.rt.state.issueCards[callId].conclusion, '先做来源校验')
 })
 
-test('a group, another bot, a hidden turn, a list without urls, and a failed read never mount a card', async (t) => {
+test('a group, another bot, a hidden turn, or a list without urls never mounts a card', async (t) => {
   let fetches = 0
   const env = await setup({
     issueFetch: async () => {
@@ -363,8 +367,69 @@ test('a group, another bot, a hidden turn, a list without urls, and a failed rea
   assert.equal(env.sent.at(-1), plain)
   await play(env.ctx, env.rt, 'chief', 7, [toolResult(ghList()), assistant(CITED)])
   assert.equal(fetches > 0, true)
-  assert.deepEqual(env.rt.state.issueCards, {})
+  const card = env.rt.state.issueCards['issue:chief:7']
+  assert.equal(card.evidence, 'session')
+  assert.match(headerLine(card), /会话列表 · 只读/)
+  assert.equal(headerLine(card).includes('公开 API'), false)
+  assert.equal(card.conclusion, '先做来源校验')
+  assert.equal(card.issues.length, 2)
+  assert.equal(card.issues[0].title, '卡片回调没有来源校验，可伪造「已完成/推迟」')
+  assert.equal(card.issues[0].url, 'https://github.com/open-x-agents/openDigitalMate/issues/98')
+  assert.equal(card.issues[0].body, '')
+  assert.deepEqual(card.issues[0].labels, [])
+  assert.deepEqual(card.issues[0].excerpts, [])
+  assert.equal(card.issues[0].commentState, 'none')
+  assert.equal(card.issues[0].commentCount, 0)
+  assert.equal(card.issues[0].priority, 'P0')
+  assert.equal(card.issues[0].step, '校验回调签名')
+  assert.equal(card.issues[1].body, '')
+  assert.equal(card.issues[1].commentState, 'unread')
+  assert.equal(card.issues[1].commentCount, 2)
+  assert.equal(card.issues[1].topic, '评测')
+  assert.equal(JSON.stringify(card).includes('还没有提炼'), false)
+  assert.equal(JSON.stringify(card).includes('REST TITLE'), false)
   assert.equal(JSON.stringify(env.rt.state).includes('没读到'), false)
+  const listed = [
+    { type: 'turn/start', data: { turn: 7 }, time: 3 },
+    { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: CITED }] } }, time: 4 },
+  ]
+  const shown = env.rt.displayItems('chief', listed)
+  assert.equal(shown.filter(item => item.kind === 'issue').length, 1)
+  assert.equal(shown.at(-1).callId, 'issue:chief:7')
   await env.ctx.sessionController.prompt(plain)
-  assert.equal(env.sent.at(-1), plain)
+  const attached = env.sent.at(-1).content[0].text
+  assert.match(attached, /\[Issue brief scope\]/)
+  assert.match(attached, /当前讨论：#98 · /)
+  assert.equal(attached.includes('  hello\n'), true)
+})
+
+test('one failed public read keeps the other issue body on the same card', async (t) => {
+  const env = await setup({
+    issueFetch: async (url) => {
+      const number = Number(/issues\/(\d+)/.exec(url)?.[1])
+      if (number === 97) return jsonResponse({ message: 'Not Found' }, 404)
+      if (url.includes('/comments')) return jsonResponse([])
+      return jsonResponse({ body: '正文', comments: 0, labels: [{ name: 'bug' }] })
+    },
+  })
+  t.after(() => env.stop())
+  await play(env.ctx, env.rt, 'chief', 3, [toolResult(ghList()), assistant('列表')])
+  const card = env.rt.state.issueCards['issue:chief:3']
+  assert.equal(card.evidence, 'partial')
+  assert.match(headerLine(card), /公开 API · 部分未读到/)
+  assert.equal(card.issues[0].body, '正文')
+  assert.deepEqual(card.issues[0].labels, ['bug'])
+  assert.equal(card.issues[0].commentState, 'none')
+  assert.equal(card.issues[1].title, '拒绝类评测用例')
+  assert.equal(card.issues[1].body, '')
+  assert.deepEqual(card.issues[1].excerpts, [])
+  assert.equal(card.issues[1].commentState, 'unread')
+  assert.equal(card.issues[1].commentCount, 2)
+  assert.equal(card.issues[1].topic, '')
+  assert.equal(JSON.stringify(card).includes('还没有提炼'), false)
+  const items = env.rt.displayItems('chief', [
+    { type: 'turn/start', data: { turn: 3 }, time: 1 },
+    { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '列表' }] } }, time: 2 },
+  ])
+  assert.equal(items.filter(item => item.kind === 'issue').length, 1)
 })

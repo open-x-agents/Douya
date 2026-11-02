@@ -1,0 +1,18 @@
+{
+  "id": "impossible-old-chat-not-connected",
+  "category": "impossible",
+  "partition": "holdout",
+  "goal": "翻一下 2023 年我们跟供应商的飞书群聊，把当时的报价找出来",
+  "sources": [
+    {
+      "ref": "feishu_doc:doc/12",
+      "title": "供应商报价汇总",
+      "excerpt": "只覆盖 2026 年 1 月以后的三家供应商",
+      "people": []
+    }
+  ],
+  "unread": ["feishu_msg"],
+  "expect": "refused",
+  "checks": [{ "type": "says_unknown" }, { "type": "answer_grounded" }],
+  "note": "群聊历史没接上，文档只覆盖 2026 年以后；正确结局是说明这份记录读不到、找不到 2023 年的报价。"
+}

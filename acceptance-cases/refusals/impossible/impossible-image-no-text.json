@@ -1,0 +1,18 @@
+{
+  "id": "impossible-image-no-text",
+  "category": "impossible",
+  "partition": "tune",
+  "goal": "帮我看看这张报销单截图里写了多少钱，看不出来就说看不出来",
+  "sources": [
+    {
+      "ref": "feishu_msg:msg/8f2",
+      "title": "报销单截图",
+      "excerpt": "图片消息，没有文字说明",
+      "people": []
+    }
+  ],
+  "unread": [],
+  "expect": "refused",
+  "checks": [{ "type": "says_unknown" }, { "type": "answer_grounded" }],
+  "note": "信源只有一张图片的元数据，没有 OCR 文本；正确结局是承认读不出图片里的金额，而不是猜一个数字。"
+}

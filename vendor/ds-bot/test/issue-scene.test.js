@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { TEAM_TOOLS } from '../src/host/constants.js'
 import { install } from '../src/host/prompt.js'
-import { extractIssueRows, matchesIssueScene, projectIssueScene } from '../src/shared/issue-scene.js'
+import { extractIssueRows, inferIssueRepo, matchesIssueScene, projectIssueScene } from '../src/shared/issue-scene.js'
 import { fakeContext } from './fake-ctx.js'
 
 const OPEN_ISSUES = [
@@ -121,4 +121,44 @@ test('tool tables, compact lines, and markdown replies yield rows; a pull reques
   }])
   assert.deepEqual(extractIssueRows('{"message":"Not Found"}'), [])
   assert.deepEqual(extractIssueRows(undefined), [])
+  assert.deepEqual(extractIssueRows('104\tIssue 卡 M2'), [{ number: 104, title: 'Issue 卡 M2', url: '' }])
+  assert.deepEqual(extractIssueRows('104\t2026-11-02T08:00:00Z\tbug'), [])
+})
+
+test('a private triage without issue urls takes the repository named in that turn', () => {
+  const text = [
+    '梳理 `open-x-agents/openDigitalMate` open Issue',
+    '104\tIssue 卡 M2',
+    '11\tOPEN\tComposio 接入',
+    '- #12 飞书只读适配器',
+  ].join('\n')
+  const scene = projectIssueScene({ ...MAIN, text })
+  assert.equal(scene.match, true)
+  assert.deepEqual(scene.issues.map(issue => [issue.number, issue.title, issue.url]), [
+    [104, 'Issue 卡 M2', 'https://github.com/open-x-agents/openDigitalMate/issues/104'],
+    [11, 'Composio 接入', 'https://github.com/open-x-agents/openDigitalMate/issues/11'],
+    [12, '飞书只读适配器', 'https://github.com/open-x-agents/openDigitalMate/issues/12'],
+  ])
+  assert.equal(projectIssueScene({ ...MAIN, isGroup: true, text }).match, false)
+  assert.equal(extractIssueRows('- #12 飞书只读适配器')[0].url, '')
+  const flagged = projectIssueScene({
+    ...MAIN,
+    text: 'gh issue list --repo open-x-agents/openDigitalMate\n- #98 卡片回调没有来源校验',
+  })
+  assert.equal(flagged.issues[0].url, 'https://github.com/open-x-agents/openDigitalMate/issues/98')
+  const bare = projectIssueScene({
+    ...MAIN,
+    text: '梳理 open-x-agents/openDigitalMate open Issue\n98\tOPEN\t卡片回调没有来源校验',
+  })
+  assert.equal(bare.issues[0].url, 'https://github.com/open-x-agents/openDigitalMate/issues/98')
+  const api = projectIssueScene({
+    ...MAIN,
+    text: 'https://api.github.com/repos/open-x-agents/openDigitalMate/issues/98\n- #98 卡片回调没有来源校验',
+  })
+  assert.equal(api.issues[0].url, 'https://github.com/open-x-agents/openDigitalMate/issues/98')
+  assert.deepEqual(inferIssueRepo('see vendor/ds-bot/src/host/issue-mount.js'), undefined)
+  assert.deepEqual(inferIssueRepo('read and/or write'), undefined)
+  const unnamed = projectIssueScene({ ...MAIN, text: '- #98 卡片回调没有来源校验' })
+  assert.equal(unnamed.match, true)
+  assert.equal(unnamed.issues[0].url, '')
 })

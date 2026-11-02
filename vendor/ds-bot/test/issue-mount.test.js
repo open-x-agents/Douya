@@ -352,7 +352,7 @@ test('a matching private turn mounts one card and keeps the reply text', async (
   assert.equal(env.rt.state.issueCards[callId].conclusion, '先做来源校验')
 })
 
-test('a group, another bot, a hidden turn, or a list without urls never mounts a card', async (t) => {
+test('a group, another bot, or a hidden turn never mounts a card', async (t) => {
   let fetches = 0
   const env = await setup({
     issueFetch: async () => {
@@ -414,6 +414,48 @@ test('a group, another bot, a hidden turn, or a list without urls never mounts a
   assert.match(attached, /\[Issue brief scope\]/)
   assert.match(attached, /当前讨论：#98 · /)
   assert.equal(attached.includes('  hello\n'), true)
+})
+
+test('a private gh table or #N list mounts when the turn names the repo', async (t) => {
+  let fetches = 0
+  const env = await setup({
+    issueFetch: async (url) => {
+      fetches += 1
+      assert.match(url, /^https:\/\/api\.github\.com\/repos\/open-x-agents\/openDigitalMate\/issues\/(?:104|11|98)(?:\/comments\?per_page=\d+)?$/)
+      return jsonResponse({ message: 'Not Found' }, 404)
+    },
+  })
+  t.after(() => env.stop())
+  const ask = text => ({
+    type: 'user/message',
+    data: { source: { kind: 'user' }, content: [{ type: 'text', text }] },
+  })
+  await emit(env.ctx, 'chief', ask('梳理 `open-x-agents/openDigitalMate` open Issue'))
+  await play(env.ctx, env.rt, 'chief', 5, [
+    { type: 'tool/call', data: { name: 'bash', arguments: JSON.stringify({ command: 'gh issue list --limit 30' }) } },
+    toolResult('104\tIssue 卡 M2\n11\tOPEN\tComposio 接入'),
+    assistant('- #104 Issue 卡 M2（开发中，PR #103）\n- #11 Composio 接入（能力探测，待做）'),
+  ])
+  const card = env.rt.state.issueCards['issue:chief:5']
+  assert.equal(card.owner, 'open-x-agents')
+  assert.equal(card.repo, 'openDigitalMate')
+  assert.equal(card.evidence, 'session')
+  assert.deepEqual(card.issues.map(issue => issue.number), [104, 11])
+  assert.equal(card.issues[0].title, 'Issue 卡 M2')
+  assert.equal(card.issues[0].url, 'https://github.com/open-x-agents/openDigitalMate/issues/104')
+  assert.equal(card.issues[1].url, 'https://github.com/open-x-agents/openDigitalMate/issues/11')
+  assert.equal(card.issues[0].body, '')
+  assert.equal(fetches, 2)
+  await play(env.ctx, env.rt, 'chief', 6, [
+    { type: 'tool/call', data: { name: 'bash', arguments: 'gh issue list -R open-x-agents/openDigitalMate' } },
+    assistant('- #98 卡片回调没有来源校验'),
+  ])
+  assert.equal(env.rt.state.issueCards['issue:chief:6'].issues[0].url, 'https://github.com/open-x-agents/openDigitalMate/issues/98')
+  await emit(env.ctx, 'chief-group', ask('梳理 `open-x-agents/openDigitalMate` open Issue'))
+  await play(env.ctx, env.rt, 'chief-group', 6, [assistant('- #98 卡片回调没有来源校验')])
+  assert.equal(env.rt.state.issueCards['issue:chief-group:6'], undefined)
+  await play(env.ctx, env.rt, 'chief', 8, [assistant('- #98 卡片回调没有来源校验')])
+  assert.equal(env.rt.state.issueCards['issue:chief:8'], undefined)
 })
 
 test('one failed public read keeps the other issue body on the same card', async (t) => {

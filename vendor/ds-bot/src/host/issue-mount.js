@@ -299,10 +299,41 @@ function eventText(event) {
   return textOf(event?.data?.message?.content)
 }
 
+/**
+ * @param {any} event
+ * @returns {string}
+ */
+function askText(event) {
+  return textOf(event?.data?.content) || textOf(event?.data?.message?.content)
+}
+
+/**
+ * Tool arguments are where `gh issue list -R owner/repo` names the repository
+ * when the table itself has no issue URL. Program source is not a repo signal.
+ * @param {any} event
+ * @returns {string}
+ */
+function callText(event) {
+  const args = event?.data?.arguments
+  let text = ''
+  if (typeof args === 'string') text = args
+  else if (args != null) {
+    try {
+      text = JSON.stringify(args)
+    } catch {
+      text = ''
+    }
+  }
+  return text.length > 20_000 ? text.slice(0, 20_000) : text
+}
+
 export function install(rt) {
   const { ctx } = rt
   /** @type {Map<string, { turn: number, chunks: string[] }>} */
   const buffers = new Map()
+  /** User asks that arrive before turn/start, kept until that turn settles. */
+  /** @type {Map<string, string[]>} */
+  const asked = new Map()
   let mounted = Promise.resolve()
   rt.whenIssueMounted = () => mounted
   rt.saveIssueWidget = (callId, widget) => saveIssueWidget(rt, callId, widget)
@@ -334,7 +365,30 @@ export function install(rt) {
           buffers.delete(id)
           return
         }
-        buffers.set(id, { turn, chunks: [] })
+        const prior = asked.get(id) ?? []
+        asked.delete(id)
+        buffers.set(id, { turn, chunks: [...prior] })
+        return
+      }
+      case 'user/message': {
+        if (event.data?.source?.kind !== 'user') return
+        const text = askText(event)
+        if (text === '') return
+        const buffer = buffers.get(id)
+        if (buffer !== undefined) {
+          buffer.chunks.push(text)
+          return
+        }
+        const prior = asked.get(id) ?? []
+        prior.push(text)
+        asked.set(id, prior)
+        return
+      }
+      case 'tool/call': {
+        const buffer = buffers.get(id)
+        if (buffer === undefined) return
+        const text = callText(event)
+        if (text !== '') buffer.chunks.push(text)
         return
       }
       case 'tool/result':

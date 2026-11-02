@@ -1,0 +1,91 @@
+{
+  "routes": [
+    {
+      "path": "/user",
+      "json": { "login": "Birfy", "type": "User" }
+    },
+    {
+      "path": "/issues",
+      "query": { "filter": "assigned", "state": "all" },
+      "json": [
+        {
+          "number": 41,
+          "title": "Wire the morning brief",
+          "state": "open",
+          "html_url": "https://github.com/open-x-agents/openDigitalMate/pull/41",
+          "repository_url": "https://api.github.com/repos/open-x-agents/openDigitalMate",
+          "repository": { "full_name": "open-x-agents/openDigitalMate" },
+          "user": { "login": "Birfy" },
+          "assignees": [{ "login": "Birfy" }],
+          "created_at": "2026-10-29T10:00:00Z",
+          "updated_at": "2026-10-30T09:15:00Z",
+          "pull_request": {
+            "url": "https://api.github.com/repos/open-x-agents/openDigitalMate/pulls/41"
+          }
+        }
+      ]
+    },
+    {
+      "path": "/repos/open-x-agents/openDigitalMate/pulls/41",
+      "json": {
+        "number": 41,
+        "title": "Wire the morning brief",
+        "state": "open",
+        "html_url": "https://github.com/open-x-agents/openDigitalMate/pull/41",
+        "user": { "login": "Birfy" },
+        "assignees": [{ "login": "Birfy" }],
+        "head": { "sha": "1111111111111111111111111111111111111111" },
+        "base": { "repo": { "full_name": "open-x-agents/openDigitalMate" } },
+        "created_at": "2026-10-29T10:00:00Z",
+        "updated_at": "2026-10-30T09:15:00Z"
+      }
+    },
+    {
+      "path": "/repos/open-x-agents/openDigitalMate/commits/1111111111111111111111111111111111111111/check-runs",
+      "json": {
+        "total_count": 2,
+        "check_runs": [
+          {
+            "name": "tests",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "1111111111111111111111111111111111111111",
+            "completed_at": "2026-10-30T09:20:00Z"
+          },
+          {
+            "name": "lint",
+            "status": "completed",
+            "conclusion": "success",
+            "head_sha": "1111111111111111111111111111111111111111",
+            "completed_at": "2026-10-30T09:21:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "path": "/repos/open-x-agents/openDigitalMate/issues/41/comments",
+      "json": [
+        {
+          "id": 9001,
+          "user": { "login": "Reviewer" },
+          "created_at": "2026-10-30T09:30:00Z",
+          "body": "The morning brief now reads the same tip as the evening report, and the check runs are green. Please keep the overlap window at one hour so the boundary cannot drop an update. This paragraph is deliberately longer than two hundred characters so the adapter has to clip it before it reaches the ledger."
+        },
+        {
+          "id": 9000,
+          "user": { "login": "Birfy" },
+          "created_at": "2026-10-29T11:00:00Z",
+          "body": "Draft opened."
+        }
+      ]
+    },
+    {
+      "match": "^/search/issues\\?q=review-requested",
+      "json": { "total_count": 0, "items": [] }
+    },
+    {
+      "match": "^/search/issues\\?q=author",
+      "json": { "total_count": 0, "items": [] }
+    }
+  ]
+}

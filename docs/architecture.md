@@ -145,6 +145,66 @@ canonical UTC 形状是 `/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/`，`due
 - `appendJsonLines`：`open('a')` → 每条一行 → `fsync` → `close`；一次调用写的多行在锁内一次写完，最坏丢最后一条而不是坏掉前面的行。
 - 账本先写、事件后写时崩溃 → 有证据没有卡；重跑 ingest 时幂等追加会跳过、`upsert` 会补回卡，不删任何东西。
 
+## 信源适配器（#10）
+
+`src/sources/` 是「从外面读进来」的那一层：契约、GitHub 适配器、摄取各一个文件，外加一个能真跑的探针。都是库，`index.js` 不 import（接早报属 #14 / #15）。
+
+### 契约
+
+`src/sources/contract.js` 只写形状、错误分类和文案，不联网、不写盘、不读环境变量。
+
+- 一个 Source 恰好五个只读成员：`id`、`readScope`、`auth()`、`list(since, cursor?)`、`get(ref)`。接口层没有 create / update / comment / delete / write / post / patch / put / merge / close / label / assign；`assertSource()` 会把后来长出来的写方法当场拒掉（`E_SOURCE_WRITE_METHOD`），缺成员是 `E_SOURCE_SHAPE`。
+- `auth()` 同步、不联网：没有 token 就是 `{ ok: false, reason: 'missing' }`。
+- `list()` 返回 `{ events, next?, partial? }`：`next` 是不透明游标（下一页的完整 URL），`partial` 是带内缺口，不是异常。
+- 错误五类 `auth / rate_limit / partial / timeout / http`，`SourceError.code = E_SOURCE_<KIND>`，带 `.reason / .status / .retryAfterMs / .url`。
+- ref 词表：`github:<issue|pr>/<owner>/<name>/<number>`，外部部分的字符集与 `src/core/event.js` 的 `EXTERNAL_REF` 一致（不含 `#`）。带仓名不是装饰：两个仓都有 10 号，不带仓名账本里就会撞成一条。`eventIdForRef()` 给 `evt_` + sha1(硬键) 前 10 位。
+- 缺口文案只有一处 `describeSourceGaps()`（`GitHub 凭据失效了`、`GitHub 限流，30 秒后再取`、`GitHub 超时，这一份缺了` …），测试逐字断言。
+
+### GitHub 适配器
+
+`src/sources/github.js` 的 `createGithubSource({ token, fetch, apiBase, maxPages, maxObjects, sleep, now })`；token 只从调用方传入，本层不读环境变量。
+
+- 请求层不接受 method 参数，写死 GET —— 只读是代码形状，不是自觉。
+- 读八条路径：`/user`；分给我的（`/issues?filter=assigned&state=all&since=…`，跨仓）；等我 review 的、我开的 PR（两条 search）；PR 的 head；tip 的 check-runs；最新一条评论；`get(ref)`。
+- CI 只认 check run，不认 combined status：同一 sha 的 `/status` 可以是 `pending`、`total_count: 0`，读它会把绿的 tip 误报成未完成。汇总规则：任一未完成 → `pending`；有 failure / cancelled / timed_out / action_required → `failure`；全 success → `success`；一条都没有 → `none`。
+- 分页：`Link: rel="next"` 的完整 URL 就是游标；`maxPages=5`、`maxObjects=60`，撞上限往 `partial` 里放 `page-cap` / `object-cap`，不静默截断。
+- 错误分类：401 → `auth/expired`；403 且限流打光 → `rate_limit`；其它 403 → `auth/scope`；429 → `rate_limit`（带 `retryAfterMs`）；网络 / abort / 5xx 重试 3 次（250 → 500 → 1000 ms）后 → `timeout`；其它非 2xx → `http`；子请求坏了是带内 `partial`，那份 PR 还在。
+
+### 摄取
+
+`src/sources/ingest.js` 的 `ingestSource({ source, dir, since, now, overlapMs, windowMs, store })`：观察 → `upsertEvent()` + `appendEvidence()`。一个对象的 ref 不变，所以重跑只会合并、不会翻倍。
+
+- since 的来法：参数 > `<dir>/sources/github.json` 的 since > now − 24h。
+- 四类 `SourceError` 不抛：`complete: false`、`missing` 一条或几条、`gap_text` 有话说。早报据此标「缺源」，而不是变成空白；非 `SourceError` 的编程错误照常抛。
+- 返回值形状固定：`{ source, complete, missing, gap_text, since, until, cursor, fetched, created, merged, appended, skipped, events }`。
+- 不做合并规则 / 去重 / 冲突（#13）、不排序展示、不写文案。
+
+### 水位
+
+`<dir>/sources/github.json`：`{ id, since, until, cursor, complete, at }`，用 `src/core/atomic.js` 的 `atomicWriteJson()` 写在 `withDataLock(dir, …)` 里。
+
+- 只有「读完了」（`complete: true`、没有 `next`、没有缺口）才前进到 `until − overlapMs`（默认 1 小时）。GitHub 的 `since` 是 `updated_at` 闭区间、search 的 `updated:` 只有天粒度，这 1 小时重叠就是用来兜边界的。
+- 失败（四类错误 / partial）一律不动水位：下一次重跑同一窗口，幂等保证重跑不翻倍。
+
+### 证据
+
+会变的东西只进只追加的账本，每个对象最多四条：`title`、`state`、`ci`（PR 且读到 check run）、`comment`（读到最新一条）。事件里的 source 用不可变的 `created_at` + 身份串 `<repo> <object> #<number>` —— `mergeEvent()` 对同一 ref 的 `at` / `excerpt_hash` 不一致会抛 `E_SOURCE_CONFLICT`，把标题 / 状态塞进事件 source，第二天对象一改评论就写不进去。关掉的对象带 `closure = { by: 'github', at: closed_at || updated_at, evidence_ref: ref }`。
+
+### 探针
+
+`scripts/source-probe.mjs`：拿真 token 跑一次 `ingestSource()`，把这次读到什么打到 stdout；缺源写在 `missing / gap_text` 里，不靠退出码。
+
+```sh
+node scripts/source-probe.mjs --repo open-x-agents/openDigitalMate            # 默认 now-24h、系统临时目录
+node scripts/source-probe.mjs --since 24h --dir /tmp/probe --json            # 机器读的形状
+node scripts/source-probe.mjs --fixture test/fixtures/github/ok --dir /tmp/p  # 离线重放，不联网
+```
+
+- 打的字段：`since` / `until`、`fetched / created / merged / appended / skipped`、`complete / missing / gap_text`、水位与账本的文件路径；`--json` 是同一个对象。
+- 退出码只有两种：0 = 跑完了（完整、或缺源但说清了缺什么），1 = 真错误（参数、夹具、写盘）。缺一份源不是命令失败。
+- 不写仓库里的 `data/`：没有 `--dir` 就落到系统临时目录。`--repo` 是写进账本的 allowlist（收窄写入范围，不省请求），水位仍跟着 `github` 这一源走。
+- `--fixture` 用 `test/fixtures/github/` 的假 fetch 重放，走的是**同一套**适配器与摄取，所以离线也能验输出形状。
+
 ## 四条流程
 
 **提醒**：`calendar()` 给事件 → `planFor()` 算 `fireAt = start - leadMinutes` → `tick()` 取 `due()` → 发卡片 → 成功才写进 `sent`。失败留在未发状态，下一次 tick 重试，投递记录进 `deliveries`。定时器只在最近一个 `fireAt` 醒来，不是每分钟轮询。

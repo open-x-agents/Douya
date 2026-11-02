@@ -4,8 +4,8 @@
 
 | 层 | 跑在哪 | 拦什么 | 现在 |
 | --- | --- | --- | --- |
-| L0 单元 | 每 PR / 每 push（`tests.yml`） | 代码本身坏了；事模型与证据账本的四条不变量（#9：至少一条 source、关掉必须有出处、`due_at` 只存 UTC、一事多源不拆卡）与账本只追加 | **有**，294 条 |
-| L1 适配器契约 | 每 PR | 信源响应形状变了、只读适配器长出写方法 | **部分**（`test/composio/*.test.js`：注册表与只读启动校验；适配器契约随 #32 S4） |
+| L0 单元 | 每 PR / 每 push（`tests.yml`） | 代码本身坏了；事模型与证据账本的四条不变量（#9：至少一条 source、关掉必须有出处、`due_at` 只存 UTC、一事多源不拆卡）与账本只追加 | **有**，348 条 |
+| L1 适配器契约 | 每 PR | 信源响应形状变了、只读适配器长出写方法 | **有（#10）**：`test/source-contract.test.js`、`test/source-github.test.js`、`test/source-ingest.test.js`、`test/source-probe.test.js`，假 fetch + 临时目录，离线；Composio 注册表的只读校验见 `test/composio/*.test.js` |
 | L2 归一化 / 去重 / 冲突 | 每 PR | 把两件事合成一件；`confidence<0.6` 被强行合并 | 无（#13） |
 | L3 一天真数据 e2e | 每晚 + 手动 | 「08:45 早报 → 关一件 → 18:30 晚报」这条路走不通 | 无（#16） |
 | L4 时延实测 | 随 L3 | 首屏 >1s、首字 >3s、提醒误差 >30s、日报偏差 >60s | 无 |
@@ -22,6 +22,7 @@ node scripts/pre-release.mjs --skip-version   # 版本号还没写出来时用�
 node scripts/pre-release.mjs --install-only   # 只跑干净安装：pack → 从 tgz 读 files 逐项核对仓库与 tgz → 空目录 import
 node test/e2e/real-model.e2e.mjs    # 只跑真实模型那一段，需要 MODEL_API_KEY
 node scripts/enqueue-guard.mjs --pr 12        # L5：对一个真 PR 跑准入（需要 GITHUB_TOKEN）
+node scripts/source-probe.mjs --repo open-x-agents/openDigitalMate   # L1：用真 token 跑一次 GitHub 只读摄取
 ```
 
 真实模型那段读三个环境变量：`MODEL_API_KEY`（必填）、`MODEL_BASE_URL`（默认 `https://api.deepseek.com/v1`）、`MODEL_NAME`（默认 `deepseek-chat`）。**没有 key 就失败，不跳过** —— 会跳过的那道闸等于没有。
@@ -78,4 +79,4 @@ completed（`waitForChecks`：15 分钟窗口、15 秒读一次真实状态）�
 - **vendor 的 pin 由 `test/vendor-pin.test.js` 订住**（#23 第一刀）：`vendor/ds-bot/VENDOR_FROM`、`docs/vendor-ds-bot.md`、
   `vendor/ds-bot/package.json` 的版本、根 `package.json` 的 peer 下限四处是手写副本，一起改才一致，单改一处会红。
 - **L7 的模型项在等 key**：仓库 secrets 里还没有 `MODEL_API_KEY`，所以下一次定时发版会红在这一步。这是故意的：先让它红一次，人就知道这道闸真的在。
-- **L1 / L2 / L3 / L4 还没有**：随 #10、#13、#16 一起长。
+- **L2 / L3 / L4 还没有**：随 #13、#16 一起长（L1 随 #10 有了）。

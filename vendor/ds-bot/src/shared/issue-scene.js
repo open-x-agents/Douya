@@ -1,5 +1,9 @@
 // Projection of Issue rows the Bot already wrote or already received from a tool.
 // No network, no new tool, no prompt. Nothing here replaces the reply.
+// A gh table or a `#N` line often has no issue URL. When the same text names one
+// repository, the projection fills `https://github.com/<owner>/<repo>/issues/<n>`
+// so the card can mount. The reply text is unchanged.
+import { repoOfRows } from './issue-card.js'
 
 /**
  * @typedef {{ number: number, title: string, url: string, comments?: number }} IssueRow
@@ -184,6 +188,14 @@ function rowFromLine(line) {
     if (number === null || title === '' || comments === null) return null
     return row(number, title, '', comments)
   }
+  const titled = /^(\d+)\t([^\t]+)$/.exec(line)
+  if (titled) {
+    const number = asNumber(titled[1])
+    const title = number === null ? '' : cleanTitle(titled[2])
+    if (number === null || title === '' || /^(?:open|closed)$/i.test(title)) return null
+    if (/^\d{4}-\d{2}-\d{2}/.test(title) || !/[A-Za-z\u4e00-\u9fff]/.test(title)) return null
+    return row(number, title, '', undefined)
+  }
   const markdown = /^(?:[-*+]\s+)?(?:\*\*)?#(\d+)(?:\*\*)?\s+(\S.*)$/.exec(line.trim())
   if (markdown) {
     const number = asNumber(markdown[1])
@@ -191,6 +203,67 @@ function rowFromLine(line) {
     return number === null || title === '' ? null : row(number, title, '', undefined)
   }
   return null
+}
+
+const OWNER = '[A-Za-z0-9][A-Za-z0-9_.-]{0,99}'
+const REPO = '[A-Za-z0-9][A-Za-z0-9_.-]{0,99}'
+const PAIR = `(${OWNER})\\/(${REPO})`
+const FILE_REPO = /\.(?:js|mjs|cjs|ts|tsx|jsx|json|md|css|html|png|svg|yml|yaml|txt)$/i
+
+/**
+ * @param {RegExpExecArray | null} match
+ * @returns {{ owner: string, repo: string } | undefined}
+ */
+function repoPair(match) {
+  if (match === null) return undefined
+  const owner = match[1]
+  const repo = match[2]
+  if (owner === '.' || owner === '..' || repo === '.' || repo === '..') return undefined
+  return { owner, repo }
+}
+
+/**
+ * Repository named in the turn when the rows themselves have no issue URL.
+ * First hit wins, in this order: a github.com owner/repo URL, an
+ * api.github.com/repos/owner/repo URL, a gh `--repo` or `-R` flag, a
+ * backtick-wrapped owner/repo, then a bare owner/repo token whose name
+ * contains a hyphen, underscore, or digit. File paths (`vendor/ds-bot/src/...`,
+ * `issue-mount.js`) are not a repository.
+ * @param {unknown} text
+ * @returns {{ owner: string, repo: string } | undefined}
+ */
+export function inferIssueRepo(text) {
+  const source = typeof text === 'string' ? text : ''
+  const web = repoPair(new RegExp(`(?<![A-Za-z0-9.])github\\.com/${PAIR}(?![A-Za-z0-9_.-])`, 'i').exec(source))
+  if (web !== undefined) return web
+  const api = repoPair(new RegExp(`api\\.github\\.com/repos/${PAIR}(?![A-Za-z0-9_.-])`, 'i').exec(source))
+  if (api !== undefined) return api
+  const flagged = repoPair(new RegExp(`(?:^|\\s)(?:--repo(?:=|\\s+)|-R\\s*)${PAIR}(?![A-Za-z0-9_.-])`).exec(source))
+  if (flagged !== undefined) return flagged
+  const quoted = repoPair(new RegExp(`\`(${OWNER})\\/(${REPO})\``).exec(source))
+  if (quoted !== undefined && !FILE_REPO.test(quoted.repo)) return quoted
+  const bare = new RegExp(`(?:^|[^A-Za-z0-9_.\\-/])${PAIR}(?![A-Za-z0-9_.\\-/])`, 'g')
+  for (const match of source.matchAll(bare)) {
+    const found = repoPair(match)
+    if (found === undefined || FILE_REPO.test(found.repo)) continue
+    if (!/[-_\d]/.test(found.owner) && !/[-_\d]/.test(found.repo)) continue
+    return found
+  }
+  return undefined
+}
+
+/**
+ * @param {IssueRow[]} issues
+ * @param {unknown} text
+ * @returns {IssueRow[]}
+ */
+function issuesWithRepo(issues, text) {
+  const repo = repoOfRows(issues) ?? inferIssueRepo(text)
+  if (repo === undefined) return issues
+  return issues.map(issue => issue.url !== '' ? issue : {
+    ...issue,
+    url: `https://github.com/${repo.owner}/${repo.repo}/issues/${issue.number}`,
+  })
 }
 
 /**
@@ -235,5 +308,5 @@ export function matchesIssueScene(input) {
 export function projectIssueScene(input) {
   const issues = extractIssueRows(input?.text)
   if (!matchesIssueScene(input) || issues.length === 0) return { match: false, issues: [] }
-  return { match: true, issues }
+  return { match: true, issues: issuesWithRepo(issues, input?.text) }
 }

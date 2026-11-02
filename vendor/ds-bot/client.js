@@ -1536,7 +1536,7 @@ function createSource(initial) {
     }
   };
 }
-var EMPTY_ROSTER = { revision: -1, mainBotId: null, mainBotIds: [], bots: [], rooms: [], agents: [], exchangeTurns: {}, questions: {}, btwCards: {}, sideChats: {}, learning: {}, secrets: [], capabilities: [], capabilityStatuses: {}, secretRequests: {}, models: [], defaultModel: null, modelsKey: null, prefs: {}, byId: {}, roomsById: {}, agentsById: {}, agentOf: {}, ready: false };
+var EMPTY_ROSTER = { revision: -1, mainBotId: null, mainBotIds: [], bots: [], rooms: [], agents: [], exchangeTurns: {}, questions: {}, issueCards: {}, issueWidgets: {}, btwCards: {}, sideChats: {}, learning: {}, secrets: [], capabilities: [], capabilityStatuses: {}, secretRequests: {}, models: [], defaultModel: null, modelsKey: null, prefs: {}, byId: {}, roomsById: {}, agentsById: {}, agentOf: {}, ready: false };
 var isMainOf = (roster, id) => id !== void 0 && (roster.mainBotIds ?? []).includes(id);
 function indexRoster(value) {
   const byId = {};
@@ -1796,6 +1796,7 @@ function teamActions({ call: call2, after, partFor, roster, ui: ui2, live, cards
     dismissQuestion: (sessionId) => after(call2("dismiss-question", { sessionId })),
     answerView: (sessionId, viewId, action, values) => after(call2("view-reply", { sessionId: partFor(sessionId), viewId, action, values })),
     dismissView: (sessionId) => after(call2("dismiss-view", { sessionId: partFor(sessionId) })),
+    saveIssueWidget: (callId, widget) => after(call2("save-issue-widget", { callId, widget })),
     deleteBtw: (sessionId, cardId) => after(call2("btw-delete", { sessionId, cardId })),
     answerApproval: (id, choice) => after(call2("approval-answer", { id, choice })),
     stopMemberWork: (roomId, botId) => after(call2("stop-member-work", { roomId, botId })),
@@ -6836,8 +6837,693 @@ Answer: ${actionSummary(answer, view.view)}`;
   }).join("\n\n");
 }
 
+// src/shared/issue-card.js
+var UNREFINED = "还没有提炼";
+var FIELD_KEEP = 240;
+var LONG_KEEP = 400;
+var BODY_KEEP = 800;
+var COMMENT_KEEP = 400;
+var COMMENT_CAP = 5;
+var PANES = /* @__PURE__ */ new Set(["detail", "sources", "compare", "plan"]);
+var FIELDS = ["topic", "short", "priority", "proposal", "decision", "step", "accept"];
+var machinePattern = () => /\[Issue brief scope\][\s\S]*?\[\/Issue brief scope\]\n?/g;
+function clipChars(value, max) {
+  const text = String(value ?? "").replace(/\r\n/g, "\n").trim();
+  return text.length > max ? text.slice(0, max) : text;
+}
+function issueShown(value) {
+  return typeof value === "string" && value.trim() !== "" ? value : UNREFINED;
+}
+function labelForState(state, issue) {
+  switch (state) {
+    case "none":
+      return "无评论";
+    case "read":
+      return "评论已读";
+    case "partial":
+      return `部分评论已读 ${issue.excerpts?.length ?? 0}/${issue.commentCount}`;
+    case "unread":
+      return "评论未读到";
+    default: {
+      const unexpected = state;
+      throw new Error(`Unknown comment state ${String(unexpected)}`);
+    }
+  }
+}
+function commentLabel(issue) {
+  const state = issue?.commentState;
+  if (state !== "none" && state !== "read" && state !== "partial" && state !== "unread") return "评论未读到";
+  return labelForState(state, issue);
+}
+function repoOfRows(rows2) {
+  for (const row of rows2 ?? []) {
+    const match = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/issues\/\d+\/?$/.exec(row?.url ?? "");
+    if (match === null || match[1] === "." || match[1] === ".." || match[2] === "." || match[2] === "..") continue;
+    return { owner: match[1], repo: match[2] };
+  }
+  return void 0;
+}
+function issueCallId(sessionId, turn) {
+  if (typeof sessionId !== "string" || sessionId === "" || sessionId === "__proto__" || sessionId === "constructor" || sessionId === "prototype") return null;
+  if (!Number.isInteger(turn) || turn < 0) return null;
+  return `issue:${sessionId}:${turn}`;
+}
+function parseCitations(text, ids) {
+  const allowed2 = new Set(ids.map((id) => String(id)));
+  const issues = {};
+  let conclusion = "";
+  let current = null;
+  for (const line of String(text ?? "").split("\n")) {
+    const note = /^\[Issue note #(\d+)\]\s*$/.exec(line.trim());
+    if (note) {
+      current = allowed2.has(note[1]) ? note[1] : null;
+      if (current !== null && issues[current] === void 0) issues[current] = {};
+      continue;
+    }
+    if (line.trim() === "[Issue conclusion]") {
+      current = "conclusion";
+      continue;
+    }
+    if (current === null) continue;
+    const field = /^([A-Za-z]+):\s*(.*)$/.exec(line.trim());
+    if (field === null) continue;
+    if (current === "conclusion") {
+      if (field[1] === "conclusion") conclusion = clipChars(field[2], LONG_KEEP);
+      continue;
+    }
+    if (!FIELDS.includes(field[1])) continue;
+    const keep = field[1] === "proposal" || field[1] === "step" ? LONG_KEEP : FIELD_KEEP;
+    issues[current][field[1]] = clipChars(field[2], keep);
+  }
+  return { conclusion, issues };
+}
+function defaultWidget(issues) {
+  return { focusId: issues[0]?.id ?? null, selectedIds: [], pane: "detail", filter: "all" };
+}
+function normalizeWidget(widget, issues) {
+  const list = Array.isArray(issues) ? issues : [];
+  const ids = new Set(list.map((issue) => issue.id));
+  const selectedIds = (Array.isArray(widget?.selectedIds) ? widget.selectedIds : []).filter((id) => typeof id === "string" && ids.has(id));
+  const focusId = typeof widget?.focusId === "string" && ids.has(widget.focusId) ? widget.focusId : list[0]?.id ?? null;
+  const pane = PANES.has(widget?.pane) ? widget.pane : "detail";
+  const topics = new Set(list.map((issue) => typeof issue.topic === "string" ? issue.topic.trim() : "").filter((topic) => topic !== ""));
+  const filter = widget?.filter === "all" || topics.has(widget?.filter) ? widget.filter : "all";
+  return { focusId, selectedIds, pane, filter };
+}
+function discussionLine(card, widget) {
+  const byId = new Map((card?.issues ?? []).map((issue) => [issue.id, issue]));
+  const selected = (widget?.selectedIds ?? []).map((id) => byId.get(id)).filter(Boolean);
+  if (selected.length > 0) return `当前讨论：${selected.map((issue) => `#${issue.number} ${issue.title}`).join("、")}`;
+  const focus = byId.get(widget?.focusId) ?? card?.issues?.[0];
+  if (!focus) return "当前讨论：";
+  return `当前讨论：#${focus.number} · ${focus.title}`;
+}
+function scopeMachine(card, widget) {
+  const scope = widget.selectedIds.length > 0 ? "selection" : "focus";
+  const ids = scope === "selection" ? widget.selectedIds : [widget.focusId ?? card.issues[0]?.id];
+  const byId = new Map(card.issues.map((issue) => [issue.id, issue]));
+  const lines = ids.map((id) => {
+    const issue = byId.get(id);
+    if (!issue) return null;
+    return `- #${issue.number} ${issue.title} | ${issue.url} | ${commentLabel(issue)}`;
+  }).filter(Boolean);
+  return [
+    "[Issue brief scope]",
+    `repo: ${card.owner}/${card.repo}`,
+    `callId: ${card.callId}`,
+    `scope: ${scope}`,
+    `pane: ${widget.pane}`,
+    ...lines,
+    "[/Issue brief scope]"
+  ].join("\n");
+}
+function peelScope(raw) {
+  if (!raw.includes("[Issue brief scope]")) return raw;
+  const text = raw.replace(machinePattern(), "");
+  if (!text.startsWith("当前讨论：")) return text;
+  const nl = text.indexOf("\n");
+  let rest = nl < 0 ? "" : text.slice(nl + 1);
+  if (rest.startsWith("\n")) rest = rest.slice(1);
+  if (rest.endsWith("\n\n")) rest = rest.slice(0, -2);
+  return rest;
+}
+function visibleUserText(text) {
+  const raw = String(text ?? "");
+  if (!raw.includes("[Issue brief scope]")) return raw;
+  return raw.replace(machinePattern(), "").replace(/\n{3,}/g, "\n\n");
+}
+function attachScope(text, spec) {
+  const raw = String(text ?? "");
+  const had = raw.includes("[Issue brief scope]");
+  const eligible = spec?.eligible === true && spec.card !== void 0 && spec.widget !== void 0;
+  if (!eligible) return had ? peelScope(raw) : raw;
+  const body = had ? peelScope(raw) : raw;
+  const line = discussionLine(spec.card, spec.widget);
+  if (line === "当前讨论：") return body;
+  const machine = scopeMachine(spec.card, spec.widget);
+  if (body === "") return `${line}
+
+${machine}`;
+  return `${line}
+
+${body}
+
+${machine}`;
+}
+function compareAction(widget) {
+  if ((widget?.selectedIds ?? []).length < 2) return { type: "disabled" };
+  return { type: "pane", pane: "compare" };
+}
+function planAction(widget) {
+  if ((widget?.selectedIds ?? []).length === 0) return { type: "disabled" };
+  return { type: "pane", pane: "plan" };
+}
+function issueCardForTurn(cards, sessionId, turn) {
+  for (const card of Object.values(cards ?? {})) {
+    if (card?.sessionId === sessionId && card?.turn === turn) return card;
+  }
+  return void 0;
+}
+function latestIssueCard(cards, sessionId) {
+  let best;
+  for (const card of Object.values(cards ?? {})) {
+    if (card?.sessionId !== sessionId) continue;
+    if (best === void 0 || (card.createdAt ?? 0) >= (best.createdAt ?? 0)) best = card;
+  }
+  return best;
+}
+function canShowIssueCard(roster, sessionId) {
+  if (roster == null || roster.roomsById?.[sessionId] !== void 0) return false;
+  const mainBotId = roster.mainBotId;
+  if (typeof mainBotId !== "string" || mainBotId === "") return false;
+  const bot = roster.byId?.[sessionId];
+  return bot?.id === mainBotId && bot?.sessionId === sessionId;
+}
+function headerLine(card) {
+  const evidence = card?.evidence;
+  const via = evidence === "session" ? "会话列表" : evidence === "partial" ? "公开 API · 部分未读到" : "公开 API";
+  return `读于 ${card.fetchedAt} · ${card.owner}/${card.repo} · ${via} · 只读`;
+}
+var BODY_LIMIT = BODY_KEEP;
+var COMMENT_LIMIT = COMMENT_KEEP;
+var COMMENT_MAX = COMMENT_CAP;
+var FIELD_LIMIT = FIELD_KEEP;
+
+// src/client/issue-card.js
+var TABS = [
+  ["detail", "提炼与详情"],
+  ["sources", "讨论依据"],
+  ["compare", "对比所选"],
+  ["plan", "实施计划"]
+];
+function knownPane(pane) {
+  switch (pane) {
+    case "detail":
+    case "sources":
+    case "compare":
+    case "plan":
+      return pane;
+    default:
+      return "detail";
+  }
+}
+function createIssueViews(h50, useState49) {
+  const focusedIssue = (card, widget) => card.issues.find((issue) => issue.id === widget.focusId) ?? card.issues[0];
+  const themesOf = (issues) => {
+    const counts2 = /* @__PURE__ */ new Map();
+    for (const issue of issues) {
+      const topic = typeof issue.topic === "string" ? issue.topic.trim() : "";
+      if (topic === "") continue;
+      counts2.set(topic, (counts2.get(topic) ?? 0) + 1);
+    }
+    return [...counts2.entries()];
+  };
+  const saveIssuePane = (actions, card, widget, patch) => {
+    const save = actions?.saveIssueWidget;
+    if (typeof save !== "function") return;
+    const next = normalizeWidget({ ...widget, ...patch }, card.issues);
+    void Promise.resolve(save(card.callId, next)).catch((error) => {
+      actions.reportError?.(error, "issue-card");
+    });
+  };
+  const section = (title, body, extra) => h50(
+    "div",
+    { className: "it-section" },
+    h50("h4", null, title),
+    h50("p", null, body),
+    extra ?? null
+  );
+  const detailPane = (card, widget, onPane) => {
+    const issue = focusedIssue(card, widget);
+    if (issue === void 0) return null;
+    return h50(
+      "div",
+      null,
+      h50("span", { className: "it-small" }, `#${issue.number} · ${commentLabel(issue)}`),
+      h50("h3", null, issue.title),
+      h50(
+        "div",
+        { className: "it-note" },
+        h50("span", { className: "it-small" }, "一句话提炼"),
+        h50("p", null, issueShown(issue.short))
+      ),
+      issue.body ? section("问题背景", issue.body) : null,
+      section(h50("span", null, "建议方案 ", h50("span", { className: "it-small" }, "· 模型引用")), issueShown(issue.proposal)),
+      section("还需要决定", issueShown(issue.decision)),
+      issue.priority ? h50("p", { className: "it-small" }, `优先级 ${issue.priority}`) : null,
+      h50("button", { type: "button", className: "it-ghost", onClick: () => onPane("sources") }, "查看原始讨论 →")
+    );
+  };
+  const sourcesPane = (card, widget) => {
+    const issue = focusedIssue(card, widget);
+    if (issue === void 0) return null;
+    const excerpts = issue.excerpts ?? [];
+    return h50(
+      "div",
+      null,
+      h50("span", { className: "it-small" }, `#${issue.number} · ${commentLabel(issue)}`),
+      h50("h3", null, "结论从哪里来"),
+      issue.body ? h50(
+        "div",
+        { className: "it-section" },
+        h50("h4", null, "Issue 正文"),
+        h50("p", null, issue.body)
+      ) : null,
+      excerpts.length > 0 ? h50(
+        "div",
+        { className: "it-section" },
+        h50("h4", null, "评论摘录"),
+        excerpts.map((excerpt, index) => h50("div", { key: index, className: "it-quote" }, excerpt))
+      ) : null,
+      issue.labels?.length > 0 ? h50("p", { className: "it-small" }, issue.labels.join(" ")) : null,
+      h50(
+        "div",
+        { className: "it-note" },
+        h50("h4", null, "提炼边界"),
+        h50("p", null, "正文和评论只显示已经读到的摘录。结论、方案、步骤和验收只显示模型在这一回合里写明的引用。")
+      )
+    );
+  };
+  const comparePane = (card, widget) => {
+    const picked = card.issues.filter((issue) => widget.selectedIds.includes(issue.id));
+    if (picked.length < 2) {
+      return h50(
+        "div",
+        null,
+        h50("h3", null, "把关键差异放在一起"),
+        h50("p", { className: "it-empty" }, "请从左侧勾选至少两条记录。")
+      );
+    }
+    return h50(
+      "div",
+      null,
+      h50("span", { className: "it-small" }, `${picked.length} 条所选记录`),
+      h50("h3", null, "已有字段对照"),
+      h50(
+        "table",
+        null,
+        h50("thead", null, h50(
+          "tr",
+          null,
+          h50("th", null, "事项"),
+          h50("th", null, "优先级"),
+          h50("th", null, "方案")
+        )),
+        h50("tbody", null, picked.map((issue) => h50(
+          "tr",
+          { key: issue.id },
+          h50("td", null, h50("h4", null, `#${issue.number} ${issue.title}`), issueShown(issue.short)),
+          h50("td", null, issueShown(issue.priority)),
+          h50("td", null, issueShown(issue.proposal))
+        )))
+      ),
+      h50(
+        "div",
+        { className: "it-note" },
+        h50("h4", null, "如何看这张表"),
+        h50("p", null, "表里只有卡片上已经有的字段。没有的格子是「还没有提炼」，这里不新开一轮。")
+      )
+    );
+  };
+  const planPane = (card, widget) => {
+    const picked = card.issues.filter((issue) => widget.selectedIds.includes(issue.id));
+    if (picked.length === 0) {
+      return h50(
+        "div",
+        null,
+        h50("h3", null, "从选择开始制定计划"),
+        h50("p", { className: "it-empty" }, "先勾选要推进的事项，再看实施计划。")
+      );
+    }
+    return h50(
+      "div",
+      null,
+      h50("span", { className: "it-small" }, `基于所选 ${picked.length} 条 · 本地草稿`),
+      h50("h3", null, "把选择变成下一步"),
+      picked.map((issue, index) => h50(
+        "div",
+        { key: issue.id, className: "it-step" },
+        h50("span", { className: "it-num" }, String(index + 1)),
+        h50(
+          "div",
+          null,
+          h50("h4", null, issueShown(issue.step)),
+          h50("span", { className: "it-small" }, `关联 #${issue.number}`),
+          h50("p", null, issueShown(issue.proposal)),
+          h50("span", { className: "it-small" }, `验收：${issueShown(issue.accept)}`)
+        )
+      )),
+      h50(
+        "div",
+        { className: "it-note" },
+        h50("span", { className: "it-small" }, "未发布"),
+        h50("p", null, "这是本地排列，没有写回 GitHub，也不估算工期。")
+      )
+    );
+  };
+  const renderPane = (pane, card, widget, onPane) => {
+    switch (pane) {
+      case "detail":
+        return detailPane(card, widget, onPane);
+      case "sources":
+        return sourcesPane(card, widget);
+      case "compare":
+        return comparePane(card, widget);
+      case "plan":
+        return planPane(card, widget);
+      default: {
+        const unexpected = pane;
+        throw new Error(`Unknown issue pane ${String(unexpected)}`);
+      }
+    }
+  };
+  function IssueCard2({ callId, card: given, sessionId, roster, actions }) {
+    const [box, setBox] = useState49({ id: "", draft: "", text: "" });
+    const card = given ?? roster?.issueCards?.[callId];
+    if (card == null) return null;
+    const where = sessionId ?? card.sessionId;
+    if (!canShowIssueCard(roster, where) || card.sessionId !== where) return null;
+    const widget = normalizeWidget(roster?.issueWidgets?.[card.callId], card.issues);
+    const pane = knownPane(widget.pane);
+    const view = box.id === card.callId ? box : { id: card.callId, draft: "", text: "" };
+    const setView = (patch) => setBox((current) => {
+      const base = current.id === card.callId ? current : { id: card.callId, draft: "", text: "" };
+      return { ...base, ...patch, id: card.callId };
+    });
+    const onPane = (next) => saveIssuePane(actions, card, widget, { pane: next });
+    const themes = themesOf(card.issues);
+    const shown = card.issues.filter((issue) => widget.filter === "all" || issue.topic?.trim() === widget.filter);
+    const hiddenSelected = widget.selectedIds.filter((id) => !shown.some((issue) => issue.id === id)).length;
+    const onFilter = (filter) => {
+      const visible = card.issues.filter((issue) => filter === "all" || issue.topic?.trim() === filter);
+      const patch = { filter };
+      if (visible.length > 0 && !visible.some((issue) => issue.id === widget.focusId)) patch.focusId = visible[0].id;
+      saveIssuePane(actions, card, widget, patch);
+    };
+    const ask = (question) => {
+      const picked = widget.selectedIds.length > 0 ? card.issues.filter((issue) => widget.selectedIds.includes(issue.id)) : [focusedIssue(card, widget)].filter(Boolean);
+      if (/计划|先做|安排/.test(question)) {
+        const selectedIds = widget.selectedIds.length > 0 ? widget.selectedIds : widget.focusId ? [widget.focusId] : [];
+        saveIssuePane(actions, card, widget, { selectedIds, pane: "plan" });
+        setView({ draft: "", text: "已按当前选择打开实施计划。计划只排列已有字段，没有调用模型。" });
+        return;
+      }
+      const lines = /验收|测试/.test(question) ? picked.map((issue) => `#${issue.number}：${issueShown(issue.accept)}`) : /为什么|优先/.test(question) ? picked.map((issue) => `#${issue.number}：${issueShown(issue.priority)}。${issueShown(issue.proposal)}`) : [`这次追问绑定到 ${picked.map((issue) => `#${issue.number}`).join("、") || "当前记录"}。界面不调用模型；主输入框发送时会带上这个范围。`];
+      setView({ draft: "", text: lines.join("\n") });
+    };
+    const selection = widget.selectedIds.length > 0 ? `已选 ${widget.selectedIds.length} 条 · ${widget.selectedIds.map((id) => `#${card.issues.find((issue) => issue.id === id)?.number ?? id}`).join("、")}` : "尚未勾选 Issue";
+    const compare = compareAction(widget);
+    const plan = planAction(widget);
+    return h50(
+      "section",
+      { className: "bt-issue it-app", role: "region", "aria-label": "Issue 简报", "data-call-id": card.callId },
+      h50(
+        "header",
+        { className: "it-top" },
+        h50("span", { className: "it-brand" }, "DigitalMate"),
+        h50("span", { className: "it-small" }, "Issue 简报"),
+        h50("span", { className: "it-small" }, "只读")
+      ),
+      h50(
+        "section",
+        { className: "it-heading" },
+        h50("div", { className: "it-request" }, headerLine(card)),
+        h50("h2", null, card.conclusion?.trim() ? card.conclusion : "Issue 简报"),
+        h50(
+          "p",
+          null,
+          themes.length > 0 ? `${card.issues.length} 条记录，聚合为 ${themes.length} 个主题。` : `${card.issues.length} 条记录。`,
+          " ",
+          h50("span", { className: "it-small" }, "只读 · 未写回")
+        ),
+        h50(
+          "div",
+          { className: "it-chips", "aria-label": "按主题查看" },
+          h50("button", {
+            type: "button",
+            "aria-pressed": widget.filter === "all",
+            onClick: () => onFilter("all")
+          }, `全部 ${card.issues.length}`),
+          themes.map(([topic, count]) => h50("button", {
+            key: topic,
+            type: "button",
+            "aria-pressed": widget.filter === topic,
+            onClick: () => onFilter(topic)
+          }, `${topic} ${count}`))
+        )
+      ),
+      h50(
+        "div",
+        { className: "it-layout" },
+        h50(
+          "aside",
+          { className: "it-list", "aria-label": "Issue 列表" },
+          h50(
+            "div",
+            { className: "it-list-head" },
+            h50("span", { className: "it-small" }, `${shown.length} 条记录`),
+            h50("span", { className: "it-small" }, "勾选比较 · 点击阅读")
+          ),
+          shown.map((issue) => {
+            const selected = widget.selectedIds.includes(issue.id);
+            const priority = typeof issue.priority === "string" ? issue.priority.trim() : "";
+            const short = typeof issue.short === "string" ? issue.short.trim() : "";
+            return h50(
+              "div",
+              { key: issue.id, className: "it-item", "data-active": issue.id === widget.focusId },
+              h50(
+                "label",
+                { className: "it-select" },
+                h50("input", {
+                  type: "checkbox",
+                  checked: selected,
+                  "aria-label": `选择 #${issue.number}：${issue.title}`,
+                  onClick: (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const selectedIds = selected ? widget.selectedIds.filter((id) => id !== issue.id) : [...widget.selectedIds, issue.id];
+                    saveIssuePane(actions, card, widget, { selectedIds });
+                  }
+                })
+              ),
+              h50(
+                "button",
+                {
+                  type: "button",
+                  className: "it-open",
+                  "aria-pressed": issue.id === widget.focusId,
+                  onClick: () => saveIssuePane(actions, card, widget, { focusId: issue.id, pane: "detail" })
+                },
+                h50(
+                  "span",
+                  { className: "it-small" },
+                  `#${issue.number}`,
+                  priority !== "" ? h50("span", { className: "it-priority" }, priority) : null
+                ),
+                h50("span", { className: "it-name" }, issue.title),
+                short !== "" ? h50("span", { className: "it-description" }, short) : null
+              )
+            );
+          })
+        ),
+        h50(
+          "section",
+          { className: "it-work", "aria-label": "Issue 工作区" },
+          h50("div", { className: "it-tabs", "aria-label": "工作区视图" }, TABS.map(([id, label]) => h50("button", {
+            key: id,
+            type: "button",
+            "aria-pressed": pane === id,
+            onClick: () => onPane(id)
+          }, label))),
+          renderPane(pane, card, widget, onPane)
+        )
+      ),
+      h50(
+        "div",
+        { className: "it-scope" },
+        h50(
+          "div",
+          null,
+          h50("span", null, selection),
+          h50("div", { className: "it-small" }, hiddenSelected > 0 ? `${hiddenSelected} 条位于其他主题，仍保留在选择中` : "选择将同步到比较、计划与后续对话")
+        ),
+        h50(
+          "div",
+          { className: "it-actions" },
+          h50("button", {
+            type: "button",
+            disabled: compare.type === "disabled",
+            onClick: () => {
+              if (compare.type === "pane") onPane(compare.pane);
+            }
+          }, "比较所选"),
+          h50("button", {
+            type: "button",
+            className: "it-primary",
+            disabled: plan.type === "disabled",
+            onClick: () => {
+              if (plan.type === "pane") onPane(plan.pane);
+            }
+          }, "生成实施计划")
+        )
+      ),
+      h50(
+        "section",
+        { className: "it-conversation", "aria-label": "继续对话" },
+        h50("div", { className: "it-small" }, discussionLine(card, widget)),
+        h50(
+          "div",
+          { className: "it-actions" },
+          h50("button", { type: "button", className: "it-ghost", onClick: () => ask("为什么优先做？") }, "为什么优先做？"),
+          h50("button", { type: "button", className: "it-ghost", onClick: () => ask("拆成验收清单") }, "拆成验收清单")
+        ),
+        h50(
+          "form",
+          {
+            className: "it-composer",
+            onSubmit: (event) => {
+              event.preventDefault();
+              const question = view.draft.trim();
+              if (question === "") return;
+              ask(question);
+            }
+          },
+          h50("input", {
+            "aria-label": "继续讨论所选 Issue",
+            placeholder: "勾选两条后，说“先做这两个”",
+            autoComplete: "off",
+            value: view.draft,
+            onChange: (event) => setView({ draft: event.target.value })
+          }),
+          h50("button", { className: "it-primary", type: "submit" }, "发送")
+        ),
+        view.text !== "" ? h50("div", { className: "it-response", "aria-live": "polite" }, view.text) : null
+      )
+    );
+  }
+  function IssueTurnTail2({ turn, sessionId, useRoster, actions }) {
+    const roster = useRoster((value) => value);
+    const number = turn?.turn;
+    const card = typeof number === "number" ? issueCardForTurn(roster?.issueCards, sessionId, number) : void 0;
+    if (card === void 0) return null;
+    return h50(IssueCard2, { card, sessionId, roster, actions });
+  }
+  function IssueScopeDock2({ sessionId, useRoster }) {
+    const roster = useRoster((value) => value);
+    if (!canShowIssueCard(roster, sessionId)) return null;
+    const card = latestIssueCard(roster?.issueCards, sessionId);
+    if (card === void 0) return null;
+    const widget = normalizeWidget(roster?.issueWidgets?.[card.callId], card.issues);
+    const line = discussionLine(card, widget);
+    if (line === "当前讨论：") return null;
+    return h50("p", { className: "bt-issue-scope" }, line);
+  }
+  return { IssueCard: IssueCard2, IssueTurnTail: IssueTurnTail2, IssueScopeDock: IssueScopeDock2 };
+}
+var ISSUE_CSS = `
+.bt-issue{margin:8px 0;color:var(--bt-ink);font:14px/1.65 var(--bt-font)}
+.bt-issue *{box-sizing:border-box}
+.bt-issue.it-app{background:var(--bt-main);border:1px solid var(--bt-line);border-radius:16px;overflow:hidden;container-type:inline-size}
+.bt-issue .it-top{padding:17px 24px;background:var(--bt-card);border-bottom:1px solid var(--bt-line);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.bt-issue .it-brand{font-size:17px;font-weight:500;letter-spacing:-.4px}
+.bt-issue .it-small{font-size:12px;color:var(--bt-ink-3)}
+.bt-issue .it-heading{padding:24px 28px 20px}
+.bt-issue .it-request{color:var(--bt-ink-3);font-size:13px;margin-bottom:10px}
+.bt-issue h2{font:500 26px/1.45 var(--bt-font);margin:0 0 10px;letter-spacing:-.6px;color:var(--bt-ink)}
+.bt-issue h3{font:500 19px/1.5 var(--bt-font);margin:6px 0 12px;color:var(--bt-ink)}
+.bt-issue h4{font:500 14px/1.65 var(--bt-font);margin:0 0 5px;color:var(--bt-ink)}
+.bt-issue p{margin:6px 0 14px}
+.bt-issue button,.bt-issue input,.bt-issue textarea{font:inherit;color:var(--bt-ink)}
+.bt-issue button{background:var(--bt-card);border:1px solid var(--bt-line);border-radius:8px;padding:7px 12px;min-height:36px;cursor:pointer}
+.bt-issue button:disabled{opacity:.45;cursor:default}
+.bt-issue button[aria-pressed="true"]{background:color-mix(in srgb,var(--bt-green) 18%,var(--bt-card));border-color:var(--bt-green)}
+.bt-issue .it-primary{background:var(--bt-green);color:var(--bt-card);border-color:var(--bt-green)}
+.bt-issue .it-ghost{background:transparent;border-color:transparent}
+.bt-issue .it-chips,.bt-issue .it-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.bt-issue .it-chips{margin-top:16px}
+.bt-issue .it-layout{display:grid;grid-template-columns:minmax(285px,.94fr) minmax(0,1.35fr);border-top:1px solid var(--bt-line)}
+.bt-issue .it-list{border-right:1px solid var(--bt-line);padding:18px 16px 14px;min-width:0}
+.bt-issue .it-list-head{display:flex;justify-content:space-between;gap:8px;padding:0 8px 10px}
+.bt-issue .it-item{display:flex;align-items:flex-start;gap:10px;border-radius:8px;padding:12px 10px;margin:3px 0;border:1px solid transparent}
+.bt-issue .it-item[data-active="true"]{background:var(--bt-card);border-color:var(--bt-line)}
+.bt-issue .it-select{display:flex;align-items:center;justify-content:center;min-height:32px;min-width:24px}
+.bt-issue input[type="checkbox"]{width:16px;height:16px;margin:0;accent-color:var(--bt-green)}
+.bt-issue .it-open{display:block;text-align:left;padding:0;border:0;background:transparent;flex:1;min-width:0;min-height:0}
+.bt-issue .it-open[aria-pressed="true"]{background:transparent;border-color:transparent}
+.bt-issue .it-name{display:block;font-weight:500;margin:3px 0}
+.bt-issue .it-description{display:block;font-size:12px;color:var(--bt-ink-3)}
+.bt-issue .it-priority{color:var(--bt-star);margin-left:6px}
+.bt-issue .it-work{padding:22px 26px 24px;background:var(--bt-card);min-width:0}
+.bt-issue .it-tabs{display:flex;gap:5px;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid var(--bt-line);margin-bottom:17px}
+.bt-issue .it-tabs button{font-size:13px}
+.bt-issue .it-section{padding:14px 0;border-bottom:1px solid var(--bt-line)}
+.bt-issue .it-section:last-child{border:0}
+.bt-issue .it-section p:last-child{margin-bottom:0}
+.bt-issue .it-note{padding:13px 15px;background:color-mix(in srgb,var(--bt-green) 16%,var(--bt-card));border-radius:8px;margin:16px 0}
+.bt-issue .it-note p:last-child{margin-bottom:0}
+.bt-issue .it-quote{border-left:3px solid var(--bt-line);padding:0 0 0 14px;margin:12px 0;color:var(--bt-ink-3);white-space:pre-wrap}
+.bt-issue .it-scope{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;padding:13px 24px;background:color-mix(in srgb,var(--bt-green) 16%,var(--bt-card));border-top:1px solid var(--bt-line)}
+.bt-issue .it-conversation{padding:18px 24px 22px;background:var(--bt-card);border-top:1px solid var(--bt-line)}
+.bt-issue .it-composer{display:flex;gap:10px;margin-top:10px;align-items:center}
+.bt-issue .it-composer input{width:100%;min-width:0;border:1px solid var(--bt-line);border-radius:8px;padding:11px 13px;background:var(--bt-main)}
+.bt-issue .it-response{padding:12px 15px;background:var(--bt-main);border-radius:8px;margin-top:13px;white-space:pre-line}
+.bt-issue .it-step{display:flex;gap:12px;padding:15px 0;border-bottom:1px solid var(--bt-line)}
+.bt-issue .it-num{background:color-mix(in srgb,var(--bt-green) 16%,var(--bt-card));color:var(--bt-green);border-radius:50%;width:27px;height:27px;flex:0 0 27px;display:flex;align-items:center;justify-content:center}
+.bt-issue table{border-collapse:collapse;width:100%;font-size:13px;table-layout:fixed}
+.bt-issue th,.bt-issue td{padding:11px 7px;border-bottom:1px solid var(--bt-line);vertical-align:top;text-align:left;overflow-wrap:anywhere;font-weight:400}
+.bt-issue th{color:var(--bt-ink-3);font-size:12px}
+.bt-issue .it-empty{padding:45px 5px;color:var(--bt-ink-3)}
+.bt-issue-scope{margin:0;padding:4px 0;font-size:13px;line-height:18px;color:var(--bt-ink-2)}
+@container(max-width:680px){
+.bt-issue .it-layout{grid-template-columns:1fr}
+.bt-issue .it-list{border-right:0;border-bottom:1px solid var(--bt-line)}
+.bt-issue .it-heading,.bt-issue .it-work{padding:20px 18px}
+.bt-issue .it-top,.bt-issue .it-scope,.bt-issue .it-conversation{padding:16px}
+.bt-issue h2{font-size:23px}
+.bt-issue button{min-height:44px}
+.bt-issue .it-select{min-height:44px;min-width:30px}
+.bt-issue .it-composer input{font-size:16px}
+}
+@media(max-width:680px){
+.bt-issue .it-layout{grid-template-columns:1fr}
+.bt-issue .it-list{border-right:0;border-bottom:1px solid var(--bt-line)}
+.bt-issue .it-heading,.bt-issue .it-work{padding:20px 18px}
+.bt-issue .it-top{padding:16px 18px}
+.bt-issue h2{font-size:23px}
+.bt-issue .it-scope,.bt-issue .it-conversation{padding:16px}
+.bt-issue button{min-height:44px}
+.bt-issue .it-select{min-height:44px;min-width:30px}
+.bt-issue .it-composer input{font-size:16px}
+}
+`;
+
 // src/client/widget-cell.js
 var import_react12 = require("react");
+var issueViews = createIssueViews(import_react12.createElement, import_react12.useState);
+var IssueCard = issueViews.IssueCard;
+var IssueTurnTail = issueViews.IssueTurnTail;
+var IssueScopeDock = issueViews.IssueScopeDock;
+var ISSUE_CSS2 = ISSUE_CSS;
 var viewT = (key, params) => key === "Send" ? t("Send to Bot") : t(key, params);
 var VIEW_UI = { t: viewT, Markdown: import_dsh_client_ui_primitives.MarkdownText };
 var Card = (props) => (0, import_react12.createElement)(ViewUi.Provider, { value: VIEW_UI }, (0, import_react12.createElement)(WidgetCard, props));
@@ -9226,6 +9912,8 @@ function chatRow(row, key, { sessionId, selfId, roster, actions, useUi, onBtwDel
       const speaker = layoutOf(roster.prefs) === "flat" ? roster.byId[selfId] : void 0;
       return speaker ? (0, import_react17.createElement)(import_react17.Fragment, { key }, (0, import_react17.createElement)(SpeakerHead, { bot: speaker, time: row.time }), bubbles) : bubbles;
     }
+    case "issue":
+      return (0, import_react17.createElement)(IssueCard, { key, callId: row.callId, sessionId, roster, actions });
     case "btw":
       return (0, import_react17.createElement)(BtwCardView, { key, card: row.card, sessionId, actions, onDeleted: onBtwDelete });
     case "event": {
@@ -21204,7 +21892,7 @@ function contentParts(content) {
     else if ((block?.type === "image" || block?.type === "file") && block.attachment !== void 0) attachments.push(block);
     else rest.push(block);
   }
-  return { text: texts2.join("\n"), attachments, rest };
+  return { text: visibleUserText(texts2.join("\n")), attachments, rest };
 }
 function mentionableBots(roster, sessionId) {
   const room2 = roster.roomsById[sessionId];
@@ -22199,6 +22887,7 @@ function apply(ctx) {
     () => installCompiledStyles(MEMBER_CSS, "members"),
     () => installCompiledStyles(USER_MESSAGE_CSS, "user-messages"),
     () => installCompiledStyles(WIDGET_CSS2, "widgets"),
+    () => installCompiledStyles(ISSUE_CSS2, "issue-card"),
     () => installCompiledStyles(HANDOFF_CSS, "handoff"),
     () => installCompiledStyles(SIDE_CSS, "side"),
     // Strip and panel styles also serve the side-chat tabs, which need no bridge.
@@ -22232,6 +22921,7 @@ function apply(ctx) {
     () => shadow("conversation.chat.turnTail", { id: "bot-turn-separators", order: 1e3, inject: face }, TurnTailCell),
     // A side question is not a transcript row. After its snapshot turn closes it
     // sits on that turn's tail, ahead of the time separator.
+    () => shadow("conversation.chat.turnTail", { id: "bot-issue", order: 790, priority: BOT_PRIORITY, inject: face }, IssueTurnTail),
     () => shadow("conversation.chat.turnTail", { id: "bot-btw", order: 800, priority: BOT_PRIORITY, inject: face }, BtwTurnTail),
     () => shadow("conversation.chat.turnTail", { id: "bot-learning", order: 850, priority: BOT_PRIORITY, inject: face }, LearningTurnTail),
     // A Bot condenses its conversation without telling anyone; the chat keeps showing
@@ -22263,6 +22953,7 @@ function apply(ctx) {
     () => shadow("conversation.input.dock", { id: "bot-view", order: -95, inject: face }, WidgetDock),
     () => shadow("conversation.input.dock", { id: "bot-secret", order: -90, inject: face }, SecretDock),
     () => shadow("conversation.input.dock", { id: "bot-handoff", order: -85, inject: face }, HandoffDock),
+    () => shadow("conversation.input.dock", { id: "bot-issue-scope", order: -80, inject: face }, IssueScopeDock),
     () => shadow("conversation.input.dock", { id: "bot-learning", order: 850, priority: BOT_PRIORITY, inject: face }, LearningDock)
   ];
   ctx.effect(() => installCompiledStyles(RETURN_CSS, "return"), "ds-bot: return styles");

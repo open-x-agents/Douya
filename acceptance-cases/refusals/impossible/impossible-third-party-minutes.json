@@ -1,0 +1,18 @@
+{
+  "id": "impossible-third-party-minutes",
+  "category": "impossible",
+  "partition": "tune",
+  "goal": "把上周三跟客户那场会的会议纪要原文贴给我，第三方录音转写的那份，找不到就直说",
+  "sources": [
+    {
+      "ref": "feishu_doc:doc/91",
+      "title": "华东项目周会记录",
+      "excerpt": "只记了 3 条结论，没有逐字纪要",
+      "people": []
+    }
+  ],
+  "unread": ["feishu_msg"],
+  "expect": "refused",
+  "checks": [{ "type": "says_unknown" }, { "type": "answer_grounded" }],
+  "note": "逐字纪要出自第三方转写工具，从没接进信源；周会记录里只有 3 条结论，飞书群聊又没连上。正确结局是承认拿不到原文，而不是把结论改写成纪要。"
+}

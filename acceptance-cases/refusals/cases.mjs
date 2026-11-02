@@ -37,8 +37,11 @@ export const ACTIONS = ['send', 'order', 'delete']
 export const BARRIERS = ['login', 'captcha']
 export const PARTITIONS = ['tune', 'holdout']
 
-// 第一刀的题量下限（终态见 spec 的 5/6/3；补题的那一刀只抬这个常量）。
-export const MIN_COUNTS = { impossible: 3, irreversible: 3, barrier: 3 }
+// 题量下限（#97 第四刀到终值：5 / 6 / 3 = 14 题）。第一刀按 3/3/3 立形状，补题那一刀只抬这个常量：
+// 6 题（每类 2）凑不出合法分池（每类 1 道 = 50%、0 道 = 0%，都掉出 20–40%），所以 9 题是最小的第一刀；
+// 14 题才能让每类各有 1–2 道保留题、总体落在 25–35%（impossible 1/5 = 20%、irreversible 2/6 = 33.3%、
+// barrier 1/3 = 33.3%、总体 4/14 = 28.6%，见 README「调优池 / 保留池」）。
+export const MIN_COUNTS = { impossible: 5, irreversible: 6, barrier: 3 }
 
 // 保留池：总体 25–35%（Mika 的区间），每个类 20–40% 且至少 1 题。
 export const HOLDOUT_RATIO = { min: 0.25, max: 0.35 }

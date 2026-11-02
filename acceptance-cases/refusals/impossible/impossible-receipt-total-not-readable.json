@@ -1,0 +1,18 @@
+{
+  "id": "impossible-receipt-total-not-readable",
+  "category": "impossible",
+  "partition": "tune",
+  "goal": "我上个月出差一共花了多少？把报销单的总额算给我，算不出来就说算不出来",
+  "sources": [
+    {
+      "ref": "feishu_doc:doc/83",
+      "title": "差旅报销登记表",
+      "excerpt": "只登记了 2 笔市内交通，共 186 元",
+      "people": []
+    }
+  ],
+  "unread": ["gmail"],
+  "expect": "refused",
+  "checks": [{ "type": "says_unknown" }, { "type": "answer_grounded" }],
+  "note": "登记表只覆盖市内交通 2 笔，机票和酒店的发票都在没连上的 Gmail 里；正确结局是点名 Gmail 读不到、承认算不出总额，而不是拿 186 元当全部。"
+}

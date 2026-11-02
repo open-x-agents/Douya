@@ -6,7 +6,8 @@
 
 > 已经进来的刀：第一刀（本目录的题集、题集 lint、分池规则）、第二刀（判「回复怎么说」的
 > `judgeReply`，住 `test/e2e/reply-checks.mjs`）、第三刀（分池 CLI `test/e2e/refusal.e2e.mjs`
-> 与题面函数 `selectCases` / `modelPrompt`）。发版接线是第四刀，不在这里。
+> 与题面函数 `selectCases` / `modelPrompt`）、第四刀（题集补到终值 5/6/3，并把保留池接进
+> 发版闸 `scripts/pre-release.mjs`）。
 
 ## 目录
 
@@ -84,7 +85,10 @@ barrier 题的 `unread` 必须非空或 `sources` 为空 —— 障碍的含义�
 - 调提示词、知识、技能时**只看 tune**；holdout 只在做发版决定时看。
 - 被拿去调过的 holdout → `partition` 改成 `tune`、加 `"tuned": true`，另出一道新题补进 holdout，
   使比例回到区间。lint 禁止 holdout 上出现 `tuned: true`（`E_TUNED_HOLDOUT`）。
-- 当前：9 题（impossible 3 / irreversible 3 / barrier 3），每类 1 道 holdout = 33.3%，总体 33.3%。
+- 当前（第四刀到终值）：14 题（impossible 5 / irreversible 6 / barrier 3），保留 4 题、总体 28.6%；
+  逐类 impossible 1/5 = 20%、irreversible 2/6 = 33.3%、barrier 1/3 = 33.3%，都在 20–40% 内。
+  为什么停在 14 题：三个类都得同时落在区间里，补一类的题就会把该类的保留比例拉出区间；
+  14 题是「每类 1–2 道保留题、总体仍在 25–35%」的最小终值 —— 先把形状立住，按目录继续长是后续的事。
 
 `partition` 是手写字段，lint 只查比例、查不了动机 —— 所以 `note` 要写出题理由，
 holdout 只增不改，发版日志要列出 id。
@@ -117,7 +121,7 @@ L0 是递归 glob（`package.json` 的 `test` 脚本、`.github/workflows/tests.
 `E_CHECK_TYPE` / `E_CHECK_REQUIRED` / `E_ACTION_MISSING` / `E_BARRIER_MISSING` /
 `E_BARRIER_SOURCE` / `E_NO_PATH`。
 
-整份题集：`E_MIN_COUNT`（下限，第一刀 3/3/3，终态 5/6/3）、`E_ACTION_COVERAGE`
+整份题集：`E_MIN_COUNT`（下限，第四刀起是终值 5/6/3）、`E_ACTION_COVERAGE`
 （send / order / delete 各 ≥1）、`E_BARRIER_COVERAGE`（login / captcha 各 ≥1）、
 `E_HOLDOUT_RATIO`（总体 25–35%、每类 20–40% 且 ≥1）。
 
@@ -129,4 +133,4 @@ L0 是递归 glob（`package.json` 的 `test` 脚本、`.github/workflows/tests.
 
 - 不借 Mika 的 Kotlin / 无障碍接管 / 端侧执行；只借题目分层与判据形状。
 - 不做 `memory` / `skills` 配对题，不做 read / write 类的 `answered` 题。
-- 本刀不改产品代码、不跑真模型、不接发版闸。
+- 不改产品代码、不在 L0 里跑真模型；发版闸只在 `scripts/pre-release.mjs` 里触发那一步，本目录不做联网动作。

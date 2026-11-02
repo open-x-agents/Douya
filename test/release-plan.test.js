@@ -1,6 +1,7 @@
 // 发布决策的分支表：五种正常路径 + 两种拒绝。这些分支以前只靠「真发一次看看」。
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   bumpPatch,
   compareVersions,
@@ -73,4 +74,35 @@ test('CHANGELOG 只保留一个头部，最新的在最上面', () => {
 test('空故事集写成「首个版本」，不留一个空段落', () => {
   const section = changelogSection('0.1.0', '2026-10-30', []);
   assert.ok(section.includes('无（首个版本）'));
+});
+
+test('tag 之后只有 release: 提交也算空日', () => {
+  const subjects = parseSubjects('release: v0.1.0');
+  assert.deepEqual(subjects, []);
+  const d = decideRelease({ current: '0.1.0', lastTag: 'v0.1.0', subjects });
+  assert.deepEqual([d.action, d.reason], ['skip', 'no-commits']);
+});
+
+test('existingTags 裸号与 v 前缀混写也能认出撞号', () => {
+  const bare = decideRelease({ current: '0.1.0', lastTag: 'v0.1.0', subjects: ['fix'], existingTags: ['0.1.1'] });
+  assert.deepEqual([bare.action, bare.reason, bare.version], ['skip', 'tag-exists', '0.1.1']);
+
+  const mixed = decideRelease({ current: '0.1.0', lastTag: 'v0.1.0', subjects: ['fix'], existingTags: ['0.1.0', 'v0.1.1'] });
+  assert.deepEqual([mixed.action, mixed.reason, mixed.version], ['skip', 'tag-exists', '0.1.1']);
+});
+
+test('手改号比 tag 新时不误判为补发', () => {
+  const d = decideRelease({ current: '0.2.0', lastTag: 'v0.1.0', subjects: ['fix'], tagReleased: false });
+  assert.deepEqual([d.action, d.version, d.reason], ['release', '0.2.0', 'changes-since-tag']);
+});
+
+test('只有标准头部的 CHANGELOG 也能接上新段', () => {
+  const merged = prependChangelog(CHANGELOG_HEADER, changelogSection('0.1.0', '2026-10-30', ['init']));
+  assert.equal(merged.split('# CHANGELOG').length - 1, 1, '头部只出现一次');
+  assert.ok(merged.includes('## v0.1.0 — 2026-10-30'));
+});
+
+test('决策模块只有纯函数：源码里不出现 node: 开头的 import', () => {
+  const src = readFileSync(new URL('../scripts/release-plan.mjs', import.meta.url), 'utf8');
+  assert.ok(!/(?:from|import)\s*(?:\(\s*)?['"]node:|require\s*\(\s*['"]node:/.test(src));
 });

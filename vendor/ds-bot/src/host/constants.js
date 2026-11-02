@@ -36,6 +36,17 @@ export const LONG_HEAD = 1000
 // DSH's read tool shows this much of one line (dsh-tool-fs `readMaxLineLength`, default).
 export const READ_LINE_MAX = 2000
 export const ROOM_REPLY_TIMEOUT_MS = 240_000
+
+// Tests and the desktop checker set this to fire a member timeout without
+// waiting four minutes. Unset, zero, and anything that is not a positive
+// number keep the default. The product timeout does not change otherwise.
+export function roomReplyTimeoutMs() {
+  const raw = process.env.DSH_ROOM_REPLY_TIMEOUT_MS
+  if (raw == null || String(raw).trim() === '') return ROOM_REPLY_TIMEOUT_MS
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed) || parsed <= 0) return ROOM_REPLY_TIMEOUT_MS
+  return parsed
+}
 // Lines a member writes less than this apart while it works reach its group together.
 export const ROOM_STEP_GAP_MS = 30_000
 export const SOURCE_KIND = 'bot'

@@ -1,0 +1,99 @@
+[
+  {
+    "source": "gmail",
+    "external_id": "18f0d1",
+    "ref": "gmail:thread/18f0d1",
+    "title": "Q4 服务器报价单",
+    "project": "报价单",
+    "people": ["李静", "王工"],
+    "at": "2026-10-29T15:30:00+08:00",
+    "due_at": "2026-10-30T16:00:00+08:00",
+    "due_kind": "deadline",
+    "amount": 12.8,
+    "state": "open",
+    "excerpt": "附件 Q4报价单v2.xlsx，总价 12.8 万"
+  },
+  {
+    "source": "doc",
+    "external_id": "7f2a9c",
+    "ref": "doc:7f2a9c",
+    "title": "Q4 服务器报价单 v2",
+    "project": "报价单",
+    "people": ["李静", "王工"],
+    "at": "2026-10-30T10:00:00+08:00",
+    "due_at": "2026-10-30T16:00:00+08:00",
+    "due_kind": "deadline",
+    "amount": 12.2,
+    "state": "open",
+    "excerpt": "云端文档 v2，单价按 12.2 万重算"
+  },
+  {
+    "source": "github",
+    "object": "pr",
+    "external_id": "41",
+    "ref": "github:pr/41",
+    "title": "Q4 服务器报价单 v2",
+    "project": "报价单",
+    "people": ["王工"],
+    "at": "2026-10-30T11:00:00+08:00",
+    "excerpt": "PR #41 改了报价数字"
+  },
+  {
+    "source": "gcal",
+    "external_id": "evt-9c31",
+    "ref": "gcal:event/evt-9c31",
+    "title": "需求评审会",
+    "project": "需求评审",
+    "people": ["李静", "王工", "张敏"],
+    "at": "2026-10-30T08:40:00+08:00",
+    "due_at": "2026-10-30T16:00:00+08:00",
+    "due_kind": "start",
+    "state": "open"
+  },
+  {
+    "source": "gmail",
+    "external_id": "19a2b7",
+    "ref": "gmail:thread/19a2b7",
+    "title": "需求评审会",
+    "project": "需求评审",
+    "people": ["李静", "张敏"],
+    "at": "2026-10-30T09:10:00+08:00",
+    "due_at": "2026-10-30T15:30:00+08:00",
+    "due_kind": "start",
+    "state": "open",
+    "excerpt": "改到 15:30，会议室 3F"
+  },
+  {
+    "source": "doc",
+    "external_id": "c41e77",
+    "ref": "doc:c41e77",
+    "title": "需求评审会",
+    "project": "需求评审",
+    "people": ["李静", "王工"],
+    "at": "2026-10-30T12:00:00+08:00",
+    "excerpt": "纪要：15:30 后王工补了接口清单"
+  },
+  {
+    "source": "gmail",
+    "external_id": "1a77e0",
+    "ref": "gmail:thread/1a77e0",
+    "title": "合同续签跟进",
+    "project": "合同",
+    "people": ["李静", "王工"],
+    "at": "2026-10-29T14:00:00+08:00",
+    "state": "closed",
+    "excerpt": "合同已经处理完"
+  },
+  {
+    "source": "gmail",
+    "external_id": "1b9c22",
+    "ref": "gmail:thread/1b9c22",
+    "title": "合同续签跟进",
+    "project": "合同",
+    "people": ["李静"],
+    "at": "2026-10-30T09:00:00+08:00",
+    "state": "open",
+    "waiting_on": "李静",
+    "excerpt": "还没完，在等李静盖章"
+  }
+]

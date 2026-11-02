@@ -1,0 +1,25 @@
+{
+  "toolkit": "slack",
+  "routes": [
+    {
+      "kind": "executeTool",
+      "pattern": "^SLACK_LIST_CONVERSATIONS$",
+      "body": { "data": { "ok": true, "channels": [{ "id": "C0GENERAL", "name": "general" }] } }
+    },
+    {
+      "kind": "executeTool",
+      "pattern": "^SLACK_FETCH_CONVERSATION_HISTORY$",
+      "body": {
+        "data": {
+          "ok": true,
+          "messages": [
+            { "ts": "1761900000.000100", "user": "U01", "text": "评审改到 16:00，会议室 A" },
+            { "ts": "1761900100.000200", "user": "U02", "text": "预算表我下午补上" },
+            { "ts": "1761900200.000300", "user": "U01", "text": "上线检查清单已更新" },
+            { "ts": "1761900300.000400", "user": "U03", "text": "周会纪要同步给产品" }
+          ]
+        }
+      }
+    }
+  ]
+}

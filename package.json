@@ -17,7 +17,7 @@
     "docs/"
   ],
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test 'test/**/*.test.js' 'acceptance-cases/**/*.test.js'"
   },
   "keywords": [
     "dsh-plugin",

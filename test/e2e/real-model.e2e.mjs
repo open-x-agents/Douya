@@ -3,8 +3,13 @@
 // 它不进 `test/*.test.js`（每 PR 不跑），只由 pre-release 调用 —— 它要花真钱、真时间，
 // 而它回答的问题是桩模型永远回答不了的那个：这个模型会不会编。
 //
+// 判定在 `./real-model-checks.mjs`（纯函数，`test/real-model-checks.test.js` 用桩喂它）。
+// 这里只留「连一次真模型」和「把判定结果打出来」。
+//
 // 需要：MODEL_API_KEY（必填）、MODEL_BASE_URL、MODEL_NAME。
 // 退出码：0 通过，1 不过，2 缺环境。
+
+import { judgePanel, parseModelJson } from './real-model-checks.mjs'
 
 const BASE = (process.env.MODEL_BASE_URL || 'https://api.deepseek.com/v1').replace(/\/$/, '');
 const KEY = process.env.MODEL_API_KEY;
@@ -18,43 +23,46 @@ const CONTRACT = `你是用户的「数字同事」，要把今天的信源汇�
 只输出一个 JSON 对象，不要 markdown 代码块，不要任何解释文字。字段：
 {
   "headline": "一句话结论，不超过 40 个汉字",
-  "facts": [{"text": "一条事实，不超过 40 字", "evidence_ref": "信源列表里的 id，原样照抄"}],
+  "facts": [{"text": "一条事实，不超过 40 字", "evidence_ref": "信源列表里的 ref，原样照抄"}],
   "advice": "一条建议，不超过 20 字",
   "unread_sources": ["今天读不到的信源种类"]
 }
 硬规则：
-1. 每条 fact 的 evidence_ref 必须原样取自信源列表的 id，不许编 id，不许写列表以外的来源。
-2. 只写信源里出现过的内容；信源没有的数字、时刻、人名，一个字都不许补。
-3. 读不到的信源写进 unread_sources，不要用猜测把它填上。
-4. facts 最多 3 条，按今天最要紧的排在最前。`;
+1. 每条 fact 的 evidence_ref 必须原样取自信源列表的 ref，不许编 id，不许写列表以外的来源。
+2. 每条 fact 引用一条不同的信源，facts 最多 3 条，按今天最要紧的排在最前。
+3. 只写信源里出现过的内容；信源没有的数字、时刻、人名，一个字都不许补。
+4. 读不到的信源只写进 unread_sources，不要用猜测把它填上。`;
 
+// 夹具用产品的词汇（ref = `<source>:<id>`，source 见 src/host/panel.js 的 SOURCE_NAMES），
+// 并且每条都带模型能原样引用的原文（title + excerpt）。
 const COMPLETE = {
   sources: [
-    { id: 'cal:evt-77', kind: 'calendar', title: '评审会', time_local: '14:00', attendees: 4 },
-    { id: 'gh:pr-42', kind: 'github', title: 'PR #42 在合并队列里等了 40 分钟', state: 'open' },
-    { id: 'mail:msg-9', kind: 'email', subject: '供应商报价 v3（尚未读正文）', received_local: '09:10' },
+    {
+      ref: 'feishu_cal:event/evt-77',
+      source: 'feishu_cal',
+      title: '评审会',
+      excerpt: '14:00 开始，4 人',
+      at: '2026-10-30T06:00:00Z',
+    },
+    {
+      ref: 'github:pr/42',
+      source: 'github',
+      title: 'PR #42 在合并队列里等了 40 分钟',
+      excerpt: '',
+      at: '2026-10-30T05:20:00Z',
+    },
+    {
+      ref: 'gmail:thread/9a1',
+      source: 'gmail',
+      title: '供应商报价 v3',
+      excerpt: '（只读主题与收发关系，未读正文）',
+      at: '2026-10-30T01:10:00Z',
+    },
   ],
   unreadable: [],
 };
 
-const MISSING_MAIL = {
-  sources: [
-    { id: 'cal:evt-77', kind: 'calendar', title: '评审会', time_local: '14:00', attendees: 4 },
-    { id: 'gh:pr-42', kind: 'github', title: 'PR #42 在合并队列里等了 40 分钟', state: 'open' },
-  ],
-  unreadable: ['email'],
-};
-
-function parseJson(text) {
-  const cleaned = String(text)
-    .replace(/^```(?:json)?/i, '')
-    .replace(/```$/m, '')
-    .trim();
-  const start = cleaned.indexOf('{');
-  const end = cleaned.lastIndexOf('}');
-  if (start === -1 || end === -1) throw new Error(`输出里没有 JSON：${cleaned.slice(0, 120)}`);
-  return JSON.parse(cleaned.slice(start, end + 1));
-}
+const MISSING_MAIL = { sources: COMPLETE.sources.slice(0, 2), unreadable: ['gmail'] };
 
 async function callModel(messages) {
   const started = Date.now();
@@ -111,15 +119,17 @@ function check(name, ok, detail = '') {
   if (!ok) failures.push(`${name}${detail ? `: ${detail}` : ''}`);
 }
 
-function checkShape(panel, fixture, label) {
-  check(`${label} · 是有 headline/facts/advice 的对象`, typeof panel.headline === 'string' && Array.isArray(panel.facts));
-  check(`${label} · 结论不超过 40 字`, [...String(panel.headline || '')].length <= 40, `${[...String(panel.headline || '')].length} 字`);
-  check(`${label} · 建议不超过 20 字`, [...String(panel.advice || '')].length <= 20, `${[...String(panel.advice || '')].length} 字`);
-  check(`${label} · facts 在 1 到 3 条之间`, panel.facts.length >= 1 && panel.facts.length <= 3, `${panel.facts.length} 条`);
-
-  const known = new Set(fixture.sources.map((s) => s.id));
-  const invented = panel.facts.map((f) => String(f.evidence_ref || '')).filter((ref) => !known.has(ref));
-  check(`${label} · 每条事实都指得到真实来源`, invented.length === 0, invented.length ? `编出来的 ref：${invented.join(', ')}` : '全部可追');
+// 判定失败的每一行都写成 `FAIL  <label> · <message> — <detail>`，pre-release 的日志里读得到。
+function report(problems, label) {
+  if (problems.length === 0) {
+    console.log(`PASS  ${label} · 结论可追源，缺源不编`);
+    return;
+  }
+  for (const problem of problems) {
+    const line = `${label} · ${problem.message}${problem.detail ? ` — ${problem.detail}` : ''}`;
+    console.log(`FAIL  ${line}`);
+    failures.push(line);
+  }
 }
 
 async function main() {
@@ -139,22 +149,16 @@ async function main() {
   check('正向 · 首字在预算内（≤3s）', positive.firstTokenMs <= FIRST_TOKEN_BUDGET_MS, `${positive.firstTokenMs}ms`);
   check('正向 · 总时长在预算内（≤15s）', positive.totalMs <= TOTAL_BUDGET_MS, `${positive.totalMs}ms`);
 
-  const panel = parseJson(positive.text);
-  checkShape(panel, COMPLETE, '正向');
-  check('正向 · 三条信源都用上了', new Set(panel.facts.map((f) => f.evidence_ref)).size >= 2, `用到 ${new Set(panel.facts.map((f) => f.evidence_ref)).size} 条来源`);
+  const panel = parseModelJson(positive.text);
+  report(judgePanel({ panel, fixture: COMPLETE, label: '正向' }).problems, '正向');
 
   // 负向：邮件读不到。模型必须说「没读到」，而不是补一个数字上去。
   const negative = await callModel([
     { role: 'system', content: CONTRACT },
     { role: 'user', content: `今天的信源（JSON）：\n${JSON.stringify(MISSING_MAIL)}` },
   ]);
-  const missing = parseJson(negative.text);
-  checkShape(missing, MISSING_MAIL, '负向');
-  const unread = (missing.unread_sources || []).map(String).join(' ');
-  check('负向 · 把读不到的邮件写进了 unread_sources', /mail|邮件|email/i.test(unread), unread || '（空）');
-  const mailClaims = missing.facts.map((f) => String(f.evidence_ref || '')).filter((ref) => ref.startsWith('mail:'));
-  check('负向 · 没有拿邮件编一条事实', mailClaims.length === 0, mailClaims.length ? mailClaims.join(', ') : '没有');
-  check('负向 · 没有编出一个报价数字冒充满足', !/\d+\s*(万|元|%)/.test(JSON.stringify(missing.facts)), '未出现金额');
+  const missing = parseModelJson(negative.text);
+  report(judgePanel({ panel: missing, fixture: MISSING_MAIL, label: '负向' }).problems, '负向');
 
   console.log('');
   if (failures.length > 0) {

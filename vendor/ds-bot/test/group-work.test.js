@@ -489,6 +489,7 @@ test('a late post that calls a member counts into the relays, and parks past the
 // anyone could see it. It is written into the log and the running round at once,
 // and the relay it still opens shows it again nowhere.
 const logLines = host => JSON.parse(readFileSync(join(host.home, 'state.json'), 'utf8')).rooms.r1.log
+const relays = messages => messages.filter(message => message.source?.form === 'relay')
 const busyRound = async (t, room, services) => {
   const host = await start(t, room, services)
   const first = host.round('c1', host.say('@Writer 整理文档'))
@@ -810,6 +811,9 @@ test('one press stops the group\'s round and every member at work there, and not
   for (const id of ['r1', 'ga', 'gb']) assert.deepEqual(host.agentOf(id).cancelled, [{ kind: 'user' }], id)
   for (const id of ['c', 'gc']) assert.deepEqual(host.agentOf(id).cancelled, [], id)
   assert.deepEqual(logLines(host).map(line => [line.who, line.kind]), [['User', undefined], ['Chief', 'stopped'], ['Writer', 'stopped']])
+  // The stop notices the press queued are in the log, and gone from the group's inbox:
+  // what is left there would keep the group shown as queued/waiting.
+  for (const list of [host.agentOf('r1').inbox.nextTurn, host.agentOf('r1').inbox.nextStep]) assert.deepEqual(relays(list), [])
   host.emit('ga', 'turn/end', { turn: 1, reason: { kind: 'aborted' } })
   await settle(() => first() !== undefined)
   assert.deepEqual(kinds(first()).filter(([kind]) => kind === 'stopped'), [['stopped', 'Chief'], ['stopped', 'Writer']])

@@ -9,7 +9,18 @@ import { due, planFor, reminderKey, snooze } from './src/host/reminders.js'
 import { dailyReportCard, readAction, reminderCard } from './src/host/cards.js'
 import { installPanel, reportKey } from './src/host/panel.js'
 import { createFeishuSender } from './src/host/feishu.js'
-import { PANEL_ROUTE, SNOOZE_MINUTES, TICK_SECONDS } from './src/host/constants.js'
+import { localDay } from './src/host/normalize.js'
+import { defaultZone, nextWakeAt, runWithBudget } from './src/host/schedule.js'
+import { assertReadOnlyRegistry, registry as composioRegistryDefault } from './src/sources/composio/registry.js'
+import { SNAPSHOT as COMPOSIO_SNAPSHOT } from './src/sources/composio/capabilities.js'
+import {
+  CALENDAR_ATTEMPTS,
+  CALENDAR_REFRESH_MS,
+  CALENDAR_TIMEOUT_MS,
+  PANEL_ROUTE,
+  REMINDER_BUDGET_MS,
+  SNOOZE_MINUTES,
+} from './src/host/constants.js'
 
 export const name = 'opendigitalmate'
 // The panel and the card callback answer on the channel ds-bot already exposes; nothing
@@ -23,14 +34,26 @@ export function apply(ctx, config = {}) {
 }
 
 export function createRuntime(ctx, config = {}) {
+  // Composio 的注册表在启动时校验：白名单里混进一个写动作就同步抛 E_WRITE_ACTION。
+  // 这是「启动失败」，不是一条告警 —— 告警会被日志吞掉，写动作却已经进了白名单。
+  const composioRegistry = config.composioRegistry ?? composioRegistryDefault
+  assertReadOnlyRegistry(composioRegistry, COMPOSIO_SNAPSHOT)
   const home = config.home ?? join(process.env.DSH_HOME ?? '.', 'opendigitalmate')
   const now = config.now ?? (() => new Date())
-  const today = config.today ?? (() => now().toISOString().slice(0, 10))
+  // The zone the two report slots are read in, and the two functions the single timer uses.
+  // Both are injected, so a test can watch the delay without waiting for it.
+  const timeZone = config.timeZone ?? defaultZone()
+  // Reports and the panel are keyed on the day the person lives in, never the UTC day: a
+  // morning report at 00:30 in Shanghai belongs to that day, not to the one before it.
+  const today = config.today ?? (() => localDay(now().toISOString(), timeZone))
   const store = createStore(join(home, 'state.json'))
   const sender = createFeishuSender({ credentials: config.credentials, log: config.log })
   const sendCard = config.sendCard ?? sender.sendCard
   const calendar = config.calendar ?? (async () => [])
   const log = config.log ?? (() => {})
+  const schedule = config.schedule ?? setTimeout
+  const cancel = config.cancel ?? clearTimeout
+  let timer = null
 
   const rt = {
     ctx,
@@ -39,43 +62,131 @@ export function createRuntime(ctx, config = {}) {
     store,
     now,
     today,
+    timeZone,
 
     // One pass of the clock: plan from the calendar, deliver what is due, keep the rest for
     // the panel. Only a delivered reminder is marked sent, so a Feishu hiccup retries.
     async tick() {
       const state = store.get()
       const moment = now().getTime()
-      const planned = planFor(await calendar(), { now: moment, leadMinutes: config.leadMinutes })
+      // A calendar that is down or slow costs the day's meeting lines, not the whole pass: the
+      // failures are kept so a late report can say "日历接口 3 次超时" instead of pretending.
+      const readAt = now().toISOString()
+      const reading = await runWithBudget(calendar, {
+        attempts: CALENDAR_ATTEMPTS,
+        timeoutMs: CALENDAR_TIMEOUT_MS,
+        source: 'calendar',
+      })
+      // What this pass did with the calendar is part of the state the panel reads: a source that
+      // returned null, threw, or handed back something that is not a list is "not connected",
+      // not "no meetings". The page must be able to say which sentence has no evidence left.
+      const connected = reading.ok && Array.isArray(reading.value)
+      const failure = reading.failures[0]
+      const calendarSource = {
+        connected,
+        last_read_at: connected ? readAt : null,
+        detail: connected ? `读到 ${reading.value.length} 个日程` : (failure?.message ?? '日历没有返回数据'),
+        error: connected ? null : (failure?.reason ?? null),
+      }
+      const planned = planFor(reading.ok ? reading.value : [], { now: moment, leadMinutes: config.leadMinutes })
       const plan = [...planned, ...(state.manual ?? [])].sort((a, b) => a.fireAt.localeCompare(b.fireAt))
-      const firing = due(plan, { now: moment, sent: Object.keys(state.sent ?? {}) })
+      // `state.done` is what the 已完成 button writes. It has to reach the planner, or a meeting
+      // the member ticked off still fires through its snoozed copy (#95).
+      //
+      // The filtered plan is used twice on purpose. `due()` alone is not enough: `nextWake()`
+      // looks at `plan` for the next moment to wake up, and a ticked-off meeting that has already
+      // passed its fireAt keeps asking for `delayMs: 0` — `arm(0)` then ticks again immediately,
+      // forever, until the meeting starts (PR #96's Verdict: INC caught exactly that).
+      const finished = Object.keys(state.done ?? {})
+      const open = plan.filter(item => state.done?.[item.id] === undefined)
+      const firing = due(open, {
+        now: moment,
+        sent: Object.keys(state.sent ?? {}),
+        done: finished,
+      })
       const deliveries = []
       const delivered = new Set()
       for (const reminder of firing) {
+        // The arrival time is read again for every reminder: a slow card must not make the next
+        // one look punctual.
+        const at = now().getTime()
+        const record = {
+          kind: 'reminder',
+          id: reminder.id,
+          at: new Date(at).toISOString(),
+          latency_ms: at - Date.parse(reminder.fireAt),
+          deadline_ms: REMINDER_BUDGET_MS,
+        }
+        record.over_budget = record.latency_ms > record.deadline_ms
         const target = reminder.owner || config.ownerOpenId
         if (target === undefined || target === '') {
-          deliveries.push({ kind: 'reminder', id: reminder.id, at: now().toISOString(), ok: false, error: 'no-target' })
+          deliveries.push({ ...record, ok: false, error: 'no-target' })
           continue
         }
         try {
           const messageId = await sendCard({ receiveId: target, card: reminderCard(reminder) })
           delivered.add(reminderKey(reminder))
-          deliveries.push({ kind: 'reminder', id: reminder.id, at: now().toISOString(), ok: true, messageId })
+          deliveries.push({ ...record, ok: true, messageId })
         } catch (error) {
           const reason = String(error?.message ?? error)
           log(`reminder ${reminder.id} not sent: ${reason}`)
-          deliveries.push({ kind: 'reminder', id: reminder.id, at: now().toISOString(), ok: false, error: reason })
+          deliveries.push({ ...record, ok: false, error: reason })
         }
       }
       const sent = { ...(state.sent ?? {}) }
       for (const key of delivered) sent[key] = now().toISOString()
+      const next = rt.nextWake({ plan: open, sent: Object.keys(sent), moment })
       await store.save({
         ...state,
+        sources: { ...(state.sources ?? {}), feishu_cal: calendarSource },
         sent,
         manual: (state.manual ?? []).filter(item => Date.parse(item.fireAt) > moment),
         upcoming: plan.slice(0, 20),
         deliveries: [...(state.deliveries ?? []), ...deliveries].slice(-200),
       })
-      return { plan, firing, deliveries }
+      rt.arm(next)
+      return { plan, firing, deliveries, failures: reading.failures, sources: { feishu_cal: calendarSource }, nextWake: next }
+    },
+
+    // When to look again. With a plan, the next reminder is the wake. With nothing planned, the
+    // calendar is re-read on a five minute cadence, so a meeting added later still shows up.
+    nextWake({ plan = [], sent = [], moment = now().getTime() } = {}) {
+      return nextWakeAt({
+        now: moment,
+        plan,
+        sent,
+        nextPushAt: null,
+        calendarAt: plan.length === 0 ? moment + CALENDAR_REFRESH_MS : null,
+      })
+    },
+
+    // One timer, always for the exact next moment: the delay is the distance to a fireAt, not a
+    // number of whole minutes, so a warning lands inside its budget instead of on a grid.
+    arm(wake = rt.nextWake()) {
+      rt.stop()
+      if (!wake || wake.delayMs === null) return null
+      timer = schedule(() => {
+        timer = null
+        void rt.tick().catch(error => log(`tick failed: ${String(error?.message ?? error)}`))
+      }, Math.max(0, wake.delayMs))
+      if (typeof timer?.unref === 'function') timer.unref()
+      return timer
+    },
+
+    stop() {
+      if (timer === null) return
+      cancel(timer)
+      timer = null
+    },
+
+    // The store is read before the first pass: the timer arms as soon as the plugin mounts,
+    // and a pass that ran before the file was read would save the empty state over the
+    // members, reports and sent reminders the previous run had left there.
+    start() {
+      return (async () => {
+        await rt.load()
+        await rt.tick()
+      })()
     },
 
     // A button press changes one record. `snooze` re-plans the same event at a later fireAt,
@@ -84,13 +195,22 @@ export function createRuntime(ctx, config = {}) {
       const action = readAction(payload)
       if (!action.ok) return { ok: false, reason: action.reason }
       const state = store.get()
+      // A finished meeting cannot be pushed further down the day: the card that offers 推迟 is
+      // the one already ticked off, and re-planning it would resurrect a reminder the member
+      // just closed (#95).
+      if (action.op === 'snooze' && state.done?.[action.id] !== undefined) {
+        return { ok: false, reason: 'already-done' }
+      }
       if (action.op === 'snooze') {
         const found = (state.upcoming ?? []).find(item => item.id === action.id)
         const base = found ?? { id: action.id, title: '日程', startAt: now().toISOString(), fireAt: now().toISOString(), leadMinutes: 0 }
         state.manual = [...(state.manual ?? []), snooze(base, { now: now().getTime(), minutes: SNOOZE_MINUTES })]
       }
       if (action.op === 'done') {
-        state.done = { ...(state.done ?? {}), [action.id]: now().toISOString() }
+        // The first tick keeps its moment; pressing twice must not move it.
+        state.done = { ...(state.done ?? {}), [action.id]: state.done?.[action.id] ?? now().toISOString() }
+        // Snoozed copies of a finished meeting are dead weight; the plan never sees them again.
+        state.manual = (state.manual ?? []).filter(item => item.id !== action.id)
       }
       if (action.op === 'reschedule') {
         state.pendingReschedule = { ...(state.pendingReschedule ?? {}), [action.id]: action.openId }
@@ -133,21 +253,25 @@ export function createRuntime(ctx, config = {}) {
         }
         const result = await rt.onCardAction(body)
         return new Response(JSON.stringify({
-          toast: result.ok ? { type: 'success', content: TOASTS[result.op] ?? '已记录' } : { type: 'error', content: '这张卡片不认识这次点击' },
+          toast: result.ok
+            ? { type: 'success', content: TOASTS[result.op] ?? '已记录' }
+            : { type: 'error', content: REASONS[result.reason] ?? '这张卡片不认识这次点击' },
         }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } })
       },
     }), 'opendigitalmate: card callback')
 
     ctx.effect(() => {
-      const timer = setInterval(() => {
-        void rt.tick().catch(error => log(`tick failed: ${String(error?.message ?? error)}`))
-      }, (config.tickSeconds ?? TICK_SECONDS) * 1000)
-      if (typeof timer.unref === 'function') timer.unref()
-      return () => clearInterval(timer)
-    }, 'opendigitalmate: reminder tick')
+      void rt.start().catch(error => log(`tick failed: ${String(error?.message ?? error)}`))
+      return () => rt.stop()
+    }, 'opendigitalmate: precise tick')
   }
 
   return rt
+}
+
+// 拒绝的理由说人话：点了已完成的日程再点推迟，不该是「不认识这次点击」。
+const REASONS = {
+  'already-done': '这件事已经标成完成了，不能再推迟',
 }
 
 const TOASTS = {

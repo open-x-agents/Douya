@@ -3,9 +3,14 @@
 //
 // Turn tracking: which turns were triggered by another Bot, and what they said.
 import { HANDOFF_ACK, MESSAGE_INLINE_MAX, REFERENCE_KIND, REPLY_KIND, SOURCE_KIND } from './constants.js'
+import { decideRoomSteer, explicitSendFlags, isJoinedFollowUp, pairComposerEcho, rememberComposerSteer, roomMembers, textNamesMember } from './group-steer.js'
+import { routeTakesEffect } from './route-inbound.js'
+import { isUserLineLogged } from './room-user-line.js'
 import { absoluteLinks } from './links.js'
 import { textOf } from './text.js'
 import { reminderText } from './schedules.js'
+import { appendCite, citeCarrier, citeItem, citesOf, mergeCites, visibleRoomCites } from '../shared/cite.js'
+import { lineBySession } from './work-lines.js'
 
 // A failed turn's `LlmFailure`, kept to what can be shown and logged. Like DSH's own
 // error row, an AUTH failure loses its message: providers may echo part of the key.
@@ -235,6 +240,8 @@ export function install(rt) {
   // package that only opens a part is acknowledged with a fixed line, also hidden.
   const claimTrigger = (sessionId, entry, info) => {
     entry.info = info
+    // The opening sentence stays first. A steer that arrived before this claim stays after it.
+    entry.cites = mergeCites(citesOf(info), entry.cites)
     // A turn that was stopped for a part switch brings its joined requests along.
     if (Array.isArray(info.joined) && info.joined.length > 0) {
       entry.joined = info.joined.filter(item => item?.info !== undefined && item.info !== null)
@@ -350,6 +357,154 @@ export function install(rt) {
     const room = rt.roomOf(rt.groupOwners.get(id)?.roomId) ?? rt.roomOf(id)
     return room ? `group "${room.name}"` : 'own chat'
   }
+  // Lines already steered from the inbox splice or from user/message. The other
+  // event is the same composer send and must not queue a second round.
+  /** @type {Map<string, {text: string, via: 'splice' | 'message'}[]>} */
+  const composerSteerPending = new Map()
+  // Composer queue while the room's own turn is running lands in next-turn.
+  // busyEnter would have used next-step, so this is an explicit queue.
+  /** @type {Map<string, string[]>} */
+  const busyQueueLines = new Map()
+  const takeBusyQueue = (roomId, text) => {
+    const list = busyQueueLines.get(roomId)
+    if (list === undefined) return false
+    const index = list.indexOf(text)
+    if (index === -1) return false
+    list.splice(index, 1)
+    if (list.length === 0) busyQueueLines.delete(roomId)
+    return true
+  }
+  // drainRoomInbox sees a next-turn splice before user/message consumes it.
+  rt.pendingRoomQueue = (id, text) => (busyQueueLines.get(id) ?? []).includes(text)
+  const roomUserContent = (content) => {
+    const blocks = Array.isArray(content) ? content : []
+    return {
+      text: textOf(content),
+      images: blocks.filter(block => block?.type === 'image' && !block.offloaded).map(block => block.attachment),
+      files: blocks.filter(block => block?.type === 'file' && block.attachment !== undefined).map(block => block.attachment),
+    }
+  }
+  // A line the room log already holds leaves the Session's inbox: DSH draws the rows
+  // left in next-step as pending bubbles, and a later wake would post the line again.
+  const dropInboxLine = (roomId, id) => {
+    void Promise.resolve(rt.resolveAgent?.(roomId))
+      .then(agent => agent?.inbox?.remove?.(id))
+      .catch(error => rt.warn?.('ds-bot: dropping the logged line in %s failed: %s', roomId, error))
+  }
+  // `via` is `splice` when the composer inserted the line into the room inbox,
+  // and `message` when the deferred user/message finally arrives.
+  const admitRoomUser = (roomId, parts, via) => {
+    const { text, images, files, source, data } = parts
+    if (text === '' && images.length === 0 && files.length === 0) return
+    const paired = pairComposerEcho(composerSteerPending.get(roomId) ?? [], text, via)
+    switch (paired.role) {
+      case 'echo':
+        if (paired.pending.length === 0) composerSteerPending.delete(roomId)
+        else composerSteerPending.set(roomId, paired.pending)
+        return
+      case 'fresh':
+        break
+      default: {
+        /** @type {never} */
+        const unexpected = paired.role
+        throw new Error(`Unknown composer echo ${String(unexpected)}`)
+      }
+    }
+    const room = rt.roomOf(roomId)
+    if (room === undefined) return
+    // A stop, a replay, or a route can leave a row in the inbox whose line is already
+    // written here. It is not admitted again: it leaves the inbox and opens nothing.
+    // After pairComposerEcho, so a steer token is still consumed before this returns.
+    if (typeof data?.id === 'string' && data.id !== '' && isUserLineLogged(room.log, data.id)) {
+      dropInboxLine(roomId, data.id)
+      return
+    }
+    const members = roomMembers(room, sessionId => live.get(sessionId), botId => rt.botOf(botId))
+    const flags = explicitSendFlags(source ?? {}, data ?? {})
+    // Composer queue is visible here when the source carries it, when the line
+    // was spliced into next-turn during this room turn, or when channel.send
+    // noted a relay intent before prompting the room. Consume every matching
+    // token so one queued line does not force the next identical text to relay.
+    const queuedByComposer = takeBusyQueue(roomId, text)
+    const queuedByChannel = rt.takeRelayIntent?.(roomId, text) === true
+    const explicitQueue = flags.explicitQueue || queuedByComposer || queuedByChannel
+    const plain = images.length === 0 && files.length === 0 && !text.includes('dsh-session:')
+    const routed = rt.routeRoomUser?.({
+      room,
+      text,
+      explicitQueue,
+      explicitNew: flags.explicitNew,
+      plain,
+      via: 'user',
+    })
+    // The message id rides with the queued post, so the line the relay writes for it
+    // can be matched back to the row it came from. The same id is the cite send id.
+    const inboxId = typeof data?.id === 'string' && data.id !== '' ? { inboxId: data.id } : {}
+    const queued = { text, ...(images.length > 0 ? { images } : {}), ...(files.length > 0 ? { files } : {}), ...inboxId }
+    const messageId = typeof data?.id === 'string' && data.id !== '' ? data.id : undefined
+    if (routeTakesEffect(routed)) {
+      composerSteerPending.set(roomId, rememberComposerSteer(paired.pending, text, via))
+      rt.noteSteeredRoomLine?.(roomId, text)
+      // Before the room session's own turn reads this message. Otherwise it
+      // synthesizes group_relay, posts an empty User row, and the admin speaks.
+      rt.suppressRelayText?.(roomId, text)
+      rt.holdRoomRoute?.(roomId)
+      // The id goes to the route so the line it writes is this row, and the row leaves
+      // the inbox only once that line is really in the log. A hold that keepHeld
+      // writes is logged, so that copy can leave; a hold that writes nothing stays.
+      const applied = rt.applyRouteDecision?.(room, routed, { text: routed.text ?? text, files, ...inboxId, ...(messageId !== undefined ? { id: messageId } : {}) })
+      void Promise.resolve(applied)
+        .then(() => {
+          if (inboxId.inboxId !== undefined && isUserLineLogged(room.log, inboxId.inboxId)) dropInboxLine(roomId, inboxId.inboxId)
+        })
+        .catch(error => rt.warn('ds-bot: inbound route failed: %s', error))
+      return
+    }
+    rt.releaseRoomRoute?.(roomId)
+    const decision = decideRoomSteer({
+      members,
+      explicitQueue,
+      explicitNew: flags.explicitNew,
+      named: textNamesMember(text, members),
+      plain,
+    })
+    const canSteer = decision.action === 'steer' && decision.member !== undefined && typeof rt.acceptRoomSteer === 'function'
+    switch (decision.action) {
+      case 'steer':
+        if (canSteer) {
+          composerSteerPending.set(roomId, rememberComposerSteer(paired.pending, text, via))
+          rt.noteSteeredRoomLine?.(roomId, text)
+          void rt.acceptRoomSteer(room, decision.member, { text, files, ...(messageId !== undefined ? { messageId } : {}) }).catch(error => rt.warn('ds-bot: group steer failed: %s', error))
+          return
+        }
+        if (via === 'splice') return
+        rt.allowRelayText?.(roomId, text)
+        queueRoomMessage(roomId, queued)
+        return
+      case 'relay':
+        // The inbox already holds a spliced line. drainRoomInbox posts that copy.
+        if (via === 'splice') return
+        rt.allowRelayText?.(roomId, text)
+        queueRoomMessage(roomId, queued)
+        return
+      default: {
+        /** @type {never} */
+        const unexpected = decision.action
+        throw new Error(`Unknown room steer action ${String(unexpected)}`)
+      }
+    }
+  }
+
+  // A follow-up steered into this turn is part of the same reply's cite.
+  // It is not a joined request: joining would open another turn for that sentence.
+  const rememberSteerCite = (entry, source) => {
+    if (entry.turn === undefined || source?.userSteer !== true) return
+    const item = citeItem(source)
+    if (item === undefined) return
+    entry.steers = appendCite(entry.steers, item)
+    entry.cites = appendCite(mergeCites(citesOf(entry.info), entry.cites), item)
+  }
+
   const noteTurnFailure = (id, failure) => {
     rt.noteFailure({
       source: 'turn',
@@ -401,6 +556,8 @@ export function install(rt) {
         entry.shown = 0
         entry.step = undefined
         entry.info = undefined
+        entry.cites = undefined
+        entry.steers = undefined
         // A turn turned away before its first step may end without a turn/end.
         entry.switched = false
         entry.answers = false
@@ -453,6 +610,10 @@ export function install(rt) {
             ...(source.late ? { late: true } : {}),
             ...(source.progress ? { progress: true } : {}),
             ...(source.quiet ? { quiet: true } : {}),
+            ...(typeof source.quoteText === 'string' && source.quoteText !== '' ? { quoteText: source.quoteText } : {}),
+            ...(typeof source.quoteSeq === 'number' && Number.isFinite(source.quoteSeq) ? { quoteSeq: source.quoteSeq } : {}),
+            ...(typeof source.quoteRoomId === 'string' && source.quoteRoomId !== '' ? { quoteRoomId: source.quoteRoomId } : {}),
+            ...(Array.isArray(source.quotes) && source.quotes.length > 0 ? { quotes: source.quotes } : {}),
             ...(source.failed ? { failed: source.failed } : {}),
             ...(source.resumed ? { resumed: true } : {}),
             ...(source.again ? { again: true } : {}),
@@ -469,12 +630,15 @@ export function install(rt) {
           queueRoomMessage(id, { text: '', resume: true })
         } else if (source?.kind === SOURCE_KIND) {
           if (entry.turn === undefined) entry.pending = source
-          else if (!opened) claimTrigger(id, entry, source)
+          // A follow-up steered into a turn that already has its trigger is another
+          // sentence of the same cite. Claiming it would keep only that sentence.
+          else if (!opened && source.userSteer !== true) claimTrigger(id, entry, source)
           else if (source.work !== undefined && source.work !== rt.workOf?.(entry.info) && !expectsReply(source)) {
             // A result for other work than this turn's informs it, and comes back in a
             // turn of its own once this one ends, which goes on with that work.
             entry.later = [...(entry.later ?? []), { info: source, text: textOf(event.data.content).replace(/^\[(?:[^\r\n]*\]\r?\n|[^\]\r\n]*\])/, '') }]
           } else if ((expectsReply(source) || source.role === 'room') && !answersUser(source)
+            && isJoinedFollowUp(source)
             && source.exchangeId !== entry.info?.exchangeId
             && !(entry.joined ?? []).some(joined => joined.info.exchangeId === source.exchangeId)) {
             // A request that lands inside a running turn steers that work but is
@@ -484,6 +648,7 @@ export function install(rt) {
             const text = textOf(event.data.content).replace(/^\[(?:[^\r\n]*\]\r?\n|[^\]\r\n]*\])/, '')
             entry.joined = [...(entry.joined ?? []), { info: source, text }]
           }
+          rememberSteerCite(entry, source)
           // A mid-turn relay that owes no reply only informs the turn: it neither
           // claims the running turn nor queues as the next one's trigger.
         } else if (source?.kind === 'schedule' && rt.roomOf(id)) {
@@ -492,12 +657,7 @@ export function install(rt) {
         } else if (source?.kind === REFERENCE_KIND && rt.roomOf(id)) {
           attachReference(roomInbox.get(id), source, textOf(event.data.content))
         } else if (source?.kind === 'user' || source?.kind === REPLY_KIND) {
-          if (rt.roomOf(id) && source.kind === 'user') {
-            const content = Array.isArray(event.data.content) ? event.data.content : []
-            const images = content.filter(block => block?.type === 'image' && !block.offloaded).map(block => block.attachment)
-            const files = content.filter(block => block?.type === 'file' && block.attachment !== undefined).map(block => block.attachment)
-            queueRoomMessage(id, { text: textOf(event.data.content), ...(images.length > 0 ? { images } : {}), ...(files.length > 0 ? { files } : {}) })
-          }
+          if (rt.roomOf(id) && source.kind === 'user') admitRoomUser(id, { ...roomUserContent(event.data?.content), source, data: event.data }, 'message')
           const own = rt.chatOwners.get(id)
           if (own !== undefined) rt.dropKickoff(own)
           // Any user message answers or supersedes the open question card and view card.
@@ -514,14 +674,33 @@ export function install(rt) {
         }
         break
       }
-      case 'agent/inbox/spliced':
+      case 'agent/inbox/spliced': {
         // A message the user steered into the running turn is fresh input, like
         // a send that never queued.
-        if (event.data?.target === 'next-step' && entry.turn !== undefined
-          && (event.data.inserted ?? []).some(message => message?.source?.kind === 'user')) {
-          entry.steeredAt = event.time ?? Date.now()
+        const inserted = (event.data?.inserted ?? []).filter(message => message?.source?.kind === 'user')
+        if (event.data?.target === 'next-step' && entry.turn !== undefined) {
+          for (const message of event.data?.inserted ?? []) {
+            if (message?.source?.userSteer === true) rememberSteerCite(entry, message.source)
+          }
+          if (inserted.length > 0) entry.steeredAt = event.time ?? Date.now()
+        }
+        // busyEnter=steer calls agent.steer on the room session. The line is in
+        // next-step immediately; user/message waits until that session's next
+        // step, which is often after the member has already finished. Admit it
+        // here, while the member is still busy, so drain cannot post it as a
+        // new user bubble.
+        if (rt.roomOf(id) && inserted.length > 0 && event.data?.target === 'next-step') {
+          for (const message of inserted) {
+            admitRoomUser(id, { ...roomUserContent(message.content), source: message.source, data: message }, 'splice')
+          }
+        } else if (rt.roomOf(id) && inserted.length > 0 && event.data?.target === 'next-turn' && entry.turn !== undefined) {
+          for (const message of inserted) {
+            const text = textOf(message.content)
+            if (text !== '') busyQueueLines.set(id, [...(busyQueueLines.get(id) ?? []), text])
+          }
         }
         break
+      }
       case 'assistant/message': {
         const content = event.data?.message?.content
         const text = textOf(content)
@@ -546,8 +725,31 @@ export function install(rt) {
         const { lastText, lastCalled } = entry
         // A turn stopped for a switch goes on in the next part, which answers instead.
         const switched = entry.switched === true
+        // The unshown remainder is what the group still posts. It rides on the
+        // in-memory completion only; the work line itself stays metadata.
+        const reply = texts.join('\n\n').trim()
+        // The opening sentence first, then any follow-up steered into this same turn.
+        // A follow-up into a line that already had a prompt cites the follow-ups only.
+        const steers = Array.isArray(entry.steers) ? entry.steers : []
+        const opening = lineBySession(rt.state, id)?.quote
+        const cites = steers.length > 0 ? visibleRoomCites(info, steers, opening) : mergeCites(entry.cites, citesOf(info))
+        const citedInfo = steers.length > 0 ? citeCarrier(info, cites) : (cites.length === 0 ? info : { ...(info ?? {}), quotes: cites })
+        // Idle is the absence of this turn. A resume replay or a part switch does
+        // not emit a second completion for the same exchange.
+        rt.noteWorkTurnEnd?.({
+          sessionId: id,
+          exchangeId: info?.exchangeId,
+          turn: event.data?.turn ?? entry.turn,
+          reason: event.data?.reason,
+          switched,
+          now: event.time ?? Date.now(),
+          ...(reply !== '' ? { reply } : {}),
+          ...(cites.length > 1 ? { quotes: cites } : {}),
+        })
         entry.turn = undefined
         entry.info = undefined
+        entry.cites = undefined
+        entry.steers = undefined
         entry.texts = []
         entry.shown = 0
         entry.step = undefined
@@ -632,14 +834,14 @@ export function install(rt) {
           } else if (!stopped && reason?.kind !== 'aborted') {
             // The round moved on without this member; how its turn ends still reaches the group.
             if (failure !== undefined) void rt.lateRoomFailure?.(id, info, failure)
-            else void rt.lateRoomReply?.(id, info, groupReply(), { shown })
+            else void rt.lateRoomReply?.(id, citedInfo, groupReply(), { shown })
           }
         } else if (!retry && speaksInGroup(id, info)) {
           // A turn that failed before it took any input (DSH can turn it down before its
           // first step) never names its call, so the call waiting on this Session fails.
           const inRound = failure !== undefined && info === undefined && rt.failRoomTurn?.(id, failure) === true
           if (failure !== undefined) { if (!inRound) void rt.lateRoomFailure?.(id, info ?? {}, failure) }
-          else if (reason?.kind !== 'aborted') void rt.lateRoomReply?.(id, info ?? {}, groupReply(), { shown })
+          else if (reason?.kind !== 'aborted') void rt.lateRoomReply?.(id, citedInfo ?? {}, groupReply(), { shown })
         } else if (!retry && info !== undefined) {
           finish(info, replyText())
         }
@@ -670,5 +872,11 @@ export function install(rt) {
     }
   })
 
-  Object.assign(rt, { live, liveOf, roomWaiters, roomProgress, roomInbox, activityView, workView, roomWorkView, turnsView, steeredView, callDetail, doingOf, stopRoomTurn, releaseBot })
+  // Group assistant-stream reads this before painting a draft. A room turn is
+  // visible. A request or stopped turn owes another Bot a reply and is not.
+  // A turn that has not claimed a trigger yet stays visible, so the user's
+  // round is not dropped before its source arrives.
+  rt.turnVisibleInGroup = (sessionId) => speaksInGroup(sessionId, live.get(sessionId)?.info)
+
+  Object.assign(rt, { live, liveOf, roomWaiters, roomProgress, roomInbox, activityView, workView, roomWorkView, turnsView, steeredView, callDetail, doingOf, stopRoomTurn, releaseBot, turnVisibleInGroup: rt.turnVisibleInGroup })
 }

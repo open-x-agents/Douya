@@ -1,0 +1,68 @@
+{
+  "toolkit": "googlecalendar",
+  "routes": [
+    {
+      "kind": "proxyGet",
+      "pattern": "^/calendar/v3/calendars/primary/events/e1$",
+      "body": {
+        "id": "e1",
+        "status": "confirmed",
+        "summary": "产品评审会",
+        "start": { "dateTime": "2025-11-01T16:00:00+08:00" },
+        "attendees": [{ "email": "lina@example.com", "displayName": "李娜" }]
+      }
+    },
+    {
+      "kind": "proxyGet",
+      "pattern": "^/calendar/v3/calendars/primary/events/e2$",
+      "body": {
+        "id": "e2",
+        "status": "confirmed",
+        "summary": "季度预算对一下",
+        "start": { "dateTime": "2025-10-31T10:05:00+08:00" },
+        "attendees": [{ "email": "wang@example.com", "displayName": "王强" }]
+      }
+    },
+    {
+      "kind": "proxyGet",
+      "pattern": "^/calendar/v3/calendars/primary/events/e3$",
+      "body": {
+        "id": "e3",
+        "status": "confirmed",
+        "summary": "上线检查",
+        "start": { "date": "2025-10-29" },
+        "attendees": []
+      }
+    },
+    {
+      "kind": "proxyGet",
+      "pattern": "^/calendar/v3/calendars/primary/events\\?",
+      "body": {
+        "items": [
+          {
+            "id": "e1",
+            "status": "confirmed",
+            "summary": "产品评审会",
+            "start": { "dateTime": "2025-11-01T16:00:00+08:00" },
+            "attendees": [{ "email": "lina@example.com", "displayName": "李娜" }]
+          },
+          {
+            "id": "e2",
+            "status": "confirmed",
+            "summary": "季度预算对一下",
+            "start": { "dateTime": "2025-10-31T10:05:00+08:00" },
+            "attendees": [{ "email": "wang@example.com", "displayName": "王强" }]
+          },
+          {
+            "id": "e3",
+            "status": "confirmed",
+            "summary": "上线检查",
+            "start": { "date": "2025-10-29" },
+            "attendees": []
+          }
+        ],
+        "nextPageToken": null
+      }
+    }
+  ]
+}

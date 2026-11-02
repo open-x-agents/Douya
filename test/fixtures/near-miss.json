@@ -1,0 +1,22 @@
+[
+  {
+    "source": "doc",
+    "external_id": "aa11bb",
+    "ref": "doc:aa11bb",
+    "title": "周报",
+    "project": "项目甲",
+    "people": ["王工", "李静"],
+    "at": "2026-10-30T09:00:00+08:00",
+    "excerpt": "项目甲第 43 周周报"
+  },
+  {
+    "source": "doc",
+    "external_id": "cc22dd",
+    "ref": "doc:cc22dd",
+    "title": "周报",
+    "project": "项目乙",
+    "people": ["王工", "李静"],
+    "at": "2026-10-30T10:00:00+08:00",
+    "excerpt": "项目乙第 43 周周报"
+  }
+]

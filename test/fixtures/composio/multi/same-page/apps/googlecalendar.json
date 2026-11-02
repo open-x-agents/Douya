@@ -1,0 +1,32 @@
+{
+  "toolkit": "googlecalendar",
+  "routes": [
+    {
+      "kind": "proxyGet",
+      "pattern": "^/calendar/v3/calendars/primary/events/e-same$",
+      "body": {
+        "id": "e-same",
+        "status": "confirmed",
+        "summary": "产品评审会",
+        "start": { "dateTime": "2025-11-01T16:00:00+08:00" },
+        "attendees": [{ "email": "lina@example.com", "displayName": "李娜" }]
+      }
+    },
+    {
+      "kind": "proxyGet",
+      "pattern": "^/calendar/v3/calendars/primary/events\\?",
+      "body": {
+        "items": [
+          {
+            "id": "e-same",
+            "status": "confirmed",
+            "summary": "产品评审会",
+            "start": { "dateTime": "2025-11-01T16:00:00+08:00" },
+            "attendees": [{ "email": "lina@example.com", "displayName": "李娜" }]
+          }
+        ],
+        "nextPageToken": null
+      }
+    }
+  ]
+}

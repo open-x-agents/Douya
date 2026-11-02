@@ -55,7 +55,7 @@
 
 自动化只做 `agent-ready` 的单。没到 `agent-ready` 就写代码，等于用代码替本人做设计决定。
 
-一条 issue 一个 PR：PR 体里写 `Fixes #N`，并打 `agent-pr`。
+一条 issue 一个 PR：PR 体里写 `Fixes #N`，并打 `agent-pr`；同一个 issue 的后续刀写 `Refs #N`（父单多半已被上一刀关掉），也打 `agent-pr` —— 准入守卫认这两种写法（#90）。
 
 ## 每一步的写都署名
 

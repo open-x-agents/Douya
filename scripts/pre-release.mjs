@@ -57,31 +57,80 @@ export function checkVersionConsistency({ version, tag = null, changelog = '', e
   return problems;
 }
 
-// 1. 单元测试：跟 tests.yml / release.yml 同一条命令。
+// 1. 单元测试：跟 tests.yml / merge-tree.yml 同一条命令。
+// 这一串是给 node 的 argv（不是 shell 命令），所以元素里不能带引号：
+// 带引号的 'test/**/*.test.js' 会被 node 当成字面路径，跑 0 条还 exit 0。
+// 导出它，是为了让 test/ci-test-command.test.js 能断言发版闸与 CI 是同一条命令。
+export const UNIT_TEST_ARGS = ['--test', 'test/**/*.test.js', 'acceptance-cases/**/*.test.js'];
+
 function stepUnitTests() {
-  const files = readdirSync(join(REPO_ROOT, 'test'))
-    .filter((f) => f.endsWith('.test.js'))
-    .map((f) => join('test', f))
-    .sort();
+  const args = UNIT_TEST_ARGS;
   try {
-    run('node', ['--test', ...files]);
-    return report('单元测试', true, `${files.length} 个文件`);
+    run('node', args);
+    return report('单元测试', true, args.slice(1).join(' '));
   } catch (error) {
     return report('单元测试', false, String(error.stdout || error.message).trim().split('\n').slice(-3).join(' | '));
   }
 }
 
-// 2. 干净安装：打包 → 装进空目录 → 真的 import 一次。
-// 本地直接读源码永远发现不了 `files` 清单少一个目录的问题。
+// 把一个 files 条目展开成仓库里的文件路径：文件条目就是它自己，目录条目递归展开。
+function entryFiles(entry, repoFiles) {
+  const base = String(entry).replace(/^\.\//, '').replace(/\/+$/, '');
+  return repoFiles.filter((path) => path === base || path.startsWith(`${base}/`));
+}
+
+/**
+ * files 清单里的每一项都得真的在仓库里、并且真的进了 tgz；src/host 下的每个文件也必须进 tgz。
+ * 这是纯函数，好让 test/pre-release.test.js 把三种缺失各测一次。
+ *
+ * @param {object} input
+ * @param {string[]} [input.listed]      tgz 里 package.json 的 files 清单（tgz 自己的，不是仓库的）
+ * @param {string[]} [input.repoFiles]   仓库里的文件路径（相对仓库根）
+ * @param {string[]} [input.tgzFiles]    tgz 里的文件路径（带或带 package/ 前缀都可）
+ * @returns {Array<{code: string, message: string}>}
+ */
+export function checkPackagedFiles({ listed = [], repoFiles = [], tgzFiles = [] } = {}) {
+  const problems = [];
+  const packed = new Set(tgzFiles.map((path) => String(path).replace(/^package\//, '')));
+
+  for (const entry of listed) {
+    const files = entryFiles(entry, repoFiles);
+    if (files.length === 0) {
+      problems.push({ code: 'listed-missing-in-repo', message: `files 清单里的 ${entry} 在仓库里一个文件都没有` });
+      continue;
+    }
+    if (!files.some((path) => packed.has(path))) {
+      problems.push({ code: 'listed-not-in-tgz', message: `files 清单里的 ${entry} 没进 tgz（仓库里有 ${files.length} 个文件）` });
+    }
+  }
+
+  // 清单写漏 src/ 时上面按条目的检查看不出来，但入口会 import 到 src/host，所以逐个文件查。
+  const lostHost = repoFiles.filter((path) => path.startsWith('src/host/') && !packed.has(path));
+  if (lostHost.length > 0) {
+    problems.push({ code: 'host-file-not-in-tgz', message: `src/host 下的文件没进 tgz：${lostHost.join(', ')}` });
+  }
+
+  return problems;
+}
+
+function listRepoFiles(dir = REPO_ROOT, prefix = '') {
+  const files = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name === '.git') continue;
+    const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) files.push(...listRepoFiles(join(dir, entry.name), path));
+    else files.push(path);
+  }
+  return files;
+}
+
+// 干净安装产出的 tgz 留给升级路径那一步接着用，所以记在模块里而不只是函数里。
+let packedTarball = null;
+
+// 2. 干净安装：打包 → 从 tgz 自己读 files 清单 → 逐项核对仓库与 tgz → 装进空目录 → 真的 import 一次。
+// 本地直接读源码永远发现不了 `files` 清单写漏或写错的问题。
 function stepCleanInstall() {
   const tmp = mkdtempSync(join(tmpdir(), 'odm-install-'));
-  const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'));
-
-  const listed = pkg.files || [];
-  const missing = listed.filter((entry) => !existsSync(join(REPO_ROOT, entry.replace(/\/$/, ''))));
-  if (missing.length > 0) {
-    return report('干净安装', false, `package.json 的 files 里写了不存在的路径：${missing.join(', ')}`);
-  }
 
   try {
     run('npm', ['pack', '--pack-destination', tmp, '--silent']);
@@ -91,18 +140,49 @@ function stepCleanInstall() {
 
   const tarball = readdirSync(tmp).find((f) => f.endsWith('.tgz'));
   if (!tarball) return report('干净安装', false, 'npm pack 没产出 tgz');
+  const tarballPath = join(tmp, tarball);
 
-  const contents = run('tar', ['-tzf', join(tmp, tarball)]);
-  const needed = ['package/index.js'];
-  const lost = needed.filter((path) => !contents.includes(`\n${path}\n`) && !contents.startsWith(`${path}\n`));
-  if (lost.length > 0) return report('干净安装', false, `tgz 里缺入口文件：${lost.join(', ')}`);
+  let listed;
+  let tgzFiles;
+  try {
+    listed = JSON.parse(run('tar', ['-xzOf', tarballPath, 'package/package.json'])).files || [];
+    tgzFiles = run('tar', ['-tzf', tarballPath])
+      .split('\n')
+      .map((path) => path.trim().replace(/^package\//, ''))
+      .filter((path) => path && !path.endsWith('/'));
+  } catch (error) {
+    return report('干净安装', false, `读不了 tgz 里的 package.json：${String(error.stderr || error.message).trim()}`);
+  }
+  packedTarball = tarballPath;
+
+  const repoFiles = listRepoFiles();
+  const problems = checkPackagedFiles({ listed, repoFiles, tgzFiles });
+
+  // 先把 tgz 里真实装了什么按清单顺序报出来：出了问题也看得见是哪一项没进。
+  const packed = new Set(tgzFiles);
+  const seen = new Set();
+  const counts = [];
+  for (const entry of listed) {
+    const files = entryFiles(entry, repoFiles).filter((path) => packed.has(path) && !seen.has(path));
+    for (const path of files) seen.add(path);
+    counts.push(`${entry} ${files.length}`);
+  }
+  const other = tgzFiles.filter((path) => !seen.has(path)).length;
+  if (other > 0) counts.push(`其它 ${other}`);
+  const breakdown = counts.length > 0 ? `（${counts.join('，')}）` : '（package.json 里没有 files 清单）';
+  console.log(`装进 tgz 的文件：${tgzFiles.length}${breakdown}`);
+
+  if (problems.length > 0) {
+    for (const problem of problems) console.log(`  - ${problem.code}: ${problem.message}`);
+    return report('干净安装', false, `${problems.length} 处与 files 清单对不上`);
+  }
 
   const app = join(tmp, 'app');
   run('mkdir', ['-p', app]);
   writeFileSync(join(app, 'package.json'), JSON.stringify({ name: 'probe', private: true, type: 'module' }));
 
   try {
-    run('npm', ['i', join(tmp, tarball), '--omit=optional', '--no-audit', '--no-fund', '--silent'], { cwd: app });
+    run('npm', ['i', tarballPath, '--omit=optional', '--no-audit', '--no-fund', '--silent'], { cwd: app });
   } catch (error) {
     return report('干净安装', false, `装进空目录失败：${String(error.stdout || error.message).trim().split('\n').slice(-2).join(' | ')}`);
   }
@@ -159,6 +239,13 @@ function stepRealModel() {
 }
 
 function main() {
+  // --install-only 只验「装得起来」这一道闸，不跑单测、版本一致性和真实模型。
+  if (process.argv.includes('--install-only')) {
+    const ok = stepCleanInstall();
+    console.log(ok ? '\n干净安装全过。' : '\n干净安装不过。');
+    process.exit(ok ? 0 : 1);
+  }
+
   // 工作流里版本号还没写（发版脚本才算出来），那一项交给 release.mjs 在写完之后自检。
   const steps = [stepUnitTests(), stepCleanInstall()];
   if (!process.argv.includes('--skip-version')) steps.push(stepVersionConsistency());

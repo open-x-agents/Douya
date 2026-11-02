@@ -1091,6 +1091,12 @@ div:has(> nav [class*="_marks"]){display:none!important}
    the host's bubble surface alone would otherwise leave the text unreadable. */
 [class*="_userRow"] [class*="_bubble"],[data-chat-flow-kind=question-reply] [class*="_bubble"],[data-chat-flow-kind=command-input] [class*="_bubble"]{background:var(--bt-user)!important;color:var(--bt-user-ink)!important;border-radius:18px!important;padding:7px 12px!important;font-size:var(--dsh-content-font-size,14px)!important;line-height:calc(var(--dsh-content-font-size,14px) + 8px)!important}
 [class*="_userRow"] [class*="_bubble"] [class*="_markdown"],[class*="_userRow"] [class*="_bubble"] a{color:inherit}
+/* A one-line send is one line. The host paints it as a paragraph in its bubble, and
+   that paragraph's own margin is a blank second line unless it is reset the way a
+   Bot bubble's paragraph already is. */
+[class*="_userRow"] [class*="_bubble"] [class*="_markdown"],[data-chat-flow-kind=question-reply] [class*="_bubble"] [class*="_markdown"],[data-chat-flow-kind=command-input] [class*="_bubble"] [class*="_markdown"]{font-size:inherit!important;line-height:inherit!important}
+[class*="_userRow"] [class*="_bubble"] p,[data-chat-flow-kind=question-reply] [class*="_bubble"] p,[data-chat-flow-kind=command-input] [class*="_bubble"] p{margin:0;line-height:inherit!important}
+[class*="_userRow"] [class*="_bubble"] p+p,[data-chat-flow-kind=question-reply] [class*="_bubble"] p+p,[data-chat-flow-kind=command-input] [class*="_bubble"] p+p{margin-top:6px}
 /* Sent messages get the hover toolbar below; steering and unsent bubbles keep none. */
 [class*="_userRow"] [class*="_actions"]{display:none!important}
 /* A steering message the Bot has not read yet shows a small unread label under
@@ -1098,6 +1104,12 @@ div:has(> nav [class*="_marks"]){display:none!important}
    the none fallback means no English can leak into a Chinese window. */
 [data-pending-steering]{flex-wrap:wrap}
 [data-pending-steering]::after{content:var(--bt-steer-unread,none);display:block;flex-basis:100%;width:100%;order:99;margin-top:4px;font-size:11px;line-height:14px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+[data-pending-steering][data-steer-copy]{display:none!important}
+[class*="_flowItem"]:has([data-pending-steering][data-steer-copy]){display:none!important}
+/* A late cite paints the sentence as the user's bubble. The host's earlier
+   copy of that send is the history bubble; it is not .bt-umsg on this desktop. */
+[data-cited-history]{display:none!important}
+[class*="_flowItem"]:has([data-cited-history]){display:none!important}
 [data-chat-flow-kind=user] [class*="_userRow"]{flex-direction:row-reverse;align-items:center;justify-content:flex-start}
 [data-chat-flow-kind=user] [class*="_actions"]{display:flex!important;height:24px!important;gap:2px!important;opacity:0!important;visibility:hidden;transition:opacity .12s ease,visibility .12s!important;flex:none}
 [data-chat-flow-kind=user] [class*="_userRow"]:hover [class*="_actions"],[data-chat-flow-kind=user] [class*="_userRow"]:focus-within [class*="_actions"]{opacity:1!important;visibility:visible}
@@ -1172,6 +1184,23 @@ div:has(> nav [class*="_marks"]){display:none!important}
 .bt-btw-answer p{margin:0}
 .bt-btw-fail{margin:0 0 6px;color:var(--bt-danger);font-size:13px;line-height:18px}
 @media (prefers-reduced-motion:reduce){.bt-btw-chevron{transition:none}}
+.bt-route-dock{width:100%;display:flex;justify-content:center}
+.bt-route{box-sizing:border-box;width:calc(var(--dsh-chat-content-width,748px) - 32px);max-width:calc(100% - 32px);margin:0 auto 8px;padding:12px 14px;border-radius:16px;background:var(--bt-card);color:var(--bt-ink);box-shadow:inset 0 0 0 .5px color-mix(in srgb,var(--bt-ink) 8%,transparent);font-family:var(--bt-font)}
+.bt-route-text{margin:0 0 8px;font-size:14px;line-height:22px}
+.bt-route-list{display:flex;flex-direction:column;gap:4px}
+.bt-route-choice{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;margin:0;padding:8px 10px;border:0;border-radius:12px;background:transparent;color:inherit;font:inherit;font-size:13px;line-height:18px;text-align:left;cursor:pointer}
+.bt-route-choice:hover{background:var(--bt-hover)}
+.bt-route-choice:disabled{opacity:.55;cursor:default}
+.bt-route-choice[data-highlight]{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--bt-accent) 45%,transparent)}
+.bt-route-choice-state{flex:none;color:var(--bt-ink-3);font-size:12px}
+.bt-route-miss{margin:8px 0 0;color:var(--bt-ink-3);font-size:12px;line-height:16px}
+/* The cite is the Bot quoting history, so it sits on the left. Its row is as wide as
+   the column: a shrink-wrapped row lets max-width:80% fold a short sentence in half.
+   A message the user sent keeps .bt-urow, which stays on the right. */
+.bt-route-cite{display:flex;flex-direction:column;align-items:flex-start;gap:8px;width:100%;margin:6px 0}
+.bt-route-cite .bt-urow{justify-content:flex-start;width:100%}
+.bt-route-cite-label{color:var(--bt-ink-3);font-size:12px;line-height:16px}
+.bt-route-cite-text{color:var(--bt-ink);font-size:14px;line-height:22px}
 `
 
 // -------------------------------------------------------------------------

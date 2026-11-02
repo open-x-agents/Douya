@@ -1,0 +1,91 @@
+{
+  "schema": 1,
+  "status": "pass",
+  "fixture_note": "test/fixtures/e2e-day1 的完整记录：第一刀只判 status / doc 两段；samples 段随后续切片补。这不是一次真实运行。",
+  "run": {
+    "sha": "5b21385502336b8daa91c42a01ae52b9ca881fbf",
+    "tz": "Asia/Shanghai",
+    "machine": "fixture-host",
+    "started_at": "2026-10-31T00:44:00Z",
+    "ended_at": "2026-11-01T01:30:00Z",
+    "operator": "fixture 夹具（不是真人跑出来的结果）"
+  },
+  "sources_used": ["github"],
+  "requests": [
+    {
+      "at": "2026-10-31T00:44:10Z",
+      "method": "GET",
+      "url": "https://api.github.com/repos/open-x-agents/openDigitalMate/pulls?state=open"
+    }
+  ],
+  "steps": [
+    {
+      "name": "morning_report",
+      "deadline_local": "08:45",
+      "at": "2026-10-31T00:45:30Z",
+      "latency_ms": 22000,
+      "deadline_ms": 30000
+    },
+    {
+      "name": "closure",
+      "at": "2026-10-31T05:00:00Z",
+      "evidence_ref": "doc:docs/architecture.md@5b21385（日历仍是注入点，关掉这件）"
+    },
+    {
+      "name": "evening_report",
+      "deadline_local": "18:30",
+      "at": "2026-10-31T10:31:00Z",
+      "latency_ms": 18000,
+      "deadline_ms": 60000
+    },
+    {
+      "name": "next_day_view",
+      "at": "2026-11-01T00:50:00Z",
+      "still_visible": true
+    }
+  ],
+  "panel": {
+    "report_keys": ["lisi:2026-10-31", "wangwu:2026-10-31"],
+    "member_ids": ["lisi", "wangwu", "zhaoliu"],
+    "numbers": [
+      {
+        "label": "提交率",
+        "value": "2/3",
+        "refs": ["report:lisi:2026-10-31", "report:wangwu:2026-10-31"]
+      },
+      { "label": "未交数", "value": "1", "refs": ["member:zhaoliu"] }
+    ]
+  },
+  "latency": {
+    "first_screen": {
+      "server_ms": 180,
+      "browser_ms": 420,
+      "measured_at": "2026-10-31T00:46:10Z",
+      "method": "浏览器 performance.now() 打点（夹具，不是真机）"
+    },
+    "first_answer": {
+      "first_token_ms": 900,
+      "measured_at": "2026-10-31T00:47:00Z",
+      "method": "test/e2e/real-model.e2e.mjs 同口径直连（口径 ≠ 面板内追问）"
+    },
+    "reminder": {
+      "error_ms": 1200,
+      "measured_at": "2026-10-31T05:10:00Z",
+      "method": "sent[eventId@fireAt] 的投递时刻 − fireAt（lastIndexOf('@')）"
+    },
+    "report": {
+      "delay_ms": -800,
+      "measured_at": "2026-10-31T10:30:00Z",
+      "method": "日报投递时刻 − 18:30 本地截止"
+    }
+  },
+  "failure": {
+    "at": "2026-10-31T01:00:00Z",
+    "source": "gcal",
+    "error_kind": "auth",
+    "report_delivered": true,
+    "unread_sources": ["gcal"],
+    "resumed_at": "2026-10-31T01:20:00Z"
+  },
+  "day2": { "still_visible": true, "report_key": "lisi:2026-10-31" }
+}

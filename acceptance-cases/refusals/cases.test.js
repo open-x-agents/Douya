@@ -92,6 +92,8 @@ test('题集：每题至少一条 check，类型合法且每类必需项齐全',
 })
 
 test('题集：题量与动作/障碍覆盖达到下限', () => {
+  // 终值是 5/6/3（#97 第四刀）。把常量本身钉住：只写 >= 的话，整刀退回第一刀的 3/3/3 也会绿。
+  assert.deepEqual(MIN_COUNTS, { impossible: 5, irreversible: 6, barrier: 3 })
   for (const category of CATEGORIES) {
     const total = cases.filter((entry) => entry.dir === category).length
     assert.ok(total >= MIN_COUNTS[category], `${category} 只有 ${total} 题，少于 ${MIN_COUNTS[category]}`)

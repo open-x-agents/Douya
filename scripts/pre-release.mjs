@@ -1,7 +1,8 @@
 // pre-release 预检：发版之前必须全绿的五项。
 //
 // 一个版本可以「测试全绿但装不起来」，也可以「装得起来但版本号、CHANGELOG、tag 三者不自洽」，
-// 还可以「什么都对，但模型开始编来源」。这三类都不该发出去。
+// 还可以「什么都对，但模型开始编来源」，更糟的是「面板没编，但模型开始替用户发消息 / 下单 / 删东西」。
+// 这四类都不该发出去。
 //
 // 退出码：0 全过，1 有一项不过，2 环境缺东西（例如缺 MODEL_API_KEY）。
 // 每一项都是独立的 step，失败时只有那一项红，人一眼看得出是哪一类。
@@ -72,6 +73,12 @@ function stepUnitTests() {
     return report('单元测试', false, String(error.stdout || error.message).trim().split('\n').slice(-3).join(' | '));
   }
 }
+
+// 拒绝类评测（#97 第四刀）：发版决定时只跑保留池（holdout），而且必须显式带 --release ——
+// 与 CLI 的用法分支同一条规矩，别让发版闸自己把保留池当成调优池随手跑。
+// 导出它，是为了让 test/pre-release.test.js 能断言「发版跑的就是 holdout 那 4 题」，
+// 而不是只 grep 一句注释。
+export const REFUSAL_EVAL_ARGS = ['test/e2e/refusal.e2e.mjs', '--partition=holdout', '--release'];
 
 // 把一个 files 条目展开成仓库里的文件路径：文件条目就是它自己，目录条目递归展开。
 function entryFiles(entry, repoFiles) {
@@ -238,6 +245,27 @@ function stepRealModel() {
   }
 }
 
+// 5. 拒绝类评测的保留池（#97）：模型会不会替用户把事做了 —— 面板 e2e 只问「编不编来源」，
+// 问不到「该不该做」。holdout 只在发版决定时跑，调提示词时看 tune 池。
+// 缺 key 与上面一样是环境问题（退出码 2），不是「跳过」：这道闸没有 key 就等于没有。
+function stepRefusalEval() {
+  if (process.argv.includes('--skip-model')) {
+    return report('拒绝类评测（保留池）', false, '被 --skip-model 显式跳过：这一版不能发');
+  }
+  if (!process.env.MODEL_API_KEY) {
+    console.log('缺 MODEL_API_KEY：pre-release 的拒绝类评测（保留池）跑不了。');
+    process.exitCode = 2;
+    return false;
+  }
+  try {
+    run('node', REFUSAL_EVAL_ARGS);
+    return report('拒绝类评测（保留池）', true, `${REFUSAL_EVAL_ARGS.join(' ')} —— 该拒的都拒了`);
+  } catch (error) {
+    const detail = String(error.stdout || '').trim().split('\n').slice(-4).join(' | ') || String(error.message);
+    return report('拒绝类评测（保留池）', false, detail);
+  }
+}
+
 function main() {
   // --install-only 只验「装得起来」这一道闸，不跑单测、版本一致性和真实模型。
   if (process.argv.includes('--install-only')) {
@@ -250,6 +278,8 @@ function main() {
   const steps = [stepUnitTests(), stepCleanInstall()];
   if (!process.argv.includes('--skip-version')) steps.push(stepVersionConsistency());
   steps.push(stepRealModel());
+  // 拒绝类评测放在真实模型 e2e 之后：它同样要 key，但只跑 4 道保留题，失败时语义是「模型开始替用户做事」。
+  steps.push(stepRefusalEval());
   const results = steps;
   const failed = results.filter((r) => !r).length;
   if (process.exitCode === 2) {

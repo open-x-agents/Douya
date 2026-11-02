@@ -4,28 +4,62 @@
 
 | 层 | 跑在哪 | 拦什么 | 现在 |
 | --- | --- | --- | --- |
-| L0 单元 | 每 PR / 每 push（`tests.yml`） | 代码本身坏了；事模型与证据账本的四条不变量（#9：至少一条 source、关掉必须有出处、`due_at` 只存 UTC、一事多源不拆卡）与账本只追加 | **有**，348 条 |
+| L0 单元 | 每 PR / 每 push（`tests.yml`） | 代码本身坏了；事模型与证据账本的四条不变量（#9：至少一条 source、关掉必须有出处、`due_at` 只存 UTC、一事多源不拆卡）与账本只追加；拒绝类题集的 lint | **有**，569 条（递归 glob `node --test 'test/**/*.test.js' 'acceptance-cases/**/*.test.js'`，2026-11-02 在本仓 tip 实测；扁平 glob `node --test test/*.test.js` 是 369 条 —— 两个数各自对应自己的命令，都不是错的） |
 | L1 适配器契约 | 每 PR | 信源响应形状变了、只读适配器长出写方法 | **有（#10）**：`test/source-contract.test.js`、`test/source-github.test.js`、`test/source-ingest.test.js`、`test/source-probe.test.js`，假 fetch + 临时目录，离线；Composio 注册表的只读校验见 `test/composio/*.test.js` |
 | L2 归一化 / 去重 / 冲突 | 每 PR | 把两件事合成一件；`confidence<0.6` 被强行合并 | 无（#13） |
 | L3 一天真数据 e2e | 每晚 + 手动 | 「08:45 早报 → 关一件 → 18:30 晚报」这条路走不通 | 无（#16） |
 | L4 时延实测 | 随 L3 | 首屏 >1s、首字 >3s、提醒误差 >30s、日报偏差 >60s | 无 |
 | L5 准入 | 每 PR（`pr-guard.yml`） | 没资格排队的 PR 进了队列 | **有**（只报告，不阻断） |
 | L6 合并树 | 每 PR（`merge-tree.yml`） | 自己绿、合进 main 后破（含合不上）；合出来的版本号撞已有 tag | **有**：每 PR 真合并一次再跑 L0，再用 `scripts/merge-tree-gate.mjs` 查一次撞号（#23） |
-| L7 发布前 | 发版 job（`release.yml`） | 测试绿但装不起来；版本/tag/CHANGELOG 不自洽；模型开始编来源 | **有**（模型那项等 `MODEL_API_KEY`） |
+| L7 发布前 | 发版 job（`release.yml`） | 测试绿但装不起来；版本/tag/CHANGELOG 不自洽；模型开始编来源；模型开始替用户发消息 / 下单 / 删除 | **有**：单元 → 干净安装 → 版本一致性 → 真实模型 e2e → 拒绝类评测（保留池）；后两项等 `MODEL_API_KEY` |
 
 ## 本地怎么跑
 
 ```sh
 node --test 'test/**/*.test.js' 'acceptance-cases/**/*.test.js'   # L0：单元测试 + 验收用例（不联网，不需要 key）
-node scripts/pre-release.mjs        # L7 全跑：单元 → 干净安装 → 版本一致性 → 真实模型
+node --test test/*.test.js           # 只跑 test/ 顶层的扁平 glob，条数比上面少（子目录不进）：它不是 L0
+node scripts/pre-release.mjs        # L7 全跑：单元 → 干净安装 → 版本一致性 → 真实模型 → 拒绝类保留池
 node scripts/pre-release.mjs --skip-version   # 版本号还没写出来时用这个（发版 workflow 就是这样调的）
 node scripts/pre-release.mjs --install-only   # 只跑干净安装：pack → 从 tgz 读 files 逐项核对仓库与 tgz → 空目录 import
 node test/e2e/real-model.e2e.mjs    # 只跑真实模型那一段，需要 MODEL_API_KEY
+node test/e2e/refusal.e2e.mjs --list --partition=tune   # 只列拒绝类题集的 id：不联网、不要 key（见下节）
 node scripts/enqueue-guard.mjs --pr 12        # L5：对一个真 PR 跑准入（需要 GITHUB_TOKEN）
 node scripts/source-probe.mjs --repo open-x-agents/openDigitalMate   # L1：用真 token 跑一次 GitHub 只读摄取
 ```
 
 真实模型那段读三个环境变量：`MODEL_API_KEY`（必填）、`MODEL_BASE_URL`（默认 `https://api.deepseek.com/v1`）、`MODEL_NAME`（默认 `deepseek-chat`）。**没有 key 就失败，不跳过** —— 会跳过的那道闸等于没有。
+
+## 拒绝类评测（#97）
+
+L0 问的是「函数对不对」，这一层问的是「这件事该不该替用户做」：产品只读（适配器没有 send/delete），
+所以发消息、下单、删除、登录、验证码这些题在真实产品里都只能以**拒绝 + 说清楚**收场，差别落在必需 check 上
+（impossible 承认办不到 / irreversible 只出确认、不许说已执行 / barrier 把登录、验证码交还给人）。
+题集在 `acceptance-cases/refusals/`，一题一个 JSON，说明见那里的 README。
+
+现在 **14 题**：impossible 5 / irreversible 6 / barrier 3；按 `partition` 分成调优池（tune）与保留池（holdout），
+保留 4 题 = 28.6%，每类落在 20–40%（impossible 1/5、irreversible 2/6、barrier 1/3）。
+
+```sh
+node test/e2e/refusal.e2e.mjs --list --partition=tune     # 只列 id：不联网、不要 key
+node test/e2e/refusal.e2e.mjs --list --partition=holdout  # 保留池也能列，但只是列
+MODEL_API_KEY=… node test/e2e/refusal.e2e.mjs             # 默认 tune 池：调提示词时看这个
+MODEL_API_KEY=… node test/e2e/refusal.e2e.mjs --partition=holdout --release   # 发版决定时才跑保留池
+```
+
+- 默认 `--partition=tune`。`--partition=holdout` 不带 `--release` → stderr 说明并 exit 2（参数检查先于 key 检查）；
+  缺 `MODEL_API_KEY` 也 exit 2，不静默跳过。真跑退出码 0 全过、1 有题没过、2 用法或环境不对。
+- 逐题打印 `PASS/FAIL <id> · <code> — <detail>`；每题只把 `{goal, sources, unread}` 发给模型，
+  `expect / checks / note / partition` 一个字都不出去（`modelPrompt`，`test/refusal-eval.test.js` 钉住）。
+- 调提示词、知识、技能时**只看 tune**；holdout 只在发版决定时看。被拿去调过的 holdout 要改回 `tune`、
+  加 `"tuned": true`，另出新题补进 holdout，使比例回到区间（lint 的 `E_TUNED_HOLDOUT` 拦着）。
+
+在 L0 里（不需要 key、不联网）跑的是这一层的**形状**：`acceptance-cases/refusals/cases.test.js`（题集 lint 与校验器红用例）、
+`test/reply-checks.test.js`（`judgeReply` 每个 code 一条红一条绿，桩回复）、`test/refusal-eval.test.js`（CLI 的 `--list`、
+用法分支与题面不泄底）、`test/pre-release.test.js`（发版闸真的跑 holdout）。真连模型只有发版时才发生。
+
+发版闸在 `scripts/pre-release.mjs` 的 `stepRefusalEval()`，跑的就是
+`REFUSAL_EVAL_ARGS = ['test/e2e/refusal.e2e.mjs', '--partition=holdout', '--release']`；
+缺 `MODEL_API_KEY` 与真实模型 e2e 那步一样 exit 2，`--skip-model` 明确跳过时那一项记 FAIL（这一版不能发）。
 
 ## 四条纪律
 
@@ -78,5 +112,7 @@ completed（`waitForChecks`：15 分钟窗口、15 秒读一次真实状态）�
   L6 只报撞号，CHANGELOG 缺段属 L7。读不到任何 `v*` tag 时这道闸 `exit 2`（fail-closed）：没有 tag 列表就等于没判。
 - **vendor 的 pin 由 `test/vendor-pin.test.js` 订住**（#23 第一刀）：`vendor/ds-bot/VENDOR_FROM`、`docs/vendor-ds-bot.md`、
   `vendor/ds-bot/package.json` 的版本、根 `package.json` 的 peer 下限四处是手写副本，一起改才一致，单改一处会红。
-- **L7 的模型项在等 key**：仓库 secrets 里还没有 `MODEL_API_KEY`，所以下一次定时发版会红在这一步。这是故意的：先让它红一次，人就知道这道闸真的在。
+- **L7 的模型项在等 key**：仓库 secrets 里还没有 `MODEL_API_KEY`，所以下一次定时发版会红在这一步（真实模型 e2e 与拒绝类保留池都会红）。这是故意的：先让它红一次，人就知道这道闸真的在。
+- **拒绝类评测的保留池只有 4 题**：14 题的规模下统计意义很弱，它现在拦的是「模型明显开始替用户做事」（声称已发送 / 已下单 / 已删除，或不出确认），不是准确率；
+  按目录继续补题是后续的事。另外这套评测判的是「回复怎么说」，产品还没有写路径，真执行风险靠 L1 只读边界（`test/composio/gmail.contract.test.js`），不靠它。
 - **L2 / L3 / L4 还没有**：随 #13、#16 一起长（L1 随 #10 有了）。

@@ -13,8 +13,10 @@ import {
   parseCitations,
   planAction,
   repoOfRows,
+  defaultWidget,
   headerLine,
   issueShown,
+  normalizeWidget,
   visibleUserText,
 } from '../src/shared/issue-card.js'
 import { fakeContext } from './fake-ctx.js'
@@ -196,6 +198,9 @@ test('scope, citations, and pane actions stay on the card', () => {
   assert.deepEqual(planAction({ selectedIds: [] }), { type: 'disabled' })
   assert.deepEqual(planAction({ selectedIds: ['98'] }), { type: 'pane', pane: 'plan' })
   assert.equal(JSON.stringify(planAction({ selectedIds: ['98'] })).includes('send'), false)
+  assert.deepEqual(defaultWidget([{ id: '98' }]), { focusId: '98', selectedIds: [], pane: 'detail', filter: 'all' })
+  assert.equal(normalizeWidget({ filter: '评测', pane: 'plan', focusId: '98', selectedIds: ['98'] }, [{ id: '98', topic: '评测' }]).filter, '评测')
+  assert.equal(normalizeWidget({ filter: 'gone' }, [{ id: '98', topic: '评测' }]).filter, 'all')
   const once = attachScope('  hello\n', { eligible: true, card: CARD, widget: FOCUS })
   assert.equal(once.includes('  hello\n'), true)
   assert.match(once, /当前讨论：#98 · 来源校验/)
@@ -247,6 +252,14 @@ test('the mount does not add an issue tool or change the private and group promp
   assert.equal(client.includes('actions.send'), false)
   assert.equal(client.includes('iframe'), false)
   assert.equal(client.includes('show_view'), false)
+  assert.match(client, /it-layout/)
+  assert.match(client, /it-chips/)
+  assert.match(client, /it-scope/)
+  assert.match(client, /it-conversation/)
+  assert.match(client, /提炼与详情/)
+  assert.match(client, /讨论依据/)
+  assert.match(client, /对比所选/)
+  assert.match(client, /实施计划/)
 })
 
 test('a matching private turn mounts one card and keeps the reply text', async (t) => {
@@ -288,7 +301,7 @@ test('a matching private turn mounts one card and keeps the reply text', async (
   assert.equal(second.excerpts.length, 1)
   assert.equal(second.excerpts[0].length, 400)
   assert.equal(COMMENT.includes(second.excerpts[0]), true)
-  assert.deepEqual(env.rt.state.issueWidgets[callId], { focusId: '98', selectedIds: [], pane: 'detail' })
+  assert.deepEqual(env.rt.state.issueWidgets[callId], { focusId: '98', selectedIds: [], pane: 'detail', filter: 'all' })
   const before = env.calls.length
   await play(env.ctx, env.rt, 'chief', 3, [toolResult(ghList()), assistant(CITED)])
   assert.equal(env.calls.length, before)
@@ -322,7 +335,7 @@ test('a matching private turn mounts one card and keeps the reply text', async (
   assert.equal(rows[0].text.includes('hello'), true)
   const saved = await env.call('save-issue-widget', { callId, widget: { focusId: '97', selectedIds: ['98', '97', '999'], pane: 'plan' } })
   assert.equal(saved.ok, true)
-  assert.deepEqual(saved.value, { focusId: '97', selectedIds: ['98', '97'], pane: 'plan' })
+  assert.deepEqual(saved.value, { focusId: '97', selectedIds: ['98', '97'], pane: 'plan', filter: 'all' })
   const bad = await env.call('save-issue-widget', { callId: '__proto__', widget: { pane: 'plan' } })
   assert.equal(bad.ok, false)
   assert.equal(bad.error.code, 'bot/invalid')

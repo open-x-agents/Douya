@@ -9,7 +9,7 @@ import { WidgetCard, ViewUi, DEEP_VIEW_CSS, WidgetView as CoreWidgetView, ViewMe
 import { checkShownView } from 'deep-view/core'
 import { createIssueViews, ISSUE_CSS as ISSUE_CARD_CSS } from './issue-card.js'
 
-const issueViews = createIssueViews(h)
+const issueViews = createIssueViews(h, useState)
 export const IssueCard = issueViews.IssueCard
 export const IssueTurnTail = issueViews.IssueTurnTail
 export const IssueScopeDock = issueViews.IssueScopeDock

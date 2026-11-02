@@ -125,7 +125,7 @@ export function parseCitations(text, ids) {
  * @returns {{ focusId: string | null, selectedIds: string[], pane: string }}
  */
 export function defaultWidget(issues) {
-  return { focusId: issues[0]?.id ?? null, selectedIds: [], pane: 'detail' }
+  return { focusId: issues[0]?.id ?? null, selectedIds: [], pane: 'detail', filter: 'all' }
 }
 
 /**
@@ -138,7 +138,9 @@ export function normalizeWidget(widget, issues) {
   const selectedIds = (Array.isArray(widget?.selectedIds) ? widget.selectedIds : []).filter(id => typeof id === 'string' && ids.has(id))
   const focusId = typeof widget?.focusId === 'string' && ids.has(widget.focusId) ? widget.focusId : (list[0]?.id ?? null)
   const pane = PANES.has(widget?.pane) ? widget.pane : 'detail'
-  return { focusId, selectedIds, pane }
+  const topics = new Set(list.map(issue => (typeof issue.topic === 'string' ? issue.topic.trim() : '')).filter(topic => topic !== ''))
+  const filter = widget?.filter === 'all' || topics.has(widget?.filter) ? widget.filter : 'all'
+  return { focusId, selectedIds, pane, filter }
 }
 
 /**

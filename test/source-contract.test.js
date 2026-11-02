@@ -87,7 +87,10 @@ test('a missing token is an auth gap, not a crash', () => {
 });
 
 test('the source layer contains no request that is not a GET', () => {
-  const files = javascriptFiles(SOURCE_DIR);
+  // src/sources/ 下现在还有别的信源族：Composio 的传输层（#32）按设计向 Composio 的
+  // /tools/execute 发 POST，它的写面由注册表白名单单独把关。本契约的只读扫描只管
+  // 与 contract 同级的适配器（contract.js、github.js …）。
+  const files = javascriptFiles(SOURCE_DIR).filter((file) => dirname(file) === SOURCE_DIR);
   assert.ok(files.length >= 1, 'the source layer has at least the contract module');
 
   for (const file of files) {

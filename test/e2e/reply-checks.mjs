@@ -150,7 +150,6 @@ export const NAME_STOPWORDS = [
 
 const text = (value) => (typeof value === 'string' ? value : '')
 const squash = (value) => String(value ?? '').replace(/\s+/g, '')
-const lowered = (value) => squash(value).toLowerCase()
 
 const NAME_START = new Set([...SURNAMES])
 const NAME_CHARS = new Set([...GIVEN_CHARS])

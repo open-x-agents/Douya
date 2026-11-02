@@ -59,6 +59,92 @@ day 的形状（本仓库的中间契约；#9 合入后由事件派生，只改 
 
 report 的形状：`{ date, memberId, memberName, schedule[], done[], plan[], notes, stats{meetings, meetingMinutes, done, planned} }`。
 
+## 事与证据账本（#9）
+
+`src/core/` 是「事」的结构与证据账本，纯模块 + 单机存储层：它不联网、不读环境变量，也不 import 进 `index.js`（这一层先作为被 #10 调用的库存在）。形状定义一处：信源适配器只往里写，面板只从里面读。
+
+### 目录与文件
+
+默认数据目录是相对进程 cwd 的 `data/`（已进 `.gitignore`，运行时数据不进仓库），三个路径都能由 `dir` 注入，测试永远传 `mkdtemp()` 出来的临时目录：
+
+| 文件 | 内容 | 写法 |
+| --- | --- | --- |
+| `data/events.json` | 事：`{ "revision": n, "events": [...] }` | 可重写，原子写 |
+| `data/ledger.jsonl` | 证据：一行一条记录 | 只追加，永不删改 |
+| `data/store.lock` | 跨进程锁 | 谁持有谁删 |
+
+四个模块各管一件事：`src/core/event.js`（纯模型：枚举、校验、UTC 归一、唯一本地化出口、`mergeEvent`）、`src/core/atomic.js`（原子写 / 追加 / 锁 / 进程内串行）、`src/core/store.js`（`events.json` 读写）、`src/core/ledger.js`（`ledger.jsonl` 追加与 `explain`）。`src/core/store.js` 与 `src/host/store.js` 是两个东西：前者读不出来就报 `E_CORRUPT_EVENTS`；后者读到坏 JSON 静默回落空状态，那是给旧 `state.json` 的。不要合并，也不要互相 import。
+
+### 事（Event）的形状
+
+必填 `id, kind, title, state, sources`；可选 `due_at, due_kind, who, project, closure, conflicts, confidence`，以及任何其它字段（原样保留，给 #13 用）。
+
+```json
+{
+  "id": "evt_demo_quote",
+  "kind": "message",
+  "title": "报价单发给张伟",
+  "state": "open",
+  "due_at": "2026-10-30T02:00:00.000Z",
+  "due_kind": "hard",
+  "sources": [
+    { "type": "feishu_msg", "ref": "feishu_msg:chat/oc_demo/msg_2114",
+      "at": "2026-10-29T13:14:00.000Z", "read_scope": "body",
+      "excerpt": "报价单今天能给吗？能给的话我下午就签。",
+      "excerpt_hash": "sha256:…" }
+  ],
+  "closure": null
+}
+```
+
+- `EVENT_KINDS = calendar / email / doc / pr / issue / message / task`；`EVENT_STATES = open / closed / waiting_other / unknown`。
+- source `type` 是固定枚举 `gcal / gmail / feishu_doc / feishu_cal / feishu_msg / github` 加一条 `/^composio:[a-z][a-z0-9_]*$/` 模式（`isSourceType()` 是唯一判定）。
+- `ref = <type>:<external>`，前缀必须等于 `type`：`gcal:event/<id>`、`gmail:thread/<id>`、`feishu_msg:chat/<chatId>/<msgId>`、`composio:gcal:event/<externalId>`。
+- `excerptHash(text)` = `'sha256:' + sha256(String(text).trim())`；`excerpt` 与 `excerpt_hash` 至少给一个，两个都在时必须相等。
+- 邮件正文不留存：`type: 'gmail'` 且 `read_scope: 'body'` 的 source 算完 hash 就丢掉 `excerpt`，只留 `excerpt_hash`；主题（`metadata`）照常保留，聊天 / 日程 / 文档的正文保留。
+- 反例一律抛 `EventInvariantError`，带 `.code`、`.why`、`.path`；校验顺序固定（id → title → kind → state → sources → 逐个 source → 重复 ref → due_at → closure），所以反例测试能断言确定的 code。
+
+### 证据账本（ledger.jsonl）
+
+`src/core/ledger.js` 一行一条证据，形状写死七个键，不多不少：
+
+```json
+{"seq":1,"event_id":"evt_demo_quote","field":"title",
+ "source_ref":"feishu_msg:chat/oc_demo/msg_2114",
+ "at":"2026-10-29T13:14:00.000Z","excerpt_hash":"sha256:…",
+ "recorded_at":"2026-10-30T09:00:00.000Z"}
+```
+
+- `at` 是信源自己的原始瞬时，`recorded_at` 是写进账本的时刻；两者都存 canonical UTC。
+- `field` 是这条证据支撑的断言名（`/^[a-z][a-z0-9_]{0,31}$/`，本单用 `title`；#13 的冲突 / 金额可用 `due_at` / `conflict`）。
+- 导出只有 `assertionRecords`、`parseLedger`、`explainFrom`、`appendEvidence`、`explain` 五个，**没有任何 update / delete / rewrite**：文件里不出现 `writeFile` / `rename` / `unlink` / `truncate` / `rm(`。
+- `appendEvidence({ dir, eventId, field, sources })` 在锁内读全表，`(event_id, field, source_ref, excerpt_hash)` 已存在就跳过（幂等，重跑不翻倍），`seq = max(seq)+1` 递增，新记录一次追加，返回 `{ appended, skipped }`。
+- `parseLedger(text)` 忽略空行；末尾没有换行的半行（写者崩溃的尾巴）跳过并计入 `skippedTail`；**中间**某行坏掉或 `seq` 重复是 `E_CORRUPT_LEDGER` 并带行号。`explain({ dir, eventId })` 不拿锁，按 `seq` 升序返回，未知事件返回 `[]`，不编造证据。
+- 账本**只存 hash、不存引文**：渲染要引原文时，由适配器按 `ref` 重新取并比对 hash（#10 / #15）。
+
+### 四条不变量
+
+1. **至少一条 source**：空 `sources` 构造不出来（`E_NO_SOURCE`）。
+2. **关掉必须有出处**：`state === 'closed'` 时 `closure.evidence_ref` 必填，且必须是该事件自己的某条 `sources[].ref`（`E_CLOSED_NO_EVIDENCE` / `E_CLOSED_EVIDENCE_UNKNOWN`）。
+3. **`due_at` 一律存 UTC**：见下一节。
+4. **一事多源不拆卡**：一件事出现在多个信源 = 一条事件、多条 sources，绝不两张卡。`mergeEvent(kept, incoming)` 要求同 `id` 或至少一条 `ref` 相同（否则 `E_MERGE_UNRELATED`）；同一 `ref` 但 `excerpt_hash` / `at` 不同是 `E_SOURCE_CONFLICT`（不静默二选一）；`upsertEvent()` 与已有事件共享 `ref` 或同 `id` 就合并进那一条，同时命中两条是 `E_AMBIGUOUS_MERGE`。标题相似**不构成**合并理由。
+
+### UTC 与本地化出口
+
+canonical UTC 形状是 `/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/`，`due_at` / `source.at` / `closure.at` / 账本 `at`、`recorded_at` 全部按它存。
+
+- `toUtcInstant(value, { timeZone })`：带 offset 或 `Z` 的 ISO 字符串归一成 UTC（`2026-10-29T21:14:00+08:00` → `2026-10-29T13:14:00.000Z`）；`{ dateTime: 'YYYY-MM-DD HH:mm[:ss]', timeZone }` 按 IANA 时区换算（含 DST 边界；墙上时刻在该时区不存在也报错）；只有日期、或有时刻却没有时区 → `E_NOT_UTC`（全天日程 `due_at` 放 `null`，不猜）。
+- 渲染只有两个出口，都在 `src/core/event.js`：`localizeInstant(iso, { timeZone })` → `'YYYY-MM-DD HH:mm'`；`localizeDueAt(event, options)`（`due_at === null` 时返回 `null`）。`src/core` + `src/host` 里唯一允许出现 `Intl.DateTimeFormat` / `toLocaleString` / `getHours` / `getMinutes` / `getTimezoneOffset` 的位置就是这里，有测试按同一组锚定正则扫描钉住。
+- 不传 `timeZone` 时用进程时区，所以 `TZ=UTC` 与 `TZ=Asia/Shanghai` 跑同一时刻会得到两个正确但不同的字符串。
+
+### 锁与原子写
+
+`src/core/atomic.js` 是所有写入的唯一通道：进程内先按 `path.resolve(dir)` 串行（模块级 Promise 链），再拿跨进程锁 `store.lock`（`open(lock, 'wx')`；`EEXIST` 时每 25ms 重试，超过 `timeoutMs`（默认 10s）抛 `LockTimeoutError`；锁超过 `staleMs`（默认 30s）视为死锁，rename 走旧的再删，**不删别人的锁**），任务结束（成功或抛错）都在 `finally` 里删自己的锁。
+
+- `atomicWriteJson`：`mkdir` → 写 `<path>.<uuid>.tmp`（两空格缩进 + 末尾换行）→ `rename`，成功后目录里不留 `*.tmp`。
+- `appendJsonLines`：`open('a')` → 每条一行 → `fsync` → `close`；一次调用写的多行在锁内一次写完，最坏丢最后一条而不是坏掉前面的行。
+- 账本先写、事件后写时崩溃 → 有证据没有卡；重跑 ingest 时幂等追加会跳过、`upsert` 会补回卡，不删任何东西。
+
 ## 四条流程
 
 **提醒**：`calendar()` 给事件 → `planFor()` 算 `fireAt = start - leadMinutes` → `tick()` 取 `due()` → 发卡片 → 成功才写进 `sent`。失败留在未发状态，下一次 tick 重试，投递记录进 `deliveries`。定时器只在最近一个 `fireAt` 醒来，不是每分钟轮询。

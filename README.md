@@ -12,8 +12,9 @@
 | 可交互 | 卡片按钮回调：推迟 10 分钟 / 已完成 / 改时间 / 补充日报 | `src/host/cards.js`、`index.js` 的 `onCardAction()` |
 | 面板 | 单页：提交率、还没交的人、近期日程、投递记录 | `src/client/panel.html`、`src/host/panel.js` |
 | 多 app 信源（Composio，只读） | 一个 app 一个适配器：`gmail`、`googlecalendar`、`notion`、`slack`、`googledrive`；加一个 app = 注册表一行 | `src/sources/composio/registry.js` |
+| 事模型 / 证据账本（#9） | 有（**库、未接线**——`index.js` 不 import，接线属 #10）：一件事可带多条证据，`events.json` 原子写，证据账本只追加、只存 hash 不存引文 | `src/core/`（`event.js`、`atomic.js`、`store.js`、`ledger.js`） |
 
-单元测试全绿（`node --test 'test/**/*.test.js' 'acceptance-cases/**/*.test.js'`），覆盖日报组装、提醒规划、卡片结构、按钮解析、面板快照、存储、插件接线、群聊忙时 steer 验收（G1–G6）、忙时连续接收与定稿验收（L1–L7）、工作线索引验收（W1–W8）、入站路由验收（R1–R16）、同 bot 跨房间投递验收（C1–C5），以及同房间多条工作线完成投影验收（D1–D8）。
+294 个单元测试全绿（`node --test test/*.test.js`，本轮实测；同日 `node --test 'test/**/*.test.js' 'acceptance-cases/**/*.test.js'` 也全绿），覆盖日报组装、提醒规划、卡片结构、按钮解析、面板快照、存储、插件接线、事模型与证据账本的四条不变量 / UTC 归一 / 唯一本地化出口 / 原子写与锁（#9），群聊忙时 steer 验收（G1–G6）、忙时连续接收与定稿验收（L1–L7）、工作线索引验收（W1–W8）、入站路由验收（R1–R16）、同 bot 跨房间投递验收（C1–C5），以及同房间多条工作线完成投影验收（D1–D8）。
 
 ## 跑起来
 
@@ -52,8 +53,9 @@ node scripts/demo.mjs          # 打印一张日报卡和一张提醒卡（不�
 ```
 index.js             插件入口：apply/createRuntime、tick、卡片回调、定时器
 src/host/            纯逻辑：report / reminders / cards / panel / store / feishu
+src/core/            事模型 + 证据账本（库、未接线）：event / atomic / store / ledger
 src/client/panel.html 面板单页（无构建步骤，直接由插件托管）
-test/                node:test，249 条（递归数，含子目录）
+test/                node:test，294 条（`node --test test/*.test.js`）
 scripts/demo.mjs     一次性的可视化输出
 docs/architecture.md 架构、数据形状、与 ds-bot 的边界
 docs/labels.md       标签流程：谁能把一张单变成「可开工」

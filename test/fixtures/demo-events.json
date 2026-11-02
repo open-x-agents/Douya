@@ -1,0 +1,76 @@
+{
+  "comment": "§3.9 demo 三件事：来源 design/demo.html:379-421。at 存 canonical UTC（含毫秒），本地时区取 Asia/Shanghai（UTC+8）。邮件那条只读主题，正文不入仓（#17 §1）。",
+  "time_zone": "Asia/Shanghai",
+  "events": [
+    {
+      "id": "evt_demo_quote",
+      "kind": "message",
+      "title": "报价单发给张伟",
+      "state": "open",
+      "due_at": "2026-10-30T02:00:00.000Z",
+      "due_kind": "hard",
+      "project": "quote",
+      "who": { "me": true, "waiting_on": "张伟" },
+      "sources": [
+        {
+          "type": "feishu_msg",
+          "ref": "feishu_msg:chat/oc_demo/msg_2114",
+          "at": "2026-10-29T13:14:00.000Z",
+          "read_scope": "body",
+          "excerpt": "报价单今天能给吗？能给的话我下午就签。"
+        },
+        {
+          "type": "feishu_msg",
+          "ref": "feishu_msg:chat/oc_demo/msg_2116",
+          "at": "2026-10-29T13:16:00.000Z",
+          "read_scope": "body",
+          "excerpt": "能给，我下午就签。"
+        }
+      ]
+    },
+    {
+      "id": "evt_demo_review",
+      "kind": "calendar",
+      "title": "评审会材料定稿",
+      "state": "open",
+      "due_at": "2026-10-30T08:00:00.000Z",
+      "due_kind": "hard",
+      "project": "review",
+      "sources": [
+        {
+          "type": "gcal",
+          "ref": "gcal:event/evt_demo_review",
+          "at": "2026-10-29T10:02:00.000Z",
+          "read_scope": "metadata",
+          "excerpt": "评审会从 14:00 挪到 16:00"
+        },
+        {
+          "type": "feishu_msg",
+          "ref": "feishu_msg:chat/oc_demo/msg_1028",
+          "at": "2026-10-28T04:00:00.000Z",
+          "read_scope": "body",
+          "excerpt": "材料周三定"
+        }
+      ]
+    },
+    {
+      "id": "evt_demo_contract",
+      "kind": "email",
+      "title": "回李静那封邮件",
+      "state": "open",
+      "due_at": null,
+      "due_kind": "soft",
+      "project": "contract",
+      "who": { "me": true, "waiting_on": "李静" },
+      "sources": [
+        {
+          "type": "gmail",
+          "ref": "gmail:thread/demo-contract",
+          "at": "2026-10-28T06:30:00.000Z",
+          "read_scope": "metadata",
+          "excerpt": "主题：合同附件 · 需要你确认版本"
+        }
+      ]
+    }
+  ]
+}

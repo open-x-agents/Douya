@@ -859,6 +859,10 @@
   .z-act{border:0;background:#fff;color:var(--ink2);font:500 12px/1 inherit;padding:7px 10px;border-radius:8px;cursor:pointer;text-decoration:none;box-shadow:0 0 0 1px var(--line)}
   .z-act:hover{color:var(--ink);box-shadow:0 0 0 1px rgba(30,40,80,.15)}
   .z-act.done:hover{color:var(--teal)}
+  .chat-fail{display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:var(--rose);font-size:13px;white-space:normal}
+  .chat-retry{border:1px solid currentColor;background:#fff;color:var(--rose);border-radius:999px;padding:3px 12px;font:600 12px inherit;cursor:pointer}
+  .chat-retry:hover{background:var(--rose-soft)}
+  .typing-note{font-size:12.5px;color:var(--ink3)}
   /* Zoom: two columns — details left (own scroll), full-height chat right */
   .tile-zoom-modal{width:min(1200px,94vw)!important;max-width:none!important;height:88vh!important;max-height:none!important;padding:0!important;overflow:hidden!important;display:flex!important;flex-direction:column}
   .tile-zoom-content{flex:1;min-height:0;padding:0!important;overflow:hidden!important;margin:0!important;display:block!important}
@@ -2046,13 +2050,8 @@
       $('todayChatMsgs').appendChild(typing);
       $('todayChatMsgs').scrollTop = $('todayChatMsgs').scrollHeight;
       try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: msg, sessionId: BOT_SESSION }),
-        });
+        const data = await sendChatResilient({ message: msg, sessionId: BOT_SESSION }, t => { typing.innerHTML = `<span class="typing-note">${escMd(t)}</span>`; });
         typing.remove();
-        const data = await res.json();
         if (data.error) { appendInlineBubble('bot', data.error); return; }
         const b = appendInlineBubble('bot', data.text || '……', data.citations);
         (data.cards || []).filter(c => c.type === 'group').slice(0, 3).forEach(c => {
@@ -2066,7 +2065,12 @@
         }
       } catch (err) {
         typing.remove();
-        appendInlineBubble('bot', '发送失败了，请稍后再试。');
+        const d = document.createElement('div');
+        d.className = 'bubble bot fail';
+        d.innerHTML = failBubbleHtml(err instanceof ChatFail ? err.message : '发送失败了。');
+        d.querySelector('.chat-retry').onclick = () => { d.remove(); const box = $('todayChatMsgs'); const mine = [...box.querySelectorAll('.bubble.me')].pop(); if (mine && mine.textContent.includes(msg)) mine.remove(); input.value = msg; send(); };
+        $('todayChatMsgs').appendChild(d);
+        $('todayChatMsgs').scrollTop = $('todayChatMsgs').scrollHeight;
       }
     };
 
@@ -2459,6 +2463,72 @@
     });
   }
 
+
+  // ---- Resilient chat send: survives a server restart / dropped connection without asking
+  // Chief twice. On a network error: wait for the server, look in the session history for this
+  // message; if Chief already got it, fetch its (settled) answer; otherwise resend once.
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  class ChatFail extends Error {}
+  async function postChatOnce(body) {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 240000);
+    try {
+      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctl.signal });
+      if (res.status >= 500) throw Object.assign(new Error('http ' + res.status), { net: true });
+      try { return await res.json(); } catch (_) { throw Object.assign(new Error('bad response'), { net: true }); }
+    } catch (e) {
+      if (e.name === 'AbortError') e.timeout = true; else e.net = true;
+      throw e;
+    } finally { clearTimeout(t); }
+  }
+  async function chatHistoryWhenUp(maxMs) {
+    const end = Date.now() + maxMs;
+    while (Date.now() < end) {
+      try { const r = await fetch('/api/chat/history', { cache: 'no-store' }); if (r.ok) return await r.json(); } catch (_) {}
+      await sleep(2000);
+    }
+    return null;
+  }
+  function replyFor(hist, msg) {
+    const m = (hist && hist.messages) || [];
+    const key = String(msg).trim().slice(0, 60);
+    let i = m.length - 1;
+    while (i >= 0 && m[i].role !== 'user') i--;
+    if (i < 0 || !String(m[i].content || '').includes(key)) return { seen: false, reply: null };
+    const after = m.slice(i + 1).filter(x => x.role === 'assistant');
+    return { seen: true, reply: after.length ? after[after.length - 1].content : null };
+  }
+  async function sendChatResilient(body, onStatus = () => {}) {
+    try { return await postChatOnce(body); }
+    catch (e) {
+      if (e.timeout) throw new ChatFail('豆芽这次想得太久（超过 4 分钟）还没回来。');
+      onStatus('连接断了，正在重连豆芽…');
+      let hist = await chatHistoryWhenUp(45000);
+      if (!hist) throw new ChatFail('连不上豆芽服务（可能正在重启，或网络断了）。');
+      let r = replyFor(hist, body.message);
+      if (r.seen) {
+        onStatus('豆芽已经收到这条，正在取回答…');
+        let last = null;
+        const end = Date.now() + 120000;
+        while (Date.now() < end) {
+          if (r.reply && r.reply === last) return { text: r.reply, recovered: true }; // settled across two polls
+          last = r.reply;
+          await sleep(4000);
+          hist = await chatHistoryWhenUp(10000);
+          r = replyFor(hist, body.message);
+        }
+        if (r.reply) return { text: r.reply, recovered: true };
+        throw new ChatFail('豆芽收到了消息，但回答还没回来。');
+      }
+      onStatus('重新发送中…');
+      try { return await postChatOnce(body); }
+      catch (e2) { throw new ChatFail(e2.timeout ? '重发后等待超时。' : '重发也没连上豆芽（服务可能正在重启）。'); }
+    }
+  }
+  // Error bubble with a 重试 button; `retry` re-runs the same send.
+  function failBubbleHtml(text) {
+    return `<div class="chat-fail"><span>${escMd(text)}</span><button class="chat-retry" type="button">重试</button></div>`;
+  }
   // Tile zoom modal functions
   let currentZoomCard = null;
   let zoomSeq = 0;
@@ -2553,8 +2623,7 @@
       let reply = '';
       try {
         const cardContext = isTT ? '当前在看：今天的时间表' : `当前在看卡片「${card.title || ''}」：${card.body || ''} ${card.url || ''}`;
-        const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg, cardId: isTT ? null : card.id, cardContext, sessionId: BOT_SESSION }) });
-        const data = await res.json();
+        const data = await sendChatResilient({ message: msg, cardId: isTT ? null : card.id, cardContext, sessionId: BOT_SESSION }, t => { if (live()) typing.textContent = t; });
         reply = data.text || data.error || '收到了，但模型没有返回内容。';
         if (live()) {
           typing.remove();
@@ -2566,7 +2635,15 @@
         }
         loadToday().catch(() => {}); // the bot may have edited cards
       } catch (err) {
-        if (live()) { typing.remove(); push('bot', '发送失败了，请稍后再试。'); }
+        if (live()) {
+          typing.remove();
+          const d = document.createElement('div');
+          d.className = 'z-msg bot fail';
+          d.innerHTML = failBubbleHtml(err instanceof ChatFail ? err.message : '发送失败了。');
+          d.querySelector('.chat-retry').onclick = () => { d.remove(); const mine = [...msgs.querySelectorAll('.z-msg.me')].pop(); if (mine && mine.textContent === msg) mine.remove(); sendZoomChat(msg); };
+          msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
+        }
+        return; // nothing to persist; retry will append the pair
       }
       chatApi({ op: 'append', messages: [{ role: 'user', text: msg }, ...(reply ? [{ role: 'assistant', text: reply }] : [])] });
     };

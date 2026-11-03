@@ -807,7 +807,12 @@ export function createApiRouter(ctx) {
           itemCount: brief.cards.length,
           sources: activeAccounts.map(a => a.toolkit.slug),
         };
-        await store.save({ ...state, cards: brief.cards }, { digest: true });
+        // Fold persisted per-email / per-sender tiles into today's category groups (never wipes;
+        // done/dismissed keep their records and show as handled items in the group).
+        const { migrateEmailCards } = await import('./email-groups.js');
+        const mig = migrateEmailCards(state.cards || [], brief.cards, state.itemStatus || {});
+        if (mig.merged) console.log(`[generateDigest] merged ${mig.merged} legacy email tiles into category groups`);
+        await store.save({ ...state, itemStatus: mig.itemStatus, cards: mig.cards }, { digest: true });
         
         // Get final merged count
         const finalState = store.get();
@@ -975,6 +980,23 @@ export function createApiRouter(ctx) {
         
         if (!card) {
           return { success: false, error: '卡片不存在' };
+        }
+
+        // Batch: 一键全部忽略 / 全部完成 for the open items of a group card (itemUrl = [{url,title}]).
+        if (Array.isArray(itemUrl)) {
+          const urls = cardItemUrls(card);
+          const status = action === 'done-all' || action === 'done' ? 'done' : 'dismissed';
+          let n = 0;
+          for (const it of itemUrl.slice(0, 200)) {
+            const u = typeof it === 'string' ? it : it?.url;
+            if (!u || !urls.has(u) || state.itemStatus?.[u]) continue;
+            setItemStatus(state, { card, url: u, title: (typeof it === 'object' && it.title) || '', action: status, by });
+            n++;
+          }
+          await store.save(state);
+          const [annotated] = annotateCards([card], state.itemStatus);
+          console.log('[trackInteraction] batch', status, n);
+          return { success: true, count: n, itemStatus: annotated.itemStatus || {} };
         }
 
         // Per-item 完成 / 忽略 / 撤销 — never touches the whole card's status.

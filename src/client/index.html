@@ -933,6 +933,9 @@
   .gc-links a{font-size:12px;color:var(--ink2);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:3px 0}
   .gc-links a::before{content:"↗ ";color:var(--ink3)}
   .gc-links a:hover{color:var(--ink)}
+  .metrics.mail-m{align-items:center}
+  .metrics.mail-m .need-pill{margin-left:auto}
+  .z-sec h4 .z-bulk{float:right;font-size:12px;font-weight:500;padding:3px 10px}
 </style>
 </head>
 <body>
@@ -1277,7 +1280,7 @@
         <div class="gc-h"><b>${escapeHtml(card.title || card.label || '')}</b><span class="gc-w ${w[0]}">${w[1]}</span></div></div>
       ${card.why || card.description ? `<p class="gc-why">${escapeHtml(card.why || card.description)}</p>` : ''}
       ${Array.isArray(card.breakdown) && card.breakdown.length > 1 ? `<div class="gc-bd">${card.breakdown.slice(0, 4).map(b => `<span>${escapeHtml(String(b.label).split('/').pop())} <b>×${b.count}</b></span>`).join('')}</div>` : ''}
-      ${card.nextAction ? `<div class="gc-next"><span>下一步</span>${escapeHtml(card.nextAction)}</div>` : ''}
+      ${card.nextAction && !VAGUE_NEXT.test(card.nextAction) ? `<div class="gc-next"><span>下一步</span>${escapeHtml(card.nextAction)}</div>` : ''}
       ${links.length ? `<div class="gc-links">${links.map(l => `<a href="${escapeHtml(l.url)}" target="_blank" rel="noopener" title="${escapeHtml(l.title || '')}">${escapeHtml(l.title || l.url)}</a>`).join('')}</div>` : ''}`;
     return el;
   }
@@ -1527,6 +1530,13 @@
     const ll = (card.blocks || []).find(b => b.type === 'link-list');
     return ((ll && ll.links) || []).filter(l => l && l.url);
   }
+  const isMailGroup = card => card && card.type === 'email-group';
+  function openItemCount(card) {
+    const st = card.itemStatus || {};
+    return linksOf(card).filter(l => !st[l.url]).length;
+  }
+  // A bare 'Open'/'查看' is not a next step; callers fall back to a concrete action.
+  const VAGUE_NEXT = /^\s*(open|view|查看|打开|详情)\s*$/i;
   function blockOf(card, type) { return (card.blocks || []).find(b => b.type === type); }
   function clip(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
   function linkKind(l) {
@@ -1552,6 +1562,10 @@
   }
   function headline(card) {
     if (SYS_TYPES.has(card.type)) return card.title || '';
+    if (isMailGroup(card)) {
+      const open = openItemCount(card);
+      return open ? `${card.title} · ${open} 封` : `${card.title} · 已全部处理`;
+    }
     const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
     const parts = [];
     if (pr) parts.push(`${pr} 个 PR 待推进`);
@@ -1572,7 +1586,8 @@
   }
   function nextAction(card) {
     const isGh = card.source === 'github' || !!repoOf(card);
-    if (card.nextAction && !(isGh && /邮件|Re:/i.test(card.nextAction))) return card.nextAction;
+    if (isMailGroup(card) && linksOf(card).length && !openItemCount(card)) return '这组邮件都处理完了，不用再看';
+    if (card.nextAction && !VAGUE_NEXT.test(card.nextAction) && !(isGh && /邮件|Re:/i.test(card.nextAction))) return card.nextAction;
     if (isGh) {
       const ghLinks = linksOf(card).filter(l => linkKind(l).k !== 'mail');
       const prL = ghLinks.find(l => linkKind(l).k === 'pr'), isL = ghLinks.find(l => linkKind(l).k === 'issue');
@@ -1591,7 +1606,10 @@
     if (pr && first) return `先推进「${clip(first.title, 30)}」，催 review 或合并`;
     if (pr) return `逐个推进 ${pr} 个 PR 的 review 与合并`;
     if (iss) return `分拣 ${iss} 个 issue，挑出今天要回复的 1–2 个`;
-    return (card.actions && card.actions[0] && card.actions[0].label) || '打开查看最新进展';
+    const a0 = card.actions && card.actions[0] && card.actions[0].label;
+    if (a0 && !VAGUE_NEXT.test(a0)) return a0;
+    if (first) return `看一下「${clip(first.title, 30)}」是否需要跟进`;
+    return card.title ? `看一下「${clip(card.title, 30)}」是否需要跟进` : '看一下是否需要跟进';
   }
 
   function deepLinks(card) {
@@ -1635,7 +1653,8 @@
     const links = linksOf(card);
     const open = links.filter(l => !st[l.url]);
     const handled = links.filter(l => st[l.url]).sort((a, b) => String(st[b.url].at).localeCompare(String(st[a.url].at)));
-    let h = `<h4>相关条目 · ${open.length}${handled.length ? `<span class="z-sub"> / 共 ${links.length}</span>` : ''}</h4><div class="z-items">`;
+    const bulk = isMailGroup(card) && open.length > 1 ? `<button class="z-act z-bulk" data-act="dismiss-all">一键全部忽略 ${open.length} 封</button>` : '';
+    let h = `<h4>${isMailGroup(card) ? '这组邮件' : '相关条目'} · ${open.length}${handled.length ? `<span class="z-sub"> / 共 ${links.length}</span>` : ''}${bulk}</h4><div class="z-items">`;
     h += open.length ? open.map(l => zoomItemRow(l, null)).join('') : '<div class="z-empty">这张卡的条目都处理完了 ✓</div>';
     h += '</div>';
     if (handled.length) h += `<details class="z-done"${zoomDoneOpen ? ' open' : ''}><summary>已处理 · ${handled.length}</summary><div class="z-items">${handled.map(l => zoomItemRow(l, st[l.url])).join('')}</div></details>`;
@@ -1652,7 +1671,11 @@
       btn.disabled = true;
       const action = btn.getAttribute('data-act');
       try {
-        const res = await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action, itemUrl: btn.getAttribute('data-item-url'), itemTitle: btn.getAttribute('data-item-title') }) });
+        const st0 = card.itemStatus || {};
+        const payload = action === 'dismiss-all'
+          ? { id: card.id, action, items: linksOf(card).filter(l => !st0[l.url]).map(l => ({ url: l.url, title: l.title })) }
+          : { id: card.id, action, itemUrl: btn.getAttribute('data-item-url'), itemTitle: btn.getAttribute('data-item-title') };
+        const res = await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         const data = await res.json();
         if (!data.success) throw new Error(data.error || 'failed');
         card.itemStatus = data.itemStatus || {};
@@ -1798,7 +1821,7 @@
     const links = deepLinks(card);
     const spark = blockOf(card, 'sparkline');
     const hasSpark = spark && (spark.data || []).some(v => v > 0);
-    const label = SRC_ZH[card.source] || (card.source || '动态');
+    const label = isMailGroup(card) ? '邮件分组' : (SRC_ZH[card.source] || (card.source || '动态'));
     const av = r ? `<img class="av" src="https://github.com/${encodeURIComponent(r.owner)}.png?size=80" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'av av-f',textContent:'${escapeHtml(r.owner.slice(0, 1).toUpperCase())}'}))">` : `<span class="av av-f">${escapeHtml((card.source || '?').slice(0, 1).toUpperCase())}</span>`;
     const review = statOf(card, '待你审') || statOf(card, '审');
     const mine = statOf(card, '你开的') || pr;
@@ -1809,6 +1832,14 @@
         ${mine ? `<div class="m"><b class="c-teal">${mine}</b><span>你开的 PR</span></div>` : ''}
         ${iss ? `<div class="m"><b class="c-violet">${iss}</b><span>待处理 issue</span></div>` : ''}
         <div class="m-bar"><i class="b-pr" style="flex:${Math.max(mine||pr,0)}"></i><i class="b-iss" style="flex:${Math.max(iss,0)}"></i></div>
+      </div>`;
+    }
+    if (isMailGroup(card)) {
+      const total = linksOf(card).length, open = openItemCount(card), you = card.waiting === 'you';
+      metrics = `<div class="metrics mail-m">
+        <div class="m"><b class="${you ? 'c-rose' : 'c-teal'}">${open}</b><span>封待看</span></div>
+        ${total - open ? `<div class="m"><b class="c-violet">${total - open}</b><span>已处理</span></div>` : ''}
+        <span class="pill ${you ? 'pill-hot' : 'pill-gray'} need-pill">${you ? '需要你处理' : '无需处理'}</span>
       </div>`;
     }
     const bar = (card.blocks || []).find(b => b.type === 'chart' && b.chartType === 'bar');

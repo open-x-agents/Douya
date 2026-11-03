@@ -1,3 +1,4 @@
+import { buildEmailClusters } from './email-groups.js';
 /**
  * Multi-stage aggregation pipeline for daily digest
  * Inspired by Superhuman/Shortwave email triage, Linear inbox, GitHub notifications
@@ -756,6 +757,7 @@ export function clusterByProjectTheme(items) {
   const githubNotifications = [];
   const newsletters = [];
   const emailBySender = new Map();
+  const mergedIntoRepo = new Set();
   
   emailItems.forEach(item => {
     const sender = item.metadata?.from || 'unknown';
@@ -788,6 +790,7 @@ export function clusterByProjectTheme(items) {
     if (repo && githubByRepo.has(repo)) {
       // Add email to existing GitHub cluster
       githubByRepo.get(repo).push(email);
+      mergedIntoRepo.add(email.sourceId);
       console.log(`  [Clustering] Merged GitHub email into ${repo} tile`);
     } else {
       // No matching repo cluster, keep as email
@@ -853,107 +856,14 @@ export function clusterByProjectTheme(items) {
   
   console.log(`[Clustering] GitHub: ${githubByRepo.size} repo clusters (${githubNotifications.length} emails merged)`);
   
-  // Create email sender clusters for 2+ emails
-  for (const [sender, senderItems] of emailBySender) {
-    if (senderItems.length < 2) continue;
-    
-    const unreadCount = senderItems.filter(i => i.type === 'email-unread').length;
-    const importantCount = senderItems.filter(i => i.type === 'email-important').length;
-    const today = new Date().toISOString().split('T')[0];
-    
-    clusters.push({
-      id: `cluster_gmail_${sender.replace(/[^a-z0-9]/gi, '_')}_${Date.now()}`,
-      type: 'email-cluster',
-      source: 'gmail',
-      sourceId: `gmail:cluster:${sender}:${today}`,
-      title: (lastGithubIdentity?.name && sender === lastGithubIdentity.name) ? '我自己发出/抄送的邮件' : `${sender} 的邮件`,
-      subtitle: 'Emails',
-      body: `最近 24h 收到 ${senderItems.length} 封邮件${unreadCount > 0 ? `，其中 ${unreadCount} 封未读` : ''}`,
-      url: `https://mail.google.com/mail/u/0/#search/from:${encodeURIComponent(sender)}`,
-      priority: importantCount > 0 ? 'high' : 'medium',
-      status: 'active',
-      clusterSize: senderItems.length,
-      items: senderItems,
-      topItems: senderItems.slice(0, 3),
-      metadata: {
-        sender,
-        unreadCount,
-        importantCount,
-      },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-  }
-  
-  console.log(`[Clustering] Gmail: ${emailBySender.size} sender clusters from ${emailItems.length - githubNotifications.length} emails`);
-  
-  // Newsletter digest cluster
-  if (newsletters.length > 1) {
-    const today = new Date().toISOString().split('T')[0];
-    
-    clusters.push({
-      id: `cluster_gmail_newsletters_${Date.now()}`,
-      type: 'newsletter-cluster',
-      source: 'gmail',
-      sourceId: `gmail:newsletters:${today}`,
-      title: 'Newsletters & Updates',
-      subtitle: '',
-      body: `${newsletters.length} newsletters`,
-      url: `https://mail.google.com/mail/u/0/#inbox`,
-      priority: 'low',
-      status: 'active',
-      clusterSize: newsletters.length,
-      items: newsletters,
-      topItems: newsletters.slice(0, 3),
-      metadata: {
-        sources: [...new Set(newsletters.map(n => extractSenderName(n.metadata?.from || '')))],
-      },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    
-    console.log(`[Clustering] Gmail: ${newsletters.length} newsletters in digest tile`);
-  }
-  
-  // Email categories donut (if we have enough variety)
-  const categories = {
-    'GitHub': githubNotifications.length,
-    'Newsletters': newsletters.length,
-    'People': emailItems.length - githubNotifications.length - newsletters.length,
-  };
-  
-  if (emailItems.length > 5) {
-    const today = new Date().toISOString().split('T')[0];
-    clusters.push({
-      id: `cluster_gmail_categories_${Date.now()}`,
-      type: 'email-categories',
-      source: 'gmail',
-      sourceId: `gmail:categories:${today}`,
-      title: 'Email Overview',
-      subtitle: '',
-      body: `${emailItems.length} emails by category`,
-      url: `https://mail.google.com/mail/u/0/#inbox`,
-      priority: 'low',
-      status: 'active',
-      clusterSize: emailItems.length,
-      items: emailItems.slice(0, 5),
-      topItems: [],
-      metadata: {
-        categories,
-      },
-      blocks: [{
-        type: 'chart',
-        chartType: 'donut',
-        data: Object.values(categories).filter(v => v > 0),
-        labels: Object.keys(categories).filter(k => categories[k] > 0),
-      }],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    
-    console.log(`[Clustering] Gmail: category donut (GitHub:${categories.GitHub}, News:${categories.Newsletters}, People:${categories.People})`);
-  }
-  
+  // Email: one tile per category (needs-you / CI / security / service / social / promo),
+  // plus at most a few actionable mails from real people. Replaces per-sender, newsletter
+  // and donut tiles, which produced one tile per promo mail.
+  const looseEmails = emailItems.filter(e => !mergedIntoRepo.has(e.sourceId));
+  const emailClusters = buildEmailClusters(looseEmails);
+  clusters.push(...emailClusters);
+  console.log(`[Clustering] Gmail: ${emailClusters.length} category tiles from ${looseEmails.length} emails (${mergedIntoRepo.size} merged into repo tiles)`);
+
   // Slack: cluster per channel / DM
   const slackItems = items.filter(i => i.source === 'slack');
   const byChan = new Map();
@@ -1154,6 +1064,18 @@ export function classifyClusters(clusters) {
       reasoning = "Today's events";
     }
     // Single items: classify based on original type
+    else if (cluster.type === 'email-action') {
+      category = 'needs-action';
+      score = 86;
+      reasoning = 'A real person is waiting on your reply';
+    }
+    else if (cluster.type === 'email-group') {
+      const key = cluster.metadata?.group;
+      const needs = cluster.metadata?.needsAction;
+      category = needs ? 'needs-action' : 'fyi';
+      score = { action: 84, code: needs ? 72 : 45, security: 62, updates: 40, social: 35, promo: 30 }[key] ?? 40;
+      reasoning = needs ? 'Mail group needs you' : 'Mail group, no action needed';
+    }
     else if (cluster.type === 'single-item' && cluster.items[0]) {
       const item = cluster.items[0];
       if (item.type === 'pr-review') {
@@ -1589,6 +1511,17 @@ function generateClusterCards(grouped) {
       });
     }
     
+    // Email category groups / actionable mails: blocks and copy are prebuilt from real data.
+    else if (cluster.type === 'email-group' || cluster.type === 'email-action') {
+      card.blocks.push(...(cluster.blocks || []));
+      card.actions.push(...(cluster.actions || []));
+      card.nextAction = cluster.nextAction;
+      card.why = cluster.why || cluster.body;
+      card.waiting = cluster.waiting;
+      card.metadata = cluster.metadata;
+      card.subtitle = cluster.subtitle;
+    }
+
     // Single items: simpler card
     else if (cluster.type === 'single-item' && cluster.items[0]) {
       const item = cluster.items[0];
@@ -1597,11 +1530,15 @@ function generateClusterCards(grouped) {
         tags: item.metadata?.labels?.slice(0, 3).map(l => ({ text: l, color: 'blue' })) || [],
       });
       
+      const kind = item.source === 'github' ? (String(item.type).includes('pr') ? 'PR' : 'issue') : item.source === 'gmail' ? '邮件' : item.source === 'slack' ? '消息' : '详情';
       card.actions.push({
-        label: 'Open',
+        label: `打开${kind}：${String(item.title || '').slice(0, 24)}`,
         value: item.url,
         primary: true,
       });
+      card.nextAction = item.type === 'pr-review' ? `审「${String(item.title || '').slice(0, 30)}」`
+        : item.type?.includes('issue') ? `回复 issue「${String(item.title || '').slice(0, 30)}」`
+        : `看一下「${String(item.title || '').slice(0, 30)}」是否需要跟进`;
     }
     
     cards.push(card);
@@ -1782,8 +1719,8 @@ export async function runAggregationPipeline(composioClient, activeSources, llmC
   if (achievements) brief.cards.push(achievements);
   
   console.log('[Aggregation] Stage 10: Generating inbox overview...');
-  const inbox = generateInboxOverview(sourceData);
-  if (inbox) brief.cards.push(inbox);
+  // Category email tiles (Stage 3.5) already summarize the inbox; the old overview donut
+  // duplicated them with unreliable sender counts, so it is no longer emitted.
   
   console.log(`[Aggregation] Complete: ${brief.cards.length} cards generated`);
   

@@ -36,6 +36,18 @@ function lastAssistantText(records = []) {
   return ''
 }
 
+// Same call shape ds-bot uses: a live session must be paged through its current seq.
+async function readLastReply(ctx, sessionId, log) {
+  const agent = await ctx.sessionController.resolveAgent(sessionId).catch(() => undefined)
+  const seq = Number(agent?.session?.seq)
+  const page = await ctx.sessionController.page({
+    address: { kind: 'session', sessionId },
+    ...(Number.isFinite(seq) && seq > 0 ? { throughSeq: seq - 1 } : {}),
+    maxMessages: 40,
+  }, AbortSignal.timeout(15_000))
+  return lastAssistantText(page?.records || page?.items || [])
+}
+
 /**
  * Prompt Chief and wait for a new assistant reply.
  */
@@ -61,12 +73,8 @@ export async function runMuseChatTurn(ctx, {
   // Snapshot previous assistant text if page works.
   let before = ''
   try {
-    const page = await ctx.sessionController.page({
-      address: { kind: 'session', sessionId },
-      maxMessages: 20,
-    }, AbortSignal.timeout(10_000))
-    before = lastAssistantText(page?.records || page?.items || [])
-  } catch { /* first turn */ }
+    before = await readLastReply(ctx, sessionId, log)
+  } catch (err) { log(`[muse-chat] page(before) failed: ${err?.message || err}`) }
 
   log(`[muse-chat] prompt → ${sessionId}: ${outbound.slice(0, 80)}`)
   await ctx.sessionController.prompt({
@@ -78,6 +86,7 @@ export async function runMuseChatTurn(ctx, {
 
   const deadline = Date.now() + 120_000
   let reply = ''
+  let pageErrLogged = false
   while (Date.now() < deadline) {
     const agent = await ctx.sessionController.resolveAgent(sessionId).catch(() => undefined)
     if (agent?.status === 'running' && typeof agent.whenIdle === 'function') {
@@ -87,13 +96,11 @@ export async function runMuseChatTurn(ctx, {
       continue
     }
     try {
-      const page = await ctx.sessionController.page({
-        address: { kind: 'session', sessionId },
-        maxMessages: 40,
-      }, AbortSignal.timeout(15_000))
-      reply = lastAssistantText(page?.records || page?.items || [])
+      reply = await readLastReply(ctx, sessionId, log)
       if (reply && reply !== before) break
-    } catch { /* keep polling */ }
+    } catch (err) {
+      if (!pageErrLogged) { pageErrLogged = true; log(`[muse-chat] page failed: ${err?.message || err}`) }
+    }
     await new Promise(r => setTimeout(r, 400))
   }
 

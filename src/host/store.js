@@ -24,6 +24,8 @@ export function emptyState() {
     cards: [],
     // Durable completion / dismiss ledger — digests never clear this.
     completions: [],
+    // Per-item (link) status keyed by item url — survives digests, new card ids, restarts.
+    itemStatus: {},
     lastDigest: null,
   }
 }
@@ -48,6 +50,7 @@ export function normalizeState(raw) {
     prefs: isRecord(raw.prefs) ? raw.prefs : {},
     cards: Array.isArray(raw.cards) ? raw.cards : [],
     completions: Array.isArray(raw.completions) ? raw.completions : [],
+    itemStatus: isRecord(raw.itemStatus) ? raw.itemStatus : {},
     lastDigest: raw.lastDigest ?? null,
   }
 }
@@ -203,4 +206,58 @@ export function createStore(path) {
       return state
     },
   }
+}
+
+
+// ---- Per-item (related link) status -------------------------------------------------
+// Items are the links inside a card (PRs, issues, mails). Their status is keyed by url
+// at the state top level, so re-aggregation (new card ids, day-scoped sourceIds) keeps it.
+
+export function cardItemUrls(card) {
+  const urls = new Set()
+  for (const b of card?.blocks || []) {
+    if (b?.type === 'link-list') for (const l of b.links || []) if (l?.url) urls.add(l.url)
+  }
+  for (const l of Array.isArray(card?.links) ? card.links : []) if (l?.url) urls.add(l.url)
+  return urls
+}
+
+export function setItemStatus(state, { card, url, title = '', action = 'done', by = 'user' }) {
+  const status = action === 'done' ? 'done' : 'dismissed'
+  const at = new Date().toISOString()
+  state.itemStatus = { ...(state.itemStatus || {}), [url]: { status, at, by, cardId: card?.id || null, title } }
+  const entry = {
+    id: `cmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    kind: 'item',
+    cardId: card?.id || null,
+    sourceId: card?.sourceId || null,
+    cardTitle: card?.title || '',
+    title,
+    itemUrl: url,
+    url,
+    source: card?.source || null,
+    action: status, // done | dismissed
+    by,
+    at,
+  }
+  const prior = (state.completions || []).filter(c => !(c.kind === 'item' && c.itemUrl === url))
+  state.completions = [...prior, entry].slice(-500)
+  return state.itemStatus[url]
+}
+
+export function clearItemStatus(state, url) {
+  const next = { ...(state.itemStatus || {}) }
+  delete next[url]
+  state.itemStatus = next
+  // Undo removes the item's ledger entry: an undone completion was not a completion.
+  state.completions = (state.completions || []).filter(c => !(c.kind === 'item' && c.itemUrl === url))
+}
+
+export function annotateCards(cards = [], itemStatus = {}) {
+  if (!itemStatus || !Object.keys(itemStatus).length) return cards
+  return cards.map(card => {
+    const mine = {}
+    for (const url of cardItemUrls(card)) if (itemStatus[url]) mine[url] = itemStatus[url]
+    return Object.keys(mine).length ? { ...card, itemStatus: mine } : card
+  })
 }

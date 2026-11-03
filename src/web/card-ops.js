@@ -28,6 +28,7 @@ function summarize(card) {
     url: card.url || null,
     nextAction: card.nextAction || null,
     links: card.links || null,
+    items: [...((card.blocks || []).find(b => b?.type === 'link-list')?.links || [])].filter(l => l?.url).slice(0, 12).map(l => ({ title: l.title, url: l.url, status: card.itemStatus?.[l.url]?.status || 'open' })),
     snoozeUntil: card.snoozeUntil || null,
     completedAt: card.completedAt || null,
   }
@@ -44,6 +45,7 @@ function routerTransport(router) {
     else if (path === '/api/opendigitalmate/card-delete') data = await router.deleteCard(body.id)
     else if (path === '/api/digest/generate') data = await router.generateDigestNow()
     else if (path === '/api/completions') data = await router.listCompletions()
+    else if (path === '/api/opendigitalmate/card-interact') data = await router.trackCardInteraction(body.id, body.action, body.itemUrl || null, body.itemTitle || '', 'bot')
     else throw new Error(`no in-process route for ${method} ${path}`)
     return data ?? {}
   }
@@ -121,6 +123,11 @@ export function createCardOps({ baseUrl = DEFAULT_MUSE, router = null } = {}) {
       const data = await call('/api/digest/generate', { method: 'POST', body: {} })
       if (data.success === false) throw new Error(data.error || '刷新失败')
       return { success: true, summary: data.summary || null, cardCount: data.totalCardCount ?? null }
+    },
+    async item(id, url, action = 'done', title = '') {
+      const data = await call('/api/opendigitalmate/card-interact', { method: 'POST', body: { id, action, itemUrl: url, itemTitle: title } })
+      if (data.success === false) throw new Error(data.error || '条目操作失败')
+      return { success: true, item: data.item || null }
     },
     async listCompletions() {
       return call('/api/completions')

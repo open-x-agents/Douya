@@ -5,11 +5,15 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
 function clean(v) { return String(v ?? '').replace(/\s+/g, ' ').trim() }
+// Keep line structure (lists, paragraphs) — the client renders Markdown.
+function cleanBlock(v) {
+  return String(v ?? '').replace(/\r\n?/g, '\n').split('\n').map(l => l.replace(/[ \t]+$/g, '')).join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
 
 function flattenContent(content) {
-  if (typeof content === 'string') return clean(content)
+  if (typeof content === 'string') return cleanBlock(content)
   if (!Array.isArray(content)) return ''
-  return clean(content.map(p => (typeof p === 'string' ? p : (p?.type && p.type !== 'text') ? '' : p?.text || '')).join(''))
+  return cleanBlock(content.map(p => (typeof p === 'string' ? p : (p?.type && p.type !== 'text') ? '' : p?.text || '')).join(''))
 }
 
 export async function loadMainBotId(dshHome) {

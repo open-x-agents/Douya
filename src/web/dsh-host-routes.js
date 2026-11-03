@@ -121,7 +121,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     requestBody: 'buffered',
     fetch: async (request) => {
       const body = await readJson(request)
-      return json(await router.trackCardInteraction(body.id, body.action))
+      return json(await router.trackCardInteraction(body.id, body.action, body.itemUrl || null, body.itemTitle || ''))
     },
   }, 'opendigitalmate: card-interact')
 

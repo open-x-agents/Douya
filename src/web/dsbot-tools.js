@@ -50,6 +50,7 @@ export const CARD_WORK_PROMPT = `你是「豆芽」背后的 Main Bot（Chief）
 - 「标完成 / 做完了 / 勾掉」→ odm_card_complete（先 odm_card_list 或 odm_card_find 找到 id）
 - 「删掉 / 不要了 / 去掉促销」→ odm_card_dismiss 或 odm_card_delete（噪音用 dismiss；明确永久删除才 delete）
 - 「推迟 / 明天再看」→ odm_card_snooze
+- 卡片里的单个条目（某个 PR / issue / 邮件）「这个做完了 / 这条不用管」→ odm_card_item（action=done|dismiss|undo，url 用 odm_card_list 返回的 items[].url）；不要因此把整张卡标完成
 - 「改标题 / 改成… / 下一步改成…」→ odm_card_update
 - 「加一张 / 记一下 / 待办」→ odm_card_create
 - 「刷新今日 / 重新汇聚」→ odm_digest_refresh
@@ -60,7 +61,13 @@ export const CARD_WORK_PROMPT = `你是「豆芽」背后的 Main Bot（Chief）
 1. 改卡前若只有关键词，先 find/list 确认 id；多张匹配时列出请用户选。
 2. 改完用工具返回的 success/card 确认（标题+新状态），完成会写入持久 completions。
 3. 不编造 id/链接/数量。Composio 保持只读。
-4. 用简体中文简短回复。`
+4. 用简体中文简短回复。
+
+## 回复格式（会按 Markdown 渲染）
+- 用真正的换行，不要把列表挤在一行里用「 - 」隔开。
+- 汇总类回答按类别分组：每组一行加粗小标题带数量（如 **要处理（3）**、**可以不管（12）**），下面每条一行「- 标题 — 一句话动作」，有链接就写成 [标题](url)。
+- 先给结论一句话，再给分组；噪音类只给数量和一个代表例子，并提出可一键处理（如「要我把这 12 封促销 dismiss 掉吗？」）。
+- 不用表格，不用多级标题；最多用 ### 一级小标题。`
 
 export async function registerBotTools(ctx, opts = {}) {
   const {
@@ -263,6 +270,22 @@ export async function registerBotTools(ctx, opts = {}) {
     output,
     async execute(args) {
       try { return JSON.stringify(await cards.remove(args?.id)) }
+      catch (err) { return JSON.stringify({ success: false, error: err.message }) }
+    },
+  }))
+
+  register(defineTool({
+    name: 'odm_card_item',
+    description: 'Mark ONE related item (PR / issue / mail link) inside a Today card as done / dismiss, or undo. Persists by item url and survives digests. Does not change the whole card.',
+    parameters: {
+      id: { type: 'string', required: true, description: 'card id' },
+      url: { type: 'string', required: true, description: 'item url from odm_card_list items[].url' },
+      action: { type: 'string', required: false, description: 'done | dismiss | undo (default done)' },
+      title: { type: 'string', required: false, description: 'item title for the ledger' },
+    },
+    output,
+    async execute(args) {
+      try { return JSON.stringify(await cards.item(args?.id, args?.url, args?.action || 'done', args?.title || '')) }
       catch (err) { return JSON.stringify({ success: false, error: err.message }) }
     },
   }))

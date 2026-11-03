@@ -59,3 +59,22 @@ test('store save digest option preserves completions and done cards', async () =
   const disk = JSON.parse(readFileSync(path, 'utf8'))
   assert.equal(disk.completions.length, 1)
 })
+
+import { setItemStatus, clearItemStatus, annotateCards } from '../src/host/store.js'
+
+test('item status persists by url across a re-aggregated card and undo clears it', () => {
+  const url = 'https://github.com/o/r/issues/1'
+  const day1 = { id: 'c1', sourceId: 'gh:o/r:2026-11-03', title: 'r', blocks: [{ type: 'link-list', links: [{ url, title: 'issue 1' }, { url: 'https://x/2', title: 'two' }] }] }
+  const state = { cards: [day1], completions: [], itemStatus: {} }
+  setItemStatus(state, { card: day1, url, title: 'issue 1', action: 'done' })
+  assert.equal(state.completions.length, 1)
+  assert.equal(state.completions[0].kind, 'item')
+  // next day's digest: new id + sourceId, same link
+  const day2 = { ...day1, id: 'c2', sourceId: 'gh:o/r:2026-11-04' }
+  const [a] = annotateCards([day2], state.itemStatus)
+  assert.equal(a.itemStatus[url].status, 'done')
+  assert.equal(a.itemStatus['https://x/2'], undefined)
+  clearItemStatus(state, url)
+  assert.equal(state.completions.length, 0)
+  assert.equal(annotateCards([day2], state.itemStatus)[0].itemStatus, undefined)
+})

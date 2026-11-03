@@ -786,6 +786,38 @@
   #v-today .today-chat-input .input-wrap{max-width:640px;margin:0 auto;background:rgba(255,255,255,.92);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.95);border-radius:999px;box-shadow:var(--shadow-hi);padding:6px 6px 6px 20px}
   #v-today .today-chat-input .send-btn{border-radius:50%;background:linear-gradient(135deg,#6f8df5,#8a74d0)}
   .grid2{padding-bottom:12px}
+  /* Bot replies: rendered Markdown */
+  .md{font-size:13.5px;line-height:1.72;color:var(--ink);overflow-wrap:anywhere}
+  .md p{margin:0 0 8px}.md>:last-child{margin-bottom:0}
+  .md strong{font-weight:680}
+  .md-h{font-weight:700;font-size:13.5px;margin:12px 0 4px}.md>.md-h:first-child{margin-top:0}
+  .md-label{display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:.03em;margin:12px 0 4px;padding:2px 10px;border-radius:999px;background:rgba(111,141,245,.11);color:#4a5fb8}
+  .md>.md-label:first-child{margin-top:2px}
+  .md-label-hot{background:rgba(236,108,92,.12);color:#c2493a}
+  .md-label-mute{background:rgba(30,40,80,.06);color:var(--ink3)}
+  .md-list{margin:2px 0 8px;padding-left:20px}
+  .md-list li{margin:3px 0;padding-left:2px}
+  .md-list li::marker{color:#8a74d0;font-weight:600}
+  .md code{font:500 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;background:rgba(30,40,80,.06);padding:1px 5px;border-radius:5px}
+  .md a{color:#4f6fe0;text-decoration:none;border-bottom:1px solid rgba(79,111,224,.28);transition:.15s}
+  .md a:hover{color:#3550c4;border-bottom-color:currentColor}
+  .today-chat-msgs .bubble.bot{max-width:92%;padding:11px 14px}
+  .z-msg.bot .md{font-size:14px}
+  /* Card zoom: handled items */
+  .z-sub{font-weight:500;color:var(--ink3);letter-spacing:0}
+  .z-item.is-done,.z-item.is-dismissed{opacity:1;background:#f9fafb}
+  .z-item.is-done .z-item-b b{text-decoration:line-through;text-decoration-color:rgba(30,40,80,.35);color:var(--ink3)}
+  .z-item.is-dismissed .z-item-b b{color:var(--ink3)}
+  .z-item.is-dismissed .lk-ic{opacity:.45}
+  .z-check{width:20px;height:20px;border-radius:50%;background:linear-gradient(135deg,#41c7a0,#2fa883);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;flex-shrink:0}
+  .z-act.undo{color:#4f6fe0}
+  .z-empty{font-size:13px;color:var(--ink3);padding:10px 12px}
+  .z-done{margin-top:10px}
+  .z-done summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--ink3);padding:4px 2px;list-style:none;user-select:none}
+  .z-done summary::-webkit-details-marker{display:none}
+  .z-done summary::before{content:'▸';display:inline-block;margin-right:6px;transition:.2s}
+  .z-done[open] summary::before{transform:rotate(90deg)}
+  .z-done .z-items{margin-top:6px}
   /* Bottom dock: one continuous soft fade across the column, no hard-edged blur boxes.
      The base .today-chat-input carries a full-bleed backdrop-filter; kill it here so only
      the pill is glass, and let a masked ::before do a gentle blur + tint that fades in. */
@@ -1266,7 +1298,7 @@
     if (text) {
       const reply = document.createElement('div');
       reply.className = 'bubble';
-      reply.innerHTML = `${escapeHtml(text)}<small>${time || new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'})}</small>`;
+      reply.innerHTML = `${renderMd(text)}<small>${time || chatTime()}</small>`;
       const ce = citesEl(citations);
       if (ce) reply.appendChild(ce);
       body.appendChild(reply);
@@ -1380,6 +1412,71 @@
     div.textContent = text;
     return div.innerHTML;
   }
+
+  // ---- Safe Markdown for bot replies: escape everything first, then add a small,
+  // fixed set of tags. Links only for http(s), always new tab.
+  const escMd = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  function mdShortUrl(u) {
+    const plain = u.replace(/&amp;/g, '&').replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const gh = plain.match(/^github\.com\/([^/]+\/[^/]+)\/(?:pull|issues)\/(\d+)/);
+    if (gh) return escMd(`${gh[1]}#${gh[2]}`);
+    return escMd(plain.length > 42 ? plain.slice(0, 41) + '…' : plain);
+  }
+  function mdInline(s) { // s is already escaped
+    const codes = [];
+    s = s.replace(/`([^`\n]+)`/g, (m, c) => { codes.push(c); return `\u0000${codes.length - 1}\u0000`; });
+    s = s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, txt, u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${txt}</a>`);
+    s = s.replace(/(^|[\s（(：:，,、])(https?:\/\/(?:(?!&quot;|&#39;)[^\s<）)，,、])+)/g, (m, pre, u) => `${pre}<a href="${u}" target="_blank" rel="noopener noreferrer">${mdShortUrl(u)}</a>`);
+    s = s.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/\u0000(\d+)\u0000/g, (m, i) => `<code>${codes[Number(i)]}</code>`);
+    return s;
+  }
+  function mdLabelTone(s) {
+    if (/要处理|优先|需要|紧急|待回复|待办|重要/.test(s)) return ' md-label-hot';
+    if (/可以不管|不用管|噪音|促销|广告|忽略|可归档|概览/.test(s)) return ' md-label-mute';
+    return '';
+  }
+  function renderMd(src) {
+    let text = String(src ?? '').replace(/\r\n?/g, '\n');
+    // Recover structure the model flattened onto one line.
+    text = text.split('\n').map(line => {
+      line = line.replace(/\s+(\*\*[^*\n]{1,24}[（(]\d+[）)]\*\*[:：]?)\s*/g, '\n$1\n');
+      const bullets = line.split(/\s+[-•]\s+(?=\S)/);
+      if (bullets.length >= 3 && !/^\s*[-*•]\s/.test(line)) return bullets[0] + '\n' + bullets.slice(1).map(b => '- ' + b).join('\n');
+      const nums = line.match(/(?:^|\s)\d{1,2}[.、]\s/g);
+      if (nums && nums.length >= 3) return line.replace(/\s+(\d{1,2}[.、]\s)/g, '\n$1');
+      return line;
+    }).join('\n');
+    const lines = text.split('\n');
+    let html = '', list = null, para = [];
+    const flushP = () => {
+      if (!para.length) return;
+      const lm = para[0].trim().match(/^\*\*([^*]+)\*\*[:：]?$/);
+      if (lm) { html += `<div class="md-label${mdLabelTone(lm[1])}">${mdInline(escMd(lm[1]))}</div>`; para = para.slice(1); }
+      if (para.length) html += `<p>${para.map(l => mdInline(escMd(l))).join('<br>')}</p>`;
+      para = [];
+    };
+    const flushL = () => {
+      if (!list) return;
+      const start = list.t === 'ol' && list.start !== '1' ? ` start="${escMd(list.start)}"` : '';
+      html += `<${list.t} class="md-list"${start}>${list.items.map(i => `<li>${mdInline(escMd(i))}</li>`).join('')}</${list.t}>`;
+      list = null;
+    };
+    for (const raw of lines) {
+      const l = raw.replace(/\s+$/, '');
+      let m;
+      if (!l.trim()) { flushP(); flushL(); continue; }
+      if ((m = l.match(/^\s*#{1,6}\s+(.*)$/))) { flushP(); flushL(); html += `<div class="md-h">${mdInline(escMd(m[1]))}</div>`; continue; }
+      if ((m = l.match(/^\s*[-*•]\s+(.*)$/))) { flushP(); if (!list || list.t !== 'ul') { flushL(); list = { t: 'ul', items: [] }; } list.items.push(m[1]); continue; }
+      if ((m = l.match(/^\s*(\d{1,3})[.、)]\s+(.*)$/))) { flushP(); if (!list || list.t !== 'ol') { flushL(); list = { t: 'ol', items: [], start: m[1] }; } list.items.push(m[2]); continue; }
+      if (list && /^\s{2,}\S/.test(raw)) { list.items[list.items.length - 1] += ' ' + l.trim(); continue; }
+      if (para.length && /^\s*\*\*[^*]+\*\*[:：]?\s*$/.test(l)) flushP();
+      flushL(); para.push(l);
+    }
+    flushP(); flushL();
+    return `<div class="md">${html}</div>`;
+  }
+  const chatTime = (at) => (at ? new Date(at) : new Date()).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 
   // Load today's data
   async function loadToday() {
@@ -1499,7 +1596,8 @@
 
   function deepLinks(card) {
     const out = [], seen = new Set();
-    for (const l of [...linksOf(card)].sort((a, b) => (repoOf(card) ? (linkKind(a).k === 'mail') - (linkKind(b).k === 'mail') : 0))) {
+    const handledItems = card.itemStatus || {};
+    for (const l of [...linksOf(card).filter(x => !handledItems[x.url])].sort((a, b) => (repoOf(card) ? (linkKind(a).k === 'mail') - (linkKind(b).k === 'mail') : 0))) {
       if (seen.has(l.url)) continue; seen.add(l.url);
       const kind = linkKind(l);
       out.push({ url: l.url, title: l.title, kind });
@@ -1523,6 +1621,50 @@
     repo: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.71 1.71.75.75 0 0 1-1.07 1.05A2.5 2.5 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.71A2.5 2.5 0 0 1 4.5 9h8Z"/></svg>',
     link: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M7.78 4.72a.75.75 0 0 1 0 1.06L5.06 8.5a1.75 1.75 0 1 0 2.47 2.47l.5-.5a.75.75 0 1 1 1.06 1.06l-.5.5a3.25 3.25 0 1 1-4.6-4.6l2.73-2.72a.75.75 0 0 1 1.06 0Zm1.44-1.44a3.25 3.25 0 0 1 4.6 4.6l-.5.5a.75.75 0 0 1-1.06-1.06l.5-.5a1.75 1.75 0 1 0-2.47-2.47L7.56 7.08A.75.75 0 1 1 6.5 6.02Z"/></svg>',
   };
+  // ---- Related items inside a card: per-item 完成 / 忽略 / 撤销, persisted by url.
+  let zoomDoneOpen = false;
+  function zoomItemRow(link, s) {
+    const k = linkKind(link);
+    const head = `<span class="lk-ic lk-${k.k}">${ICON[k.k] || ICON.link}</span><div class="z-item-b"><b title="${escMd(link.title)}">${escMd(link.title)}</b><span>${k.zh}${s ? ` · ${s.status === 'done' ? '已完成' : '已忽略'} ${chatTime(s.at)}` : ''}</span></div>`;
+    const data = `data-item-url="${escMd(link.url)}" data-item-title="${escMd(link.title)}"`;
+    if (s) return `<div class="z-item ${s.status === 'done' ? 'is-done' : 'is-dismissed'}">${s.status === 'done' ? '<span class="z-check">✓</span>' : ''}${head}<div class="z-acts"><a class="z-act" href="${escMd(link.url)}" target="_blank" rel="noopener">打开</a><button class="z-act undo" data-act="undo" ${data}>撤销</button></div></div>`;
+    return `<div class="z-item">${head}<div class="z-acts"><a class="z-act" href="${escMd(link.url)}" target="_blank" rel="noopener">打开</a><button class="z-act done" data-act="done" ${data}>完成</button><button class="z-act dismiss" data-act="dismiss" ${data}>忽略</button></div></div>`;
+  }
+  function zoomItemsHtml(card) {
+    const st = card.itemStatus || {};
+    const links = linksOf(card);
+    const open = links.filter(l => !st[l.url]);
+    const handled = links.filter(l => st[l.url]).sort((a, b) => String(st[b.url].at).localeCompare(String(st[a.url].at)));
+    let h = `<h4>相关条目 · ${open.length}${handled.length ? `<span class="z-sub"> / 共 ${links.length}</span>` : ''}</h4><div class="z-items">`;
+    h += open.length ? open.map(l => zoomItemRow(l, null)).join('') : '<div class="z-empty">这张卡的条目都处理完了 ✓</div>';
+    h += '</div>';
+    if (handled.length) h += `<details class="z-done"${zoomDoneOpen ? ' open' : ''}><summary>已处理 · ${handled.length}</summary><div class="z-items">${handled.map(l => zoomItemRow(l, st[l.url])).join('')}</div></details>`;
+    return h;
+  }
+  function bindZoomItems(card) {
+    const sec = $('zItemsSec');
+    if (!sec || !card.id) return;
+    sec.addEventListener('toggle', e => { if (e.target.matches('details.z-done')) zoomDoneOpen = e.target.open; }, true);
+    sec.addEventListener('click', async e => {
+      const btn = e.target.closest('button[data-act]');
+      if (!btn || btn.disabled) return;
+      e.preventDefault(); e.stopPropagation();
+      btn.disabled = true;
+      const action = btn.getAttribute('data-act');
+      try {
+        const res = await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action, itemUrl: btn.getAttribute('data-item-url'), itemTitle: btn.getAttribute('data-item-title') }) });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'failed');
+        card.itemStatus = data.itemStatus || {};
+        if (action !== 'undo') zoomDoneOpen = zoomDoneOpen || false;
+        sec.innerHTML = zoomItemsHtml(card);
+        loadToday().catch(() => {});
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = '重试';
+      }
+    });
+  }
   function linkRow(l) {
     return `<a class="lk lk-${l.kind.k}" href="${escapeHtml(l.url)}" target="_blank" rel="noopener" title="${escapeHtml(l.title)}"><span class="lk-ic">${ICON[l.kind.k] || ICON.link}</span><span class="lk-t">${escapeHtml(l.title)}</span><span class="lk-arrow">↗</span></a>`;
   }
@@ -1719,11 +1861,18 @@
       </div>
       <div class="today-chat-input"><div class="input-wrap"><input type="text" id="todayChatInput" placeholder="和豆芽对话…" autocomplete="off" /><button class="send-btn" id="todayChatSend" type="button">↑</button></div></div>
     </div>`;
-    const prevAsk = $('todayChatInput') ? $('todayChatInput').value : '';
+    // Keep the live chat dock (open state, transcript, in-flight reply) across refreshes:
+    // detach it, rebuild the grid, then put the same node back in place of the fresh one.
+    const liveChat = $('todayChat');
     const hadFocus = document.activeElement && document.activeElement.id === 'todayChatInput';
+    const msgsScroll = $('todayChatMsgs') ? $('todayChatMsgs').scrollTop : 0;
+    if (liveChat) liveChat.remove();
     container.innerHTML = html;
-    if (prevAsk) $('todayChatInput').value = prevAsk;
-    if (hadFocus) $('todayChatInput').focus();
+    if (liveChat) {
+      $('todayChat').replaceWith(liveChat);
+      if ($('todayChatMsgs')) $('todayChatMsgs').scrollTop = msgsScroll;
+      if (hadFocus) $('todayChatInput').focus({ preventScroll: true });
+    }
 
     const track = async (card, action) => {
       if (!card || !card.id) return;
@@ -1746,7 +1895,7 @@
     });
     const myday = container.querySelector('.myday');
     if (myday && tt) myday.addEventListener('click', () => openTileZoom(tt));
-    setupTodayChatInput();
+    if (!liveChat) setupTodayChatInput();
   }
 
 
@@ -1779,8 +1928,8 @@
       return b;
     }
     const b = document.createElement('div');
-    b.className = 'bubble';
-    b.innerHTML = `${escapeHtml(text)}<small>${new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}</small>`;
+    b.className = 'bubble bot';
+    b.innerHTML = `${renderMd(text)}<small>${chatTime()}</small>`;
     const ce = citesEl(citations);
     if (ce) b.appendChild(ce);
     body.appendChild(b);
@@ -1805,8 +1954,8 @@
           body.appendChild(b);
         } else if (m.role === 'assistant') {
           const b = document.createElement('div');
-          b.className = 'bubble';
-          b.innerHTML = `${escapeHtml(m.content)}<small>${m.at ? new Date(m.at).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}) : ''}</small>`;
+          b.className = 'bubble bot';
+          b.innerHTML = `${renderMd(m.content)}<small>${m.at ? chatTime(m.at) : ''}</small>`;
           const ce = citesEl(m.citations);
           if (ce) b.appendChild(ce);
           body.appendChild(b);
@@ -1850,6 +1999,7 @@
           $('todayChatMsgs').appendChild(renderGroupCard(c));
         });
         $('todayChatMsgs').scrollTop = $('todayChatMsgs').scrollHeight;
+        loadToday().catch(() => {}); // bot may have edited cards; dock stays open
         // Keep the legacy dock transcript in sync if it was opened elsewhere
         if ($('dockBody')) {
           try { addBotMessage(data.text, data.time, data.cards, data.citations); } catch (_) {}
@@ -2276,16 +2426,7 @@
       if (pr || iss) html += `<div class="z-kpis">${pr ? `<div><b class="c-teal">${pr}</b><span>待推进 PR</span></div>` : ''}${iss ? `<div><b class="c-violet">${iss}</b><span>待处理 issue</span></div>` : ''}</div>`;
       const dl = deepLinks(card);
       html += `<div class="z-next"><div><span class="w-next-k">下一步</span><b>${escapeHtml(nextAction(card))}</b></div>${dl[0] ? `<a class="z-btn" href="${escapeHtml(dl[0].url)}" target="_blank" rel="noopener">去处理 ↗</a>` : ''}</div>`;
-      const links = linksOf(card);
-      if (links.length) {
-        html += `<div class="z-sec"><h4>相关条目 · ${links.length}</h4><div class="z-items">`;
-        links.forEach(link => {
-          const k = linkKind(link);
-          html += `<div class="z-item"><span class="lk-ic lk-${k.k}">${ICON[k.k] || ICON.link}</span><div class="z-item-b"><b title="${escapeHtml(link.title)}">${escapeHtml(link.title)}</b><span>${k.zh}</span></div>
-            <div class="z-acts"><a class="z-act" href="${escapeHtml(link.url)}" target="_blank" rel="noopener">打开</a><button class="z-act done" data-item-url="${escapeHtml(link.url)}">完成</button><button class="z-act dismiss" data-item-url="${escapeHtml(link.url)}">忽略</button></div></div>`;
-        });
-        html += '</div></div>';
-      }
+      if (linksOf(card).length) html += `<div class="z-sec" id="zItemsSec">${zoomItemsHtml(card)}</div>`;
     }
     const name = r ? r.name : (isTT ? '今天的安排' : clip(card.title, 20));
     const FALLBACK_SUGG = {
@@ -2308,7 +2449,7 @@
     const chatInput = $('zoomChatInput');
     const ctx = isTT ? '【上下文：我今天的时间表】' : `【上下文：${r ? r.owner + '/' + r.name : ''} — ${card.title}。${card.body || ''} 相关链接：${linksOf(card).map(l => l.title + ' ' + l.url).join('；')}】`;
     let first = true;
-    const push = (cls, text) => { const d = document.createElement('div'); d.className = 'z-msg ' + cls; d.textContent = text; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; return d; };
+    const push = (cls, text) => { const d = document.createElement('div'); d.className = 'z-msg ' + cls; if (cls === 'bot') d.innerHTML = renderMd(text); else d.textContent = text; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; return d; };
     const sendZoomChat = async (preset) => {
       const msg = (preset || chatInput.value).trim();
       if (!msg) return;
@@ -2335,15 +2476,7 @@
     chatInput.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendZoomChat(); } };
     content.querySelectorAll('.z-chip').forEach(b => { b.onclick = () => sendZoomChat(b.textContent); });
 
-    const mark = async (btn, action) => {
-      if (!card.id) return;
-      try { await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action, itemUrl: btn.getAttribute('data-item-url') }) }); } catch (e) { return; }
-      btn.closest('.z-item').classList.add(action === 'done' ? 'is-done' : 'is-dismissed');
-      btn.textContent = action === 'done' ? '✓ 已完成' : '已忽略';
-      btn.disabled = true;
-    };
-    content.querySelectorAll('.z-act.done').forEach(b => { b.onclick = () => mark(b, 'done'); });
-    content.querySelectorAll('.z-act.dismiss').forEach(b => { b.onclick = () => mark(b, 'dismiss'); });
+    bindZoomItems(card);
     overlay.classList.add('open');
     setTimeout(() => chatInput && chatInput.focus({ preventScroll: true }), 50);
   }

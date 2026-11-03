@@ -12,6 +12,10 @@ const QUIET_MS = 2_000
 const STEP_TIMEOUT_MS = 120_000
 
 function clean(v) { return String(v ?? '').replace(/\s+/g, ' ').trim() }
+// Keep line structure (lists, paragraphs) — the client renders Markdown.
+function cleanBlock(v) {
+  return String(v ?? '').replace(/\r\n?/g, '\n').split('\n').map(l => l.replace(/[ \t]+$/g, '')).join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
 function authPath(home) { return join(home || '.odm-data', 'dsbot-auth.json') }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
@@ -140,7 +144,7 @@ function readLastAssistant(logPath) {
       const text = Array.isArray(content)
         ? content.map(p => p?.text || '').join('')
         : (typeof content === 'string' ? content : '')
-      if (clean(text)) last = clean(text)
+      if (clean(text)) last = cleanBlock(text)
     }
   }
   return last
@@ -231,7 +235,7 @@ export async function loadDsBotHistory({ home = '.odm-data', baseUrl = DEFAULT_B
         const msg = o.data?.message
         const role = msg?.role === 'user' ? 'user' : 'assistant'
         const content = Array.isArray(msg?.content) ? msg.content.map(p => p?.text || '').join('') : (msg?.content || '')
-        if (clean(content)) messages.push({ role, content: clean(content) })
+        if (clean(content)) messages.push({ role, content: cleanBlock(content) })
       }
     }
     return { sessionId: BOT_SESSION_ID, messages: messages.slice(-limit), botId: mainId }

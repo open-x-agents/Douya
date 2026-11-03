@@ -9,7 +9,7 @@ import { generateDailyDigest, getSourcesStatus, pushDailyDigest, createComposioC
 import { reminderCard } from '../host/cards.js';
 import { createProfileManager } from './profile.js';
 import { resolveDisplayName, lastGithubIdentity } from './aggregation.js';
-import { recordCompletion } from '../host/store.js'
+import { recordCompletion, setItemStatus, clearItemStatus, annotateCards, cardItemUrls } from '../host/store.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -693,7 +693,7 @@ export function createApiRouter(ctx) {
           meetingHours: Math.round(meetingHours * 10) / 10,
           waitingCount: activeCards.filter(c => c.status === 'waiting').length,
           lastDigestAt: state.lastDigest?.generatedAt || null,
-          cards: activeCards,
+          cards: annotateCards(activeCards, state.itemStatus),
           hasDigest: state.lastDigest !== null,
         };
       } catch (err) {
@@ -847,7 +847,7 @@ export function createApiRouter(ctx) {
           return new Date(b.createdAt) - new Date(a.createdAt);
         });
         
-        return { cards: sorted };
+        return { cards: annotateCards(sorted, state.itemStatus) };
       } catch (err) {
         console.error('[listCards] Error:', err);
         return { cards: [] };
@@ -967,7 +967,7 @@ export function createApiRouter(ctx) {
     /**
      * POST /api/cards/:id/interact - Track card interaction
      */
-    async trackCardInteraction(id, action) {
+    async trackCardInteraction(id, action, itemUrl = null, itemTitle = '', by = 'user') {
       try {
         const state = store.get();
         const cards = state.cards || [];
@@ -975,6 +975,19 @@ export function createApiRouter(ctx) {
         
         if (!card) {
           return { success: false, error: '卡片不存在' };
+        }
+
+        // Per-item 完成 / 忽略 / 撤销 — never touches the whole card's status.
+        if (itemUrl) {
+          if (!cardItemUrls(card).has(itemUrl)) return { success: false, error: '这张卡片里没有这个条目' };
+          if (action === 'undo') clearItemStatus(state, itemUrl);
+          else if (action === 'done' || action === 'dismiss' || action === 'dismissed') {
+            setItemStatus(state, { card, url: itemUrl, title: itemTitle, action: action === 'done' ? 'done' : 'dismissed', by });
+          } else return { success: false, error: `未知操作: ${action}` };
+          await store.save(state);
+          const [annotated] = annotateCards([card], state.itemStatus);
+          console.log('[trackInteraction] item', action, itemUrl);
+          return { success: true, item: state.itemStatus[itemUrl] || null, itemStatus: annotated.itemStatus || {} };
         }
         
         // Track in profile

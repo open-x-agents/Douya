@@ -33,31 +33,48 @@ function summarize(card) {
   }
 }
 
-export function createCardOps({ baseUrl = DEFAULT_MUSE } = {}) {
+// In-process transport: same dsh process as the bot, so call the api router directly
+// (HTTP to our own port hits dsh's owner-auth fence and returns 401).
+function routerTransport(router) {
+  return async (path, { method = 'GET', body } = {}) => {
+    let data
+    if (path === '/api/cards' && method === 'GET') data = await router.listCards()
+    else if (path === '/api/cards') data = await router.createCard(body)
+    else if (path === '/api/opendigitalmate/card-update') data = await router.updateCard(body.id, body)
+    else if (path === '/api/opendigitalmate/card-delete') data = await router.deleteCard(body.id)
+    else if (path === '/api/digest/generate') data = await router.generateDigestNow()
+    else if (path === '/api/completions') data = await router.listCompletions()
+    else throw new Error(`no in-process route for ${method} ${path}`)
+    return data ?? {}
+  }
+}
+
+export function createCardOps({ baseUrl = DEFAULT_MUSE, router = null } = {}) {
+  const call = router ? routerTransport(router) : (path, o = {}) => muse(path, { ...o, baseUrl })
   return {
     baseUrl,
     async list({ status = 'active' } = {}) {
-      const { cards = [] } = await muse('/api/cards', { baseUrl })
+      const { cards = [] } = await call('/api/cards')
       const filtered = status === 'all' ? cards : cards.filter(c => (c.status || 'active') === status)
       return { count: filtered.length, cards: filtered.map(summarize) }
     },
     async get(id) {
-      const { cards = [] } = await muse('/api/cards', { baseUrl })
+      const { cards = [] } = await call('/api/cards')
       const card = cards.find(c => c.id === id)
       if (!card) throw new Error(`卡片不存在: ${id}`)
       return summarize(card)
     },
     async findByTitle(query) {
       const q = String(query || '').trim().toLowerCase()
-      const { cards = [] } = await muse('/api/cards', { baseUrl })
+      const { cards = [] } = await call('/api/cards')
       const hits = cards.filter(c => (c.status || 'active') === 'active').filter(c =>
         (c.title || '').toLowerCase().includes(q) || (c.body || '').toLowerCase().includes(q)
       )
       return { count: hits.length, cards: hits.map(summarize) }
     },
     async create(input) {
-      const data = await muse('/api/cards', {
-        method: 'POST', baseUrl,
+      const data = await call('/api/cards', {
+        method: 'POST',
         body: {
           title: input.title,
           body: input.body || '',
@@ -77,7 +94,7 @@ export function createCardOps({ baseUrl = DEFAULT_MUSE } = {}) {
       for (const key of ['title', 'body', 'priority', 'status', 'url', 'type', 'nextAction', 'links', 'snoozeUntil', 'completedBy', 'dismissedBy']) {
         if (updates[key] !== undefined) allowed[key] = updates[key]
       }
-      const data = await muse('/api/opendigitalmate/card-update', { method: 'POST', baseUrl, body: allowed })
+      const data = await call('/api/opendigitalmate/card-update', { method: 'POST', body: allowed })
       if (data.success === false) throw new Error(data.error || '更新失败')
       return { success: true, card: summarize(data.card) }
     },
@@ -96,17 +113,17 @@ export function createCardOps({ baseUrl = DEFAULT_MUSE } = {}) {
       return this.update(id, { status: 'snoozed', snoozeUntil })
     },
     async remove(id) {
-      const data = await muse('/api/opendigitalmate/card-delete', { method: 'POST', baseUrl, body: { id } })
+      const data = await call('/api/opendigitalmate/card-delete', { method: 'POST', body: { id } })
       if (data.success === false) throw new Error(data.error || '删除失败')
       return { success: true, deleted: id }
     },
     async refreshDigest() {
-      const data = await muse('/api/digest/generate', { method: 'POST', baseUrl, body: {} })
+      const data = await call('/api/digest/generate', { method: 'POST', body: {} })
       if (data.success === false) throw new Error(data.error || '刷新失败')
       return { success: true, summary: data.summary || null, cardCount: data.totalCardCount ?? null }
     },
     async listCompletions() {
-      return muse('/api/completions', { baseUrl })
+      return call('/api/completions')
     },
   }
 }

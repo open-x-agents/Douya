@@ -9,7 +9,7 @@ function clean(v) { return String(v ?? '').replace(/\s+/g, ' ').trim() }
 function flattenContent(content) {
   if (typeof content === 'string') return clean(content)
   if (!Array.isArray(content)) return ''
-  return clean(content.map(p => (typeof p === 'string' ? p : p?.text || '')).join(''))
+  return clean(content.map(p => (typeof p === 'string' ? p : (p?.type && p.type !== 'text') ? '' : p?.text || '')).join(''))
 }
 
 export async function loadMainBotId(dshHome) {
@@ -23,8 +23,10 @@ export async function loadMainBotId(dshHome) {
 
 function lastAssistantText(records = []) {
   for (let i = records.length - 1; i >= 0; i--) {
-    const ev = records[i]?.event || records[i]
-    const msg = ev?.message || ev
+    const rec = records[i]
+    const ev = rec?.event || rec
+    // dsh page records look like { type: 'assistant/message', data: { message: {...} } }
+    const msg = ev?.data?.message || ev?.message || ev
     const role = msg?.role || msg?.info?.role
     if (role === 'assistant' || role === 'model') {
       const text = flattenContent(msg.content || msg.parts || msg.text)

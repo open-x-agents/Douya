@@ -68,6 +68,7 @@ export async function registerBotTools(ctx, opts = {}) {
     getCards = () => [],
     home = '.odm-data',
     museUrl = process.env.ODM_MUSE_URL || 'http://127.0.0.1:7777',
+    router = null,
     log = () => {},
   } = opts
 
@@ -89,7 +90,7 @@ export async function registerBotTools(ctx, opts = {}) {
     }
   }
 
-  const cards = createCardOps({ baseUrl: museUrl })
+  const cards = createCardOps({ baseUrl: museUrl, router })
   const disposers = []
   const register = (tool) => {
     try {
@@ -323,6 +324,6 @@ export async function registerBotTools(ctx, opts = {}) {
     }))
   }
 
-  log(`dsbot-tools: registered disposers=${disposers.length} composio=${composioDefs.length} muse=${museUrl}`)
+  log(`dsbot-tools: registered disposers=${disposers.length} composio=${composioDefs.length} cards=${router ? 'in-process' : museUrl}`)
   return () => { for (const d of disposers.splice(0).reverse()) try { d() } catch { /* */ } }
 }

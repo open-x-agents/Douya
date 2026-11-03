@@ -354,6 +354,7 @@ export function createRuntime(ctx, config = {}) {
           getCards: () => store.get()?.cards || [],
           home,
           museUrl: process.env.ODM_MUSE_URL || 'http://127.0.0.1:7777',
+          router: rt.apiRouter,
           log: (m) => log(m),
         }).then(d => { dispose = d })
       ).catch(err => log(`dsbot-tools failed: ${err.message}`))

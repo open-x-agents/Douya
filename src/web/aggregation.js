@@ -1709,6 +1709,20 @@ ${brief}
   }
 }
 
+// Every GitHub search result / Gmail message the fetch stage read, deduped (the fetch stage
+// keeps them in per-query arrays; there is no prebuilt `.all`).
+function allGithubItems(sourceData) {
+  const seen = new Map();
+  for (const list of Object.values(sourceData.github || {})) for (const it of Array.isArray(list) ? list : []) if (it?.id != null && !seen.has(it.id)) seen.set(it.id, it);
+  return [...seen.values()];
+}
+function allGmailItems(sourceData) {
+  const seen = new Map();
+  for (const list of Object.values(sourceData.gmail || {})) for (const m of Array.isArray(list) ? list : []) { const k = m?.messageId || m?.id; if (k && !seen.has(k)) seen.set(k, m); }
+  return [...seen.values()];
+}
+const mergedAt = item => item?.pull_request?.merged_at || item?.merged_at || null;
+
 /**
  * Main aggregation pipeline
  */
@@ -1778,12 +1792,11 @@ async function generateHeroCard(grouped, sourceData, llmClient, profileContext) 
   
   // Calculate today's achievements
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const githubItems = sourceData.github?.all || [];
+  const githubItems = allGithubItems(sourceData);
   
   const prsMergedToday = githubItems.filter(item => 
-    item.state === 'closed' && 
-    item.merged_at && 
-    new Date(item.merged_at) >= todayStart
+    mergedAt(item) && 
+    new Date(mergedAt(item)) >= todayStart
   ).length;
   
   const issuesClosedToday = githubItems.filter(item => 
@@ -1792,7 +1805,7 @@ async function generateHeroCard(grouped, sourceData, llmClient, profileContext) 
     !item.pull_request
   ).length;
   
-  const emailsProcessed = (sourceData.gmail?.all || []).filter(email => 
+  const emailsProcessed = (allGmailItems(sourceData)).filter(email => 
     !email.labelIds?.includes('UNREAD')
   ).length;
   
@@ -1863,8 +1876,8 @@ JSON: {"narrative": "你的 1-2 句叙述"}`;
         type: 'achievement-rings',
         rings: [
           // Real counts only; there is no invented daily target, so rings carry no max.
-          { label: '今日合并 PR', value: prsMergedToday, max: null, color: '#00d084' },
-          { label: '今日关闭 issue', value: issuesClosedToday, max: null, color: '#4a6cf7' },
+          { label: '今日合并（与你相关的 PR）', value: prsMergedToday, max: null, color: '#00d084' },
+          { label: '今日关闭（相关 issue）', value: issuesClosedToday, max: null, color: '#4a6cf7' },
           { label: '最近 24h 已读邮件', value: emailsProcessed, max: null, color: '#ffa600' },
         ],
       },
@@ -1975,10 +1988,10 @@ JSON: {
  * Generate achievements tile with streak and contribution heatmap
  */
 function generateAchievementsTile(sourceData, items) {
-  const githubItems = sourceData.github?.all || [];
+  const githubItems = allGithubItems(sourceData);
   
   // Calculate total merged PRs
-  const mergedPRs = githubItems.filter(i => i.state === 'closed' && i.merged_at).length;
+  const mergedPRs = githubItems.filter(i => mergedAt(i)).length;
   
   // Calculate streak (consecutive days with activity)
   const activityDates = new Set();
@@ -2057,7 +2070,7 @@ function generateAchievementsTile(sourceData, items) {
  * Generate inbox overview with category donut and top senders bar
  */
 function generateInboxOverview(sourceData) {
-  const emails = sourceData.gmail?.all || [];
+  const emails = allGmailItems(sourceData);
   
   if (emails.length === 0) return null;
   

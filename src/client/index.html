@@ -1651,7 +1651,7 @@
     lastCards = cards;
     const hero = cards.find(c => c.type === 'hero');
     const tt = cards.find(c => c.type === 'timetable');
-    const work = cards.filter(c => !SYS_TYPES.has(c.type));
+    const work = cards.filter(c => !SYS_TYPES.has(c.type) && c.source !== 'system');
     const order = [...work].sort((a, b) => ((b.priority === 'high') - (a.priority === 'high')));
     let html = tt ? renderTimetable(tt) : '';
     html += '<div class="grid2">';

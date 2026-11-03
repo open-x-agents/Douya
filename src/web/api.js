@@ -650,7 +650,7 @@ export function createApiRouter(ctx) {
         // Work items = everything except system tiles (hero / timetable), so the
         // header count always matches the cards rendered in the grid.
         const SYSTEM_TYPES = new Set(['hero', 'timetable']);
-        const actionable = activeCards.filter(c => !SYSTEM_TYPES.has(c.type) && c.type !== 'event');
+        const actionable = activeCards.filter(c => !SYSTEM_TYPES.has(c.type) && c.source !== 'system' && c.type !== 'event');
         const urgent = actionable.filter(c => c.priority === 'urgent' || c.priority === 'high');
         
         // Build sources list

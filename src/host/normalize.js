@@ -242,10 +242,27 @@ export function normalizeEvents(rawEvents = []) {
     .map((entry) => entry.event)
 }
 
-function localDay(iso, timeZone) {
+// The day a person lives in, not the UTC day: at 00:30 in Shanghai the UTC date is still
+// yesterday, and anything keyed on UTC would draw yesterday as today. `timeZone` is explicit so
+// a test never depends on the process TZ. Both helpers live here, not in panel.js.
+export function localDay(iso, timeZone) {
   const ms = Date.parse(text(iso))
   if (!Number.isFinite(ms)) return null
   return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms))
+}
+
+// HH:mm on the person's wall clock. h23 keeps midnight at 00:00 instead of 24:00.
+export function localClock(iso, timeZone) {
+  const ms = Date.parse(text(iso))
+  if (!Number.isFinite(ms)) return null
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(ms))
+  const field = (type) => parts.find((part) => part.type === type)?.value ?? ''
+  return `${field('hour')}:${field('minute')}`
 }
 
 function eventDay(event, timeZone) {

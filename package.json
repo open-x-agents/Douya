@@ -17,7 +17,7 @@
     "docs/"
   ],
   "scripts": {
-    "test": "node --test test/*.test.js",
+    "test": "node --test 'test/**/*.test.js' 'acceptance-cases/**/*.test.js'",
     "start": "node scripts/server.js",
     "start:dsbot": "npx cordis start --config config.yml",
     "dev": "node scripts/server.js 7777",

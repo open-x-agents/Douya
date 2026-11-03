@@ -890,6 +890,7 @@
     </div>
     <div class="nav on" data-view="today">今天</div>
     <div class="nav" data-view="sources">信源状态</div>
+    <div class="nav" data-view="panel">晨报面板</div>
     <div class="grp">设置</div>
     <div class="nav" data-view="settings">配置</div>
   </aside>
@@ -924,6 +925,13 @@
           <div class="stamp a in">查看已连接的数据源和权限范围</div>
 
           <div id="sourcesContent"></div>
+        </section>
+
+        <!-- 晨报面板（main 的 panel 页面：来源健康、坏日子状态、冲突并列） -->
+        <section class="view" id="v-panel">
+          <h3 class="concl">晨报面板</h3>
+          <div class="stamp a in">按来源证据生成的早报：哪些来源读到了、哪些没读到、冲突并列 · <a href="/api/opendigitalmate/page" target="_blank" rel="noopener">新窗口打开</a></div>
+          <iframe id="panelFrame" title="晨报面板" style="width:100%;height:calc(100vh - 170px);border:0;border-radius:18px;background:#fff;box-shadow:var(--shadow)"></iframe>
         </section>
 
         <!-- 设置 -->
@@ -1084,7 +1092,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const views = { today: $('v-today'), sources: $('v-sources'), settings: $('v-settings') };
+  const views = { today: $('v-today'), sources: $('v-sources'), panel: $('v-panel'), settings: $('v-settings') };
   
   // View navigation
   document.querySelectorAll('.nav[data-view]').forEach(nav => {
@@ -1094,6 +1102,7 @@
       nav.classList.add('on');
       Object.keys(views).forEach(k => views[k].classList.toggle('on', k === view));
       if (view === 'sources') loadSources();
+      if (view === 'panel') $('panelFrame').src = '/api/opendigitalmate/page?t=' + Date.now();
       if (view === 'settings') {
         checkConfig();
         loadLLMSettings();
@@ -2045,8 +2054,8 @@
     try {
       const res = await fetch('/api/config/check');
       const data = await res.json();
-      const status = $('configStatus');
-      const llmStatus = $('llmStatus');
+      const status = $('configStatus') || { innerHTML: '' };
+      const llmStatus = $('llmStatus') || { innerHTML: '' };
       
       if (data.configured) {
         status.innerHTML = '<span style="color:var(--green)">✓ 已配置</span>';
@@ -2060,8 +2069,8 @@
         llmStatus.innerHTML = '<span style="color:var(--red)">✗ 未配置（聊天功能受限）</span>';
       }
     } catch (err) {
-      $('configStatus').innerHTML = '<span style="color:var(--red)">检查失败</span>';
-      $('llmStatus').innerHTML = '<span style="color:var(--red)">检查失败</span>';
+      if ($('configStatus')) $('configStatus').innerHTML = '<span style="color:var(--red)">检查失败</span>';
+      if ($('llmStatus')) $('llmStatus').innerHTML = '<span style="color:var(--red)">检查失败</span>';
     }
   }
 

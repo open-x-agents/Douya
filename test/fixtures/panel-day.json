@@ -1,0 +1,290 @@
+{
+  "revision": 7,
+  "members": {
+    "m1": { "id": "m1", "name": "小王" },
+    "m2": { "id": "m2", "name": "小李" },
+    "m3": { "id": "m3", "name": "已经离职", "active": false }
+  },
+  "reports": {
+    "m1:2026-10-30": {
+      "date": "2026-10-30",
+      "memberId": "m1",
+      "memberName": "小王",
+      "schedule": [],
+      "events": [],
+      "done": ["把报价单数字核完"],
+      "plan": ["等张伟回复"],
+      "notes": "",
+      "stats": { "meetings": 3, "meetingMinutes": 180, "done": 1, "planned": 1 }
+    }
+  },
+  "sent": {},
+  "manual": [],
+  "deliveries": [],
+  "upcoming": [],
+  "days": {
+    "2026-10-30": {
+      "day": "2026-10-30",
+      "time_zone": "Asia/Shanghai",
+      "conclusion": "今天 3 个会，只有 1 件必须今天推完。",
+      "meeting_hours": 3,
+      "events": [
+        {
+          "id": "evt_1",
+          "kind": "thread",
+          "title": "报价单发给张伟",
+          "state": "open",
+          "due_at": "2026-10-30T02:00:00.000Z",
+          "due_kind": "hard",
+          "who": { "people": ["张伟"], "waiting_on": null },
+          "project": "quote",
+          "sources": [
+            {
+              "ref": "feishu_msg:chat/oc_demo/msg_2114",
+              "source": "feishu_msg",
+              "at": "2026-10-29T13:14:00.000Z",
+              "due_at": null,
+              "due_kind": null,
+              "amount": null,
+              "state": null,
+              "excerpt": "报价单今天能给吗？"
+            }
+          ],
+          "confidence": 0.95,
+          "maybe_same": [],
+          "defer": null
+        },
+        {
+          "id": "evt_2",
+          "kind": "meeting",
+          "title": "评审会材料定稿",
+          "state": "open",
+          "due_at": "2026-10-30T05:00:00.000Z",
+          "due_kind": "soft",
+          "who": { "people": ["小王"], "waiting_on": null },
+          "project": "review",
+          "sources": [
+            {
+              "ref": "gmail:thread/18f2c1a0",
+              "source": "gmail",
+              "at": "2026-10-29T07:02:00.000Z",
+              "due_at": null,
+              "due_kind": null,
+              "amount": null,
+              "state": null,
+              "excerpt": "评审会从 14:00 挪到 16:00"
+            },
+            {
+              "ref": "feishu_cal:event/mtg_3",
+              "source": "feishu_cal",
+              "at": "2026-10-29T10:02:00.000Z",
+              "due_at": "2026-10-30T08:00:00.000Z",
+              "due_kind": "hard",
+              "amount": null,
+              "state": null,
+              "excerpt": null
+            }
+          ],
+          "confidence": 0.95,
+          "maybe_same": [],
+          "defer": null
+        },
+        {
+          "id": "evt_3",
+          "kind": "thread",
+          "title": "回李静那封邮件",
+          "state": "open",
+          "due_at": "2026-10-30T04:00:00.000Z",
+          "due_kind": "soft",
+          "who": { "people": ["李静"], "waiting_on": null },
+          "project": "mail",
+          "sources": [
+            {
+              "ref": "gmail:thread/18f1be22",
+              "source": "gmail",
+              "at": "2026-10-28T06:30:00.000Z",
+              "due_at": null,
+              "due_kind": null,
+              "amount": null,
+              "state": null,
+              "excerpt": "方便的话今天回我一句"
+            }
+          ],
+          "confidence": 0.8,
+          "maybe_same": [],
+          "defer": null
+        },
+        {
+          "id": "evt_4",
+          "kind": "thread",
+          "title": "合同盖章",
+          "state": "waiting_other",
+          "due_at": null,
+          "due_kind": null,
+          "who": { "people": ["周敏"], "waiting_on": "周敏" },
+          "project": "contract",
+          "sources": [
+            {
+              "ref": "feishu_msg:chat/oc_demo/msg_2051",
+              "source": "feishu_msg",
+              "at": "2026-10-29T09:40:00.000Z",
+              "due_at": null,
+              "due_kind": null,
+              "amount": null,
+              "state": null,
+              "excerpt": "明天上午给你"
+            }
+          ],
+          "confidence": 0.8,
+          "maybe_same": [],
+          "defer": null
+        },
+        {
+          "id": "evt_5",
+          "kind": "thread",
+          "title": "张伟签字",
+          "state": "waiting_other",
+          "due_at": null,
+          "due_kind": null,
+          "who": { "people": ["张伟"], "waiting_on": "张伟" },
+          "project": "contract",
+          "sources": [
+            {
+              "ref": "feishu_msg:chat/oc_demo/msg_2114",
+              "source": "feishu_msg",
+              "at": "2026-10-29T13:14:00.000Z",
+              "due_at": null,
+              "due_kind": null,
+              "amount": null,
+              "state": null,
+              "excerpt": "收到报价单我就签"
+            }
+          ],
+          "confidence": 0.8,
+          "maybe_same": [],
+          "defer": null
+        },
+        {
+          "id": "evt_6",
+          "kind": "thread",
+          "title": "供应商比价表",
+          "state": "open",
+          "due_at": "2026-10-30T09:00:00.000Z",
+          "due_kind": "soft",
+          "who": { "people": ["小王"], "waiting_on": null },
+          "project": "quote",
+          "sources": [
+            {
+              "ref": "gmail:thread/18f2d3c0",
+              "source": "gmail",
+              "at": "2026-10-29T11:20:00.000Z",
+              "due_at": null,
+              "due_kind": null,
+              "amount": null,
+              "state": null,
+              "excerpt": "下周一才要，别今天排"
+            }
+          ],
+          "confidence": 0.8,
+          "maybe_same": [],
+          "defer": { "moved_to": "2026-11-02" }
+        },
+        {
+          "id": "evt_7",
+          "kind": "thread",
+          "title": "报价单回执归档",
+          "state": "closed",
+          "due_at": "2026-10-30T00:30:00.000Z",
+          "due_kind": "hard",
+          "who": { "people": ["张伟"], "waiting_on": null },
+          "project": "quote",
+          "sources": [
+            {
+              "ref": "feishu_msg:chat/oc_demo/msg_1620",
+              "source": "feishu_msg",
+              "at": "2026-10-30T00:22:00.000Z",
+              "due_at": null,
+              "due_kind": null,
+              "amount": null,
+              "state": null,
+              "excerpt": "数字能接受，明天上午签。"
+            }
+          ],
+          "confidence": 0.95,
+          "maybe_same": [],
+          "defer": null,
+          "closure": { "by": "张伟", "at": "2026-10-30T00:22:00.000Z", "evidence_ref": "feishu_msg:chat/oc_demo/msg_1620" }
+        },
+        {
+          "id": "evt_8",
+          "kind": "document",
+          "title": "会前材料发出",
+          "state": "closed",
+          "due_at": "2026-10-30T01:00:00.000Z",
+          "due_kind": "hard",
+          "who": { "people": ["小王"], "waiting_on": null },
+          "project": "review",
+          "sources": [
+            {
+              "ref": "gmail:thread/18f2c1a0",
+              "source": "gmail",
+              "at": "2026-10-30T00:55:00.000Z",
+              "due_at": null,
+              "due_kind": null,
+              "amount": null,
+              "state": null,
+              "excerpt": "材料已发，请查收"
+            }
+          ],
+          "confidence": 0.95,
+          "maybe_same": [],
+          "defer": null,
+          "closure": { "by": "panel", "at": "2026-10-30T00:55:00.000Z", "evidence_ref": "gmail:thread/18f2c1a0" }
+        }
+      ],
+      "materials": {}
+    }
+  },
+  "sources": {
+    "feishu_msg": {
+      "connected": true,
+      "last_read_at": "2026-10-30T00:42:00.000Z",
+      "detail": "214 条 · 3 个会话",
+      "error": null
+    },
+    "gmail": {
+      "connected": true,
+      "last_read_at": "2026-10-30T00:40:00.000Z",
+      "detail": "38 封 · 仅主题",
+      "error": null
+    },
+    "feishu_cal": {
+      "connected": true,
+      "last_read_at": "2026-10-30T00:42:00.000Z",
+      "detail": "12 个日程",
+      "error": null
+    },
+    "feishu_doc": {
+      "connected": false,
+      "last_read_at": null,
+      "detail": "没有接入",
+      "error": null
+    }
+  },
+  "week": [
+    { "day": "2026-10-24", "closed": 1, "dropped": 0 },
+    { "day": "2026-10-25", "closed": 0, "dropped": 1 },
+    { "day": "2026-10-26", "closed": 2, "dropped": 0 },
+    { "day": "2026-10-27", "closed": 1, "dropped": 1 },
+    { "day": "2026-10-28", "closed": 3, "dropped": 0 },
+    { "day": "2026-10-29", "closed": 2, "dropped": 1 }
+  ],
+  "expect": {
+    "open": 3,
+    "meeting_hours": 3,
+    "waiting": 2,
+    "closed": 2,
+    "dropped": 1,
+    "after_close": { "open": 2, "closed": 2, "dropped": 1, "waiting": 2 }
+  }
+}

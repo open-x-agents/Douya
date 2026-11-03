@@ -73,3 +73,13 @@ test('the card keeps the wall clock the member was given, not the UTC one', () =
   assert.equal(plan[0].startAt, '2026-10-30T01:30:00.000Z')
   assert.equal(plan[0].startLocal, '2026-10-30T09:30:00+08:00')
 })
+
+test('a finished meeting is not due, even through a snoozed copy', () => {
+  const plan = planFor(events, { now, leadMinutes: 10 })
+  const soon = plan.find(item => item.id === 'soon')
+  const pushed = snooze(soon, { now: at('2026-10-30T09:20:00Z'), minutes: 10 })
+  const all = [...plan, pushed]
+  // 没有 done 的时候，同一场会以自己的时刻和被推迟的时刻各出现一次 —— 这就是多发的来源。
+  assert.deepEqual(due(all, { now: at('2026-10-30T09:40:00Z') }).map(item => item.id), ['soon', 'soon'])
+  assert.deepEqual(due(all, { now: at('2026-10-30T09:40:00Z'), done: ['soon'] }), [])
+})

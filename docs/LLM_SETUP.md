@@ -99,13 +99,13 @@ The server checks for these in order:
 ## Files Changed
 
 ### New Files:
-- `src/host/llm-client.js` - LLM client with streaming
+- `src/web/llm-client.js` - LLM client with streaming
 - `docs/LLM_SETUP.md` - This guide
 
 ### Modified Files:
 - `src/client/index.html` - Added model config UI
-- `src/host/config-store.js` - LLM config storage
-- `src/host/api.js` - LLM config endpoints
+- `src/web/config-store.js` - LLM config storage
+- `src/web/api.js` - LLM config endpoints
 - `scripts/server.js` - LLM client initialization
 - `index.js` - Runtime LLM context wiring
 

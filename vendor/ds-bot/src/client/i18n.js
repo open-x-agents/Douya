@@ -1176,6 +1176,11 @@ const HOST_ZH = {
   'Nothing to cancel': '没有要取消的内容',
   'Nothing to close': '没有要关闭的内容',
   'DS Bot is still loading this chat.': 'DS Bot 还在加载这个对话。',
+  'Which line should this go on?': '这句话要接到哪一条工作线？',
+  'Replying to what you wrote earlier': '回复你更早的这句',
+  'That message was not a choice.': '这句话不是选项，卡片还在。',
+  Busy: '忙',
+  Idle: '空闲',
 }
 Object.assign(ZH, HOST_ZH)
 

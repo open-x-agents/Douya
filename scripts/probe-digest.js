@@ -7,8 +7,8 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { createComposioClient } from '../src/host/composio.js';
-import { runAggregationPipeline } from '../src/host/aggregation.js';
+import { createComposioClient } from '../src/web/composio.js';
+import { runAggregationPipeline } from '../src/web/aggregation.js';
 
 async function main() {
   console.log('=== Digest Pipeline Probe ===\n');
@@ -67,7 +67,7 @@ async function main() {
   
   // Create LLM client
   console.log('Creating LLM client...');
-  const { createLLMClient } = await import('../src/host/llm-client.js');
+  const { createLLMClient } = await import('../src/web/llm-client.js');
   const llm = createLLMClient({
     provider: config.llm.provider,
     baseURL: config.llm.baseURL,

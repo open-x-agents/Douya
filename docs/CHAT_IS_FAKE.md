@@ -10,7 +10,7 @@ Current `/api/chat` implementation is **fundamentally broken**:
 
 1. **Canned/Fallback Responses**:
    ```javascript
-   // src/host/api.js line ~550
+   // src/web/api.js line ~550
    if (!llmCtx?.llm) {
      return {
        text: '收到！我可以帮你管理任务...',  // ❌ FAKE
@@ -190,7 +190,7 @@ export const openDigitalMateAgent = defineAgent({
 
 #### 3. Wire Agent to /api/chat
 
-**Update `src/host/api.js` POST /api/chat**:
+**Update `src/web/api.js` POST /api/chat**:
 ```javascript
 async sendChatMessage(data) {
   const { message, sessionId = 'web-default' } = data;
@@ -428,7 +428,7 @@ npm run start:dsbot
 1. Read this document
 2. Create `src/host/agent-definition.js`
 3. Update `index.js` to register agent
-4. Update `src/host/api.js` POST /api/chat to use agent
+4. Update `src/web/api.js` POST /api/chat to use agent
 5. Remove all canned responses
 6. Test with real GitHub data
 7. Document startup for user

@@ -6,9 +6,11 @@
 
 import { createServer } from 'node:http';
 import { createRuntime } from '../index.js';
-import { mountApiRoutes } from '../src/host/api.js';
-import { createLLMClient, PROVIDERS } from '../src/host/llm-client.js';
-import { createComposioClient } from '../src/host/composio.js';
+import { mountApiRoutes } from '../src/web/api.js';
+import { createLLMClient, PROVIDERS } from '../src/web/llm-client.js';
+import { createComposioClient } from '../src/web/composio.js';
+import { installPanel } from '../src/host/panel.js';
+import { askQuestion, evidenceFromState } from '../src/host/ask.js';
 
 const PORT = process.env.PORT || process.argv[2] || 7777;
 
@@ -19,6 +21,8 @@ const config = {
   composioEntityId: process.env.COMPOSIO_ENTITY_ID,
   digestSchedule: process.env.DIGEST_SCHEDULE || '08:00',
   enableDigest: process.env.ENABLE_DIGEST !== 'false',
+  // Local zone of this machine (TZ wins), so the panel's day and clocks match the person's day.
+  timeZone: process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone,
   log: msg => console.log(`[ODM] ${msg}`),
 };
 
@@ -85,8 +89,29 @@ runtime.apiRouter = runtime.createApiRouter?.({
 // Create HTTP server
 const server = createServer();
 
+// Plugin routes from main (morning-brief panel JSON + page, evidence-first ask), collected through a
+// ds-bot-shaped ctx so the standalone server and the ds-bot plugin serve the same handlers.
+const extraRoutes = [];
+const routeCtx = { effect: fn => fn(), connection: { fetch: { register: r => { extraRoutes.push(r); return () => {}; } } } };
+installPanel(routeCtx, runtime);
+extraRoutes.push({
+  path: '/api/ask',
+  methods: ['POST'],
+  fetch: async request => {
+    const { text } = await request.json().catch(() => ({}));
+    const state = runtime.store.get();
+    const base = evidenceFromState(state);
+    // Today's cards are evidence too: each card's link is its ref, its body the excerpt.
+    const cardSources = (state.cards || []).filter(c => c.url && c.source !== 'system').map(c => ({
+      ref: c.url, source: c.source, title: c.title || '', excerpt: String(c.body || c.title || '').slice(0, 400), at: c.updatedAt || '', read_scope: 'card',
+    }));
+    const result = await askQuestion({ text, sources: [...base.sources, ...cardSources], unread: base.unread });
+    return new Response(JSON.stringify(result), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } });
+  },
+});
+
 // Mount API routes
-mountApiRoutes(server, runtime.apiRouter);
+mountApiRoutes(server, runtime.apiRouter, { extraRoutes });
 
 server.listen(PORT, () => {
   console.log(`✅ Server running at http://localhost:${PORT}`);

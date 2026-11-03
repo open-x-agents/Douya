@@ -1,0 +1,295 @@
+{
+  "timezone": "Asia/Shanghai",
+  "note": "One base event set, five scenario pages. Every scenario lists event ids from base_events; no scenario carries its own copy of an event.",
+  "base_events": [
+    {
+      "id": "evt_moved_meeting",
+      "kind": "meeting",
+      "title": "周会评审",
+      "state": "open",
+      "due_at": "2026-10-30T07:30:00Z",
+      "due_kind": "meeting",
+      "moved_from": { "at": "11:00", "to": "15:30" },
+      "who": { "people": ["小林", "Peter"], "waiting_on": null },
+      "project": "季度交付",
+      "sources": [
+        {
+          "ref": "gmail:thread/9",
+          "source": "gmail",
+          "at": "2026-10-30T06:40:00Z",
+          "due_at": "2026-10-30T07:30:00Z",
+          "due_kind": "meeting",
+          "amount": null,
+          "state": "open",
+          "excerpt": "评审会改到 15:30，会议室 B。"
+        },
+        {
+          "ref": "feishu_cal:event/77",
+          "source": "feishu_cal",
+          "at": "2026-10-30T06:41:00Z",
+          "due_at": "2026-10-30T07:30:00Z",
+          "due_kind": "meeting",
+          "amount": null,
+          "state": "open",
+          "excerpt": "评审会改到 15:30，会议室 B。"
+        }
+      ],
+      "confidence": 0.95,
+      "maybe_same": []
+    },
+    {
+      "id": "evt_report_doc",
+      "kind": "document",
+      "title": "周报初稿",
+      "state": "open",
+      "due_at": "2026-10-30T10:00:00Z",
+      "due_kind": "deadline",
+      "who": { "people": ["小林"], "waiting_on": null },
+      "project": "季度交付",
+      "action": { "kind": "open_doc", "label": "打开文档" },
+      "sources": [
+        {
+          "ref": "feishu_doc:doxcnWeekly",
+          "source": "feishu_doc",
+          "at": "2026-10-30T02:00:00Z",
+          "due_at": "2026-10-30T10:00:00Z",
+          "due_kind": "deadline",
+          "amount": null,
+          "state": "open",
+          "excerpt": "周报初稿，还差数据段。"
+        }
+      ],
+      "confidence": 0.95,
+      "maybe_same": []
+    },
+    {
+      "id": "evt_waiting_review",
+      "kind": "thread",
+      "title": "等 Peter 回接口确认",
+      "state": "waiting_other",
+      "due_at": "2026-10-30T09:00:00Z",
+      "due_kind": "reply",
+      "who": { "people": ["Peter"], "waiting_on": "Peter" },
+      "project": "季度交付",
+      "sources": [
+        {
+          "ref": "feishu_msg:om_abc123",
+          "source": "feishu_msg",
+          "at": "2026-10-30T01:10:00Z",
+          "due_at": "2026-10-30T09:00:00Z",
+          "due_kind": "reply",
+          "amount": null,
+          "state": "waiting_other",
+          "excerpt": "Peter：接口字段我明天中午前给你。"
+        }
+      ],
+      "confidence": 0.5,
+      "maybe_same": []
+    },
+    {
+      "id": "evt_closed_budget",
+      "kind": "thread",
+      "title": "预算表已经签字",
+      "state": "closed",
+      "due_at": "2026-10-30T02:00:00Z",
+      "due_kind": "internal",
+      "who": { "people": ["王会计"], "waiting_on": null },
+      "project": "季度交付",
+      "sources": [
+        {
+          "ref": "gmail:thread/12",
+          "source": "gmail",
+          "at": "2026-10-30T02:00:00Z",
+          "due_at": "2026-10-30T02:00:00Z",
+          "due_kind": "internal",
+          "amount": null,
+          "state": "closed",
+          "excerpt": "王会计：预算表已签字，附件为准。"
+        }
+      ],
+      "confidence": 0.95,
+      "maybe_same": []
+    },
+    {
+      "id": "evt_github_pr",
+      "kind": "thread",
+      "title": "PR #42 待合并",
+      "state": "open",
+      "due_at": "2026-10-31T02:00:00Z",
+      "due_kind": "review",
+      "who": { "people": ["小林"], "waiting_on": null },
+      "project": "季度交付",
+      "sources": [
+        {
+          "ref": "github:pr/42",
+          "source": "github",
+          "at": "2026-10-30T05:00:00Z",
+          "due_at": "2026-10-31T02:00:00Z",
+          "due_kind": "review",
+          "amount": null,
+          "state": "open",
+          "excerpt": "PR #42：tests 绿，等合入。"
+        }
+      ],
+      "confidence": 0.95,
+      "maybe_same": []
+    },
+    {
+      "id": "evt_closed_sync",
+      "kind": "meeting",
+      "title": "早会",
+      "state": "closed",
+      "due_at": "2026-10-30T01:00:00Z",
+      "due_kind": "meeting",
+      "who": { "people": ["小林", "Peter"], "waiting_on": null },
+      "project": "季度交付",
+      "sources": [
+        {
+          "ref": "gcal:event/88",
+          "source": "gcal",
+          "at": "2026-10-30T01:00:00Z",
+          "due_at": "2026-10-30T01:00:00Z",
+          "due_kind": "meeting",
+          "amount": null,
+          "state": "closed",
+          "excerpt": "早会开过了，纪要已发。"
+        }
+      ],
+      "confidence": 0.95,
+      "maybe_same": []
+    },
+    {
+      "id": "evt_open_thread",
+      "kind": "thread",
+      "title": "飞书群里的三条待办",
+      "state": "open",
+      "due_at": "2026-10-30T06:00:00Z",
+      "due_kind": "internal",
+      "who": { "people": ["小林"], "waiting_on": null },
+      "project": "季度交付",
+      "sources": [
+        {
+          "ref": "feishu_msg:om_def456",
+          "source": "feishu_msg",
+          "at": "2026-10-30T03:30:00Z",
+          "due_at": "2026-10-30T06:00:00Z",
+          "due_kind": "internal",
+          "amount": null,
+          "state": "open",
+          "excerpt": "群里定了三条待办，第一条今天给。"
+        }
+      ],
+      "confidence": 0.5,
+      "maybe_same": []
+    },
+    {
+      "id": "evt_defer_doc",
+      "kind": "document",
+      "title": "把方案推到下周",
+      "state": "open",
+      "due_at": "2026-10-30T08:00:00Z",
+      "due_kind": "deadline",
+      "defer": "2026-11-06",
+      "who": { "people": ["小林"], "waiting_on": null },
+      "project": "季度交付",
+      "sources": [
+        {
+          "ref": "gmail:thread/15",
+          "source": "gmail",
+          "at": "2026-10-30T04:00:00Z",
+          "due_at": "2026-10-30T08:00:00Z",
+          "due_kind": "deadline",
+          "amount": null,
+          "state": "open",
+          "excerpt": "方案改到下周五，先不动。"
+        }
+      ],
+      "confidence": 0.95,
+      "maybe_same": []
+    }
+  ],
+  "scenarios": {
+    "normal": {
+      "date": "2026-10-30",
+      "has_baseline": true,
+      "event_ids": ["evt_moved_meeting", "evt_report_doc", "evt_waiting_review"],
+      "next_first": { "title": "PR #42 待合并", "due_at": "2026-10-31T02:00:00Z" },
+      "prefs": {},
+      "sources": {
+        "gcal": { "connected": true, "last_read_at": "2026-10-30T00:10:00Z", "last_error": null },
+        "gmail": { "connected": true, "last_read_at": "2026-10-30T00:12:00Z", "last_error": null },
+        "feishu_doc": { "connected": true, "last_read_at": "2026-10-30T00:14:00Z", "last_error": null },
+        "feishu_cal": { "connected": true, "last_read_at": "2026-10-30T00:11:00Z", "last_error": null },
+        "feishu_msg": { "connected": true, "last_read_at": "2026-10-30T00:13:00Z", "last_error": null },
+        "github": { "connected": true, "last_read_at": "2026-10-30T00:15:00Z", "last_error": null }
+      }
+    },
+    "empty": {
+      "date": "2026-10-30",
+      "has_baseline": true,
+      "event_ids": [],
+      "next_first": { "title": "PR #42 待合并", "due_at": "2026-10-31T02:00:00Z" },
+      "prefs": {},
+      "sources": {
+        "gcal": { "connected": true, "last_read_at": "2026-10-30T00:10:00Z", "last_error": null },
+        "gmail": { "connected": true, "last_read_at": "2026-10-30T00:12:00Z", "last_error": null },
+        "feishu_doc": { "connected": true, "last_read_at": "2026-10-30T00:14:00Z", "last_error": null },
+        "feishu_cal": { "connected": true, "last_read_at": "2026-10-30T00:11:00Z", "last_error": null },
+        "feishu_msg": { "connected": true, "last_read_at": "2026-10-30T00:13:00Z", "last_error": null },
+        "github": { "connected": true, "last_read_at": "2026-10-30T00:15:00Z", "last_error": null }
+      }
+    },
+    "srcless": {
+      "date": "2026-10-30",
+      "has_baseline": true,
+      "event_ids": ["evt_moved_meeting", "evt_report_doc", "evt_waiting_review"],
+      "next_first": { "title": "PR #42 待合并", "due_at": "2026-10-31T02:00:00Z" },
+      "prefs": {},
+      "sources": {
+        "gcal": { "connected": true, "last_read_at": "2026-10-30T00:10:00Z", "last_error": null },
+        "gmail": { "connected": true, "last_read_at": "2026-10-30T00:12:00Z", "last_error": null },
+        "feishu_doc": { "connected": true, "last_read_at": "2026-10-30T00:14:00Z", "last_error": null },
+        "feishu_cal": { "connected": false, "last_read_at": null, "last_error": null },
+        "feishu_msg": { "connected": true, "last_read_at": "2026-10-30T00:13:00Z", "last_error": null },
+        "github": { "connected": true, "last_read_at": "2026-10-30T00:15:00Z", "last_error": null }
+      }
+    },
+    "partial": {
+      "date": "2026-10-30",
+      "has_baseline": true,
+      "event_ids": ["evt_moved_meeting", "evt_report_doc", "evt_waiting_review"],
+      "next_first": { "title": "PR #42 待合并", "due_at": "2026-10-31T02:00:00Z" },
+      "prefs": {},
+      "sources": {
+        "gcal": { "connected": true, "last_read_at": "2026-10-30T00:10:00Z", "last_error": null },
+        "gmail": { "connected": true, "last_read_at": "2026-10-30T00:12:00Z", "last_error": null },
+        "feishu_doc": { "connected": true, "last_read_at": "2026-10-30T00:14:00Z", "last_error": null },
+        "feishu_cal": { "connected": true, "last_read_at": "2026-10-30T00:11:00Z", "last_error": null },
+        "feishu_msg": { "connected": true, "last_read_at": "2026-10-30T00:13:00Z", "last_error": "timeout after 20s" },
+        "github": { "connected": true, "last_read_at": "2026-10-30T00:15:00Z", "last_error": null }
+      }
+    },
+    "weekend": {
+      "date": "2026-10-31",
+      "has_baseline": true,
+      "event_ids": [],
+      "next_first": { "title": "PR #42 待合并", "due_at": "2026-11-02T02:00:00Z" },
+      "prefs": { "weekend_send": false },
+      "sources": {
+        "gcal": { "connected": true, "last_read_at": "2026-10-31T00:10:00Z", "last_error": null },
+        "gmail": { "connected": true, "last_read_at": "2026-10-31T00:12:00Z", "last_error": null },
+        "feishu_doc": { "connected": true, "last_read_at": "2026-10-31T00:14:00Z", "last_error": null },
+        "feishu_cal": { "connected": true, "last_read_at": "2026-10-31T00:11:00Z", "last_error": null },
+        "feishu_msg": { "connected": true, "last_read_at": "2026-10-31T00:13:00Z", "last_error": null },
+        "github": { "connected": true, "last_read_at": "2026-10-31T00:15:00Z", "last_error": null }
+      }
+    }
+  },
+  "brevity": {
+    "before_day": "2026-10-29",
+    "after_day": "2026-10-30",
+    "since_day": "2026-10-30",
+    "event_ids": ["evt_moved_meeting", "evt_report_doc", "evt_waiting_review"],
+    "prefs": { "brevity": { "level": "short", "since_day": "2026-10-30" } }
+  }
+}

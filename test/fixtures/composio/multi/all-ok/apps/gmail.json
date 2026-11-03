@@ -1,0 +1,79 @@
+{
+  "toolkit": "gmail",
+  "routes": [
+    {
+      "kind": "proxyGet",
+      "pattern": "^/gmail/v1/users/me/threads/t1\\?format=metadata",
+      "body": {
+        "id": "t1",
+        "messages": [
+          {
+            "id": "m1",
+            "threadId": "t1",
+            "payload": {
+              "mimeType": "text/plain",
+              "headers": [
+                { "name": "From", "value": "李娜 <lina@example.com>" },
+                { "name": "To", "value": "我 <me@example.com>" },
+                { "name": "Subject", "value": "产品评审会" },
+                { "name": "Date", "value": "Fri, 31 Oct 2025 15:30:00 +0800" },
+                { "name": "Message-ID", "value": "<t1@example.com>" }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "proxyGet",
+      "pattern": "^/gmail/v1/users/me/threads/t2\\?format=metadata",
+      "body": {
+        "id": "t2",
+        "messages": [
+          {
+            "id": "m2",
+            "threadId": "t2",
+            "payload": {
+              "mimeType": "text/plain",
+              "headers": [
+                { "name": "From", "value": "王强 <wang@example.com>" },
+                { "name": "To", "value": "我 <me@example.com>" },
+                { "name": "Subject", "value": "季度预算对一下" },
+                { "name": "Date", "value": "Thu, 30 Oct 2025 10:05:00 +0800" },
+                { "name": "Message-ID", "value": "<t2@example.com>" }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "proxyGet",
+      "pattern": "^/gmail/v1/users/me/threads/t3\\?format=metadata",
+      "body": {
+        "id": "t3",
+        "messages": [
+          {
+            "id": "m3",
+            "threadId": "t3",
+            "payload": {
+              "mimeType": "text/plain",
+              "headers": [
+                { "name": "From", "value": "赵敏 <zhao@example.com>" },
+                { "name": "To", "value": "我 <me@example.com>" },
+                { "name": "Subject", "value": "下周一上线检查" },
+                { "name": "Date", "value": "Wed, 29 Oct 2025 09:20:00 +0800" },
+                { "name": "Message-ID", "value": "<t3@example.com>" }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "proxyGet",
+      "pattern": "^/gmail/v1/users/me/threads\\?",
+      "body": { "threads": [{ "id": "t1" }, { "id": "t2" }, { "id": "t3" }], "nextPageToken": null }
+    }
+  ]
+}

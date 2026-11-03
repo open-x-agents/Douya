@@ -4,7 +4,7 @@
  * Tests the auth_config lookup/filter fix for Calendar OAuth issue
  */
 
-import { createComposioClient } from '../src/host/composio.js';
+import { createComposioClient } from '../src/web/composio.js';
 
 const COMPOSIO_API_KEY = process.env.COMPOSIO_API_KEY;
 

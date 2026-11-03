@@ -7,8 +7,8 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { createServer } from 'node:http';
 import { createRuntime } from '../index.js';
-import { mountApiRoutes } from '../src/host/api.js';
-import { createLLMClient } from '../src/host/llm-client.js';
+import { mountApiRoutes } from '../src/web/api.js';
+import { createLLMClient } from '../src/web/llm-client.js';
 
 // Extract all fetch() URLs from index.html
 const EXPECTED_ROUTES = [

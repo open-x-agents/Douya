@@ -15,7 +15,7 @@
 
 ## ✅ 已完成的工作
 
-### 1. 創建 Composio 工具集 (`src/host/agent-tools.js`)
+### 1. 創建 Composio 工具集 (`src/web/agent-tools.js`)
 
 **5 個真實工具，每個包裝 Composio v3 API：**
 
@@ -147,19 +147,19 @@ async function callLLMWithTools(llm, messages, tools, sessionId) {
 **刪除的假回复（代碼行數）：**
 
 ```diff
-- // src/host/api.js line 309-318
+- // src/web/api.js line 309-318
 - return {
 -   text: '我暫時沒有想法，您可以換個問法試試',
 -   cards: [{type: 'action', title: '換個方式問', ...}]
 - };
 
-- // src/host/api.js line 371-380
+- // src/web/api.js line 371-380
 - return {
 -   text: '我暫時沒有想法，您可以換個問法試試',
 -   cards: [{type: 'action', title: '換個方式問', ...}]
 - };
 
-- // src/host/api.js line 348-359
+- // src/web/api.js line 348-359
 - return {
 -   text: '模型未配置',
 -   cards: [{type: 'action', title: '配置模型', ...}]
@@ -385,15 +385,15 @@ $ grep -r "我暫時沒有想法" src/
 $ grep -r "換個方式問" src/
 # → 無結果 ✅
 
-$ grep -r "快速操作" src/host/api.js
+$ grep -r "快速操作" src/web/api.js
 # → 無結果 ✅
 
 # 工具定義
-$ grep -c "async execute" src/host/agent-tools.js
+$ grep -c "async execute" src/web/agent-tools.js
 5  # → 5 個工具 ✅
 
 # 系統提示包含工具調用協議
-$ grep "tool_calls" src/host/agent-tools.js
+$ grep "tool_calls" src/web/agent-tools.js
 # → 找到多處 ✅
 ```
 
@@ -433,10 +433,10 @@ npm start
 ## 📦 提交記錄
 
 ### Commit 1: `7be6b19` - feat: integrate Composio tools with function calling in chat
-- 創建 `src/host/agent-tools.js`
+- 創建 `src/web/agent-tools.js`
   - `createComposioTools(composioClient)` - 5 個工具
   - `AGENT_SYSTEM_PROMPT` - 工具調用系統提示
-- 重寫 `src/host/api.js`
+- 重寫 `src/web/api.js`
   - `callLLM()` 支持 `composioClient` 參數
   - 新增 `callLLMWithTools()` 多輪工具調用循環
   - `sendChatMessage()` 傳遞 `composioClient`
@@ -527,7 +527,7 @@ plugins:
 
 ### 代碼修改
 - **新增文件：** 4 個（`agent-tools.js` + 3 份文檔）
-- **修改文件：** 1 個（`src/host/api.js`）
+- **修改文件：** 1 個（`src/web/api.js`）
 - **新增代碼：** +1,471 行
 - **刪除代碼：** -112 行（主要是罐頭回复）
 - **淨增：** +1,359 行

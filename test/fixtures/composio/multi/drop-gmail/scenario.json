@@ -1,0 +1,13 @@
+{
+  "name": "drop-gmail",
+  "userId": "flybot-01",
+  "since": "2025-10-30T00:00:00.000Z",
+  "now": "2025-11-01T09:00:00.000Z",
+  "appsDir": "../all-ok/apps",
+  "config": { "notion": { "rootId": "blk-root" } },
+  "accounts": [
+    { "id": "ca-gcal-1", "toolkit": { "slug": "googlecalendar" }, "user_id": "flybot-01", "status": "ACTIVE" },
+    { "id": "ca-notion-1", "toolkit": { "slug": "notion" }, "user_id": "flybot-01", "status": "ACTIVE" },
+    { "id": "ca-slack-1", "toolkit": { "slug": "slack" }, "user_id": "flybot-01", "status": "ACTIVE" }
+  ]
+}

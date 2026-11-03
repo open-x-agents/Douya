@@ -19,7 +19,7 @@ return {
 
 **修復：** 刪除重複塊
 ```bash
-$ node --check src/host/api.js
+$ node --check src/web/api.js
 ✅ Syntax OK
 ```
 
@@ -298,7 +298,7 @@ curl -s "http://localhost:7777/composio-callback?status=success&connected_accoun
 
 **應該返回：** HTML 頁面顯示成功 + 自動關閉窗口
 
-**如果 404：** 需要在 `src/host/api.js` 添加路由
+**如果 404：** 需要在 `src/web/api.js` 添加路由
 
 ---
 
@@ -309,7 +309,7 @@ curl -s "http://localhost:7777/composio-callback?status=success&connected_accoun
 - 終端日志：`[Composio] Getting auth config for: googlecalendar`
 - OAuth URL：應該是 `https://connect.composio.dev/...` 並重定向到 Google（不是 GitHub）
 
-**如果錯誤：** `src/host/composio.js` 的 `getAuthConfig()` 需要過濾 `item.toolkit?.slug === toolkitSlug`
+**如果錯誤：** `src/web/composio.js` 的 `getAuthConfig()` 需要過濾 `item.toolkit?.slug === toolkitSlug`
 
 ---
 
@@ -381,12 +381,12 @@ chmod +x quick-test.sh
 **推送:** ✅ 已推送到 origin
 
 **變更文件：**
-- `src/host/api.js` (+57, -66)
-- `src/host/composio.js` (+1, -1)
+- `src/web/api.js` (+57, -66)
+- `src/web/composio.js` (+1, -1)
 
 **驗證：**
 ```bash
-$ node --check src/host/api.js
+$ node --check src/web/api.js
 ✅ Syntax OK
 
 $ npm start

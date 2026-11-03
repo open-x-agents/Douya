@@ -1,0 +1,112 @@
+{
+  "note": "脱敏的假服务器回放表，取自 2026-10-31T12:15Z 的真探测：只保留 id / status / user_id / toolkit slug，没有 key、没有 token、没有邮箱、没有正文。这里特意保留两条行为：复数参数 toolkit_slugs+user_ids 回 5 条；单数参数 toolkit_slug 被服务端静默忽略、回全部 30 条。",
+  "at": "2026-10-31T12:15:56.454Z",
+  "routes": [
+    {
+      "name": "tools-gmail",
+      "method": "GET",
+      "path": "/tools",
+      "match": { "toolkit_slug": "gmail" },
+      "status": 200,
+      "body": {
+        "items": [
+          { "slug": "GMAIL_FETCH_EMAILS", "tags": ["readOnlyHint"], "is_deprecated": false },
+          { "slug": "GMAIL_GET_PROFILE", "tags": ["readOnlyHint"], "is_deprecated": false }
+        ],
+        "next_cursor": null
+      }
+    },
+    {
+      "name": "tools-rate-limited",
+      "method": "GET",
+      "path": "/tools",
+      "match": { "toolkit_slug": "limited" },
+      "status": 429,
+      "headers": { "retry-after": "2" },
+      "body": { "message": "rate limited" }
+    },
+    {
+      "name": "accounts-plural-toolkit-and-user",
+      "method": "GET",
+      "path": "/connected_accounts",
+      "match": { "toolkit_slugs": "gmail", "user_ids": "default" },
+      "status": 200,
+      "body": {
+        "items": [
+          { "id": "ca_gmail_default_1", "status": "ACTIVE", "user_id": "default", "toolkit": { "slug": "gmail" } },
+          { "id": "ca_gmail_default_2", "status": "EXPIRED", "user_id": "default", "toolkit": { "slug": "gmail" } },
+          { "id": "ca_slack_default_1", "status": "ACTIVE", "user_id": "default", "toolkit": { "slug": "slack" } },
+          { "id": "ca_gcal_default_1", "status": "EXPIRED", "user_id": "default", "toolkit": { "slug": "googlecalendar" } },
+          { "id": "ca_notion_default_1", "status": "EXPIRED", "user_id": "default", "toolkit": { "slug": "notion" } }
+        ],
+        "next_cursor": null
+      }
+    },
+    {
+      "name": "accounts-singular-silently-ignored",
+      "method": "GET",
+      "path": "/connected_accounts",
+      "match": { "toolkit_slug": "gmail" },
+      "status": 200,
+      "body": {
+        "items": [
+          { "id": "ca_all_01", "status": "ACTIVE", "user_id": "default", "toolkit": { "slug": "gmail" } },
+          { "id": "ca_all_02", "status": "EXPIRED", "user_id": "default", "toolkit": { "slug": "gmail" } },
+          { "id": "ca_all_03", "status": "ACTIVE", "user_id": "flybot-7743", "toolkit": { "slug": "gmail" } },
+          { "id": "ca_all_04", "status": "ACTIVE", "user_id": "flybot-187b", "toolkit": { "slug": "gmail" } },
+          { "id": "ca_all_05", "status": "EXPIRED", "user_id": "flybot-187b", "toolkit": { "slug": "gmail" } },
+          { "id": "ca_all_06", "status": "ACTIVE", "user_id": "default", "toolkit": { "slug": "slack" } },
+          { "id": "ca_all_07", "status": "ACTIVE", "user_id": "flybot-187b", "toolkit": { "slug": "slack" } },
+          { "id": "ca_all_08", "status": "EXPIRED", "user_id": "default", "toolkit": { "slug": "slack" } },
+          { "id": "ca_all_09", "status": "EXPIRED", "user_id": "flybot-7743", "toolkit": { "slug": "notion" } },
+          { "id": "ca_all_10", "status": "EXPIRED", "user_id": "default", "toolkit": { "slug": "googlecalendar" } },
+          { "id": "ca_all_11", "status": "EXPIRED", "user_id": "flybot-187b", "toolkit": { "slug": "googlecalendar" } },
+          { "id": "ca_all_12", "status": "INITIALIZING", "user_id": "default", "toolkit": { "slug": "notion" } },
+          { "id": "ca_all_13", "status": "ACTIVE", "user_id": "default", "toolkit": { "slug": "googledrive" } },
+          { "id": "ca_all_14", "status": "EXPIRED", "user_id": "default", "toolkit": { "slug": "googledrive" } },
+          { "id": "ca_all_15", "status": "ACTIVE", "user_id": "flybot-7743", "toolkit": { "slug": "slack" } },
+          { "id": "ca_all_16", "status": "EXPIRED", "user_id": "flybot-7743", "toolkit": { "slug": "googledrive" } },
+          { "id": "ca_all_17", "status": "EXPIRED", "user_id": "flybot-187b", "toolkit": { "slug": "gmail" } },
+          { "id": "ca_all_18", "status": "EXPIRED", "user_id": "default", "toolkit": { "slug": "linear" } },
+          { "id": "ca_all_19", "status": "ACTIVE", "user_id": "default", "toolkit": { "slug": "googledrive" } },
+          { "id": "ca_all_20", "status": "FAILED", "user_id": "default", "toolkit": { "slug": "linear" } },
+          { "id": "ca_all_21", "status": "EXPIRED", "user_id": "flybot-7743", "toolkit": { "slug": "slack" } },
+          { "id": "ca_all_22", "status": "EXPIRED", "user_id": "default", "toolkit": { "slug": "gmail" } },
+          { "id": "ca_all_23", "status": "ACTIVE", "user_id": "default", "toolkit": { "slug": "gmail" } },
+          { "id": "ca_all_24", "status": "EXPIRED", "user_id": "flybot-187b", "toolkit": { "slug": "notion" } },
+          { "id": "ca_all_25", "status": "ACTIVE", "user_id": "default", "toolkit": { "slug": "slack" } },
+          { "id": "ca_all_26", "status": "EXPIRED", "user_id": "default", "toolkit": { "slug": "googlecalendar" } },
+          { "id": "ca_all_27", "status": "EXPIRED", "user_id": "flybot-7743", "toolkit": { "slug": "googlecalendar" } },
+          { "id": "ca_all_28", "status": "ACTIVE", "user_id": "default", "toolkit": { "slug": "googledrive" } },
+          { "id": "ca_all_29", "status": "EXPIRED", "user_id": "flybot-187b", "toolkit": { "slug": "slack" } },
+          { "id": "ca_all_30", "status": "EXPIRED", "user_id": "default", "toolkit": { "slug": "notion" } }
+        ],
+        "next_cursor": null
+      }
+    },
+    {
+      "name": "proxy-gmail-profile",
+      "method": "POST",
+      "path": "/tools/execute/proxy",
+      "match": {},
+      "status": 200,
+      "body": {
+        "data": { "messagesTotal": 3, "threadsTotal": 3 },
+        "status": 200,
+        "headers": {}
+      }
+    },
+    {
+      "name": "execute-gmail-fetch",
+      "method": "POST",
+      "path": "/tools/execute/GMAIL_FETCH_EMAILS",
+      "match": {},
+      "status": 200,
+      "body": {
+        "data": { "messages": [] },
+        "successful": true,
+        "error": null
+      }
+    }
+  ]
+}

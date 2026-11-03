@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generateDailyDigest, getSourcesStatus, pushDailyDigest, createComposioClient } from './composio.js';
-import { reminderCard } from './cards.js';
+import { reminderCard } from '../host/cards.js';
 import { createProfileManager } from './profile.js';
 import { resolveDisplayName, lastGithubIdentity } from './aggregation.js';
 
@@ -381,6 +381,7 @@ async function callLLMWithTools(llm, messages, tools, sessionId) {
     [/邮件|邮箱|inbox|e-?mail|gmail/i, 'gmail_fetch_emails', {}],
     [/\bPR\b|pull request|合并请求|review/i, 'github_search_my_prs', {}],
     [/\bissue/i, 'github_list_my_issues', {}],
+    [/slack|频道|私信|channel/i, 'slack_search_messages', {}],
   ];
   const pre = [];
   for (const [re, name, args] of intents) {
@@ -1506,7 +1507,7 @@ export function createApiRouter(ctx) {
 /**
  * Mount API routes to HTTP server
  */
-export function mountApiRoutes(server, router) {
+export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
   if (!server || !server.on) {
     console.warn('No HTTP server provided, API routes not mounted');
     return;
@@ -1523,6 +1524,25 @@ export function mountApiRoutes(server, router) {
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
       res.end();
+      return;
+    }
+
+    // Routes registered the ds-bot way ({ path, methods, fetch(Request) => Response }), e.g. main's
+    // morning-brief panel. Served first so the standalone server exposes the same plugin routes.
+    const extra = extraRoutes.find(r => r.path === url.pathname && (!r.methods || r.methods.includes(req.method)));
+    if (extra) {
+      try {
+        const chunks = [];
+        for await (const c of req) chunks.push(c);
+        const body = chunks.length ? Buffer.concat(chunks) : undefined;
+        const request = new Request(url.href, { method: req.method, headers: req.headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : body });
+        const response = await extra.fetch(request);
+        res.writeHead(response.status, Object.fromEntries(response.headers.entries()));
+        res.end(Buffer.from(await response.arrayBuffer()));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
       return;
     }
 

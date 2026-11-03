@@ -199,6 +199,46 @@ export function createComposioTools(composioClient) {
     },
 
     {
+      name: 'slack_search_messages',
+      description: '搜索最近的 Slack 消息（默认最近 2 天），按频道/私信预聚合',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Slack 搜索语法，例如 after:2026-01-01、in:#general、from:@someone' },
+          days: { type: 'number', description: '回看天数（query 为空时使用）', default: 2 },
+        },
+      },
+      async execute({ query, days = 2 } = {}) {
+        try {
+          const since = new Date(Date.now() - Math.max(1, Number(days) || 2) * 86400000).toISOString().split('T')[0]
+          const result = await composioClient.executeAction('SLACK_SEARCH_MESSAGES', { query: query || `after:${since}`, count: 100, sort: 'timestamp' })
+          const matches = result.data?.messages?.matches || []
+          const byChan = new Map()
+          for (const m of matches) {
+            const ch = m.channel || {}
+            const key = ch.id || 'unknown'
+            if (!byChan.has(key)) byChan.set(key, { ch, items: [] })
+            byChan.get(key).items.push(m)
+          }
+          const groups = [...byChan.values()].sort((a, b) => b.items.length - a.items.length).map(({ ch, items }) => {
+            const isDm = !!(ch.is_im || ch.is_mpim)
+            const people = [...new Set(items.map(m => m.username || m.user).filter(Boolean))]
+            return {
+              key: `slack:${ch.id}`, label: isDm ? `私信 · ${people[0] || ''}` : `#${ch.name || ch.id}`, icon: 'slack',
+              count: items.length, waiting: isDm,
+              why: `${items.length} 条消息${people.length ? `，来自 ${people.slice(0, 3).join('、')}` : ''}`,
+              nextAction: isDm ? '回复这条私信' : '打开频道看最新讨论',
+              links: items.slice(0, 3).map(m => ({ title: String(m.text || '').replace(/\s+/g, ' ').slice(0, 80), url: m.permalink })),
+            }
+          })
+          return { count: matches.length, groups, sample: matches.slice(0, 8).map(m => ({ channel: m.channel?.name, user: m.username, text: String(m.text || '').slice(0, 120) })) }
+        } catch (error) {
+          return { error: error.message, groups: [], count: 0 }
+        }
+      },
+    },
+
+    {
       name: 'calendar_list_events',
       description: '获取 Google Calendar 事件',
       inputSchema: {
@@ -268,6 +308,7 @@ export const AGENT_SYSTEM_PROMPT = `你是「豆芽」（Open Digital Mate），
 - 管理任务和日程
 - 监控 GitHub（仓库、PR、Issue）
 - 查收 Gmail 邮件
+- 查看 Slack 频道与私信
 - 提醒 Google Calendar 事件
 
 ## 可用工具
@@ -285,7 +326,10 @@ export const AGENT_SYSTEM_PROMPT = `你是「豆芽」（Open Digital Mate），
 4. **gmail_fetch_emails** - 获取最近的邮件（默认 40 封、newer_than:2d，系统已预先聚合为 groups）
    参数: { max_results?: number(30-50), query?: string }
    
-5. **calendar_list_events** - 获取日历事件
+5. **slack_search_messages** - 搜索最近的 Slack 消息（已按频道/私信预聚合为 groups）
+   参数: { query?: string, days?: number }
+
+6. **calendar_list_events** - 获取日历事件
    参数: { timeMin?: string, timeMax?: string, maxResults?: number }
 
 ## 工具调用协议

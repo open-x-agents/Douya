@@ -933,6 +933,8 @@
   .gc-links a{font-size:12px;color:var(--ink2);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:3px 0}
   .gc-links a::before{content:"↗ ";color:var(--ink3)}
   .gc-links a:hover{color:var(--ink)}
+  .w-senders{display:flex;flex-wrap:wrap;gap:6px;margin:-2px 0 8px}
+  .w-senders span{font-size:11.5px;color:var(--ink3);background:#eef0f4;border-radius:999px;padding:2px 9px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .metrics.mail-m{align-items:center}
   .metrics.mail-m .need-pill{margin-left:auto}
   .z-sec h4 .z-bulk{float:right;font-size:12px;font-weight:500;padding:3px 10px}
@@ -1643,7 +1645,7 @@
   let zoomDoneOpen = false;
   function zoomItemRow(link, s) {
     const k = linkKind(link);
-    const head = `<span class="lk-ic lk-${k.k}">${ICON[k.k] || ICON.link}</span><div class="z-item-b"><b title="${escMd(link.title)}">${escMd(link.title)}</b><span>${k.zh}${s ? ` · ${s.status === 'done' ? '已完成' : '已忽略'} ${chatTime(s.at)}` : ''}</span></div>`;
+    const head = `<span class="lk-ic lk-${k.k}">${ICON[k.k] || ICON.link}</span><div class="z-item-b"><b title="${escMd(link.title)}">${escMd(link.title)}</b><span>${link.from ? escMd(link.from) : k.zh}${s ? ` · ${s.status === 'done' ? '已完成' : '已忽略'} ${chatTime(s.at)}` : ''}</span></div>`;
     const data = `data-item-url="${escMd(link.url)}" data-item-title="${escMd(link.title)}"`;
     if (s) return `<div class="z-item ${s.status === 'done' ? 'is-done' : 'is-dismissed'}">${s.status === 'done' ? '<span class="z-check">✓</span>' : ''}${head}<div class="z-acts"><a class="z-act" href="${escMd(link.url)}" target="_blank" rel="noopener">打开</a><button class="z-act undo" data-act="undo" ${data}>撤销</button></div></div>`;
     return `<div class="z-item">${head}<div class="z-acts"><a class="z-act" href="${escMd(link.url)}" target="_blank" rel="noopener">打开</a><button class="z-act done" data-act="done" ${data}>完成</button><button class="z-act dismiss" data-act="dismiss" ${data}>忽略</button></div></div>`;
@@ -1861,9 +1863,10 @@
         <header class="w-top">
           ${av}
           <div class="w-src"><span class="w-label">${escapeHtml(label)}</span><span class="w-repo">${escapeHtml(r ? `${r.owner} / ${r.name}` : (card.subtitle || ''))}</span></div>
-          ${big ? '<span class="pill pill-hot">优先</span>' : ''}${tagHtml}
+          ${big ? '<span class="pill pill-hot">优先</span>' : ''}${isMailGroup(card) ? '' : tagHtml}
         </header>
         <h3 class="w-head">${escapeHtml(headline(card))}</h3>
+        ${isMailGroup(card) && tags.length ? `<div class="w-senders">${tags.map(t => `<span title="${escapeHtml(t.text)}">${escapeHtml(t.text)}</span>`).join('')}</div>` : ''}
         ${desc ? `<p class="w-desc">${escapeHtml(desc)}</p>` : ''}
         ${metrics}${avRow}
         <div class="w-next"><span class="w-next-k">下一步</span><span class="w-next-v">${escapeHtml(nextAction(card))}</span></div>
@@ -2452,11 +2455,11 @@
       html += `<div class="z-sec"><h4>时间表</h4><div class="z-items">${all.map(b => `<div class="z-item"><span class="z-time">${escapeHtml(b.start)}–${escapeHtml(b.end)}</span><div class="z-item-b"><b>${escapeHtml(b.title)}</b><span>${escapeHtml(CAT_ZH[b.category] || (b.type === 'suggested' ? '建议' : '日程'))}</span></div></div>`).join('') || '<p class="w-desc">暂无日程</p>'}</div></div>`;
     } else {
       if (card.body) html += `<p class="z-body">${escapeHtml(zhBody(card))}</p>`;
-      if (card.title && card.title !== headline(card) && !(r && card.title.toLowerCase() === r.name.toLowerCase())) html += `<p class="z-orig">原始摘要：${escapeHtml(card.title)}</p>`;
+      if (!isMailGroup(card) && card.title && card.title !== headline(card) && !(r && card.title.toLowerCase() === r.name.toLowerCase())) html += `<p class="z-orig">原始摘要：${escapeHtml(card.title)}</p>`;
       const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
       if (pr || iss) html += `<div class="z-kpis">${pr ? `<div><b class="c-teal">${pr}</b><span>待推进 PR</span></div>` : ''}${iss ? `<div><b class="c-violet">${iss}</b><span>待处理 issue</span></div>` : ''}</div>`;
       const dl = deepLinks(card);
-      html += `<div class="z-next"><div><span class="w-next-k">下一步</span><b>${escapeHtml(nextAction(card))}</b></div>${dl[0] ? `<a class="z-btn" href="${escapeHtml(dl[0].url)}" target="_blank" rel="noopener">去处理 ↗</a>` : ''}</div>`;
+      html += `<div class="z-next"><div><span class="w-next-k">下一步</span><b>${escapeHtml(nextAction(card))}</b></div>${dl[0] ? `<a class="z-btn" href="${escapeHtml(dl[0].url)}" target="_blank" rel="noopener">${isMailGroup(card) ? '打开第一封 ↗' : '去处理 ↗'}</a>` : ''}</div>`;
       if (linksOf(card).length) html += `<div class="z-sec" id="zItemsSec">${zoomItemsHtml(card)}</div>`;
     }
     const name = r ? r.name : (isTT ? '今天的安排' : clip(card.title, 20));

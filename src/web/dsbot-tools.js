@@ -57,6 +57,11 @@ export const CARD_WORK_PROMPT = `你是「豆芽」背后的 Main Bot（Chief）
 - 问邮件/PR/Slack/日历 → odm_github_* / odm_gmail_* / odm_slack_* / odm_calendar_*（只读）
 - 「我是谁」→ odm_whoami
 
+## 信源工具出错时
+- 先真的调用一次对应工具（如「看看邮件」→ odm_gmail_fetch_emails），不要凭印象说工具不在。
+- 工具返回 error 时，照实说是哪个信源（Gmail / GitHub / Slack / 日历）出了什么错，并建议到豆芽左侧的「信源状态」页重新连接该信源；可同时用已有卡片里的内容先顶上，并说明那是上次汇聚的数据。
+- 这里的产品叫「豆芽」。不要让用户去 FlyBot、Composio 控制台或其他产品里操作。
+
 ## 规矩
 1. 改卡前若只有关键词，先 find/list 确认 id；多张匹配时列出请用户选。
 2. 改完用工具返回的 success/card 确认（标题+新状态），完成会写入持久 completions。
@@ -72,6 +77,7 @@ export const CARD_WORK_PROMPT = `你是「豆芽」背后的 Main Bot（Chief）
 export async function registerBotTools(ctx, opts = {}) {
   const {
     composioClient = null,
+    getComposioClient = null,
     getCards = () => [],
     home = '.odm-data',
     museUrl = process.env.ODM_MUSE_URL || 'http://127.0.0.1:7777',
@@ -100,6 +106,7 @@ export async function registerBotTools(ctx, opts = {}) {
   const cards = createCardOps({ baseUrl: museUrl, router })
   const disposers = []
   const failed = []
+  const registered = []
   // Takes a thunk so a bad schema in one defineTool() can't abort every later registration.
   const register = (make) => {
     let tool
@@ -107,6 +114,7 @@ export async function registerBotTools(ctx, opts = {}) {
       tool = typeof make === 'function' ? make() : make
       const d = ctx.tools.register(tool)
       if (typeof d === 'function') disposers.push(d)
+      registered.push(tool.name)
     } catch (err) {
       failed.push(tool?.name || '?')
       log(`dsbot-tools: register ${tool?.name || '(defineTool)'} failed: ${err.message}`)
@@ -339,7 +347,18 @@ export async function registerBotTools(ctx, opts = {}) {
     },
   }))
 
-  const composioDefs = createComposioTools(composioClient)
+  // The client can be built after plugin setup (config loads async, or is saved later from
+  // 信源状态/配置). Register the tools against a lazy proxy so they always exist for Chief.
+  const resolveClient = () => (typeof getComposioClient === 'function' ? getComposioClient() : null) || composioClient
+  const lazyClient = new Proxy({}, {
+    get(_t, key) {
+      const c = resolveClient()
+      if (!c) return () => { throw new Error('Composio 未配置：请到豆芽「配置」页填写 API Key，并在「信源状态」页连接信源') }
+      const v = c[key]
+      return typeof v === 'function' ? v.bind(c) : v
+    },
+  })
+  const composioDefs = createComposioTools(lazyClient)
   for (const def of composioDefs) {
     register(() => defineTool({
       name: `odm_${def.name}`,
@@ -353,6 +372,8 @@ export async function registerBotTools(ctx, opts = {}) {
     }))
   }
 
-  log(`dsbot-tools: registered disposers=${disposers.length} failed=${failed.length} composio=${composioDefs.length} cards=${router ? 'in-process' : museUrl}`)
+  const summary = `dsbot-tools: registered ${registered.length} tools (failed=${failed.length}${failed.length ? ': ' + failed.join(',') : ''}; composio=${resolveClient() ? 'ready' : 'lazy'}; cards=${router ? 'in-process' : museUrl}): ${registered.join(' ')}`
+  log(summary)
+  console.log(`[odm] ${summary}`)
   return () => { for (const d of disposers.splice(0).reverse()) try { d() } catch { /* */ } }
 }

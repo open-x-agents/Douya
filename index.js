@@ -351,6 +351,16 @@ export function createRuntime(ctx, config = {}) {
       import('./src/web/dsbot-tools.js').then(({ registerBotTools }) =>
         registerBotTools(ctx, {
           composioClient,
+          getComposioClient: () => {
+            if (composioClient) return composioClient
+            const cfg = configStore.get() || {}
+            const apiKey = cfg.composioApiKey || config.composioApiKey || process.env.COMPOSIO_API_KEY
+            if (!apiKey) return null
+            try {
+              composioClient = createComposioClient({ composioApiKey: apiKey, composioEntityId: cfg.composioEntityId || config.composioEntityId || process.env.COMPOSIO_ENTITY_ID || 'default' })
+            } catch (err) { log(`Composio late init failed: ${err.message}`) }
+            return composioClient
+          },
           getCards: () => store.get()?.cards || [],
           home,
           museUrl: process.env.ODM_MUSE_URL || 'http://127.0.0.1:7777',

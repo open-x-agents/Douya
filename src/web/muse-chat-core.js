@@ -37,12 +37,18 @@ function lastAssistantText(records = []) {
 }
 
 // Same call shape ds-bot uses: a live session must be paged through its current seq.
+// sessionController.resolveAgent resolves to { agent } or { error }, not the agent itself.
+async function liveAgent(ctx, sessionId) {
+  const resolved = await ctx.sessionController.resolveAgent(sessionId).catch(() => undefined)
+  return resolved && !('error' in resolved) ? (resolved.agent ?? resolved) : undefined
+}
+
 async function readLastReply(ctx, sessionId, log) {
-  const agent = await ctx.sessionController.resolveAgent(sessionId).catch(() => undefined)
+  const agent = await liveAgent(ctx, sessionId)
   const seq = Number(agent?.session?.seq)
   const page = await ctx.sessionController.page({
     address: { kind: 'session', sessionId },
-    ...(Number.isFinite(seq) && seq > 0 ? { throughSeq: seq - 1 } : {}),
+    ...(Number.isFinite(seq) && seq > 0 ? { throughSeq: seq - 1 } : { throughSeq: -1 }),
     maxMessages: 40,
   }, AbortSignal.timeout(15_000))
   return lastAssistantText(page?.records || page?.items || [])
@@ -88,7 +94,7 @@ export async function runMuseChatTurn(ctx, {
   let reply = ''
   let pageErrLogged = false
   while (Date.now() < deadline) {
-    const agent = await ctx.sessionController.resolveAgent(sessionId).catch(() => undefined)
+    const agent = await liveAgent(ctx, sessionId)
     if (agent?.status === 'running' && typeof agent.whenIdle === 'function') {
       await Promise.race([agent.whenIdle(), new Promise(r => setTimeout(r, 8_000))])
     } else if (agent?.status === 'running') {

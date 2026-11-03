@@ -5,8 +5,8 @@
 
 # Surgical replacement of the default web shell (same pattern as dsh-work-shell).
 - id: ui-layout
-  disable: true
+  disabled: true
 - id: ui-sidebar
-  disable: true
+  disabled: true
 - id: ui-conversation
-  disable: true
+  disabled: true

@@ -33,7 +33,7 @@ const nameOf = from => {
   return n || (s.match(/<([^>]+)>/) || [])[1] || s || 'unknown'
 }
 const addrOf = from => ((String(from || '').match(/<([^>]+)>/) || [])[1] || String(from || '')).toLowerCase()
-const clean = s => String(s || '').replace(/^(re|fwd?|回复|转发)\s*[:：]\s*/i, '').trim()
+const clean = s => String(s || '').replace(/^(re|fwd?|回复|转发)\s*[:：]\s*/i, '').replace(/^\[[\w.-]+\/[\w.-]+\]\s*/, '').trim()
 const clip = (s, n) => { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s }
 
 /** Classify one normalized email item ({title, url, metadata:{from, labelIds, snippet}}). */
@@ -59,10 +59,13 @@ function isActionableSingle(item) {
   return (md.labelIds || []).includes('IMPORTANT') || ACTION_TEXT.test(text)
 }
 
-function topSenders(list, n = 3) {
+const repoOf = t => (String(t || '').match(/\[([\w.-]+\/[\w.-]+)\]/) || [])[1] || null
+
+// Code mail from GitHub & co. carries the actor's name as sender, so name the repos instead.
+function topSenders(list, n = 3, key = null) {
   const count = new Map()
   for (const it of list) {
-    const k = nameOf(it.metadata?.from || it.body)
+    const k = (key === 'code' && repoOf(it.title)) || nameOf(it.metadata?.from || it.body)
     count.set(k, (count.get(k) || 0) + 1)
   }
   return [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([name, c]) => ({ name, count: c }))
@@ -129,7 +132,7 @@ function copyFor(key, list, senders) {
 function refreshGroupCard(g) {
   const ll = g.blocks.find(b => b.type === 'link-list')
   const pseudo = ll.links.map(l => ({ title: l.title, url: l.url, body: `From: ${l.from || ''}`, metadata: { from: l.from || '' } }))
-  const senders = topSenders(pseudo)
+  const senders = topSenders(pseudo, 3, g.metadata?.group)
   const copy = copyFor(g.metadata?.group, pseudo, senders)
   Object.assign(g, { body: copy.body, why: copy.body, nextAction: copy.nextAction, clusterSize: pseudo.length, subtitle: `共 ${pseudo.length} 封` })
   const stat = g.blocks.find(b => b.type === 'stat'); if (stat) stat.value = pseudo.length
@@ -197,7 +200,7 @@ export function buildEmailClusters(emailItems, { today = new Date().toISOString(
   for (const [key, list] of [...buckets.entries()].sort((a, b) => GROUPS[a[0]].order - GROUPS[b[0]].order)) {
     if (!list.length) continue
     const sorted = [...list].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
-    const senders = topSenders(sorted)
+    const senders = topSenders(sorted, 3, key)
     const copy = copyFor(key, sorted, senders)
     out.push({
       id: `email_group_${key}_${today}`,

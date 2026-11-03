@@ -126,6 +126,16 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
   }, 'opendigitalmate: card-interact')
 
   effect({
+    path: '/api/opendigitalmate/card-chat',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request) => {
+      try { return json(await router.cardChat(await readJson(request))) }
+      catch (err) { return json({ success: false, error: err.message }) }
+    },
+  }, 'opendigitalmate: card-chat')
+
+  effect({
     path: '/api/completions',
     methods: ['GET'],
     requestBody: 'buffered',

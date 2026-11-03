@@ -972,6 +972,28 @@ export function createApiRouter(ctx) {
     /**
      * POST /api/cards/:id/interact - Track card interaction
      */
+    // Per-card zoom chat transcript (keyed by a stable card key such as repo or group), so
+    // reopening a card shows its conversation. Capped; survives digests and restarts.
+    async cardChat({ op = 'get', key, messages = [] } = {}) {
+      key = String(key || '').slice(0, 200);
+      if (!key) return { success: false, error: 'missing key' };
+      const state = store.get();
+      const all = { ...(state.cardChats || {}) };
+      if (op === 'append') {
+        const add = (Array.isArray(messages) ? messages : []).slice(0, 10)
+          .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string' && m.text.trim())
+          .map(m => ({ role: m.role, text: m.text.slice(0, 8000), at: new Date().toISOString() }));
+        all[key] = [...(all[key] || []), ...add].slice(-40);
+        const keys = Object.keys(all);
+        if (keys.length > 200) for (const k of keys.sort((a, b) => String(all[a].at(-1)?.at).localeCompare(String(all[b].at(-1)?.at))).slice(0, keys.length - 200)) delete all[k];
+        await store.save({ ...state, cardChats: all });
+      } else if (op === 'clear') {
+        delete all[key];
+        await store.save({ ...state, cardChats: all });
+      }
+      return { success: true, key, messages: all[key] || [] };
+    },
+
     async trackCardInteraction(id, action, itemUrl = null, itemTitle = '', by = 'user') {
       try {
         const state = store.get();
@@ -1685,6 +1707,20 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
           try {
             const data = JSON.parse(body || '{}');
             const response = await router.trackCardInteraction(data.id, data.action);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid request' }));
+          }
+        });
+        return;
+      } else if (url.pathname === '/api/opendigitalmate/card-chat' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const response = await router.cardChat(JSON.parse(body || '{}'));
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(response));
           } catch (err) {

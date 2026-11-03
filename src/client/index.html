@@ -859,9 +859,35 @@
   .z-act{border:0;background:#fff;color:var(--ink2);font:500 12px/1 inherit;padding:7px 10px;border-radius:8px;cursor:pointer;text-decoration:none;box-shadow:0 0 0 1px var(--line)}
   .z-act:hover{color:var(--ink);box-shadow:0 0 0 1px rgba(30,40,80,.15)}
   .z-act.done:hover{color:var(--teal)}
-  .z-chat{border-top:1px solid var(--line);padding-top:16px}
-  .z-msgs{display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto;margin-bottom:8px}
-  .z-msgs:empty{display:none}
+  /* Zoom: two columns — details left (own scroll), full-height chat right */
+  .tile-zoom-modal{width:min(1200px,94vw)!important;max-width:none!important;height:88vh!important;max-height:none!important;padding:0!important;overflow:hidden!important;display:flex!important;flex-direction:column}
+  .tile-zoom-content{flex:1;min-height:0;padding:0!important;overflow:hidden!important;margin:0!important;display:block!important}
+  .z-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,440px);height:100%;min-height:0}
+  .z-left{overflow-y:auto;padding:30px 30px 28px 32px;min-height:0;overscroll-behavior:contain}
+  .z-left .tile-zoom-header{padding:0!important;margin:0 0 4px!important;border:0!important}
+  .z-chat{display:flex;flex-direction:column;min-height:0;background:linear-gradient(180deg,#f7f8fb,#f3f4f8);border-left:1px solid var(--line);padding:0}
+  .z-chat-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:22px 64px 14px 22px;border-bottom:1px solid rgba(0,0,0,.05)}
+  .z-chat-head b{display:block;font-size:15px;font-weight:650;color:var(--ink);letter-spacing:-.01em}
+  .z-chat-head span{display:block;font-size:12px;color:var(--ink3);margin-top:3px}
+  .z-chat-clear{border:0;background:transparent;color:var(--ink3);font:12px inherit;cursor:pointer;padding:4px 6px;border-radius:8px;margin-top:-2px}
+  .z-chat-clear:hover{background:rgba(0,0,0,.05);color:var(--ink2)}
+  .z-msgs{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:16px 18px 12px;overscroll-behavior:contain}
+  .z-empty-chat{margin:auto 8px;text-align:center;font-size:13px;line-height:1.6;color:var(--ink3)}
+  .z-compose{padding:10px 16px 16px;border-top:1px solid rgba(0,0,0,.05);background:rgba(255,255,255,.6)}
+  .z-compose .z-sugg{margin-bottom:10px}
+  .z-compose .z-chip{text-align:left;line-height:1.35}
+  .z-compose .z-input{background:#fff;box-shadow:0 1px 0 rgba(0,0,0,.03),0 0 0 1px var(--line) inset}
+  .z-chat .z-msg{max-width:92%}
+  .z-chat .z-msg.bot{background:#fff;box-shadow:0 1px 2px rgba(20,30,60,.05),0 0 0 1px rgba(0,0,0,.035)}
+  .z-chat .z-msg.me{max-width:80%}
+  @media (max-width:900px){
+    .tile-zoom-modal{height:92vh!important;width:96vw!important}
+    .tile-zoom-content{overflow-y:auto!important}
+    .z-split{display:block;height:auto}
+    .z-left{overflow:visible;padding:24px 20px 18px}
+    .z-chat{border-left:0;border-top:1px solid var(--line);min-height:520px;height:70vh}
+    .z-chat-head{padding:18px 20px 12px}
+  }
   .z-msg{max-width:85%;padding:9px 13px;border-radius:14px;font-size:13.5px;line-height:1.6;white-space:pre-wrap}
   .z-msg.me{align-self:flex-end;background:linear-gradient(135deg,#6f8df5,#8a74d0);color:#fff;border-bottom-right-radius:4px}
   .z-msg.bot{align-self:flex-start;background:#f3f4f8;border-bottom-left-radius:4px}
@@ -2435,6 +2461,7 @@
 
   // Tile zoom modal functions
   let currentZoomCard = null;
+  let zoomSeq = 0;
   
   function openTileZoom(card) {
     currentZoomCard = card;
@@ -2470,41 +2497,78 @@
     };
     const sugg = isTT ? ['帮我把今晚剩下的时间排一下', '明天上午留两小时专注，放哪里？'] :
       (Array.isArray(card.suggestedQuestions) && card.suggestedQuestions.length ? card.suggestedQuestions : (FALLBACK_SUGG[card.source] || ['帮我总结一下这张卡片', '下一步我该做什么？', '这件事有多紧急？']));
-    html += `
-      <div class="z-chat">
-        <h4>继续这个任务 · 和豆芽聊「${escapeHtml(name)}」</h4>
-        <div class="z-msgs" id="zoomMsgs"></div>
-        <div class="z-sugg">${sugg.map(s => `<button class="z-chip">${escapeHtml(s)}</button>`).join('')}</div>
-        <div class="z-input"><input type="text" id="zoomChatInput" placeholder="关于「${escapeHtml(name)}」，问我或让我去做…" /><button id="zoomChatSend">发送</button></div>
+    const chatKey = isTT ? 'timetable' : r ? `repo:${r.owner}/${r.name}` : isMailGroup(card) ? `mail:${(card.metadata && card.metadata.group) || card.title}` : (card.sourceId || card.id);
+    const modal = overlay.querySelector('.tile-zoom-modal');
+    const hdr = modal.querySelector('.tile-zoom-header');
+    if (hdr) hdr.remove(); // keep the node; re-attached into the left column below
+    content.innerHTML = `
+      <div class="z-split">
+        <section class="z-left" id="zLeft">${html}</section>
+        <aside class="z-chat" id="zChat">
+          <div class="z-chat-head">
+            <div><b>和豆芽聊「${escapeHtml(name)}」</b><span>继续这个任务 · 对话会记在这张卡上</span></div>
+            <button class="z-chat-clear" id="zoomChatClear" title="清空这张卡的对话" hidden>清空</button>
+          </div>
+          <div class="z-msgs" id="zoomMsgs"><div class="z-empty-chat" id="zoomEmpty">问我这张卡的进展，或者直接让我去做：标完成、改下一步、起草回复…</div></div>
+          <div class="z-compose">
+            <div class="z-sugg">${sugg.map(s => `<button class="z-chip">${escapeHtml(s)}</button>`).join('')}</div>
+            <div class="z-input"><input type="text" id="zoomChatInput" placeholder="关于「${escapeHtml(name)}」，问我或让我去做…" /><button id="zoomChatSend">发送</button></div>
+          </div>
+        </aside>
       </div>`;
-    content.innerHTML = html;
+    if (hdr) $('zLeft').prepend(hdr);
 
     const msgs = $('zoomMsgs');
     const chatInput = $('zoomChatInput');
-    const ctx = isTT ? '【上下文：我今天的时间表】' : `【上下文：${r ? r.owner + '/' + r.name : ''} — ${card.title}。${card.body || ''} 相关链接：${linksOf(card).map(l => l.title + ' ' + l.url).join('；')}】`;
-    let first = true;
-    const push = (cls, text) => { const d = document.createElement('div'); d.className = 'z-msg ' + cls; if (cls === 'bot') d.innerHTML = renderMd(text); else d.textContent = text; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; return d; };
+    const clearBtn = $('zoomChatClear');
+    const token = ++zoomSeq;
+    const live = () => token === zoomSeq && currentZoomCard === card;
+    const push = (cls, text) => {
+      const em = $('zoomEmpty'); if (em) em.remove();
+      const d = document.createElement('div');
+      d.className = 'z-msg ' + cls;
+      if (cls === 'bot') d.innerHTML = renderMd(text); else d.textContent = text;
+      msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
+      if (clearBtn) clearBtn.hidden = false;
+      return d;
+    };
+    const chatApi = (body) => fetch('/api/opendigitalmate/card-chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: chatKey, ...body }) }).then(r => r.json()).catch(() => ({}));
+    chatApi({ op: 'get' }).then(d => {
+      if (!live() || !Array.isArray(d.messages) || !d.messages.length) return;
+      if (msgs.querySelector('.z-msg')) return; // user already typed before history arrived
+      d.messages.forEach(m => push(m.role === 'user' ? 'me' : 'bot', m.text));
+    });
+    if (clearBtn) clearBtn.onclick = async () => {
+      await chatApi({ op: 'clear' });
+      if (!live()) return;
+      msgs.innerHTML = '<div class="z-empty-chat" id="zoomEmpty">对话已清空。</div>';
+      clearBtn.hidden = true;
+    };
     const sendZoomChat = async (preset) => {
       const msg = (preset || chatInput.value).trim();
       if (!msg) return;
       chatInput.value = '';
       push('me', msg);
       const typing = push('bot typing', '豆芽正在想…');
+      let reply = '';
       try {
         const cardContext = isTT ? '当前在看：今天的时间表' : `当前在看卡片「${card.title || ''}」：${card.body || ''} ${card.url || ''}`;
         const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg, cardId: isTT ? null : card.id, cardContext, sessionId: BOT_SESSION }) });
-        first = false;
         const data = await res.json();
-        typing.remove();
-        const b = push('bot', data.text || data.error || '收到了，但模型没有返回内容。');
-        const ce = citesEl(data.citations);
-        if (ce) b.appendChild(ce);
-        (data.cards || []).filter(c => c.type === 'group').slice(0, 3).forEach(c => { msgs.appendChild(renderGroupCard(c)); });
-        msgs.scrollTop = msgs.scrollHeight;
+        reply = data.text || data.error || '收到了，但模型没有返回内容。';
+        if (live()) {
+          typing.remove();
+          const b = push('bot', reply);
+          const ce = citesEl(data.citations);
+          if (ce) b.appendChild(ce);
+          (data.cards || []).filter(c => c.type === 'group').slice(0, 3).forEach(c => { msgs.appendChild(renderGroupCard(c)); });
+          msgs.scrollTop = msgs.scrollHeight;
+        }
+        loadToday().catch(() => {}); // the bot may have edited cards
       } catch (err) {
-        typing.remove();
-        push('bot', '发送失败了，请稍后再试。');
+        if (live()) { typing.remove(); push('bot', '发送失败了，请稍后再试。'); }
       }
+      chatApi({ op: 'append', messages: [{ role: 'user', text: msg }, ...(reply ? [{ role: 'assistant', text: reply }] : [])] });
     };
     $('zoomChatSend').onclick = () => sendZoomChat();
     chatInput.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendZoomChat(); } };
@@ -2520,6 +2584,7 @@
     const overlay = $('tileZoomOverlay');
     if (overlay) overlay.classList.remove('open');
     currentZoomCard = null;
+    zoomSeq++;
   }
   
   // Wire up close handlers (delegated: overlay markup is after this script)

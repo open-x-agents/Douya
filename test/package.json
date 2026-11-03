@@ -1,0 +1,11 @@
+{
+  "name": "opendigitalmate-test",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test:chat": "node chat-ui-test.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+}

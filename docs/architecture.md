@@ -310,6 +310,30 @@ node scripts/source-probe.mjs --fixture test/fixtures/github/ok --dir /tmp/p  # 
 `ask.js` 的 `sourceLabel` 在 `composio:` 分支里同样先查 `labelOf()`。之后加一个 app 只加注册表一行的
 `label`，`src/host/**` 里不出现任何 app 名（写死的中文名只在注册表里）。
 
+## Web 卡片看板与问答（src/web，#17）
+
+`npm start`（`scripts/server.js`）起一个独立 HTTP 服务（默认 7777），托管 `src/client/index.html` 的卡片看板（今天 / 信源状态 / 配置）。它和插件共用 `createRuntime` 与 `src/host/store.js`，但看板自己的逻辑都在 `src/web/`，不进 `src/host/`——`src/host` 仍然不出现具体 app 名、不自己格式化时间（`test/composio/add-app.test.js`、`test/event.test.js` 守着）。
+
+| 文件 | 职责 |
+|---|---|
+| `src/web/api.js` | HTTP 路由（`/api/today`、`/api/digest/generate`、`/api/chat`、`/api/sources`、`/api/config/*`、`/api/composio/*`）；`mountApiRoutes(server, router, { extraRoutes })` 先分发 ds-bot 形状的路由（`installPanel` 注册的 `/api/opendigitalmate*` 原样可用） |
+| `src/web/aggregation.js` | 汇聚流水线：拉取（GitHub / Gmail / Slack / 日历，经 Composio）→ 归一 → 去重（按完整 URL）→ 按项目 / 发件人 / 频道聚类 → 分类 → 卡片；英文标题 + 中文摘要、每卡 3 个追问由模型生成，数字只来自真实数据 |
+| `src/web/composio.js`、`agent-tools.js`、`chat-groups.js` | Composio v3 客户端；只读工具（PR / issue / 邮件 / Slack 搜索 / 日历）及其预聚合分组 |
+| `src/web/ask-bridge.js` | 对话框与卡片追问的后端，见下 |
+| `src/web/llm-client.js`、`config-store.js`、`profile.js` | 模型客户端、`.odm-data/config.json`、显示名（运行时从 GitHub 身份推出，不写死） |
+
+### 问答：先找依据再答（接 `src/host/ask.js`）
+
+对话框和卡片放大里的追问都走 `askWithEvidence()`：
+
+1. 证据：今天的卡片（每张卡一条、卡里每个链接一条，`ref` 是真实链接），加上问题点名的信源的实时只读拉取（邮件 / PR / issue / Slack），各自成组；问题点名了某个信源时只用那个信源，实时结果顶替旧卡片。卡片追问只用这张卡的证据。
+2. 候选：用 `ask.js` 的 `rankSources()` 排出前 6 条。
+3. 起草：配置的模型只看这些候选，输出 `{claims:[{text, ref}]}`；模型不可用时退回「引用候选自己的摘要」，不产生新措辞。
+4. 判定：把草稿当 `model` 交给 `askQuestion()`——ref 不在证据里、或时间 / 数字 / 金额不在被引信源原文里的 claim 一律丢掉，一条不剩就拒答。没有任何候选时不调模型。
+5. 回给界面：答案、引用（链接 + 来源名）、被引分组的聚合卡片。
+
+`ask.js` 本身没改，它的测试也没改；桥接的行为在 `test/ask-bridge.test.js`。
+
 ## 与 ds-bot 的边界
 
 - 用 ds-bot 的 `ctx.connection.fetch.register` 挂路由，用 `ctx.effect` 管定时器和注销——插件卸载即清理。

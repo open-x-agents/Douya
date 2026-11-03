@@ -1,0 +1,2250 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open Digital Mate</title>
+<style>
+  :root{
+    --ink:#15171c; --ink2:#4a4f5a; --ink3:#8b909c;
+    --bg:#f4f2ee; --card:#ffffff; --line:#e8e6e1;
+    --blue:#4a6cf7; --blue-soft:#eef2ff; --blue-line:#dbe3ff;
+    --green:#2f9e6b; --green-soft:#eaf7f0;
+    --amber:#c8862a; --amber-soft:#fdf4e6;
+    --red:#c0392b; --red-soft:#fdeceb;
+    --gray-soft:#f4f3f0;
+    --ease:cubic-bezier(.22,.61,.36,1);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden}
+  body{
+    background:#fafafa;
+    color:var(--ink);
+    font:15px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  code{font:12px/1.5 ui-monospace,Menlo,monospace;background:#ecebe7;padding:1px 5px;border-radius:4px}
+
+  .app{display:grid;grid-template-columns:200px 1fr;height:100vh;width:100vw}
+  @media (max-width:760px){.app{grid-template-columns:1fr}.side{display:none}}
+
+  .side{background:#f8f7f4;border-right:1px solid var(--line);padding:16px 12px;font-size:13px;overflow-y:auto}
+  .side .who{display:flex;align-items:center;gap:8px;padding:4px 8px 16px}
+  .side .who img{width:24px;height:24px}
+  .side .who b{font-size:14px;font-weight:600}
+  .nav{padding:8px 12px;border-radius:8px;color:var(--ink2);margin-bottom:2px;transition:.25s var(--ease);cursor:pointer}
+  .nav:hover{background:rgba(255,255,255,.5)}
+  .nav.on{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(21,23,28,.07)}
+  .side .grp{font-size:10.5px;color:#a8acb5;letter-spacing:.08em;padding:16px 12px 6px;text-transform:uppercase}
+
+  .views{position:relative;overflow:hidden;background:#fff}
+  .view{position:absolute;inset:0;overflow-y:auto;padding:32px 40px 40px;opacity:0;visibility:hidden;transition:opacity .34s var(--ease),transform .34s var(--ease);transform:translateY(8px)}
+  .view.on{opacity:1;visibility:visible;transform:none}
+  @media (max-width:620px){.view{padding:20px 16px 24px}}
+
+  .a{opacity:0;transform:translateY(10px);transition:opacity .5s var(--ease),transform .5s var(--ease)}
+  .a.in{opacity:1;transform:none}
+
+  .concl{font-size:23px;line-height:1.45;letter-spacing:-.015em;margin:0 0 8px;font-weight:600;min-height:2.9em}
+  @media (max-width:620px){.concl{font-size:19px}}
+  .stamp{font-size:11.5px;color:var(--ink3);margin-bottom:18px;line-height:1.7}
+  .stamp b{color:var(--amber);font-weight:600}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
+  .stat{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 13px}
+  .stat b{display:block;font-size:22px;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.3}
+  .stat span{font-size:11.5px;color:var(--ink3)}
+
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:12px}
+  .card h3{margin:0 0 8px;font-size:15px;font-weight:600}
+  .card p{margin:0;font-size:13px;color:var(--ink2);line-height:1.6}
+  .card .meta{font-size:11.5px;color:var(--ink3);margin-top:8px}
+  .card .actions{display:flex;gap:8px;margin-top:12px}
+  
+  /* Windows 8 style tile grid with glassmorphism */
+  body{background:linear-gradient(135deg,#f5f7fa 0%,#e3e8f0 100%);min-height:100vh}
+  
+  .cards-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));
+    grid-auto-rows:minmax(200px, auto);
+    grid-auto-flow:dense;
+    gap:16px;
+    margin-top:24px;
+    padding-bottom:100px;
+  }
+  @media (max-width:1200px){.cards-grid{grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));grid-auto-rows:minmax(180px, auto)}}
+  @media (max-width:760px){.cards-grid{grid-template-columns:repeat(auto-fill, minmax(180px, 1fr));grid-auto-rows:minmax(160px, auto)}}
+  @media (max-width:480px){.cards-grid{grid-template-columns:1fr 1fr;grid-auto-rows:minmax(140px, auto);gap:12px}}
+  
+  .tile{
+    background:rgba(255,255,255,.85);
+    backdrop-filter:blur(12px) saturate(180%);
+    border-radius:16px;
+    padding:18px;
+    transition:.28s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor:pointer;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+    position:relative;
+    border:1px solid rgba(255,255,255,.6);
+    box-shadow:0 4px 16px rgba(21,23,28,.08),inset 0 1px 0 rgba(255,255,255,.8);
+  }
+  .tile:hover{transform:translateY(-3px) scale(1.01);box-shadow:0 12px 28px rgba(21,23,28,.15),inset 0 1px 0 rgba(255,255,255,.9)}
+  
+  /* Tile sizes */
+  .tile.small{grid-column:span 1;grid-row:span 1}
+  .tile.normal{grid-column:span 1;grid-row:span 1}
+  .tile.wide{grid-column:span 2;grid-row:span 1}
+  .tile.large{grid-column:span 2;grid-row:span 2}
+  @media (max-width:480px){
+    .tile.wide{grid-column:span 2}
+    .tile.large{grid-column:span 2;grid-row:span 2}
+  }
+  
+  /* Glassmorphism tile colors by type */
+  .tile.hero{
+    background:linear-gradient(135deg,rgba(74,108,247,.95) 0%,rgba(61,92,232,.95) 100%);
+    backdrop-filter:blur(16px) saturate(180%);
+    color:#fff;
+    border-color:rgba(255,255,255,.3);
+    box-shadow:0 8px 32px rgba(74,108,247,.25),inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .tile.hero *{color:#fff}
+  
+  .tile.timetable{
+    background:linear-gradient(135deg,rgba(47,158,107,.92) 0%,rgba(39,132,90,.92) 100%);
+    backdrop-filter:blur(16px) saturate(180%);
+    color:#fff;
+    border-color:rgba(255,255,255,.3);
+    box-shadow:0 8px 32px rgba(47,158,107,.25),inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .tile.timetable *{color:#fff}
+  
+  .tile.project-cluster{
+    background:linear-gradient(135deg,rgba(238,242,255,.95) 0%,rgba(224,231,255,.95) 100%);
+    backdrop-filter:blur(12px) saturate(180%);
+    border-color:rgba(74,108,247,.2);
+    box-shadow:0 4px 16px rgba(74,108,247,.1),inset 0 1px 0 rgba(255,255,255,.9);
+  }
+  
+  .tile.email-cluster,
+  .tile.email-categories{
+    background:linear-gradient(135deg,rgba(253,244,230,.95) 0%,rgba(249,234,209,.95) 100%);
+    backdrop-filter:blur(12px) saturate(180%);
+    border-color:rgba(255,166,0,.2);
+    box-shadow:0 4px 16px rgba(255,166,0,.1),inset 0 1px 0 rgba(255,255,255,.9);
+  }
+  
+  .tile.calendar-cluster{
+    background:linear-gradient(135deg,rgba(234,247,240,.95) 0%,rgba(213,239,226,.95) 100%);
+    backdrop-filter:blur(12px) saturate(180%);
+    border-color:rgba(47,158,107,.2);
+    box-shadow:0 4px 16px rgba(47,158,107,.1),inset 0 1px 0 rgba(255,255,255,.9);
+  }
+  
+  .tile.newsletter-cluster{
+    background:rgba(250,250,252,.95);
+    backdrop-filter:blur(12px) saturate(180%);
+    border-color:rgba(0,0,0,.08);
+  }
+  
+  .tile.achievements-tile{
+    background:linear-gradient(135deg,rgba(138,43,226,.92) 0%,rgba(106,27,154,.92) 100%);
+    backdrop-filter:blur(16px) saturate(180%);
+    color:#fff;
+    border-color:rgba(255,255,255,.3);
+    box-shadow:0 8px 32px rgba(138,43,226,.25),inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .tile.achievements-tile *{color:#fff}
+  
+  .tile.urgent{border-color:rgba(239,68,68,.6);border-width:2px;box-shadow:0 0 0 3px rgba(239,68,68,.1),0 4px 16px rgba(239,68,68,.2)}
+  
+  .tile-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;gap:8px}
+  .tile-title{font-size:15.5px;font-weight:700;letter-spacing:-.015em;line-height:1.3;margin:0;word-break:break-word}
+  .tile-subtitle{font-size:10.5px;color:var(--ink3);text-transform:uppercase;letter-spacing:.1em;margin:2px 0 6px;font-weight:700;opacity:.8}
+  .tile-body{font-size:13px;line-height:1.55;opacity:.9;margin:4px 0 8px;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+  
+  /* Visual blocks in tiles */
+  .tile-blocks{display:flex;flex-direction:column;gap:10px;margin:10px 0;flex:1;min-height:0}
+  
+  /* Stat blocks */
+  .tile-blocks .stat-block{display:flex;align-items:baseline;gap:4px}
+  .tile-blocks .stat-block .value{font-size:28px;font-weight:800;line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+  .tile-blocks .stat-block .label{font-size:11px;color:var(--ink3);font-weight:600;opacity:.85}
+  
+  /* Stat row (colored stats) */
+  .stat-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .stat-row-item{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+  .stat-row-item .value{font-size:20px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+  .stat-row-item .label{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;opacity:.8}
+  
+  /* Achievement rings */
+  .achievement-rings{display:flex;gap:16px;align-items:center;justify-content:center;margin:12px 0}
+  .achievement-ring{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .achievement-ring svg{width:64px;height:64px}
+  .achievement-ring .label{font-size:10px;font-weight:600;text-align:center;opacity:.9;line-height:1.3}
+  
+  /* Sparkline */
+  .sparkline-container{display:flex;flex-direction:column;gap:4px}
+  .sparkline-container .label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;opacity:.75}
+  .sparkline-container svg{width:100%;height:32px}
+  
+  /* Avatar stack */
+  .avatars{display:flex;align-items:center}
+  .avatars .avatar{width:28px;height:28px;border-radius:50%;border:2px solid #fff;margin-left:-8px;overflow:hidden;background:var(--gray-soft)}
+  .avatars .avatar:first-child{margin-left:0}
+  .avatars .avatar img{width:100%;height:100%;object-fit:cover}
+  
+  /* Link list */
+  .link-list{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+  .link-list-item{font-size:11.5px;line-height:1.4;padding:6px 8px;background:rgba(255,255,255,.4);border-radius:6px;
+    text-decoration:none;color:inherit;transition:.2s;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid rgba(0,0,0,.08)}
+  .link-list-item:hover{background:rgba(255,255,255,.7);transform:translateX(2px)}
+  
+  .tile-blocks .tags{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+  .tile-blocks .tag{font-size:10px;padding:3px 8px;border-radius:999px;font-weight:600;letter-spacing:.03em;white-space:nowrap;flex-shrink:0}
+  .tile-blocks .tag.blue{background:var(--blue-soft);color:var(--blue);border:1px solid var(--blue-line)}
+  .tile-blocks .tag.red{background:var(--red-soft);color:var(--red);border:1px solid var(--red)}
+  .tile-blocks .tag.green{background:var(--green-soft);color:var(--green);border:1px solid var(--green)}
+  .tile-blocks .tag.orange{background:var(--amber-soft);color:var(--amber);border:1px solid var(--amber)}
+  .tile-blocks .tag.gray{background:var(--gray-soft);color:var(--ink3);border:1px solid var(--line)}
+  
+  /* Charts in tiles */
+  .tile-chart{width:100%;height:50px;margin:6px 0}
+  .tile-chart svg{width:100%;height:100%}
+  
+  /* Donut chart */
+  .donut-chart{display:flex;align-items:center;justify-content:center;gap:12px;margin:6px 0}
+  .donut-chart svg{width:60px;height:60px;flex-shrink:0}
+  .donut-legend{display:flex;flex-direction:column;gap:4px;font-size:11px}
+  .donut-legend-item{display:flex;align-items:center;gap:6px}
+  .donut-legend-item .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  
+  /* Timeline in tiles */
+  .tile-timeline{display:flex;flex-direction:column;gap:6px;margin:8px 0;font-size:11.5px}
+  .timeline-event{display:grid;grid-template-columns:48px 1fr;gap:8px;align-items:center}
+  .timeline-event .time{font-weight:700;font-variant-numeric:tabular-nums;font-family:ui-monospace,monospace;color:var(--ink)}
+  .timeline-event .event-title{line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  
+  /* Timetable strip (24h horizontal) */
+  .timetable-strip{
+    display:flex;
+    height:48px;
+    border-radius:8px;
+    overflow:hidden;
+    margin:10px 0;
+    position:relative;
+    background:rgba(255,255,255,.15);
+    box-shadow:inset 0 2px 8px rgba(0,0,0,.1);
+  }
+  .timetable-block{
+    flex:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:9.5px;
+    font-weight:700;
+    color:rgba(255,255,255,.95);
+    border-right:1px solid rgba(255,255,255,.2);
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    padding:0 6px;
+    text-align:center;
+    line-height:1.2;
+  }
+  .timetable-block.fixed{
+    background:rgba(255,255,255,.35);
+    box-shadow:inset 0 1px 3px rgba(0,0,0,.1);
+  }
+  .timetable-block.suggested{
+    background:rgba(255,255,255,.12);
+    font-style:italic;
+    opacity:.85;
+  }
+  .timetable-block:last-child{border-right:none}
+  .timetable-now{
+    position:absolute;
+    top:-2px;
+    bottom:-2px;
+    width:3px;
+    background:#fff;
+    box-shadow:0 0 6px rgba(255,255,255,.9),0 0 12px rgba(255,255,255,.5);
+    z-index:10;
+    border-radius:999px;
+  }
+  .timetable-now::before{
+    content:'';
+    position:absolute;
+    top:0;
+    left:50%;
+    transform:translateX(-50%);
+    width:8px;
+    height:8px;
+    background:#fff;
+    border-radius:50%;
+    box-shadow:0 0 8px rgba(255,255,255,.9);
+  }
+  
+  /* Tile actions - always at bottom */
+  .tile-actions{display:flex;gap:6px;margin-top:auto;padding-top:12px;flex-shrink:0}
+  .tile-action{border:1px solid rgba(0,0,0,.15);background:rgba(255,255,255,.5);border-radius:6px;padding:6px 12px;font-size:11.5px;
+    font-weight:600;cursor:pointer;transition:.2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
+  .tile-action:hover{background:rgba(255,255,255,.8);transform:translateY(-1px)}
+  .tile.hero .tile-action,
+  .tile.timetable .tile-action{border-color:rgba(255,255,255,.4);background:rgba(255,255,255,.2);color:#fff}
+  .tile.hero .tile-action:hover,
+  .tile.timetable .tile-action:hover{background:rgba(255,255,255,.35)}
+  
+  /* Bottom input for chat */
+  .today-chat-input{
+    position:sticky;
+    bottom:0;
+    left:0;
+    right:0;
+    padding:16px;
+    background:rgba(255,255,255,.95);
+    backdrop-filter:blur(10px);
+    border-top:1px solid var(--line);
+    margin:24px -40px -40px;
+  }
+  @media (max-width:620px){.today-chat-input{margin:16px -16px -24px;padding:12px 16px}}
+  
+  .today-chat-input .input-wrap{
+    max-width:720px;
+    margin:0 auto;
+    display:flex;
+    gap:10px;
+    align-items:center;
+    background:#fff;
+    border:2px solid var(--line);
+    border-radius:12px;
+    padding:4px 4px 4px 16px;
+    transition:.25s var(--ease);
+  }
+  .today-chat-input .input-wrap:focus-within{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+  
+  .today-chat-input input{
+    flex:1;
+    border:0;
+    outline:none;
+    font:inherit;
+    font-size:14px;
+    padding:10px 0;
+    color:var(--ink);
+    background:none;
+    min-width:0;
+  }
+  .today-chat-input input::placeholder{color:var(--ink3)}
+  
+  .today-chat-input .send-btn{
+    width:40px;
+    height:40px;
+    border-radius:8px;
+    background:var(--blue);
+    color:#fff;
+    border:0;
+    font-size:18px;
+    cursor:pointer;
+    display:grid;
+    place-items:center;
+    flex-shrink:0;
+    transition:.2s var(--ease);
+  }
+  .today-chat-input .send-btn:hover{background:var(--blue);transform:scale(1.05)}
+  .today-chat-input .send-btn:active{transform:scale(.95)}
+  
+  /* Tile zoom modal overlay */
+  .tile-zoom-overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.6);
+    backdrop-filter:blur(8px);
+    z-index:2000;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:40px;
+    animation:fadeIn .2s ease;
+  }
+  .tile-zoom-overlay.open{display:flex}
+  
+  .tile-zoom-modal{
+    background:rgba(255,255,255,.98);
+    border-radius:20px;
+    width:90%;
+    max-width:900px;
+    max-height:90vh;
+    overflow:auto;
+    padding:32px;
+    box-shadow:0 20px 60px rgba(0,0,0,.3);
+    position:relative;
+    animation:zoomIn .3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  
+  @keyframes fadeIn{from{opacity:0}}
+  @keyframes zoomIn{from{transform:scale(.8);opacity:0}to{transform:scale(1);opacity:1}}
+  
+  .tile-zoom-close{z-index:5;
+    position:absolute;
+    top:20px;
+    right:20px;
+    width:36px;
+    height:36px;
+    border-radius:50%;
+    background:var(--gray-soft);
+    border:1px solid var(--line);
+    font-size:20px;
+    cursor:pointer;
+    display:grid;
+    place-items:center;
+    transition:.2s;
+  }
+  .tile-zoom-close:hover{background:var(--line)}
+  
+  .tile-zoom-header{
+    margin-bottom:24px;
+    padding-bottom:16px;
+    border-bottom:2px solid var(--line);
+  }
+  .tile-zoom-title{font-size:24px;font-weight:800;margin:0 0 8px;color:var(--ink)}
+  .tile-zoom-subtitle{font-size:14px;color:var(--ink3);margin:0}
+  
+  .tile-zoom-content{
+    display:grid;
+    gap:24px;
+  }
+  
+  .tile-zoom-section{
+    background:var(--gray-soft);
+    border-radius:12px;
+    padding:20px;
+  }
+  .tile-zoom-section h3{margin:0 0 12px;font-size:16px;font-weight:700;color:var(--ink)}
+  
+  .tile-zoom-items{display:flex;flex-direction:column;gap:12px}
+  .tile-zoom-item{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:12px 16px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .tile-zoom-item-content{flex:1;min-width:0}
+  .tile-zoom-item-title{font-size:14px;font-weight:600;margin:0 0 4px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tile-zoom-item-meta{font-size:12px;color:var(--ink3);margin:0}
+  
+  .tile-zoom-actions{display:flex;gap:8px;flex-shrink:0}
+  .tile-zoom-action{
+    padding:6px 12px;
+    border-radius:6px;
+    font-size:12px;
+    font-weight:600;
+    border:1px solid var(--line);
+    background:#fff;
+    cursor:pointer;
+    transition:.2s;
+  }
+  .tile-zoom-action:hover{background:var(--blue-soft);border-color:var(--blue);color:var(--blue)}
+  .tile-zoom-action.done{background:var(--green-soft);border-color:var(--green);color:var(--green)}
+  .tile-zoom-action.dismiss{background:var(--red-soft);border-color:var(--red);color:var(--red)}
+  
+  .tile-zoom-chat{
+    background:linear-gradient(135deg,#eef2ff 0%,#e0e7ff 100%);
+    border-radius:12px;
+    padding:20px;
+  }
+  .tile-zoom-chat h3{margin:0 0 12px;font-size:16px;font-weight:700;color:var(--ink)}
+  .tile-zoom-chat-input{
+    display:flex;
+    gap:10px;
+    background:#fff;
+    border:2px solid var(--line);
+    border-radius:10px;
+    padding:4px;
+  }
+  .tile-zoom-chat-input input{
+    flex:1;
+    border:0;
+    outline:none;
+    font:inherit;
+    padding:10px 12px;
+    font-size:14px;
+  }
+  .tile-zoom-chat-input button{
+    padding:10px 20px;
+    border-radius:6px;
+    background:var(--blue);
+    color:#fff;
+    border:0;
+    font-weight:600;
+    cursor:pointer;
+    transition:.2s;
+  }
+  .tile-zoom-chat-input button:hover{background:#3d5ce8}
+  
+  .btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 14px;font-size:12.5px;color:var(--ink);font-weight:500;font-family:inherit;cursor:pointer;transition:.2s}
+  .btn:hover{border-color:#cfd3db}
+  .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  .btn.primary:hover{background:#3d5ce8}
+
+  ul.work{list-style:none;margin:0;padding:0}
+  ul.work li{display:grid;grid-template-columns:22px 1fr;gap:11px;padding:12px 0;border-top:1px solid var(--line)}
+  ul.work li:first-child{border-top:0;padding-top:2px}
+  .idx{font:600 11.5px/22px ui-monospace,Menlo,monospace;width:22px;height:22px;text-align:center;border-radius:50%;background:var(--blue-soft);color:var(--blue)}
+  ul.work h4{margin:0 0 2px;font-size:14.5px}
+  .why{font-size:12.5px;color:var(--ink2);margin:0 0 5px;line-height:1.6}
+  .evi{font-size:11.5px;color:var(--ink3);display:block;margin-top:3px}
+  .adv{display:inline-block;background:var(--blue-soft);border:1px solid var(--blue-line);color:#2b4ecf;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:500}
+
+  ul.work li.closed{opacity:.55}
+  ul.work li.closed h4{text-decoration:line-through}
+  ul.work li.closed .idx{background:var(--green-soft);color:var(--green)}
+
+  .dockPanel{position:fixed;right:16px;bottom:16px;width:380px;max-height:500px;background:#fff;border:1px solid var(--line);border-radius:14px;
+    box-shadow:0 26px 60px -22px rgba(21,23,28,.5);display:flex;flex-direction:column;overflow:hidden;
+    transform-origin:100% 100%;opacity:0;transform:translateY(10px) scale(.96);pointer-events:none;
+    transition:.34s var(--ease);z-index:1000}
+  .dockPanel.open{opacity:1;transform:none;pointer-events:auto}
+  .dockHead{display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid var(--line);background:#fbfaf8}
+  .dockHead b{font-size:13px;display:block;line-height:1.4}
+  .dockHead small{font-size:10.5px;color:var(--ink3)}
+  .dockHead .x{margin-left:auto;border:0;background:none;color:var(--ink3);font-size:15px;cursor:pointer;line-height:1;padding:3px 5px}
+  .cites{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+  .cites-h{font-size:11px;color:var(--ink3);margin-right:2px}
+  .cites a{display:inline-flex;align-items:center;gap:4px;max-width:100%;font-size:11.5px;line-height:1.3;padding:3px 8px;border-radius:999px;background:rgba(80,110,240,.08);color:#3d55c9;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cites a i{font-style:normal;font-weight:650;font-size:10px;width:15px;height:15px;border-radius:50%;background:#fff;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+  .dockBody{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:#fdfcfb}
+  .bubble{max-width:86%;background:#fff;border:1px solid var(--line);border-radius:11px;padding:9px 12px;font-size:13px;line-height:1.65}
+  .bubble.me{margin-left:auto;background:#e9eeff;border-color:var(--blue-line)}
+  .bubble small{display:block;font-size:10.5px;color:var(--ink3);margin-top:4px}
+  .typing{display:inline-block;animation:typing 1.5s infinite}
+  @keyframes typing{0%,100%{opacity:.3}50%{opacity:1}}
+
+  .chat-card{background:var(--gray-soft);border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:8px;max-width:92%}
+  .card-title{font-size:13px;font-weight:600;margin-bottom:8px;color:var(--ink)}
+  .card-actions,.card-choices{display:flex;gap:6px;flex-wrap:wrap}
+  .card-btn{border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 12px;font-size:12px;color:var(--ink);cursor:pointer;transition:.2s;font-family:inherit}
+  .card-btn:hover{border-color:var(--blue);color:var(--blue)}
+  .card-btn.choice{background:var(--blue-soft);border-color:var(--blue-line);color:var(--blue)}
+  
+  .dockFoot{border-top:1px solid var(--line);padding:7px 10px;display:flex;gap:8px;align-items:center;background:#fff}
+  .dockFoot input{flex:1;border:0;outline:none;font:inherit;font-size:12.5px;padding:5px 2px;color:var(--ink);background:none;min-width:0}
+  .dockFoot .send{width:27px;height:27px;border-radius:8px;background:var(--blue);color:#fff;border:0;font-size:13px;cursor:pointer}
+  
+  .dockBtn{position:fixed;right:20px;bottom:20px;width:56px;height:56px;border-radius:50%;border:2px solid var(--blue);background:var(--blue);
+    cursor:pointer;box-shadow:0 4px 12px rgba(74,108,247,.4);display:grid;place-items:center;z-index:999;transition:.25s var(--ease)}
+  .dockBtn:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(74,108,247,.5)}
+  .dockBtn svg{fill:white}
+  .dockBtn.has .badge{opacity:1;transform:scale(1)}
+  .badge{position:absolute;top:-2px;right:-2px;width:12px;height:12px;border-radius:50%;background:#e5484d;border:2px solid #fff;opacity:0;transform:scale(.5);transition:.25s var(--ease)}
+
+  .chat-open-hint{position:fixed;right:90px;bottom:30px;background:var(--ink);color:#fff;font-size:13px;padding:8px 16px;border-radius:8px;
+    box-shadow:0 4px 12px rgba(0,0,0,.2);z-index:998;opacity:0;animation:hintPulse 3s ease-in-out;pointer-events:none}
+  @keyframes hintPulse{0%,100%{opacity:0}10%,90%{opacity:1}}
+
+  .loading{text-align:center;padding:40px;color:var(--ink3)}
+  .error{background:var(--red-soft);border:1px solid var(--red);border-radius:8px;padding:12px;margin:12px 0;color:var(--red)}
+
+  .apps-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+  .app-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;transition:.2s var(--ease);cursor:pointer}
+  .app-card:hover{border-color:var(--blue);box-shadow:0 4px 12px rgba(74,108,247,.1)}
+  .app-card.connected{border-color:var(--green);background:var(--green-soft)}
+  .app-header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+  .app-logo{font-size:32px;width:48px;height:48px;display:grid;place-items:center;border-radius:10px;background:var(--gray-soft)}
+  .app-info{flex:1}
+  .app-info h4{margin:0;font-size:14px;font-weight:600}
+  .app-info p{margin:2px 0 0;font-size:11.5px;color:var(--ink3)}
+  .app-status{font-size:11px;padding:3px 8px;border-radius:999px;font-weight:600}
+  .app-status.connected{background:var(--green);color:#fff}
+  .app-status.disconnected{background:var(--gray-soft);color:var(--ink3)}
+  .app-actions{display:flex;gap:6px;margin-top:8px}
+  .app-actions .btn{font-size:11.5px;padding:5px 12px}
+
+  .source-toggle{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;
+    background:#fff;font-size:12px;cursor:pointer;transition:.2s}
+  .source-toggle:hover{border-color:var(--blue)}
+  .source-toggle.active{background:var(--blue);border-color:var(--blue);color:#fff}
+  .source-toggle input[type=checkbox]{display:none}
+
+  @media (max-width:620px){
+    .apps-grid{grid-template-columns:1fr}
+  }
+
+  @media (max-width:620px){
+    .dockPanel{width:calc(100vw - 32px);right:16px;left:16px;bottom:10px;max-height:60%}
+  }
+
+
+  .tt-now{overflow:visible}
+  .tt-track{overflow:hidden}
+  .load-rows{overflow:hidden;min-width:0;width:100%}
+  .load-bar{min-width:0}
+  .load-val{min-width:0;overflow:hidden}
+  .w-links{overflow:hidden;min-width:0}
+  .lk{overflow:hidden}
+  .lk-t{min-width:0}
+  .myday,.grid2 .tile{overflow:hidden}
+  .focus-b span,.w-desc,.w-next-v{overflow:hidden}
+  .load-row{overflow:hidden}
+  .tt-bar span{max-width:100%}
+
+
+  .load-row{grid-template-columns:minmax(0,110px) minmax(0,1fr) 56px}
+  .load-name,.w-repo,.lk-t,.focus-b span,.w-next-v,.w-desc,.w-head,.tt-bar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .w-desc,.w-next-v,.w-head{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical}
+  .w-links{width:100%;max-width:100%}
+  .lk{width:100%}
+  .grid2 .tile,.myday,.load-rows,.tt{max-width:100%}
+
+  .av-row{display:flex;gap:4px;margin:0 0 10px}
+  .av.sm{width:22px;height:22px;border-radius:7px}
+  .mini-bars{display:flex;gap:14px;align-items:flex-end;height:52px;margin:0 0 12px;padding:0 4px}
+  .mini-bars .mb{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:36px}
+  .mini-bars .mb i{display:block;width:18px;border-radius:6px 6px 3px 3px}
+  .mini-bars .mb span{font-size:10.5px;color:var(--ink3);display:flex;flex-direction:column;align-items:center;line-height:1.2}
+  .mini-bars .mb b{color:var(--ink);font-weight:650;font-size:12px}
+  .w-tags{display:flex;flex-wrap:wrap;gap:4px}
+  .pill-red,.pill-orange{background:var(--rose-soft);color:var(--rose)}
+  .pill-blue{background:var(--sky-soft);color:var(--sky)}
+  .pill-gray{background:#eef0f4;color:var(--ink3)}
+  .pill-green{background:var(--teal-soft);color:var(--teal)}
+  .w-top .w-tags{margin-left:8px}
+  .size-normal .metrics .m b{font-size:22px}
+  .w-links .lk:nth-child(n+4){display:none}
+
+  /* ===== v2 visual system (Muse / Today inspired) ===== */
+  :root{
+    --ink:#1c1d21; --ink2:#5a5e68; --ink3:#9296a0; --line:rgba(28,29,33,.07);
+    --teal:#22a898; --teal-soft:#e3f6f3; --violet:#8a74d0; --violet-soft:#efebfa;
+    --sky:#4f9de8; --sky-soft:#e7f1fc; --rose:#e2667a; --rose-soft:#fdecef; --peach:#f0a35e; --peach-soft:#fdf0e3;
+    --r-lg:22px; --r-md:14px;
+    --shadow:0 1px 2px rgba(30,40,80,.04),0 6px 24px -6px rgba(30,40,80,.08);
+    --shadow-hi:0 2px 4px rgba(30,40,80,.05),0 18px 40px -10px rgba(30,40,80,.18);
+  }
+  body{background:radial-gradient(1200px 600px at 85% -10%,#e4ecfb 0%,transparent 60%),radial-gradient(900px 500px at -10% 110%,#f6ecdf 0%,transparent 55%),#f3f4f7;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
+  .app{grid-template-columns:208px 1fr}
+  .side{background:rgba(255,255,255,.45);backdrop-filter:blur(20px);border-right:1px solid rgba(255,255,255,.7);padding:20px 14px}
+  .side .who{padding:4px 10px 22px}
+  .side .who b{font-size:15px;letter-spacing:.02em}
+  .nav{padding:9px 12px;border-radius:12px;font-size:13.5px}
+  .nav.on{background:#fff;box-shadow:0 1px 2px rgba(30,40,80,.06),0 4px 12px -4px rgba(30,40,80,.08)}
+  .views{background:transparent}
+  #v-today{padding:36px 44px 0}
+  .c-teal{color:var(--teal)} .c-violet{color:var(--violet)} .c-blue{color:var(--sky)} .c-rose{color:var(--rose)}
+
+  .day-head{display:flex;align-items:flex-end;justify-content:space-between;gap:32px;margin-bottom:22px}
+  .day-date{font-size:12.5px;color:var(--ink3);letter-spacing:.02em;margin-bottom:6px}
+  .day-title{font-size:34px;line-height:1.15;font-weight:650;letter-spacing:-.025em;margin:0}
+  .day-sum{margin:8px 0 0;font-size:14px;color:var(--ink2)}
+  .day-side{display:flex;align-items:center;gap:22px;flex-shrink:0}
+  .kpis{display:flex;gap:6px;background:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.9);border-radius:18px;padding:8px 6px;box-shadow:var(--shadow)}
+  .kpi{min-width:74px;padding:2px 14px;text-align:center;border-right:1px solid var(--line)}
+  .kpi:last-child{border-right:0}
+  .kpi b{display:block;font-size:24px;font-weight:650;letter-spacing:-.02em;line-height:1.2;font-variant-numeric:tabular-nums}
+  .kpi span{font-size:11.5px;color:var(--ink3)}
+  .day-actions{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+  .digest-status{font-size:11.5px;color:var(--teal);min-height:16px}
+  .btn-glow{border:0;cursor:pointer;font:600 13.5px/1 inherit;color:#fff;padding:12px 20px;border-radius:999px;background:linear-gradient(135deg,#6f8df5,#8a74d0);box-shadow:0 6px 18px -6px rgba(110,110,230,.6);transition:.2s var(--ease)}
+  .btn-glow:hover{transform:translateY(-1px);box-shadow:0 10px 24px -8px rgba(110,110,230,.7)}
+  .btn-glow:disabled{opacity:.6;cursor:default;transform:none}
+
+  .eyebrow{font-size:11px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+
+  /* My Day */
+  .myday{background:rgba(255,255,255,.72);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.9);border-radius:var(--r-lg);padding:18px 22px 14px;box-shadow:var(--shadow);margin-bottom:18px;cursor:pointer;transition:.25s var(--ease)}
+  .myday:hover{box-shadow:var(--shadow-hi)}
+  .myday-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:14px}
+  .myday-note{font-size:15px;font-weight:550;margin-top:4px}
+  .myday-meta{display:flex;gap:16px;font-size:12px;color:var(--ink3);white-space:nowrap}
+  .myday-meta b{color:var(--ink);font-weight:650}
+  .tt{position:relative;padding:0 4px}
+  .tt-track{position:relative;height:46px;border-radius:12px;background:repeating-linear-gradient(90deg,rgba(30,40,80,.035) 0 1px,transparent 1px calc(100%/14)),#f6f7fa;overflow:hidden}
+  .tt-bar{position:absolute;box-sizing:border-box;border-radius:9px;padding:4px 8px;overflow:hidden;white-space:nowrap;display:flex;flex-direction:column;justify-content:center;min-width:0}
+  .tt-bar b{overflow:hidden;text-overflow:ellipsis;font-size:11px;font-weight:650;line-height:1.2}
+  .tt-bar span{font-size:11px;opacity:.8;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
+  .tt-bar.c-meal{background:var(--peach-soft);color:#b8692a;box-shadow:inset 3px 0 0 var(--peach)}
+  .tt-bar.c-focus{background:var(--teal-soft);color:#16786d;box-shadow:inset 3px 0 0 var(--teal)}
+  .tt-bar.c-meeting{background:var(--sky-soft);color:#2d6cb0;box-shadow:inset 3px 0 0 var(--sky)}
+  .tt-bar.c-break,.tt-bar.c-exercise,.tt-bar.c-personal{background:var(--violet-soft);color:#6450a8;box-shadow:inset 3px 0 0 var(--violet)}
+  .tt-bar.past{opacity:.45;filter:saturate(.6)}
+  .tt-bar.live{box-shadow:inset 3px 0 0 currentColor,0 0 0 2px rgba(34,168,152,.25)}
+  .tt-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--ink3)}
+  .tt-now{position:absolute;top:0;bottom:0;width:2px;z-index:3;pointer-events:none;background:var(--rose);border-radius:2px;transform:translateX(-1px)}
+  .tt-now::before{content:"";position:absolute;top:-1px;left:-3px;width:8px;height:8px;border-radius:50%;background:var(--rose)}
+  .tt-now em{position:absolute;z-index:4;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.12);bottom:3px;right:6px;font:600 10.5px/1 inherit;font-style:normal;color:var(--rose);background:rgba(255,255,255,.9);padding:3px 5px;border-radius:6px}
+  .tt-axis{position:relative;height:18px;margin-top:4px}
+  .tt-tick{position:absolute;top:0;transform:translateX(-50%)}
+  .tt-tick:first-child{transform:none}
+  .tt-tick:last-child{transform:translateX(-100%)}
+  .tt-tick i{font-style:normal;font-size:10.5px;color:var(--ink3);font-variant-numeric:tabular-nums}
+
+  /* Grid */
+  .grid2{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-flow:row dense;gap:16px;padding-bottom:120px}
+  .grid2 .tile{background:rgba(255,255,255,.82);backdrop-filter:blur(18px) saturate(160%);border:1px solid rgba(255,255,255,.95);border-radius:var(--r-lg);padding:20px 20px 16px;box-shadow:var(--shadow);color:var(--ink);transform:none;display:flex;flex-direction:column;min-width:0;overflow:hidden;cursor:pointer;transition:transform .25s var(--ease),box-shadow .25s var(--ease)}
+  .grid2 .tile:hover{transform:translateY(-2px);box-shadow:var(--shadow-hi)}
+  .size-hero{grid-column:span 2;grid-row:span 2}
+  .size-load{grid-column:span 2;grid-row:span 2}
+  .size-wide{grid-column:span 2}
+  .size-normal{grid-column:span 1}
+  @media (max-width:1180px){.grid2{grid-template-columns:repeat(3,minmax(0,1fr))}.size-hero,.size-load{grid-column:span 3;grid-row:auto}}
+  @media (max-width:860px){.grid2{grid-template-columns:repeat(2,minmax(0,1fr))}.size-hero,.size-load,.size-wide{grid-column:span 2}}
+
+  /* Hero */
+  .grid2 .hero2{background:linear-gradient(160deg,rgba(255,255,255,.95) 0%,rgba(241,237,252,.92) 55%,rgba(228,240,252,.92) 100%);cursor:default}
+  .grid2 .hero2:hover{transform:none}
+  .hero-lead{font-size:19px;line-height:1.5;font-weight:600;letter-spacing:-.01em;margin:10px 0 16px}
+  .focus{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+  .focus li{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--r-md);background:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.95);cursor:pointer;transition:.2s var(--ease)}
+  .focus li:hover{background:#fff;box-shadow:0 4px 14px -6px rgba(30,40,80,.18)}
+  .focus-n{width:24px;height:24px;flex-shrink:0;border-radius:8px;background:var(--violet-soft);color:var(--violet);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .focus-b{flex:1;min-width:0;display:flex;flex-direction:column}
+  .focus-b b{font-size:13.5px;font-weight:650}
+  .focus-b span{font-size:12.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .focus-go{color:var(--ink3);font-size:14px}
+  .hero-foot{margin-top:auto;padding-top:16px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .hero-kpi b{display:block;font-size:26px;font-weight:650;letter-spacing:-.02em;line-height:1.1}
+  .hero-kpi span,.hero-ring span{font-size:11.5px;color:var(--ink3)}
+  .hero-kpi:first-child b{color:var(--teal)} .hero-kpi:nth-child(2) b{color:var(--violet)}
+  .hero-ring{display:flex;align-items:center;gap:8px}
+  .hero-ring b{display:block;font-size:15px;font-weight:650;line-height:1.1}
+  .hero-ring small{font-size:11px;color:var(--ink3);font-weight:500}
+  .hero-ring span{display:block;white-space:nowrap}
+
+  /* Load */
+  .grid2 .load{cursor:default}
+  .grid2 .load:hover{transform:none}
+  .load-desc{font-size:12.5px;color:var(--ink2);margin:6px 0 14px;line-height:1.55}
+  .load-rows{display:flex;flex-direction:column;gap:9px}
+  .load-row{display:grid;grid-template-columns:120px 1fr 64px;align-items:center;gap:12px;padding:3px 6px;margin:0 -6px;border-radius:8px;cursor:pointer}
+  .load-row:hover{background:rgba(30,40,80,.04)}
+  .load-name{font-size:12.5px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .load-bar{display:flex;height:10px;border-radius:6px;background:#f0f1f5;overflow:hidden}
+  .load-bar i{display:block;height:100%}
+  .b-pr{background:linear-gradient(90deg,#5ccfc0,var(--teal))}
+  .b-iss{background:linear-gradient(90deg,#b3a3e6,var(--violet))}
+  .load-val{display:flex;gap:6px;justify-content:flex-end;font-size:12px;font-variant-numeric:tabular-nums}
+  .load-val em{font-style:normal;font-weight:650}
+  .v-pr{color:var(--teal)} .v-iss{color:var(--violet)}
+  .legend{margin-top:auto;padding-top:12px;display:flex;gap:14px;font-size:11.5px;color:var(--ink3)}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+
+  /* Work tile */
+  .w-top{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .av{width:30px;height:30px;border-radius:9px;flex-shrink:0;object-fit:cover;background:#eef0f4;box-shadow:0 0 0 1px rgba(30,40,80,.06)}
+  .av-f{display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--ink2)}
+  .w-src{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3}
+  .w-label{font-size:10.5px;font-weight:650;letter-spacing:.06em;color:var(--ink3);text-transform:uppercase}
+  .w-repo{font-size:12.5px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pill{font-size:11px;font-weight:650;padding:3px 9px;border-radius:999px;flex-shrink:0}
+  .pill-hot{background:var(--rose-soft);color:var(--rose)}
+  .w-head{font-size:17px;line-height:1.35;font-weight:650;letter-spacing:-.01em;margin:0 0 6px}
+  .size-normal .w-head{font-size:16px}
+  .w-desc{font-size:13px;line-height:1.6;color:var(--ink2);margin:0 0 12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .size-normal .w-desc{-webkit-line-clamp:3}
+  .metrics{display:flex;align-items:center;gap:20px;margin:2px 0 14px}
+  .metrics .m b{display:block;font-size:28px;font-weight:650;letter-spacing:-.02em;line-height:1.05;font-variant-numeric:tabular-nums}
+  .metrics .m span{font-size:11.5px;color:var(--ink3)}
+  .m-bar{flex:1;display:flex;height:8px;border-radius:5px;overflow:hidden;gap:2px;background:#f0f1f5;min-width:60px}
+  .m-bar i{display:block;height:100%;min-width:0}
+  .spark{width:100%;height:28px;color:var(--teal);margin-bottom:10px}
+  .w-next{margin-top:auto;display:flex;gap:8px;align-items:baseline;padding:9px 11px;border-radius:12px;background:rgba(34,168,152,.07);margin-bottom:10px}
+  .w-next-k{font-size:11px;font-weight:700;color:var(--teal);flex-shrink:0;letter-spacing:.04em}
+  .w-next-v{font-size:12.5px;line-height:1.5;color:var(--ink);min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .w-links{display:flex;flex-direction:column;gap:2px}
+  .lk{display:flex;align-items:center;gap:8px;padding:5px 6px;margin:0 -6px;border-radius:8px;color:var(--ink2);text-decoration:none;font-size:12.5px;min-width:0;transition:.15s}
+  .lk:hover{background:rgba(30,40,80,.05);color:var(--ink)}
+  .lk-ic{display:inline-flex;width:20px;height:20px;border-radius:6px;align-items:center;justify-content:center;flex-shrink:0}
+  .lk-pr .lk-ic,.lk-ic.lk-pr{background:var(--teal-soft);color:var(--teal)}
+  .lk-issue .lk-ic,.lk-ic.lk-issue{background:var(--violet-soft);color:var(--violet)}
+  .lk-mail .lk-ic,.lk-ic.lk-mail{background:var(--peach-soft);color:var(--peach)}
+  .lk-repo .lk-ic,.lk-link .lk-ic,.lk-ic.lk-link{background:#eef0f4;color:var(--ink2)}
+  .lk-t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lk-arrow{color:var(--ink3);font-size:11px;opacity:0;transition:.15s}
+  .lk:hover .lk-arrow{opacity:1}
+
+  /* Bottom ask bar */
+  #v-today .today-chat-input{position:sticky;bottom:0;margin:0 -44px;padding:18px 44px 22px;background:linear-gradient(to bottom,rgba(243,244,247,0),rgba(243,244,247,.92) 40%);border:0;box-shadow:none;z-index:5}
+  #v-today .today-chat-input .input-wrap{max-width:640px;margin:0 auto;background:rgba(255,255,255,.92);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.95);border-radius:999px;box-shadow:var(--shadow-hi);padding:6px 6px 6px 20px}
+  #v-today .today-chat-input .send-btn{border-radius:50%;background:linear-gradient(135deg,#6f8df5,#8a74d0)}
+  .grid2{padding-bottom:12px}
+  .dockBtn{background:linear-gradient(135deg,#6f8df5,#8a74d0)!important;box-shadow:0 10px 24px -8px rgba(110,110,230,.7)!important}
+
+  /* Zoom modal */
+  .tile-zoom-overlay{background:rgba(28,30,40,.28)!important;backdrop-filter:blur(10px)}
+  .tile-zoom-modal{border-radius:26px!important;max-width:760px!important;width:min(760px,92vw)!important;padding:30px 32px 24px!important;background:rgba(255,255,255,.96)!important;box-shadow:0 30px 80px -20px rgba(30,40,80,.35)!important}
+  .tile-zoom-title{font-size:24px!important;font-weight:650!important;letter-spacing:-.02em;margin:0 40px 6px 0!important;color:var(--ink)!important}
+  .tile-zoom-subtitle{font-size:13px!important;color:var(--ink3)!important;margin:0 0 16px!important;-webkit-line-clamp:unset!important;display:block!important}
+  .tile-zoom-subtitle a{color:var(--ink2);text-decoration:none;border-bottom:1px solid var(--line)}
+  .z-src{font-weight:650;letter-spacing:.04em}
+  .z-body{font-size:14.5px;line-height:1.75;color:var(--ink);margin:0 0 8px}
+  .z-orig{font-size:12px;color:var(--ink3);margin:0 0 14px}
+  .z-kpis{display:flex;gap:28px;margin:4px 0 16px}
+  .z-kpis b{display:block;font-size:30px;font-weight:650;line-height:1.1}
+  .z-kpis span{font-size:12px;color:var(--ink3)}
+  .z-next{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border-radius:16px;background:linear-gradient(135deg,rgba(34,168,152,.09),rgba(79,157,232,.08));margin-bottom:18px}
+  .z-next b{display:block;font-size:14.5px;margin-top:2px}
+  .z-btn{flex-shrink:0;text-decoration:none;color:#fff;font-size:13px;font-weight:600;padding:9px 16px;border-radius:999px;background:var(--teal)}
+  .z-sec h4,.z-chat h4{font-size:11.5px;font-weight:650;letter-spacing:.06em;color:var(--ink3);margin:0 0 8px}
+  .z-items{display:flex;flex-direction:column;gap:6px;margin-bottom:18px}
+  .z-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:#f6f7fa;transition:.2s}
+  .z-item.is-done{opacity:.5}.z-item.is-dismissed{opacity:.3}
+  .z-time{font-size:12.5px;font-weight:650;color:var(--teal);font-variant-numeric:tabular-nums;min-width:88px}
+  .z-item-b{flex:1;min-width:0;display:flex;flex-direction:column}
+  .z-item-b b{font-size:13.5px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .z-item-b span{font-size:11.5px;color:var(--ink3)}
+  .z-acts{display:flex;gap:4px;flex-shrink:0}
+  .z-act{border:0;background:#fff;color:var(--ink2);font:500 12px/1 inherit;padding:7px 10px;border-radius:8px;cursor:pointer;text-decoration:none;box-shadow:0 0 0 1px var(--line)}
+  .z-act:hover{color:var(--ink);box-shadow:0 0 0 1px rgba(30,40,80,.15)}
+  .z-act.done:hover{color:var(--teal)}
+  .z-chat{border-top:1px solid var(--line);padding-top:16px}
+  .z-msgs{display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto;margin-bottom:8px}
+  .z-msgs:empty{display:none}
+  .z-msg{max-width:85%;padding:9px 13px;border-radius:14px;font-size:13.5px;line-height:1.6;white-space:pre-wrap}
+  .z-msg.me{align-self:flex-end;background:linear-gradient(135deg,#6f8df5,#8a74d0);color:#fff;border-bottom-right-radius:4px}
+  .z-msg.bot{align-self:flex-start;background:#f3f4f8;border-bottom-left-radius:4px}
+  .z-msg.typing{color:var(--ink3)}
+  .z-sugg{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+  .z-chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font:12.5px/1.2 inherit;color:var(--ink2);cursor:pointer}
+  .z-chip:hover{border-color:rgba(138,116,208,.4);color:var(--violet)}
+  .z-input{display:flex;gap:8px;background:#f6f7fa;border-radius:999px;padding:5px 5px 5px 16px}
+  .z-input input{flex:1;border:0;background:transparent;font:14px inherit;outline:none;min-width:0}
+  .z-input button{border:0;border-radius:999px;padding:8px 16px;font:600 13px inherit;color:#fff;background:linear-gradient(135deg,#6f8df5,#8a74d0);cursor:pointer}
+
+  /* zoom overflow fix */
+  .tile-zoom-modal{box-sizing:border-box!important;max-height:88vh!important;overflow-x:hidden!important;overflow-y:auto!important}
+  .tile-zoom-content,.tile-zoom-content *{box-sizing:border-box;max-width:100%}
+  .tile-zoom-content{overflow-x:hidden;min-width:0}
+  .z-next>*{min-width:0}.z-next{flex-wrap:wrap}
+  .z-item{min-width:0;flex-wrap:nowrap}
+  .z-item-b>*{white-space:normal!important;overflow-wrap:anywhere;word-break:break-word}
+  .tile-zoom-title,.tile-zoom-content p,.tile-zoom-content div{overflow-wrap:anywhere}
+
+  /* sources grid */
+  #v-sources,#v-settings{padding:36px 44px 60px}
+  .src-summary{display:flex;align-items:center;gap:28px;margin:4px 0 22px}
+  .src-summary b{display:block;font-size:28px;font-weight:650;line-height:1.1}
+  .src-summary span{font-size:12px;color:var(--ink3)}
+  .src-warn{margin:0;font-size:13px;color:var(--rose)}
+  .src-group{margin-bottom:26px}
+  .src-group-h{display:flex;align-items:baseline;gap:10px;margin:0 0 10px}
+  .src-group-h b{font-size:15px;font-weight:650}
+  .src-group-h span{font-size:12px;color:var(--ink3)}
+  .src-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
+  .src-tile{background:rgba(255,255,255,.82);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.95);border-radius:18px;padding:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;min-width:0;transition:.2s var(--ease)}
+  .src-tile:hover{box-shadow:var(--shadow-hi);transform:translateY(-1px)}
+  .src-tile.is-on{background:linear-gradient(160deg,#fff,rgba(227,246,243,.9))}
+  .src-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .src-top img,.src-fb{width:36px;height:36px;border-radius:10px;object-fit:contain;background:#fff;box-shadow:0 0 0 1px var(--line)}
+  .src-fb{display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--ink2)}
+  .src-pill{font-size:11px;font-weight:650;padding:3px 9px;border-radius:999px}
+  .src-pill.on{background:var(--teal-soft);color:var(--teal)}
+  .src-pill.wait{background:var(--peach-soft);color:var(--peach)}
+  .src-pill.off{background:#eef0f4;color:var(--ink3)}
+  .src-tile h4{margin:0 0 4px;font-size:14.5px;font-weight:650}
+  .src-tile p{margin:0 0 14px;font-size:12.5px;line-height:1.55;color:var(--ink2);flex:1}
+  .src-foot{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .src-auth{font-size:11px;color:var(--ink3)}
+  .src-btn{border:0;cursor:pointer;font:600 12.5px/1 inherit;color:#fff;padding:8px 14px;border-radius:999px;background:linear-gradient(135deg,#6f8df5,#8a74d0)}
+  .src-btn.ghost{background:#fff;color:var(--ink2);box-shadow:0 0 0 1px var(--line)}
+
+  .dockPanel{width:420px;max-height:min(680px,calc(100vh - 32px))}
+  /* flex column children default to flex-shrink:1; with overflow:hidden their min-height becomes 0,
+     so a tall reply squashes every card. Never shrink dock messages; the body scrolls instead. */
+  .dockBody{min-height:0;overscroll-behavior:contain}
+  .dockBody > *{flex-shrink:0}
+  .gcard{flex-shrink:0;max-width:100%;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:8px 0;box-shadow:0 1px 2px rgba(30,40,80,.04);position:relative;overflow:hidden}
+  .gcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:#d7dbe3}
+  .gcard.g-you::before{background:var(--rose)} .gcard.g-others::before{background:var(--sky)}
+  .gc-top{display:flex;align-items:center;gap:10px}
+  .gc-count{flex-shrink:0;min-width:34px;height:34px;padding:0 8px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;background:#f1f2f6;color:var(--ink)}
+  .g-you .gc-count{background:var(--rose-soft);color:var(--rose)} .g-others .gc-count{background:var(--sky-soft);color:var(--sky)}
+  .gc-h{display:flex;flex-direction:column;min-width:0}
+  .gc-h b{font-size:14px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gc-w{font-size:11px;color:var(--ink3)} .gc-w.you{color:var(--rose)} .gc-w.others{color:var(--sky)}
+  .gc-why{margin:8px 0 0;font-size:12.5px;line-height:1.55;color:var(--ink2)}
+  .gc-bd{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .gc-bd span{font-size:11.5px;background:#f4f5f8;border-radius:999px;padding:3px 9px;color:var(--ink2)}
+  .gc-next{margin-top:8px;font-size:12.5px;line-height:1.5;background:rgba(34,168,152,.08);border-radius:10px;padding:7px 10px}
+  .gc-next span{font-size:11px;font-weight:700;color:var(--teal);margin-right:6px}
+  .gc-links{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+  .gc-links a{font-size:12px;color:var(--ink2);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:3px 0}
+  .gc-links a::before{content:"↗ ";color:var(--ink3)}
+  .gc-links a:hover{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="side">
+    <div class="who">
+      <svg viewBox="0 0 32 32" width="24" height="24" aria-hidden="true">
+        <circle cx="16" cy="16" r="16" fill="#eef2ff"/>
+        <ellipse cx="16" cy="18" rx="10.5" ry="9.5" fill="#4a6cf7"/>
+        <path d="M16 4.6c0-1.6 1.2-2.6 2.9-2.6-.2 1.7-1.2 2.9-2.9 3.1z" fill="#2f9e6b"/>
+        <circle cx="12.4" cy="16.6" r="1.6" fill="#fff"/>
+        <circle cx="19.6" cy="16.6" r="1.6" fill="#fff"/>
+        <path d="M13.4 20.4q2.6 2.4 5.2 0" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+      </svg>
+      <b>豆芽</b>
+    </div>
+    <div class="nav on" data-view="today">今天</div>
+    <div class="nav" data-view="sources">信源状态</div>
+    <div class="grp">设置</div>
+    <div class="nav" data-view="settings">配置</div>
+  </aside>
+
+  <div class="views">
+        <!-- 今天视图 -->
+        <section class="view on" id="v-today">
+          <header class="day-head">
+            <div class="day-hello">
+              <div class="day-date" id="stamp">—</div>
+              <h1 class="day-title" id="conclText">正在加载…</h1>
+              <p class="day-sum" id="daySummary"></p>
+            </div>
+            <div class="day-side">
+              <div class="kpis">
+                <div class="kpi"><b id="nOpen">–</b><span>件在手</span></div>
+                <div class="kpi"><b id="nUrgent" class="c-rose">–</b><span>件优先</span></div>
+                <div class="kpi"><b id="nMeet">–</b><span>个会议</span></div>
+              </div>
+              <div class="day-actions">
+                <span id="digestStatus" class="digest-status"></span>
+                <button id="generateDigestBtn" class="btn-glow">立即汇聚</button>
+              </div>
+            </div>
+          </header>
+          <div id="cardList"></div>
+        </section>
+
+        <!-- 信源状态 -->
+        <section class="view" id="v-sources">
+          <h3 class="concl">信源接入状态</h3>
+          <div class="stamp a in">查看已连接的数据源和权限范围</div>
+
+          <div id="sourcesContent"></div>
+        </section>
+
+        <!-- 设置 -->
+        <section class="view" id="v-settings">
+          <h3 class="concl">模型配置</h3>
+          <div class="stamp a in">配置 AI 模型用于智能对话</div>
+
+          <!-- Model Configuration -->
+          <div class="card a in" id="modelCard">
+            <h3>🤖 AI模型</h3>
+            <p style="font-size:12.5px;color:var(--ink2);margin:8px 0">配置用于对话的 AI 模型</p>
+            
+            <div style="display:grid;gap:12px;margin-top:12px">
+              <div>
+                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:4px">提供商</label>
+                <select id="llmProviderSelect" 
+                  style="width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px;background:#fff">
+                  <option value="">选择提供商...</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="deepseek">DeepSeek</option>
+                  <option value="moonshot">Moonshot (月之暗面)</option>
+                  <option value="zhipu">ZhipuAI (智谱清言)</option>
+                  <option value="anthropic">Anthropic (需代理)</option>
+                  <option value="custom">自定义 / Custom</option>
+                </select>
+              </div>
+
+              <div id="llmBaseURLDiv" style="display:none">
+                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:4px">Base URL</label>
+                <input type="text" id="llmBaseURLInput" placeholder="https://api.example.com/v1" 
+                  style="width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px;font-family:ui-monospace,monospace" />
+              </div>
+
+              <div>
+                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:4px">API Key</label>
+                <div style="display:flex;gap:8px">
+                  <input type="password" id="llmApiKeyInput" placeholder="输入 API Key" 
+                    style="flex:1;border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px;font-family:ui-monospace,monospace" />
+                </div>
+              </div>
+
+              <div>
+                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:4px">模型</label>
+                <input type="text" id="llmModelInput" placeholder="gpt-4o" 
+                  style="width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px" />
+              </div>
+
+              <div style="display:flex;gap:8px">
+                <button class="btn primary" id="saveLLMBtn">保存模型配置</button>
+                <button class="btn" id="testLLMBtn">测试连接</button>
+              </div>
+              
+              <div id="llmStatus" style="font-size:11.5px;margin-top:6px"></div>
+            </div>
+          </div>
+
+          <h3 class="concl" style="margin-top:32px">Composio 设置</h3>
+          <div class="stamp a in">连接你的应用，开始聚合信息</div>
+
+          <!-- API Key Configuration -->
+          <div class="card a in" id="apiKeyCard">
+            <h3>🔑 API密钥</h3>
+            <p style="font-size:12.5px;color:var(--ink2);margin:8px 0">从 <a href="https://app.composio.dev" target="_blank" style="color:var(--blue)">Composio Dashboard</a> 获取你的 API 密钥</p>
+            
+            <div style="display:grid;gap:12px;margin-top:12px">
+              <div>
+                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:4px">API Key</label>
+                <div style="display:flex;gap:8px">
+                  <input type="password" id="apiKeyInput" placeholder="输入 Composio API Key" 
+                    style="flex:1;border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px;font-family:ui-monospace,monospace" />
+                  <button class="btn primary" id="saveApiKeyBtn">保存</button>
+                </div>
+                <div id="apiKeyStatus" style="font-size:11.5px;margin-top:6px"></div>
+              </div>
+              
+              <div>
+                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:4px">Entity ID（可选）</label>
+                <input type="text" id="entityIdInput" placeholder="default" 
+                  style="width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Available Apps Grid -->
+          <div style="margin-top:24px">
+            <h4 style="font-size:15px;font-weight:600;margin:0 0 12px">可连接的应用</h4>
+            <div id="appsGrid" class="apps-grid">
+              <!-- Apps will be loaded here -->
+            </div>
+          </div>
+
+          <!-- Digest Settings -->
+          <div class="card a in" style="margin-top:24px">
+            <h3>⏰ 每日汇聚设置</h3>
+            
+            <div style="display:grid;gap:16px;margin-top:12px">
+              <div>
+                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:4px">推送时间</label>
+                <input type="time" id="digestTimeInput" 
+                  style="border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px;width:150px" />
+              </div>
+              
+              <div>
+                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:8px">选择信源</label>
+                <div id="digestSources" style="display:flex;flex-wrap:wrap;gap:8px">
+                  <!-- Source toggles will be loaded here -->
+                </div>
+              </div>
+              
+              <div class="actions">
+                <button class="btn primary" id="saveDigestSettingsBtn">保存设置</button>
+                <button class="btn" id="testDigestBtn">测试推送</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 聊天面板 -->
+<div class="chat-open-hint" id="chatHint">💬 点击这里开始对话</div>
+<button class="dockBtn" id="dockBtn" title="和豆芽对话（必备功能）">
+  <svg viewBox="0 0 24 24" width="28" height="28" fill="white">
+    <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
+    <circle cx="8" cy="10" r="1.5"/>
+    <circle cx="12" cy="10" r="1.5"/>
+    <circle cx="16" cy="10" r="1.5"/>
+  </svg>
+  <span class="badge"></span>
+</button>
+
+<div class="dockPanel" id="dockPanel">
+  <div class="dockHead">
+    <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true">
+      <circle cx="16" cy="16" r="16" fill="#eef2ff"/>
+      <ellipse cx="16" cy="18" rx="10.5" ry="9.5" fill="#4a6cf7"/>
+      <path d="M16 4.6c0-1.6 1.2-2.6 2.9-2.6-.2 1.7-1.2 2.9-2.9 3.1z" fill="#2f9e6b"/>
+      <circle cx="12.4" cy="16.6" r="1.6" fill="#fff"/>
+      <circle cx="19.6" cy="16.6" r="1.6" fill="#fff"/>
+      <path d="M13.4 20.4q2.6 2.4 5.2 0" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    </svg>
+    <div><b>豆芽</b><small>数字同事</small></div>
+    <button class="x" id="dockClose">✕</button>
+  </div>
+  <div class="dockBody" id="dockBody">
+    <!-- Messages will appear here -->
+  </div>
+  <div class="dockFoot">
+    <input id="dockInput" placeholder="问我任何事情..." />
+    <button class="send" id="dockSend">↑</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  const $ = id => document.getElementById(id);
+  const views = { today: $('v-today'), sources: $('v-sources'), settings: $('v-settings') };
+  
+  // View navigation
+  document.querySelectorAll('.nav[data-view]').forEach(nav => {
+    nav.addEventListener('click', () => {
+      const view = nav.getAttribute('data-view');
+      document.querySelectorAll('.nav').forEach(n => n.classList.remove('on'));
+      nav.classList.add('on');
+      Object.keys(views).forEach(k => views[k].classList.toggle('on', k === view));
+      if (view === 'sources') loadSources();
+      if (view === 'settings') {
+        checkConfig();
+        loadLLMSettings();
+        loadComposioSettings();
+      }
+    });
+  });
+
+  // Dock panel
+  $('dockBtn').addEventListener('click', () => {
+    $('dockPanel').classList.toggle('open');
+    $('dockBtn').classList.remove('has');
+  });
+  $('dockClose').addEventListener('click', () => {
+    $('dockPanel').classList.remove('open');
+  });
+
+  // Chat send
+  $('dockSend').addEventListener('click', sendMessage);
+  $('dockInput').addEventListener('keypress', e => {
+    if (e.key === 'Enter') sendMessage();
+  });
+
+  async function sendMessage() {
+    const input = $('dockInput');
+    const text = input.value.trim();
+    if (!text) return;
+
+    const body = $('dockBody');
+    
+    // Add user message
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble me';
+    bubble.innerHTML = `${escapeHtml(text)}<small>${new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'})}</small>`;
+    body.appendChild(bubble);
+    body.scrollTop = body.scrollHeight;
+    input.value = '';
+
+    // Show typing indicator
+    const typing = document.createElement('div');
+    typing.className = 'bubble';
+    typing.innerHTML = '<span class="typing">⋯</span>';
+    body.appendChild(typing);
+    body.scrollTop = body.scrollHeight;
+
+    try {
+      // Send to backend
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, sessionId: 'web-default' }),
+      });
+
+      // Remove typing indicator
+      typing.remove();
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      
+      const data = await res.json();
+
+      // Check for error in response
+      if (data.error) {
+        addBotMessage(data.error, data.time);
+        return;
+      }
+
+      // Check for empty response
+      if (!data.text && (!data.cards || data.cards.length === 0)) {
+        console.warn('[Chat] Empty response:', data);
+        addBotMessage('收到了，但模型没有返回内容。', data.time);
+        return;
+      }
+
+      // Add successful response
+      addBotMessage(data.text, data.time, data.cards, data.citations);
+      
+    } catch (err) {
+      typing.remove();
+      console.error('[Chat Error]', err);
+      addBotMessage('抱歉，发送失败了。请稍后重试。', null);
+    }
+  }
+
+  function renderGroupCard(card) {
+    const el = document.createElement('div');
+    const w = card.waiting === 'you' ? ['you', '等你处理'] : card.waiting === 'others' ? ['others', '等别人'] : ['fyi', '仅供参考'];
+    const links = (card.links || []).filter(l => l && /^https?:/.test(l.url)).slice(0, 3);
+    el.className = `gcard g-${w[0]}`;
+    el.innerHTML = `
+      <div class="gc-top"><span class="gc-count">${Number(card.count) || 0}</span>
+        <div class="gc-h"><b>${escapeHtml(card.title || card.label || '')}</b><span class="gc-w ${w[0]}">${w[1]}</span></div></div>
+      ${card.why || card.description ? `<p class="gc-why">${escapeHtml(card.why || card.description)}</p>` : ''}
+      ${Array.isArray(card.breakdown) && card.breakdown.length > 1 ? `<div class="gc-bd">${card.breakdown.slice(0, 4).map(b => `<span>${escapeHtml(String(b.label).split('/').pop())} <b>×${b.count}</b></span>`).join('')}</div>` : ''}
+      ${card.nextAction ? `<div class="gc-next"><span>下一步</span>${escapeHtml(card.nextAction)}</div>` : ''}
+      ${links.length ? `<div class="gc-links">${links.map(l => `<a href="${escapeHtml(l.url)}" target="_blank" rel="noopener" title="${escapeHtml(l.title || '')}">${escapeHtml(l.title || l.url)}</a>`).join('')}</div>` : ''}`;
+    return el;
+  }
+
+  function citesEl(citations) {
+    const list = (citations || []).filter(c => c && /^https?:/.test(c.url || ''));
+    if (!list.length) return null;
+    const el = document.createElement('div');
+    el.className = 'cites';
+    el.innerHTML = `<span class="cites-h">依据</span>` + list.slice(0, 6).map((c, i) => `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" title="${escapeHtml(c.title || c.url)}"><i>${i + 1}</i>${escapeHtml(c.label || '')}${c.title ? ' · ' + escapeHtml(clip(c.title, 26)) : ''}</a>`).join('');
+    return el;
+  }
+
+  function addBotMessage(text, time, cards, citations) {
+    const body = $('dockBody');
+    
+    // Add text bubble if present
+    if (text) {
+      const reply = document.createElement('div');
+      reply.className = 'bubble';
+      reply.innerHTML = `${escapeHtml(text)}<small>${time || new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'})}</small>`;
+      const ce = citesEl(citations);
+      if (ce) reply.appendChild(ce);
+      body.appendChild(reply);
+    }
+
+    // Add interactive cards if present
+    if (cards && cards.length > 0) {
+      cards.forEach(card => {
+        try {
+          if (card && card.type === 'group') { body.appendChild(renderGroupCard(card)); return; }
+          const cardEl = document.createElement('div');
+          cardEl.className = 'chat-card';
+          cardEl.style.cssText = 'background:#f8f9fa;border:1px solid #e0e0e0;border-radius:8px;padding:12px;margin:8px 0;max-width:400px;';
+          
+          let html = '';
+          
+          // Title
+          if (card.title) {
+            html += `<h4 style="margin:0 0 8px;font-size:14px;font-weight:600;color:#333">${escapeHtml(card.title)}</h4>`;
+          }
+          
+          // Description
+          if (card.description) {
+            html += `<p style="margin:0 0 8px;font-size:13px;color:#666;line-height:1.4">${escapeHtml(card.description)}</p>`;
+          }
+          
+          // Time + Status (for event/task)
+          if (card.time || card.status) {
+            html += '<div style="font-size:12px;color:#888;margin-bottom:8px">';
+            if (card.time) html += `<span>${escapeHtml(card.time)}</span>`;
+            if (card.status) html += `<span style="margin-left:8px">${escapeHtml(card.status)}</span>`;
+            html += '</div>';
+          }
+          
+          // Items list (for info cards)
+          if (card.items && Array.isArray(card.items) && card.items.length > 0) {
+            html += '<ul style="margin:8px 0;padding-left:20px;list-style:disc">';
+            card.items.forEach(item => {
+              html += `<li style="font-size:13px;color:#555;margin:4px 0">${escapeHtml(String(item))}</li>`;
+            });
+            html += '</ul>';
+          }
+          
+          // Actions (for action/choice cards) - handle both 'actions' and 'choices' fields
+          const actionList = card.actions || card.choices;
+          if (actionList && Array.isArray(actionList) && actionList.length > 0) {
+            html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">';
+            actionList.forEach(action => {
+              const label = escapeHtml(action.label || action.text || 'Action');
+              const value = escapeHtml(action.value || action.action || action.label || '');
+              html += `<button class="card-btn" data-value="${value}" style="padding:6px 12px;background:#007bff;color:white;border:none;border-radius:4px;font-size:13px;cursor:pointer;transition:background 0.2s">${label}</button>`;
+            });
+            html += '</div>';
+          }
+          
+          cardEl.innerHTML = html;
+          
+          // Add click handlers for action buttons
+          cardEl.querySelectorAll('.card-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const actionValue = btn.getAttribute('data-value');
+              handleCardAction(actionValue);
+            });
+            // Hover effects
+            btn.addEventListener('mouseenter', () => { btn.style.background = '#0056b3'; });
+            btn.addEventListener('mouseleave', () => { btn.style.background = '#007bff'; });
+          });
+          
+          body.appendChild(cardEl);
+        } catch (err) {
+          console.error('[Card Render Error]', err, card);
+          // Don't show error bubble if HTTP succeeded
+        }
+      });
+    }
+
+    body.scrollTop = body.scrollHeight;
+  }
+
+  function handleCardAction(value) {
+    console.log('[Card Action]', value);
+    
+    // Normalize value for matching
+    const normalized = value.toLowerCase().trim();
+    
+    // Special actions - match human-readable text patterns
+    if (normalized.includes('设置') || normalized === 'goto_settings') {
+      closeAllViews();
+      showView('settings');
+      return;
+    }
+    
+    if (normalized.includes('重试') || normalized === 'retry') {
+      $('dockInput').focus();
+      return;
+    }
+    
+    if (normalized.includes('今天') || normalized.includes('今日') || normalized === 'view_today') {
+      closeAllViews();
+      showView('today');
+      return;
+    }
+    
+    // Default: send action value as message (human-readable text)
+    $('dockInput').value = value;
+    sendMessage();
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // Load today's data
+  async function loadToday() {
+    try {
+      const res = await fetch('/api/today');
+      const data = await res.json();
+      lastToday = data;
+      const name = data.userName || '';
+      $('conclText').textContent = `${greetingWord()}${name ? '，' + name : ''}`;
+      $('stamp').textContent = `${data.date || ''}${data.sources ? ' · 来自 ' + data.sources : ''}`;
+      $('nOpen').textContent = data.openCount || 0;
+      $('nUrgent').textContent = data.urgentCount || 0;
+      $('nMeet').textContent = data.meetingCount || 0;
+      $('daySummary').textContent = data.summary || '';
+      renderCardList(data.cards || []);
+      if (data.hasDigest) {
+        $('digestStatus').textContent = data.lastDigestAt ? `已汇聚 · ${new Date(data.lastDigestAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}` : '已汇聚';
+      } else {
+        $('digestStatus').textContent = '';
+      }
+    } catch (err) {
+      console.error('Failed to load today:', err);
+      $('conclText').textContent = '加载失败，请稍后重试';
+    }
+  }
+
+  // ===== v2 tile renderer (Muse/Today-inspired) =====
+  const SYS_TYPES = new Set(['hero', 'timetable']);
+  let lastCards = [];
+  let lastToday = {};
+  const CAT_ZH = { meal: '用餐', focus: '专注', break: '休息', exercise: '运动', meeting: '会议', review: '复盘', admin: '杂务', learning: '学习', personal: '个人' };
+  const TAG_ZH = { 'In Progress': '进行中', Active: '活跃', 'Needs Review': '待你审', Waiting: '等待中', Done: '已完成' };
+  const TITLE_ZH = { 'Lunch break': '午餐休息', 'Focus time': '专注时段', Breakfast: '早餐', Dinner: '晚餐', 'Evening walk': '晚间散步' };
+  const SRC_ZH = { github: 'GitHub · 代码协作', gmail: 'Gmail · 邮件', googlecalendar: '日历 · 日程', slack: 'Slack · 消息', manual: '手动 · 待办' };
+
+  function repoOf(card) {
+    const m = String(card.url || '').match(/github\.com\/([^/]+)\/([^/#?]+)/);
+    return m ? { owner: m[1], name: m[2] } : null;
+  }
+  function statOf(card, key) {
+    for (const b of card.blocks || []) {
+      if (b.type !== 'stat-row') continue;
+      for (const s of b.stats || []) if (String(s.label).includes(key)) return Number(s.value) || 0;
+    }
+    return 0;
+  }
+  function linksOf(card) {
+    const ll = (card.blocks || []).find(b => b.type === 'link-list');
+    return ((ll && ll.links) || []).filter(l => l && l.url);
+  }
+  function blockOf(card, type) { return (card.blocks || []).find(b => b.type === type); }
+  function clip(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+  function linkKind(l) {
+    const t = String(l.type || '');
+    if (t.startsWith('email') || /mail\.google/.test(l.url)) return { k: 'mail', zh: '邮件' };
+    if (/\/issues\//.test(l.url) || t.includes('issue')) return { k: 'issue', zh: 'Issue' };
+    if (/\/pull\//.test(l.url) || t.includes('pr')) return { k: 'pr', zh: 'PR' };
+    return { k: 'link', zh: '链接' };
+  }
+  function explain(card) {
+    const r = repoOf(card);
+    let t = String(card.body || '').trim();
+    if (r) {
+      t = t.replace(new RegExp('^' + r.owner.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/' + r.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*'), '');
+      t = t.replace(new RegExp('^' + r.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*', 'i'), '');
+    }
+    t = t.replace(/^过去\s*24\s*(h|小时)\s*(内)?\s*(无|没有)[^，,。]*[，,]\s*/, '');
+    if (!/[\u4e00-\u9fa5]/.test(t)) return '';
+    const parts = t.split(/(?<=[。！？；])/);
+    let out = '';
+    for (const p of parts) { if (out && (out + p).length > 78) break; out += p; }
+    return clip(out, 96);
+  }
+  function headline(card) {
+    if (SYS_TYPES.has(card.type)) return card.title || '';
+    const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
+    const parts = [];
+    if (pr) parts.push(`${pr} 个 PR 待推进`);
+    if (iss) parts.push(`${iss} 个 issue 待处理`);
+    return parts.length ? parts.join(' · ') : (card.title || '');
+  }
+  function zhBody(card) {
+    const b = String(card.body || '').trim();
+    if (/[\u4e00-\u9fa5]/.test(b)) return b;
+    const r = repoOf(card);
+    const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
+    const mails = linksOf(card).filter(l => linkKind(l).k === 'mail').length;
+    const parts = [];
+    if (pr) parts.push(`${pr} 个你开的 PR 还没合并`);
+    if (iss) parts.push(`${iss} 个 issue 仍开着`);
+    if (!parts.length) return b;
+    return `${r ? r.name : '这个项目'} 目前有 ${parts.join('、')}${mails ? `，另有 ${mails} 封相关通知邮件` : ''}。${iss > 20 ? 'issue 积压较多，建议先按标签分拣出今天必须回的。' : pr ? '先把最接近合并的 PR 推过去。' : ''}`;
+  }
+  function nextAction(card) {
+    const isGh = card.source === 'github' || !!repoOf(card);
+    if (card.nextAction && !(isGh && /邮件|Re:/i.test(card.nextAction))) return card.nextAction;
+    if (isGh) {
+      const ghLinks = linksOf(card).filter(l => linkKind(l).k !== 'mail');
+      const prL = ghLinks.find(l => linkKind(l).k === 'pr'), isL = ghLinks.find(l => linkKind(l).k === 'issue');
+      const pr0 = statOf(card, 'PR'), iss0 = statOf(card, 'issue');
+      if (prL) return `先推进 PR「${clip(prL.title, 30)}」，催 review 或合并`;
+      if (pr0) return `打开 PR 列表，推进 ${pr0} 个待合并 PR`;
+      if (isL) return `先回复 issue「${clip(isL.title, 30)}」`;
+      if (iss0) return `分拣 ${iss0} 个 issue，挑出今天要回复的 1–2 个`;
+    }
+    const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
+    const review = statOf(card, '待你审') || statOf(card, '审');
+    const links = linksOf(card);
+    const first = links[0];
+    if (review && first) return `先审「${clip(first.title, 30)}」`;
+    if (first && linkKind(first).k === 'mail') return `先回复邮件「${clip(first.title.replace(/^Re:\s*/i, ''), 30)}」`;
+    if (pr && first) return `先推进「${clip(first.title, 30)}」，催 review 或合并`;
+    if (pr) return `逐个推进 ${pr} 个 PR 的 review 与合并`;
+    if (iss) return `分拣 ${iss} 个 issue，挑出今天要回复的 1–2 个`;
+    return (card.actions && card.actions[0] && card.actions[0].label) || '打开查看最新进展';
+  }
+
+  function deepLinks(card) {
+    const out = [], seen = new Set();
+    for (const l of [...linksOf(card)].sort((a, b) => (repoOf(card) ? (linkKind(a).k === 'mail') - (linkKind(b).k === 'mail') : 0))) {
+      if (seen.has(l.url)) continue; seen.add(l.url);
+      const kind = linkKind(l);
+      out.push({ url: l.url, title: l.title, kind });
+      if (out.length >= 2) break;
+    }
+    const a = (card.actions || []).find(x => x.value && /^https?:/.test(x.value));
+    const r = repoOf(card);
+    if (a && !seen.has(a.value)) {
+      let label = a.label;
+      if (r && /\/pulls$/.test(a.value)) { const pr = statOf(card, 'PR'); label = pr ? `全部 ${pr} 个待处理 PR` : '全部 PR'; }
+      out.push({ url: a.value, title: label, kind: { k: 'repo', zh: '仓库' } });
+    } else if (r && !seen.has(card.url)) {
+      out.push({ url: card.url, title: '打开仓库', kind: { k: 'repo', zh: '仓库' } });
+    }
+    return out.slice(0, 3);
+  }
+  const ICON = {
+    pr: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm0 2.122a2.25 2.25 0 1 0-1.5 0v5.256a2.25 2.25 0 1 0 1.5 0Zm7.5 5.256V6.25A2.75 2.75 0 0 0 9.75 3.5H8.56l1.22-1.22-1.06-1.06L5.69 4.25l3.03 3.03 1.06-1.06L8.56 5h1.19c.69 0 1.25.56 1.25 1.25v4.378a2.25 2.25 0 1 0 1.5 0ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm7.5 0a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z"/></svg>',
+    issue: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/><path fill="currentColor" d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"/></svg>',
+    mail: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M1.75 2h12.5c.97 0 1.75.78 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 14H1.75A1.75 1.75 0 0 1 0 12.25v-8.5C0 2.78.78 2 1.75 2ZM1.5 5.06v7.19c0 .14.11.25.25.25h12.5c.14 0 .25-.11.25-.25V5.06L8.4 9.2a.75.75 0 0 1-.8 0Zm13-1.31v-.02c0-.13-.11-.23-.25-.23H1.75c-.14 0-.25.1-.25.23v.02L8 7.67Z"/></svg>',
+    repo: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.71 1.71.75.75 0 0 1-1.07 1.05A2.5 2.5 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.71A2.5 2.5 0 0 1 4.5 9h8Z"/></svg>',
+    link: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M7.78 4.72a.75.75 0 0 1 0 1.06L5.06 8.5a1.75 1.75 0 1 0 2.47 2.47l.5-.5a.75.75 0 1 1 1.06 1.06l-.5.5a3.25 3.25 0 1 1-4.6-4.6l2.73-2.72a.75.75 0 0 1 1.06 0Zm1.44-1.44a3.25 3.25 0 0 1 4.6 4.6l-.5.5a.75.75 0 0 1-1.06-1.06l.5-.5a1.75 1.75 0 1 0-2.47-2.47L7.56 7.08A.75.75 0 1 1 6.5 6.02Z"/></svg>',
+  };
+  function linkRow(l) {
+    return `<a class="lk lk-${l.kind.k}" href="${escapeHtml(l.url)}" target="_blank" rel="noopener" title="${escapeHtml(l.title)}"><span class="lk-ic">${ICON[l.kind.k] || ICON.link}</span><span class="lk-t">${escapeHtml(l.title)}</span><span class="lk-arrow">↗</span></a>`;
+  }
+  function toMin(t) {
+    if (typeof t === 'string' && /^\d{1,2}:\d{2}$/.test(t)) { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
+    const d = new Date(t); return isNaN(d) ? null : d.getHours() * 60 + d.getMinutes();
+  }
+  function fmtMin(m) { return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
+  function greetingWord() {
+    const h = new Date().getHours();
+    return h < 5 ? '夜深了' : h < 11 ? '早上好' : h < 13 ? '中午好' : h < 18 ? '下午好' : '晚上好';
+  }
+
+  function ttTitle(t) {
+    t = String(t || '');
+    if (TITLE_ZH[t]) return TITLE_ZH[t];
+    const map = [[/^deep\s*focus\s*[:：-]?\s*/i, '深度专注：'], [/^focus(\s*time)?\s*[:：-]?\s*/i, '专注：'], [/^review\s*/i, '评审 '], [/^lunch\b/i, '午餐'], [/^dinner\b/i, '晚餐'], [/^breakfast\b/i, '早餐'], [/^(short\s*)?break\b/i, '休息'], [/^(wind[\s-]*down|wrap[\s-]*up)\b\s*[:：-]?\s*/i, '收尾：'], [/^exercise|^walk/i, '运动'], [/^meeting\s*[:：-]?\s*/i, '会议：']];
+    for (const [re, zh] of map) if (re.test(t)) { t = t.replace(re, zh); break; }
+    return t.replace(/\s*&\s*/g, '与').replace(/[:：]\s*$/, '');
+  }
+
+  function renderTimetable(card) {
+    const tt = blockOf(card, 'timetable') || {};
+    const blocks = [...(tt.fixedBlocks || []).map(b => ({ ...b, fixed: true })), ...(tt.suggestedBlocks || [])]
+      .map(b => ({ ...b, s: toMin(b.start), e: toMin(b.end) }))
+      .filter(b => b.s != null && b.e != null && b.e > b.s)
+      .sort((a, b) => a.s - b.s);
+    const now = new Date(); const nowM = now.getHours() * 60 + now.getMinutes();
+    let lo = 8 * 60, hi = 22 * 60;
+    for (const b of blocks) { lo = Math.min(lo, Math.floor(b.s / 60) * 60); hi = Math.max(hi, Math.ceil(b.e / 60) * 60); }
+    lo = Math.min(lo, Math.floor(nowM / 60) * 60); hi = Math.max(hi, Math.ceil((nowM + 1) / 60) * 60);
+    hi = Math.min(hi, 24 * 60);
+    const pct = m => ((m - lo) / (hi - lo)) * 100;
+    let ticks = '';
+    for (let h = lo / 60; h <= hi / 60; h += 2) ticks += `<span class="tt-tick" style="left:${pct(h * 60)}%"><i>${String(h).padStart(2, '0')}:00</i></span>`;
+    const lanesEnd = [];
+    const minSpan = 0.04 * (hi - lo); // short blocks get a readable minimum width; lanes use the visual end
+    for (const b of blocks) { b.ve = Math.max(b.e, b.s + minSpan); }
+    for (const b of blocks) { let l = lanesEnd.findIndex(e => e <= b.s); if (l < 0) { l = lanesEnd.length; lanesEnd.push(0); } lanesEnd[l] = b.ve; b.lane = l; }
+    const nLanes = Math.max(1, lanesEnd.length), laneH = 40;
+    const bars = blocks.map(b => {
+      const state = b.e <= nowM ? 'past' : b.s <= nowM ? 'live' : 'next';
+      const cat = CAT_ZH[b.category] || (b.fixed ? '日程' : '建议');
+      return `<div class="tt-bar c-${escapeHtml(b.category || (b.fixed ? 'meeting' : 'focus'))} ${state}" style="left:${pct(b.s)}%;width:calc(${pct(b.ve) - pct(b.s)}% - 2px);top:${5 + b.lane * laneH}px;height:${laneH - 6}px" title="${escapeHtml(b.start + '–' + b.end + ' ' + ttTitle(b.title))}"><b>${escapeHtml(cat)}</b><span>${escapeHtml(b.start)}–${escapeHtml(b.end)} · ${escapeHtml(ttTitle(b.title))}</span></div>`;
+    }).join('');
+    const upcoming = blocks.find(b => b.e > nowM);
+    const fixedN = blocks.filter(b => b.fixed).length;
+    const freeMin = Math.max(0, (Math.min(hi, 23 * 60) - nowM) - blocks.filter(b => b.e > nowM).reduce((s, b) => s + (b.e - Math.max(b.s, nowM)), 0));
+    const note = upcoming
+      ? `接下来 ${escapeHtml(upcoming.start)} ${(() => { const t = ttTitle(upcoming.title), c = CAT_ZH[upcoming.category] || ''; return escapeHtml(c && !t.startsWith(c) ? c + '：' + t : t); })()}`
+      : `今天的安排都已过去，剩余约 ${(freeMin / 60).toFixed(1)} 小时空闲，适合收尾或复盘。`;
+    return `
+      <section class="myday" data-sys="timetable">
+        <div class="myday-head">
+          <div>
+            <div class="eyebrow c-teal">我的一天 · MY DAY</div>
+            <div class="myday-note">${note}</div>
+          </div>
+          <div class="myday-meta"><span><b>${fixedN}</b> 个固定日程</span><span><b>${blocks.length - fixedN}</b> 个建议时段</span><span>现在 <b>${fmtMin(nowM)}</b></span></div>
+        </div>
+        <div class="tt">
+          <div class="tt-track" style="height:${nLanes * laneH + 6}px">${bars || '<div class="tt-empty">今天还没有日程，连接日历后会自动排进来</div>'}
+            ${nowM >= lo && nowM <= hi ? `<div class="tt-now" style="left:${pct(nowM)}%"><em>${fmtMin(nowM)}</em></div>` : ''}
+          </div>
+          <div class="tt-axis">${ticks}</div>
+        </div>
+      </section>`;
+  }
+
+  function ringSvg(value, max, color, size = 64, stroke = 7) {
+    const r = (size - stroke) / 2, c = 2 * Math.PI * r;
+    const p = max > 0 ? Math.min(value / max, 1) : 0;
+    return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="rgba(30,40,80,.08)" stroke-width="${stroke}"/><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c - p * c}" transform="rotate(-90 ${size / 2} ${size / 2})"/></svg>`;
+  }
+
+  function renderHero(hero, work) {
+    const urgent = work.filter(c => c.priority === 'urgent' || c.priority === 'high');
+    const totPR = work.reduce((s, c) => s + statOf(c, 'PR'), 0);
+    const totIss = work.reduce((s, c) => s + statOf(c, 'issue'), 0);
+    const focus = [...work].sort((a, b) => (b.priority === 'high') - (a.priority === 'high') || (statOf(b, 'PR') + statOf(b, 'issue')) - (statOf(a, 'PR') + statOf(a, 'issue'))).slice(0, 3);
+    const rings = (blockOf(hero || {}, 'achievement-rings') || {}).rings || [];
+    const lead = work.length
+      ? `${work.length} 个项目在推进，其中 ${urgent.length} 个需要优先关注。按下面的顺序来，一件件收掉。`
+      : '今天没有待推进的事项，点「立即汇聚」拉取最新动态。';
+    return `
+      <div class="tile hero2 size-hero" data-sys="hero">
+        <div class="eyebrow c-violet">今日焦点 · 豆芽建议</div>
+        <p class="hero-lead">${escapeHtml(lead)}</p>
+        <ol class="focus">
+          ${focus.map((c, i) => {
+            const r = repoOf(c);
+            return `<li data-focus="${escapeHtml(c.id)}"><span class="focus-n">${i + 1}</span><div class="focus-b"><b>${escapeHtml(r ? r.name : clip(c.title, 24))}</b><span>${escapeHtml(nextAction(c))}</span></div><span class="focus-go">→</span></li>`;
+          }).join('')}
+        </ol>
+        <div class="hero-foot">
+          <div class="hero-kpi"><b>${totPR}</b><span>PR 待推进</span></div>
+          <div class="hero-kpi"><b>${totIss}</b><span>issue 待处理</span></div>
+          ${rings.map(r => { const has = Number(r.max) > 0; return `<div class="hero-ring" title="${escapeHtml(r.label)} ${r.value}${has ? '/' + r.max : ''}">${ringSvg(r.value, has ? r.max : Math.max(1, r.value), r.color, 44, 5)}<div><b>${r.value}${has ? `<small>/${r.max}</small>` : ''}</b><span>${escapeHtml(r.label)}</span></div></div>`; }).join('')}
+        </div>
+      </div>`;
+  }
+
+  function renderLoad(work) {
+    const rows = work.map(c => ({ c, r: repoOf(c), pr: statOf(c, 'PR'), iss: statOf(c, 'issue') }))
+      .filter(x => x.pr + x.iss > 0)
+      .sort((a, b) => (b.pr + b.iss) - (a.pr + a.iss)).slice(0, 7);
+    if (!rows.length) return '';
+    const max = Math.max(...rows.map(x => x.pr + x.iss), 1);
+    const scale = v => { const a=Math.log10(v+1), b=Math.log10(max+1); return Math.max(6, (a/b)*100); };
+    return `
+      <div class="tile load size-load" data-sys="load">
+        <div class="eyebrow c-blue">工作负载 · 按项目</div>
+        <p class="load-desc">每个项目还挂着多少 PR 和 issue（长度按平方根缩放，避免大仓库压扁小仓库）。点一行看详情。</p>
+        <div class="load-rows">
+          ${rows.map(x => `
+            <div class="load-row" data-focus="${escapeHtml(x.c.id)}">
+              <span class="load-name" title="${escapeHtml(x.r ? x.r.owner + '/' + x.r.name : x.c.title)}">${escapeHtml(x.r ? x.r.name : clip(x.c.title, 18))}</span>
+              <span class="load-bar"><i class="b-pr" style="width:${scale(x.pr + x.iss) * (x.pr / (x.pr + x.iss))}%"></i><i class="b-iss" style="width:${scale(x.pr + x.iss) * (x.iss / (x.pr + x.iss))}%"></i></span>
+              <span class="load-val">${x.pr ? `<em class="v-pr">${x.pr}</em>` : ''}${x.iss ? `<em class="v-iss">${x.iss}</em>` : ''}</span>
+            </div>`).join('')}
+        </div>
+        <div class="legend"><span><i class="b-pr"></i>你开的 / 待推进 PR</span><span><i class="b-iss"></i>待处理 issue</span><span style="margin-left:auto;opacity:.7">长度按对数缩放</span></div>
+      </div>`;
+  }
+
+  function renderWorkTile(card, idx) {
+    const r = repoOf(card);
+    const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
+    const big = card.priority === 'high' || card.priority === 'urgent';
+    const desc = explain(card) || zhBody(card);
+    const links = deepLinks(card);
+    const spark = blockOf(card, 'sparkline');
+    const hasSpark = spark && (spark.data || []).some(v => v > 0);
+    const label = SRC_ZH[card.source] || (card.source || '动态');
+    const av = r ? `<img class="av" src="https://github.com/${encodeURIComponent(r.owner)}.png?size=80" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'av av-f',textContent:'${escapeHtml(r.owner.slice(0, 1).toUpperCase())}'}))">` : `<span class="av av-f">${escapeHtml((card.source || '?').slice(0, 1).toUpperCase())}</span>`;
+    const review = statOf(card, '待你审') || statOf(card, '审');
+    const mine = statOf(card, '你开的') || pr;
+    let metrics = '';
+    if (review || mine || iss) {
+      metrics = `<div class="metrics">
+        ${review ? `<div class="m"><b class="c-rose">${review}</b><span>待你审</span></div>` : ''}
+        ${mine ? `<div class="m"><b class="c-teal">${mine}</b><span>你开的 PR</span></div>` : ''}
+        ${iss ? `<div class="m"><b class="c-violet">${iss}</b><span>待处理 issue</span></div>` : ''}
+        <div class="m-bar"><i class="b-pr" style="flex:${Math.max(mine||pr,0)}"></i><i class="b-iss" style="flex:${Math.max(iss,0)}"></i></div>
+      </div>`;
+    }
+    const bar = (card.blocks || []).find(b => b.type === 'chart' && b.chartType === 'bar');
+    if (bar && (bar.data || []).some(v => v > 0)) {
+      const mx = Math.max(...bar.data, 1);
+      metrics += `<div class="mini-bars" title="等你 vs 等别人">${(bar.data||[]).map((v,i)=>`<div class="mb"><i style="height:${Math.max(8,(v/mx)*36)}px" class="${i===0?'b-pr':'b-iss'}"></i><span>${escapeHtml((bar.labels||[])[i]||'')}<b>${v}</b></span></div>`).join('')}</div>`;
+    }
+    const tags = ((card.blocks || []).find(b => b.type === 'tags') || {}).tags || [];
+    const avatars = (blockOf(card, 'avatars') || {}).urls || [];
+    const avRow = avatars.length ? `<div class="av-row">${avatars.slice(0,5).map(u=>`<img class="av sm" src="${escapeHtml(u)}" alt="" loading="lazy" onerror="this.style.display='none'"/>`).join('')}</div>` : '';
+    const tagHtml = tags.length ? `<div class="w-tags">${tags.map(t=>{const tx=TAG_ZH[t.text]||t.text; return `<span class="pill pill-${escapeHtml(t.color||'gray')}">${escapeHtml(tx)}</span>`;}).join('')}</div>` : '';
+    if (hasSpark) {
+      const d = spark.data, mx = Math.max(...d, 1);
+      const pts = d.map((v, i) => `${(i / (d.length - 1)) * 100},${30 - (v / mx) * 26}`).join(' ');
+      metrics += `<svg class="spark" viewBox="0 0 100 32" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
+    }
+    return `
+      <article class="tile work ${big ? 'size-wide' : 'size-normal'}" data-idx="${idx}">
+        <header class="w-top">
+          ${av}
+          <div class="w-src"><span class="w-label">${escapeHtml(label)}</span><span class="w-repo">${escapeHtml(r ? `${r.owner} / ${r.name}` : (card.subtitle || ''))}</span></div>
+          ${big ? '<span class="pill pill-hot">优先</span>' : ''}${tagHtml}
+        </header>
+        <h3 class="w-head">${escapeHtml(headline(card))}</h3>
+        ${desc ? `<p class="w-desc">${escapeHtml(desc)}</p>` : ''}
+        ${metrics}${avRow}
+        <div class="w-next"><span class="w-next-k">下一步</span><span class="w-next-v">${escapeHtml(nextAction(card))}</span></div>
+        <div class="w-links">${links.map(linkRow).join('')}</div>
+      </article>`;
+  }
+
+  function renderCardList(cards) {
+    const container = $('cardList');
+    lastCards = cards;
+    const hero = cards.find(c => c.type === 'hero');
+    const tt = cards.find(c => c.type === 'timetable');
+    const work = cards.filter(c => !SYS_TYPES.has(c.type) && c.source !== 'system');
+    const order = [...work].sort((a, b) => ((b.priority === 'high') - (a.priority === 'high')));
+    let html = tt ? renderTimetable(tt) : '';
+    html += '<div class="grid2">';
+    html += renderHero(hero, work);
+    html += renderLoad(work);
+    html += order.map(c => renderWorkTile(c, cards.indexOf(c))).join('');
+    if (!work.length) html += `<div class="tile empty size-wide"><div class="eyebrow">还没有卡片</div><p class="w-desc">点击右上角「立即汇聚」，豆芽会从已连接的数据源拉取最新动态。</p></div>`;
+    html += '</div>';
+    html += `<div class="today-chat-input"><div class="input-wrap"><input type="text" id="todayChatInput" placeholder="问豆芽：今天先做哪件？帮我总结一下…" /><button class="send-btn" id="todayChatSend">↑</button></div></div>`;
+    const prevAsk = $('todayChatInput') ? $('todayChatInput').value : '';
+    const hadFocus = document.activeElement && document.activeElement.id === 'todayChatInput';
+    container.innerHTML = html;
+    if (prevAsk) $('todayChatInput').value = prevAsk;
+    if (hadFocus) $('todayChatInput').focus();
+
+    const track = async (card, action) => {
+      if (!card || !card.id) return;
+      try { await fetch(`/api/cards/${card.id}/interact`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) }); } catch (e) { console.warn('[Interaction] Track failed:', e); }
+    };
+    container.querySelectorAll('.tile.work').forEach(tile => {
+      const card = cards[Number(tile.getAttribute('data-idx'))];
+      tile.addEventListener('click', e => {
+        if (e.target.closest('a')) { track(card, 'open'); return; }
+        track(card, 'open');
+        openTileZoom(card);
+      });
+    });
+    container.querySelectorAll('[data-focus]').forEach(el => {
+      el.addEventListener('click', e => {
+        e.stopPropagation();
+        const card = cards.find(c => c.id === el.getAttribute('data-focus'));
+        if (card) { track(card, 'open'); openTileZoom(card); }
+      });
+    });
+    const myday = container.querySelector('.myday');
+    if (myday && tt) myday.addEventListener('click', () => openTileZoom(tt));
+    setupTodayChatInput();
+  }
+
+
+  function openDock() {
+    $('dockPanel').classList.add('open');
+    $('dockBtn').classList.remove('has');
+  }
+
+  function setupTodayChatInput() {
+    const input = $('todayChatInput');
+    const sendBtn = $('todayChatSend');
+    
+    if (!input || !sendBtn) return;
+    
+    const send = () => {
+      const msg = input.value.trim();
+      if (!msg) return;
+      
+      // Open dock and send message
+      input.value = '';
+      openDock();
+      $('dockInput').value = msg;
+      sendMessage();
+    };
+    
+    sendBtn.onclick = send;
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        send();
+      }
+    };
+  }
+
+  // Manual digest generation
+  async function generateDigest() {
+    const btn = $('generateDigestBtn');
+    const status = $('digestStatus');
+    
+    btn.disabled = true;
+    btn.textContent = '汇聚中...';
+    status.textContent = '正在获取数据...';
+    status.style.color = 'var(--blue)';
+    
+    try {
+      const res = await fetch('/api/digest/generate', { method: 'POST' });
+      const result = await res.json();
+      
+      if (!result.success) {
+        status.textContent = '⚠️ ' + (result.error || '汇聚失败');
+        status.style.color = 'var(--red)';
+        btn.textContent = '⚡ 立即汇聚';
+        btn.disabled = false;
+        return;
+      }
+      
+      status.textContent = `✓ 已汇聚 ${result.newCardCount} 张新卡片`;
+      status.style.color = 'var(--green)';
+      btn.textContent = '⚡ 重新汇聚';
+      btn.disabled = false;
+      
+      // Reload today page
+      await loadToday();
+    } catch (err) {
+      console.error('Failed to generate digest:', err);
+      status.textContent = '⚠️ 生成失败';
+      status.style.color = 'var(--red)';
+      btn.textContent = '⚡ 立即汇聚';
+      btn.disabled = false;
+    }
+  }
+
+  // Load Composio digest
+
+  // Load sources status
+  function renderAppTiles(apps) {
+    const groups = {};
+    apps.forEach(a => { (groups[a.category || '其他'] = groups[a.category || '其他'] || []).push(a); });
+    const authZh = { OAUTH2: 'OAuth 授权', OAUTH1: 'OAuth 授权', API_KEY: '需 API Key', NO_AUTH: '无需授权' };
+    return Object.entries(groups).map(([cat, list]) => {
+      const n = list.filter(a => a.connected).length;
+      return `<section class="src-group"><div class="src-group-h"><b>${escapeHtml(cat)}</b><span>${n ? `${n}/${list.length} 已连接` : `${list.length} 个可连接`}</span></div>
+      <div class="src-grid">${list.map(a => {
+        const st = a.connected ? ['on', '已连接'] : a.pending ? ['wait', '授权中'] : ['off', '未连接'];
+        return `<div class="src-tile ${a.connected ? 'is-on' : ''}">
+          <div class="src-top"><img src="${escapeHtml(a.logo)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'src-fb',textContent:'${escapeHtml(a.name.charAt(0))}'}))"><span class="src-pill ${st[0]}">${st[1]}</span></div>
+          <h4>${escapeHtml(a.name)}</h4>
+          <p>${escapeHtml(a.description || '')}</p>
+          <div class="src-foot"><span class="src-auth">${authZh[a.authMode] || ''}</span>
+          <button class="src-btn ${a.connected ? 'ghost' : ''}" onclick="handleAppAction('${escapeHtml(a.key)}', ${a.connected ? 'true' : 'false'})">${a.connected ? '断开' : '连接'}</button></div>
+        </div>`;
+      }).join('')}</div></section>`;
+    }).join('');
+  }
+
+  async function loadSources() {
+    const content = $('sourcesContent');
+    content.innerHTML = '<div class="loading">加载中...</div>';
+    try {
+      const res = await fetch('/api/composio/apps');
+      const data = await res.json();
+      const apps = data.apps || [];
+      const on = apps.filter(a => a.connected).length;
+      content.innerHTML = `<div class="src-summary"><div><b>${on}</b><span>已连接</span></div><div><b>${apps.length}</b><span>可用信源</span></div>${data.configured ? '' : '<p class="src-warn">尚未配置 Composio API Key，请先到「配置」页填写后再连接。</p>'}</div>` + renderAppTiles(apps);
+    } catch (err) {
+      console.error('Failed to load sources:', err);
+      content.innerHTML = '<div class="error">加载失败</div>';
+    }
+  }
+  window.__reloadSources = () => { if ($('v-sources').classList.contains('on')) loadSources(); };
+
+  // LLM Settings handlers
+  async function loadLLMSettings() {
+    try {
+      const res = await fetch('/api/llm/config');
+      const data = await res.json();
+      
+      if (data.provider) {
+        $('llmProviderSelect').value = data.provider;
+        handleProviderChange();
+      }
+      if (data.baseURL) $('llmBaseURLInput').value = data.baseURL;
+      if (data.model) $('llmModelInput').value = data.model;
+      if (data.apiKey) {
+        $('llmApiKeyInput').placeholder = data.apiKey;
+        $('llmApiKeyInput').value = '';
+      }
+    } catch (error) {
+      console.error('Failed to load LLM settings:', error);
+    }
+  }
+
+  const PROVIDER_PRESETS = {
+    openai: { baseURL: 'https://api.openai.com/v1', model: 'gpt-4o' },
+    deepseek: { baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+    moonshot: { baseURL: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k' },
+    zhipu: { baseURL: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4' },
+    anthropic: { baseURL: 'https://api.anthropic.com/v1', model: 'claude-3-5-sonnet-20241022' },
+  };
+
+  function handleProviderChange() {
+    const provider = $('llmProviderSelect').value;
+    const baseURLDiv = $('llmBaseURLDiv');
+    const baseURLInput = $('llmBaseURLInput');
+    const modelInput = $('llmModelInput');
+
+    if (provider === 'custom') {
+      baseURLDiv.style.display = 'block';
+      baseURLInput.value = '';
+      modelInput.placeholder = '输入模型名称';
+    } else if (PROVIDER_PRESETS[provider]) {
+      const preset = PROVIDER_PRESETS[provider];
+      baseURLDiv.style.display = 'none';
+      baseURLInput.value = preset.baseURL;
+      if (!modelInput.value || modelInput.value === modelInput.placeholder) {
+        modelInput.value = preset.model;
+      }
+      modelInput.placeholder = preset.model;
+    } else {
+      baseURLDiv.style.display = 'none';
+    }
+  }
+
+  const llmProviderSelect = $('llmProviderSelect');
+  if (llmProviderSelect) {
+    llmProviderSelect.addEventListener('change', handleProviderChange);
+  }
+
+  const saveLLMBtn = $('saveLLMBtn');
+  if (saveLLMBtn) {
+    saveLLMBtn.addEventListener('click', async () => {
+      const provider = $('llmProviderSelect').value;
+      const baseURL = $('llmBaseURLInput').value;
+      const apiKey = $('llmApiKeyInput').value;
+      const model = $('llmModelInput').value;
+
+      if (!provider) {
+        $('llmStatus').innerHTML = '<span style="color:var(--red)">请选择提供商</span>';
+        return;
+      }
+      if (!apiKey && !$('llmApiKeyInput').placeholder.includes('...')) {
+        $('llmStatus').innerHTML = '<span style="color:var(--red)">请输入 API Key</span>';
+        return;
+      }
+
+      $('llmStatus').innerHTML = '<span style="color:var(--ink3)">保存中...</span>';
+      
+      try {
+        const payload = { provider, baseURL, model };
+        if (apiKey) payload.apiKey = apiKey;
+        
+        const res = await fetch('/api/llm/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        
+        const result = await res.json();
+        
+        if (result.success) {
+          $('llmStatus').innerHTML = '<span style="color:var(--green)">✓ 保存成功，模型已更新</span>';
+          if (result.masked) {
+            $('llmApiKeyInput').placeholder = result.masked;
+            $('llmApiKeyInput').value = '';
+          }
+        } else {
+          $('llmStatus').innerHTML = `<span style="color:var(--red)">保存失败: ${result.error}</span>`;
+        }
+      } catch (error) {
+        $('llmStatus').innerHTML = `<span style="color:var(--red)">保存失败: ${error.message}</span>`;
+      }
+    });
+  }
+
+  const testLLMBtn = $('testLLMBtn');
+  if (testLLMBtn) {
+    testLLMBtn.addEventListener('click', async () => {
+      $('llmStatus').innerHTML = '<span style="color:var(--ink3)">测试中...</span>';
+      
+      try {
+        const res = await fetch('/api/llm/test', { method: 'POST' });
+        const result = await res.json();
+        
+        if (result.ok) {
+          $('llmStatus').innerHTML = `<span style="color:var(--green)">✓ 连接成功！<br>回复: ${escapeHtml(result.response)}</span>`;
+        } else {
+          let errorHtml = `<span style="color:var(--red)">✗ ${escapeHtml(result.error)}`;
+          if (result.status) {
+            errorHtml += `<br><small style="color:var(--ink3)">HTTP ${result.status}</small>`;
+          }
+          if (result.body && result.body.length > 0) {
+            const shortBody = result.body.slice(0, 200);
+            errorHtml += `<br><small style="color:var(--ink3);font-family:monospace;font-size:10px">${escapeHtml(shortBody)}${result.body.length > 200 ? '...' : ''}</small>`;
+          }
+          errorHtml += '</span>';
+          $('llmStatus').innerHTML = errorHtml;
+        }
+      } catch (error) {
+        $('llmStatus').innerHTML = `<span style="color:var(--red)">测试失败: ${error.message}</span>`;
+      }
+    });
+  }
+
+  // Composio Settings
+  async function loadComposioSettings() {
+    try {
+      // Load config
+      const cfgRes = await fetch('/api/composio/config');
+      const cfg = await cfgRes.json();
+      
+      if (cfg.apiKeyMasked) {
+        $('apiKeyInput').placeholder = cfg.apiKeyMasked;
+        $('apiKeyInput').value = '';
+      }
+      if (cfg.entityId) {
+        $('entityIdInput').value = cfg.entityId;
+      }
+
+      // Load apps
+      const appsRes = await fetch('/api/composio/apps');
+      const appsData = await appsRes.json();
+      
+      const grid = $('appsGrid');
+      grid.className = '';
+      grid.innerHTML = (appsData.apps && appsData.apps.length) ? renderAppTiles(appsData.apps) : '<p style="color:var(--ink3);padding:20px;text-align:center">暂无可用应用</p>';
+    } catch (error) {
+      console.error('Failed to load Composio settings:', error);
+    }
+  }
+
+  // Save Composio API Key
+  const saveApiKeyBtn = $('saveApiKeyBtn');
+  if (saveApiKeyBtn) {
+    saveApiKeyBtn.addEventListener('click', async () => {
+      const apiKey = $('apiKeyInput').value;
+      const entityId = $('entityIdInput').value || 'default';
+
+      if (!apiKey && !$('apiKeyInput').placeholder.includes('...')) {
+        $('apiKeyStatus').innerHTML = '<span style="color:var(--red)">请输入 API Key</span>';
+        return;
+      }
+
+      $('apiKeyStatus').innerHTML = '<span style="color:var(--ink3)">保存中...</span>';
+      
+      try {
+        const payload = { entityId };
+        if (apiKey) payload.apiKey = apiKey;
+        
+        const res = await fetch('/api/composio/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        
+        const result = await res.json();
+        
+        if (result.success) {
+          $('apiKeyStatus').innerHTML = '<span style="color:var(--green)">✓ 保存成功</span>';
+          if (result.apiKeyMasked) {
+            $('apiKeyInput').placeholder = result.apiKeyMasked;
+            $('apiKeyInput').value = '';
+          }
+          // Reload apps to get connection status
+          setTimeout(() => loadComposioSettings(), 500);
+        } else {
+          $('apiKeyStatus').innerHTML = `<span style="color:var(--red)">保存失败: ${escapeHtml(result.error)}</span>`;
+        }
+      } catch (error) {
+        $('apiKeyStatus').innerHTML = `<span style="color:var(--red)">保存失败: ${error.message}</span>`;
+      }
+    });
+  }
+
+  // Handle app connect/disconnect
+  window.handleAppAction = async function(appKey, isConnected) {
+    if (isConnected) {
+      // Disconnect
+      if (!confirm(`确定要断开 ${appKey} 的连接吗？`)) return;
+      
+      try {
+        const res = await fetch('/api/composio/disconnect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appKey }),
+        });
+        const result = await res.json();
+        if (result.success) {
+          alert('已断开连接');
+          loadComposioSettings(); window.__reloadSources && window.__reloadSources();
+        } else {
+          alert('断开失败: ' + result.error);
+        }
+      } catch (error) {
+        alert('断开失败: ' + error.message);
+      }
+    } else {
+      // Connect via OAuth
+      try {
+        const res = await fetch('/api/composio/connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appKey }),
+        });
+        const result = await res.json();
+        const authUrl = result.redirectUrl || result.authUrl;
+        if (authUrl) {
+          // Open OAuth in new window
+          window.open(authUrl, '_blank', 'width=600,height=700');
+          // Poll for connection status (3 attempts over 6 seconds)
+          let attempts = 0;
+          const pollInterval = setInterval(() => {
+            attempts++;
+            loadComposioSettings(); window.__reloadSources && window.__reloadSources();
+            if (attempts >= 3) {
+              clearInterval(pollInterval);
+            }
+          }, 2000);
+        } else {
+          alert('连接失败: ' + (result.error || '未知错误'));
+        }
+      } catch (error) {
+        alert('连接失败: ' + error.message);
+      }
+    }
+  };
+
+  // Check config
+  async function checkConfig() {
+    try {
+      const res = await fetch('/api/config/check');
+      const data = await res.json();
+      const status = $('configStatus') || { innerHTML: '' };
+      const llmStatus = $('llmStatus') || { innerHTML: '' };
+      
+      if (data.configured) {
+        status.innerHTML = '<span style="color:var(--green)">✓ 已配置</span>';
+      } else {
+        status.innerHTML = '<span style="color:var(--amber)">⚠ 未配置或配置不完整</span>';
+      }
+      
+      if (data.llmConfigured) {
+        llmStatus.innerHTML = '<span style="color:var(--green)">✓ 已配置</span>';
+      } else {
+        llmStatus.innerHTML = '<span style="color:var(--red)">✗ 未配置（聊天功能受限）</span>';
+      }
+    } catch (err) {
+      if ($('configStatus')) $('configStatus').innerHTML = '<span style="color:var(--red)">检查失败</span>';
+      if ($('llmStatus')) $('llmStatus').innerHTML = '<span style="color:var(--red)">检查失败</span>';
+    }
+  }
+
+  // Manual digest push
+  const pushBtn = $('pushDigestBtn');
+  if (pushBtn) {
+    pushBtn.addEventListener('click', async () => {
+      pushBtn.disabled = true;
+      pushBtn.textContent = '推送中...';
+      try {
+        const res = await fetch('/api/digest/push', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          alert(`推送成功！已发送 ${data.deliveries?.length || 0} 条消息`);
+        } else {
+          alert(`推送失败：${data.error}`);
+        }
+      } catch (err) {
+        alert('推送失败：' + err.message);
+      } finally {
+        pushBtn.disabled = false;
+        pushBtn.textContent = '手动推送汇聚';
+      }
+    });
+  }
+
+  // Tile zoom modal functions
+  let currentZoomCard = null;
+  
+  function openTileZoom(card) {
+    currentZoomCard = card;
+    const overlay = $('tileZoomOverlay');
+    const title = $('zoomTitle');
+    const subtitle = $('zoomSubtitle');
+    const content = $('zoomContent');
+    if (!overlay || !title || !subtitle || !content) return;
+    const r = repoOf(card);
+    const isTT = card.type === 'timetable';
+    title.textContent = isTT ? '我的一天' : headline(card);
+    subtitle.innerHTML = isTT ? '今天的固定日程与豆芽建议的时段' :
+      `<span class="z-src">${escapeHtml(SRC_ZH[card.source] || card.source || '')}</span>${r ? ` · <a href="${escapeHtml(card.url)}" target="_blank" rel="noopener">${escapeHtml(r.owner + ' / ' + r.name)}</a>` : ''}`;
+    let html = '';
+    if (isTT) {
+      const tt = blockOf(card, 'timetable') || {};
+      const all = [...(tt.fixedBlocks || []), ...(tt.suggestedBlocks || [])].sort((a, b) => (toMin(a.start) || 0) - (toMin(b.start) || 0));
+      html += `<div class="z-sec"><h4>时间表</h4><div class="z-items">${all.map(b => `<div class="z-item"><span class="z-time">${escapeHtml(b.start)}–${escapeHtml(b.end)}</span><div class="z-item-b"><b>${escapeHtml(b.title)}</b><span>${escapeHtml(CAT_ZH[b.category] || (b.type === 'suggested' ? '建议' : '日程'))}</span></div></div>`).join('') || '<p class="w-desc">暂无日程</p>'}</div></div>`;
+    } else {
+      if (card.body) html += `<p class="z-body">${escapeHtml(zhBody(card))}</p>`;
+      if (card.title && card.title !== headline(card) && !(r && card.title.toLowerCase() === r.name.toLowerCase())) html += `<p class="z-orig">原始摘要：${escapeHtml(card.title)}</p>`;
+      const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
+      if (pr || iss) html += `<div class="z-kpis">${pr ? `<div><b class="c-teal">${pr}</b><span>待推进 PR</span></div>` : ''}${iss ? `<div><b class="c-violet">${iss}</b><span>待处理 issue</span></div>` : ''}</div>`;
+      const dl = deepLinks(card);
+      html += `<div class="z-next"><div><span class="w-next-k">下一步</span><b>${escapeHtml(nextAction(card))}</b></div>${dl[0] ? `<a class="z-btn" href="${escapeHtml(dl[0].url)}" target="_blank" rel="noopener">去处理 ↗</a>` : ''}</div>`;
+      const links = linksOf(card);
+      if (links.length) {
+        html += `<div class="z-sec"><h4>相关条目 · ${links.length}</h4><div class="z-items">`;
+        links.forEach(link => {
+          const k = linkKind(link);
+          html += `<div class="z-item"><span class="lk-ic lk-${k.k}">${ICON[k.k] || ICON.link}</span><div class="z-item-b"><b title="${escapeHtml(link.title)}">${escapeHtml(link.title)}</b><span>${k.zh}</span></div>
+            <div class="z-acts"><a class="z-act" href="${escapeHtml(link.url)}" target="_blank" rel="noopener">打开</a><button class="z-act done" data-item-url="${escapeHtml(link.url)}">完成</button><button class="z-act dismiss" data-item-url="${escapeHtml(link.url)}">忽略</button></div></div>`;
+        });
+        html += '</div></div>';
+      }
+    }
+    const name = r ? r.name : (isTT ? '今天的安排' : clip(card.title, 20));
+    const FALLBACK_SUGG = {
+      github: ['这些 PR 现在卡在哪？', '帮我起草一条催 review 的评论', '今天只做一件事的话，做哪件？'],
+      gmail: ['这些邮件里哪封需要我回复？', '帮我起草一条回复', '哪些可以直接归档？'],
+      slack: ['这个频道今天在讨论什么？', '有没有需要我回应的消息？', '帮我起草一条回复'],
+    };
+    const sugg = isTT ? ['帮我把今晚剩下的时间排一下', '明天上午留两小时专注，放哪里？'] :
+      (Array.isArray(card.suggestedQuestions) && card.suggestedQuestions.length ? card.suggestedQuestions : (FALLBACK_SUGG[card.source] || ['帮我总结一下这张卡片', '下一步我该做什么？', '这件事有多紧急？']));
+    html += `
+      <div class="z-chat">
+        <h4>继续这个任务 · 和豆芽聊「${escapeHtml(name)}」</h4>
+        <div class="z-msgs" id="zoomMsgs"></div>
+        <div class="z-sugg">${sugg.map(s => `<button class="z-chip">${escapeHtml(s)}</button>`).join('')}</div>
+        <div class="z-input"><input type="text" id="zoomChatInput" placeholder="关于「${escapeHtml(name)}」，问我或让我去做…" /><button id="zoomChatSend">发送</button></div>
+      </div>`;
+    content.innerHTML = html;
+
+    const msgs = $('zoomMsgs');
+    const chatInput = $('zoomChatInput');
+    const ctx = isTT ? '【上下文：我今天的时间表】' : `【上下文：${r ? r.owner + '/' + r.name : ''} — ${card.title}。${card.body || ''} 相关链接：${linksOf(card).map(l => l.title + ' ' + l.url).join('；')}】`;
+    let first = true;
+    const push = (cls, text) => { const d = document.createElement('div'); d.className = 'z-msg ' + cls; d.textContent = text; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; return d; };
+    const sendZoomChat = async (preset) => {
+      const msg = (preset || chatInput.value).trim();
+      if (!msg) return;
+      chatInput.value = '';
+      push('me', msg);
+      const typing = push('bot typing', '豆芽正在想…');
+      try {
+        const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg, cardId: isTT ? null : card.id, sessionId: `card-${card.id || 'x'}` }) });
+        first = false;
+        const data = await res.json();
+        typing.remove();
+        const b = push('bot', data.text || data.error || '收到了，但模型没有返回内容。');
+        const ce = citesEl(data.citations);
+        if (ce) b.appendChild(ce);
+        (data.cards || []).filter(c => c.type === 'group').slice(0, 3).forEach(c => { msgs.appendChild(renderGroupCard(c)); });
+        msgs.scrollTop = msgs.scrollHeight;
+      } catch (err) {
+        typing.remove();
+        push('bot', '发送失败了，请稍后再试。');
+      }
+    };
+    $('zoomChatSend').onclick = () => sendZoomChat();
+    chatInput.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendZoomChat(); } };
+    content.querySelectorAll('.z-chip').forEach(b => { b.onclick = () => sendZoomChat(b.textContent); });
+
+    const mark = async (btn, action) => {
+      if (!card.id) return;
+      try { await fetch(`/api/cards/${card.id}/interact`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, itemUrl: btn.getAttribute('data-item-url') }) }); } catch (e) { return; }
+      btn.closest('.z-item').classList.add(action === 'done' ? 'is-done' : 'is-dismissed');
+      btn.textContent = action === 'done' ? '✓ 已完成' : '已忽略';
+      btn.disabled = true;
+    };
+    content.querySelectorAll('.z-act.done').forEach(b => { b.onclick = () => mark(b, 'done'); });
+    content.querySelectorAll('.z-act.dismiss').forEach(b => { b.onclick = () => mark(b, 'dismiss'); });
+    overlay.classList.add('open');
+    setTimeout(() => chatInput && chatInput.focus({ preventScroll: true }), 50);
+  }
+
+
+  function closeTileZoom() {
+    const overlay = $('tileZoomOverlay');
+    if (overlay) overlay.classList.remove('open');
+    currentZoomCard = null;
+  }
+  
+  // Wire up close handlers (delegated: overlay markup is after this script)
+  document.addEventListener('click', (e) => {
+    if (e.target.closest && e.target.closest('#tileZoomClose')) { e.preventDefault(); closeTileZoom(); return; }
+    if (e.target && e.target.id === 'tileZoomOverlay') closeTileZoom();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && currentZoomCard) closeTileZoom();
+  });
+
+  // Initialize
+  loadToday();
+  setInterval(loadToday, 60000); // Refresh every minute
+  
+  // Wire up digest button
+  const digestBtn = $('generateDigestBtn');
+  if (digestBtn) {
+    digestBtn.addEventListener('click', generateDigest);
+  }
+  
+  // Show chat hint after 2 seconds
+  setTimeout(() => {
+    const hint = $('chatHint');
+    if (hint) hint.style.animation = 'hintPulse 3s ease-in-out';
+  }, 2000);
+})();
+</script>
+<!-- Tile zoom modal overlay -->
+<div class="tile-zoom-overlay" id="tileZoomOverlay">
+  <div class="tile-zoom-modal">
+    <button class="tile-zoom-close" id="tileZoomClose">✕</button>
+    <div class="tile-zoom-header">
+      <h2 class="tile-zoom-title" id="zoomTitle"></h2>
+      <p class="tile-zoom-subtitle" id="zoomSubtitle"></p>
+    </div>
+    <div class="tile-zoom-content" id="zoomContent"></div>
+  </div>
+</div>
+
+</body>
+</html>

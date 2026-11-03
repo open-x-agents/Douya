@@ -1,0 +1,23 @@
+# Open Digital Mate running on ds-bot
+# Start with: npx cordis start --config config.yml
+
+host: 0.0.0.0
+port: 7777
+
+plugins:
+  # Core ds-bot (from vendor)
+  './vendor/ds-bot/index.js':
+    home: ./.dsh-data
+
+  # HTTP server for web UI
+  '@cordisjs/plugin-server':
+    port: 7777
+    selfUrl: http://localhost:7777
+
+  # Open Digital Mate plugin
+  './index.js':
+    home: ./.odm-data
+    composioApiKey: ${COMPOSIO_API_KEY}
+    composioEntityId: ${COMPOSIO_ENTITY_ID:-default}
+    digestSchedule: ${DIGEST_SCHEDULE:-08:00}
+    enableDigest: true

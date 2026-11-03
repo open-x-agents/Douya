@@ -1,7 +1,7 @@
 {
   "name": "opendigitalmate",
   "version": "0.1.0",
-  "description": "Open Digital Mate: a Feishu-native teammate on top of ds-bot \u2014 daily reports, calendar reminders, interactive cards and one panel",
+  "description": "Open Digital Mate: a Feishu-native teammate on top of ds-bot — daily reports, calendar reminders, interactive cards and one panel",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -17,7 +17,11 @@
     "docs/"
   ],
   "scripts": {
-    "test": "node --test 'test/**/*.test.js' 'acceptance-cases/**/*.test.js'"
+    "test": "node --test 'test/**/*.test.js' 'acceptance-cases/**/*.test.js'",
+    "start": "node scripts/server.js",
+    "start:dsbot": "npx cordis start --config config.yml",
+    "dev": "node scripts/server.js 7777",
+    "demo": "node scripts/demo.mjs"
   },
   "keywords": [
     "dsh-plugin",
@@ -37,5 +41,8 @@
   "optionalDependencies": {
     "@larksuiteoapi/node-sdk": "^1.40.0"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "playwright": "^1.64.1"
+  }
 }

@@ -1,0 +1,176 @@
+{
+  "cards": [
+    {
+      "id": "hero_001",
+      "type": "hero",
+      "title": "10月31日星期六 · 下午",
+      "body": "下午好, Danyang",
+      "source": "system",
+      "sourceId": "hero:2026-10-31",
+      "priority": "high",
+      "status": "active",
+      "size": "large",
+      "url": "",
+      "blocks": [
+        {
+          "type": "narrative",
+          "text": "今天有 5 件事需要你处理，其中 2 件比较紧急。让我们一起搞定它们！"
+        },
+        {
+          "type": "achievement-rings",
+          "rings": [
+            { "label": "今日合并 PR", "value": 3, "max": 5, "color": "#00d084" },
+            { "label": "今日关闭 issue", "value": 2, "max": 3, "color": "#4a6cf7" },
+            { "label": "已读邮件", "value": 8, "max": 10, "color": "#ffa600" }
+          ]
+        }
+      ],
+      "actions": [],
+      "createdAt": "2026-10-31T08:00:00Z",
+      "updatedAt": "2026-10-31T08:00:00Z"
+    },
+    {
+      "id": "timetable_001",
+      "type": "timetable",
+      "title": "我的一天",
+      "body": "已安排 3 个日程",
+      "source": "system",
+      "sourceId": "timetable:2026-10-31",
+      "priority": "high",
+      "status": "active",
+      "size": "wide",
+      "url": "",
+      "blocks": [
+        {
+          "type": "timetable",
+          "fixedBlocks": [
+            { "type": "fixed", "start": "10:00", "end": "11:00", "title": "团队周会", "color": "blue" },
+            { "type": "fixed", "start": "14:00", "end": "15:30", "title": "产品评审", "color": "blue" }
+          ],
+          "suggestedBlocks": [
+            { "type": "suggested", "category": "focus", "start": "09:00", "end": "10:00", "title": "Review PR #42", "color": "green" },
+            { "type": "suggested", "category": "meal", "start": "12:00", "end": "13:00", "title": "午餐", "color": "orange" },
+            { "type": "suggested", "category": "focus", "start": "15:30", "end": "17:00", "title": "处理 issue", "color": "green" }
+          ],
+          "nowTime": "16:30"
+        }
+      ],
+      "actions": [],
+      "createdAt": "2026-10-31T08:00:00Z",
+      "updatedAt": "2026-10-31T08:00:00Z"
+    },
+    {
+      "id": "project_flybot",
+      "type": "project-cluster",
+      "title": "Major refactor shipped, 3 reviews pending",
+      "subtitle": "ThinkFlowLab · FLYBOT",
+      "body": "FlyBot 过去 24h 合并了 17 个 PR，主要是 task-read-model 重构工作；还有 3 个 PR 等待 review。",
+      "url": "https://github.com/ThinkFlowLab/FlyBot",
+      "source": "github",
+      "sourceId": "github:cluster:ThinkFlowLab/FlyBot:2026-10-31",
+      "priority": "urgent",
+      "status": "active",
+      "size": "normal",
+      "blocks": [
+        {
+          "type": "tags",
+          "tags": [{ "text": "需要 Review", "color": "red" }]
+        },
+        {
+          "type": "stat-row",
+          "stats": [
+            { "label": "待处理 PR", "value": 5, "color": "#4a6cf7" },
+            { "label": "已合并（24h）", "value": 17, "color": "#00d084" },
+            { "label": "待解决 issue", "value": 3, "color": "#ffa600" }
+          ]
+        },
+        {
+          "type": "sparkline",
+          "data": [2, 5, 3, 8, 6, 12, 7],
+          "label": "最近 7 天活动"
+        },
+        {
+          "type": "avatars",
+          "urls": [
+            "https://avatars.githubusercontent.com/u/1234?v=4",
+            "https://avatars.githubusercontent.com/u/5678?v=4",
+            "https://avatars.githubusercontent.com/u/9012?v=4"
+          ]
+        },
+        {
+          "type": "link-list",
+          "links": [
+            { "title": "feat: refactor task read model #1728", "url": "https://github.com/ThinkFlowLab/FlyBot/pull/1728", "type": "pr-review" },
+            { "title": "fix: memory leak in worker pool #1742", "url": "https://github.com/ThinkFlowLab/FlyBot/pull/1742", "type": "pr-assigned" },
+            { "title": "Update changelog for v0.2.14 #1750", "url": "https://github.com/ThinkFlowLab/FlyBot/pull/1750", "type": "pr-mine" }
+          ]
+        }
+      ],
+      "actions": [
+        { "label": "查看待 Review PR", "value": "https://github.com/ThinkFlowLab/FlyBot/pulls", "primary": true }
+      ],
+      "createdAt": "2026-10-31T08:00:00Z",
+      "updatedAt": "2026-10-31T08:00:00Z"
+    },
+    {
+      "id": "achievements_001",
+      "type": "achievements-tile",
+      "title": "成就统计",
+      "body": "连续活跃 12 天，已合并 23 个 PR",
+      "source": "system",
+      "sourceId": "achievements:2026-10-31",
+      "priority": "medium",
+      "status": "active",
+      "size": "wide",
+      "url": "",
+      "blocks": [
+        {
+          "type": "stat-row",
+          "stats": [
+            { "label": "已合并 PR", "value": 23, "color": "#00d084" },
+            { "label": "连续活跃天数", "value": 12, "color": "#4a6cf7" }
+          ]
+        },
+        {
+          "type": "heatmap",
+          "data": [
+            [{"date":"2026-10-25","count":3},{"date":"2026-10-26","count":5},{"date":"2026-10-27","count":6},{"date":"2026-10-28","count":7},{"date":"2026-10-29","count":5},{"date":"2026-10-30","count":4},{"date":"2026-10-31","count":3}]
+          ],
+          "label": "最近 7 天贡献"
+        }
+      ],
+      "actions": [],
+      "createdAt": "2026-10-31T08:00:00Z",
+      "updatedAt": "2026-10-31T08:00:00Z"
+    },
+    {
+      "id": "inbox_001",
+      "type": "email-categories",
+      "title": "收件箱概览",
+      "body": "共 156 封邮件，来自 42 个发件人",
+      "source": "gmail",
+      "sourceId": "inbox-overview:2026-10-31",
+      "priority": "low",
+      "status": "active",
+      "size": "normal",
+      "url": "",
+      "blocks": [
+        {
+          "type": "chart",
+          "chartType": "donut",
+          "data": [67, 45, 44],
+          "labels": ["GitHub", "Newsletter", "个人邮件"]
+        },
+        {
+          "type": "chart",
+          "chartType": "bar",
+          "data": [23, 18, 15, 12, 10],
+          "labels": ["GitHub", "Notion", "Linear", "张伟", "李娜"]
+        }
+      ],
+      "actions": [],
+      "createdAt": "2026-10-31T08:00:00Z",
+      "updatedAt": "2026-10-31T08:00:00Z"
+    }
+  ]
+}

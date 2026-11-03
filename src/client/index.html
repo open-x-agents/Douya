@@ -868,6 +868,11 @@
   .z-text p{margin:0 0 4px}
   .z-more{border:0;background:none;padding:2px 0;color:var(--sky,#4a73d9);font:600 12px inherit;cursor:pointer}
   .lk-slack{color:#7b5ad9}
+  .src-note{margin:4px 0 14px;font-size:12.5px;color:var(--ink3);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .src-note.src-bad{color:var(--rose)}
+  .src-recheck{border:1px solid var(--line);background:#fff;border-radius:999px;padding:3px 10px;font:500 12px inherit;color:var(--ink2);cursor:pointer}
+  .src-spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--ink3);animation:srcspin .8s linear infinite;display:inline-block}
+  @keyframes srcspin{to{transform:rotate(360deg)}}
   .act-card{align-self:stretch;border-radius:14px;background:#fff;box-shadow:0 0 0 1px var(--line) inset;padding:12px 14px;font-size:13px;line-height:1.55}
   .act-card.act-pending{box-shadow:0 0 0 1.5px rgba(232,120,60,.55) inset;background:linear-gradient(180deg,#fffaf5,#fff)}
   .act-h{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
@@ -2177,7 +2182,7 @@
       const n = list.filter(a => a.connected).length;
       return `<section class="src-group"><div class="src-group-h"><b>${escapeHtml(cat)}</b><span>${n ? `${n}/${list.length} 已连接` : `${list.length} 个可连接`}</span></div>
       <div class="src-grid">${list.map(a => {
-        const st = a.connected ? ['on', '已连接'] : a.pending ? ['wait', '授权中'] : ['off', '未连接'];
+        const st = a.connected ? ['on', '已连接'] : a.unknown ? ['wait', '状态未知'] : a.pending ? ['wait', '授权中'] : ['off', '未连接'];
         return `<div class="src-tile ${a.connected ? 'is-on' : ''}">
           <div class="src-top"><img src="${escapeHtml(a.logo)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'src-fb',textContent:'${escapeHtml(a.name.charAt(0))}'}))"><span class="src-pill ${st[0]}">${st[1]}</span></div>
           <h4>${escapeHtml(a.name)}</h4>
@@ -2189,21 +2194,61 @@
     }).join('');
   }
 
-  async function loadSources() {
+  // 信源状态: paint at once from the last-known status (browser cache → server cache), then re-check live
+  // with a hard server-side timeout. A slow or failed check is shown plainly; it never blocks the page.
+  const SRC_LS = 'odm.sources.v1';
+  let srcSeq = 0;
+  function fmtCheckedAt(iso) {
+    if (!iso) return '';
+    const d = new Date(iso), now = new Date();
+    const hm = d.toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false });
+    const sameDay = d.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }) === now.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' });
+    return sameDay ? `今天 ${hm}` : `${d.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric' })} ${hm}`;
+  }
+  function paintSources(data, phase) {
     const content = $('sourcesContent');
-    content.innerHTML = '<div class="loading">加载中...</div>';
+    const apps = data.apps || [];
+    const st = data.status || {};
+    const unknown = !!st.unknown;
+    const on = apps.filter(a => a.connected).length;
+    let note = '';
+    if (phase === 'checking') note = `<p class="src-note src-checking"><span class="src-spin"></span>正在检查最新连接状态…${st.checkedAt ? `（先显示 ${fmtCheckedAt(st.checkedAt)} 的状态）` : ''}</p>`;
+    else if (st.error) note = `<p class="src-note src-bad">Composio 这次没及时响应：${escapeHtml(st.error)}。${st.checkedAt ? `下面是 ${fmtCheckedAt(st.checkedAt)} 的状态。` : '连接状态暂时未知。'} <button class="src-recheck" onclick="loadSources(true)">重新检查</button></p>`;
+    else if (st.checkedAt) note = `<p class="src-note">状态检查于 ${fmtCheckedAt(st.checkedAt)}${st.probeMs != null && !st.cached ? ` · 用时 ${(st.probeMs / 1000).toFixed(1)} 秒` : ''} <button class="src-recheck" onclick="loadSources(true)">重新检查</button></p>`;
+    content.innerHTML = `<div class="src-summary"><div><b>${unknown ? '–' : on}</b><span>已连接</span></div><div><b>${apps.length}</b><span>可用信源</span></div>${data.configured === false ? '<p class="src-warn">尚未配置 Composio API Key，请先到「配置」页填写后再连接。</p>' : ''}</div>` + note + renderAppTiles(apps.map(a => ({ ...a, unknown: unknown && !a.connected })));
+  }
+  async function loadSources(force = false) {
+    const content = $('sourcesContent');
+    const seq = ++srcSeq;
+    let painted = false;
+    try { const c = JSON.parse(localStorage.getItem(SRC_LS) || 'null'); if (c?.apps?.length) { paintSources(c, 'checking'); painted = true; } } catch {}
+    if (!painted) content.innerHTML = '<div class="loading">加载中...</div>';
+    const getJson = (u) => fetch(u, { method: u.endsWith('/refresh') ? 'POST' : 'GET' }).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); });
     try {
-      const res = await fetch('/api/composio/apps');
-      const data = await res.json();
-      const apps = data.apps || [];
-      const on = apps.filter(a => a.connected).length;
-      content.innerHTML = `<div class="src-summary"><div><b>${on}</b><span>已连接</span></div><div><b>${apps.length}</b><span>可用信源</span></div>${data.configured ? '' : '<p class="src-warn">尚未配置 Composio API Key，请先到「配置」页填写后再连接。</p>'}</div>` + renderAppTiles(apps);
+      let data = force ? null : await getJson('/api/composio/apps');
+      if (seq !== srcSeq) return;
+      if (data) {
+        const needLive = data.configured !== false && (data.status?.stale || data.status?.unknown);
+        paintSources(data, needLive ? 'checking' : 'done');
+        if (data.status?.checkedAt) localStorage.setItem(SRC_LS, JSON.stringify(data));
+        if (!needLive) return;
+      } else if (painted || content.querySelector('.src-tile')) {
+        content.querySelector('.src-note')?.replaceWith(Object.assign(document.createElement('p'), { className: 'src-note src-checking', innerHTML: '<span class="src-spin"></span>正在检查最新连接状态…' }));
+      }
+      data = await getJson('/api/composio/apps/refresh');
+      if (seq !== srcSeq) return;
+      paintSources(data, 'done');
+      if (data.status?.checkedAt && !data.status?.error) localStorage.setItem(SRC_LS, JSON.stringify(data));
     } catch (err) {
       console.error('Failed to load sources:', err);
-      content.innerHTML = '<div class="error">加载失败</div>';
+      if (seq !== srcSeq) return;
+      if (content.querySelector('.src-tile')) {
+        content.querySelector('.src-note')?.replaceWith(Object.assign(document.createElement('p'), { className: 'src-note src-bad', innerHTML: `没连上豆芽服务（${escapeHtml(err.message)}），显示的是上次的状态。 <button class="src-recheck" onclick="loadSources(true)">重新检查</button>` }));
+      } else content.innerHTML = `<div class="error">加载失败：${escapeHtml(err.message)} <button class="src-recheck" onclick="loadSources(true)">重试</button></div>`;
     }
   }
-  window.__reloadSources = () => { if ($('v-sources').classList.contains('on')) loadSources(); };
+  window.loadSources = loadSources;
+  window.__reloadSources = () => { if ($('v-sources').classList.contains('on')) loadSources(true); };
 
   // LLM Settings handlers
   async function loadLLMSettings() {

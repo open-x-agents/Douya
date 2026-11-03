@@ -232,6 +232,14 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     fetch: async () => json(await router.getComposioApps()),
   }, 'opendigitalmate: composio apps')
 
+  // Fresh probe for the 信源状态 page (the page first paints from the cached status above).
+  effect({
+    path: '/api/composio/apps/refresh',
+    methods: ['GET', 'POST'],
+    requestBody: 'buffered',
+    fetch: async () => json(await router.getComposioApps({ fresh: true })),
+  }, 'opendigitalmate: composio apps refresh')
+
   effect({
     path: '/api/composio/connect',
     methods: ['POST'],
@@ -244,8 +252,8 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     methods: ['GET', 'POST'],
     requestBody: 'buffered',
     fetch: async (request) => {
-      if (request.method === 'GET') return json(await router.getComposioConfig?.() ?? { configured: false })
-      return json(await router.saveComposioConfig?.(await readJson(request)) ?? { ok: false })
+      if (request.method === 'GET') return json(await router.getComposioConfig())
+      return json(await router.updateComposioConfig(await readJson(request)))
     },
   }, 'opendigitalmate: composio config')
 
@@ -254,8 +262,8 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     methods: ['GET', 'POST'],
     requestBody: 'buffered',
     fetch: async (request) => {
-      if (request.method === 'GET') return json(await router.getLlmConfig?.() ?? {})
-      return json(await router.saveLlmConfig?.(await readJson(request)) ?? { ok: false })
+      if (request.method === 'GET') return json(await router.getLLMConfig())
+      return json(await router.updateLLMConfig(await readJson(request)))
     },
   }, 'opendigitalmate: llm config')
 
@@ -264,21 +272,21 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     path: '/api/digest/push',
     methods: ['POST'],
     requestBody: 'buffered',
-    fetch: async () => json(await router.pushDigestNow?.() ?? { ok: false, error: 'pushDigestNow unavailable' }),
+    fetch: async () => json(await router.pushDigest()),
   }, 'opendigitalmate: /api/digest/push')
 
   effect({
     path: '/api/llm/test',
     methods: ['POST'],
     requestBody: 'buffered',
-    fetch: async () => json(await router.testLlm?.() ?? { ok: false }),
+    fetch: async () => json(await router.testLLM()),
   }, 'opendigitalmate: /api/llm/test')
 
   effect({
     path: '/api/composio/disconnect',
     methods: ['POST'],
     requestBody: 'buffered',
-    fetch: async (request) => json(await router.disconnectComposioApp?.(await readJson(request)) ?? { ok: false }),
+    fetch: async (request) => json(await router.disconnectComposioApp(await readJson(request))),
   }, 'opendigitalmate: composio disconnect')
 
   log('dsh-host-routes: Muse app + APIs registered')

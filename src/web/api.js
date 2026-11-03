@@ -3,6 +3,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generateDailyDigest, getSourcesStatus, pushDailyDigest, createComposioClient } from './composio.js';
@@ -582,6 +583,49 @@ export function createApiRouter(ctx) {
   /**
    * Get Composio client - builds lazily from saved config or env
    */
+  // ds-bot Chief runs on the dsh profile's model; in dsh mode ctx.ctx is an inject-only proxy that throws on
+  // unknown property reads, so never let a status check crash on it.
+  function hasHostLlm() {
+    try { return !!(llmCtx && llmCtx.llm && llmCtx.llm.stream) } catch { return false }
+  }
+
+  // ---- Source status cache: the 信源状态 page must paint at once. One Composio call lists every connected
+  // account; keep the last answer in memory and on disk, refresh it with a hard timeout, never block forever.
+  const SOURCES_TTL_MS = 30_000;
+  const SOURCES_TIMEOUT_MS = Number(process.env.ODM_SOURCES_TIMEOUT_MS) || 6000;
+  const sourcesCachePath = join(config?.home || config?.dataDir || './.odm-data', 'sources-cache.json');
+  let sourcesCache = null; // { at, items, error, ms }
+  try { sourcesCache = JSON.parse(readFileSync(sourcesCachePath, 'utf8')) } catch {}
+  let sourcesInflight = null;
+  function refreshAccounts(client) {
+    if (sourcesInflight) return sourcesInflight;
+    const t0 = Date.now();
+    let timer;
+    const timeout = new Promise((_, rej) => { timer = setTimeout(() => rej(new Error(`Composio 超过 ${Math.round(SOURCES_TIMEOUT_MS / 1000)} 秒没响应`)), SOURCES_TIMEOUT_MS) });
+    sourcesInflight = Promise.race([client.getConnectedAccounts(), timeout])
+      .then(r => {
+        sourcesCache = { at: new Date().toISOString(), items: r?.items || [], error: null, ms: Date.now() - t0 };
+        try { writeFileSync(sourcesCachePath, JSON.stringify(sourcesCache)) } catch {}
+        return sourcesCache;
+      })
+      .catch(err => {
+        sourcesCache = { ...(sourcesCache || { items: null, at: null }), error: err.message, failedAt: new Date().toISOString(), ms: Date.now() - t0 };
+        return sourcesCache;
+      })
+      .finally(() => { clearTimeout(timer); sourcesInflight = null });
+    return sourcesInflight;
+  }
+  /** Returns { items|null, at, error, stale, cached }. fresh=true waits (≤ timeout) for a live answer. */
+  async function connectedAccounts({ fresh = false } = {}) {
+    const client = getComposioClient();
+    if (!client) return { items: [], at: null, error: null, stale: false, cached: false };
+    const age = sourcesCache?.at ? Date.now() - Date.parse(sourcesCache.at) : Infinity;
+    if (!fresh && sourcesCache?.items && age < SOURCES_TTL_MS && !sourcesCache.error) return { ...sourcesCache, stale: false, cached: true };
+    if (!fresh && sourcesCache?.items) { refreshAccounts(client); return { ...sourcesCache, stale: true, cached: true } }
+    const r = await refreshAccounts(client);
+    return { ...r, stale: !!r.error, cached: false };
+  }
+
   function getComposioClient() {
     // Check if already built in context
     if (ctx.composioClient) {
@@ -1098,8 +1142,8 @@ export function createApiRouter(ctx) {
           };
         }
 
-        // Get all connected accounts from Composio v3
-        const result = await client.getConnectedAccounts();
+        // Get all connected accounts (cached, timeout-bounded)
+        const result = await connectedAccounts();
         const accounts = result?.items || [];
         
         // Build map of ACTIVE connections by toolkit.slug
@@ -1177,10 +1221,10 @@ export function createApiRouter(ctx) {
       const client = getComposioClient();
       return {
         configured: !!client,
-        composioApiKey: !!(configStore?.get()?.composio?.apiKey || process.env.COMPOSIO_API_KEY),
-        composioEntityId: configStore?.get()?.composio?.entityId || process.env.COMPOSIO_ENTITY_ID || 'default',
-        digestSchedule: config?.digestSchedule || '08:00',
-        llmConfigured: !!(llmCtx?.llm?.stream),
+        composioApiKey: !!(configStore?.get()?.composioApiKey || process.env.COMPOSIO_API_KEY),
+        composioEntityId: configStore?.get()?.composioEntityId || process.env.COMPOSIO_ENTITY_ID || 'default',
+        digestSchedule: configStore?.get()?.digestSchedule || config?.digestSchedule || '08:00',
+        llmConfigured: !!configStore?.isLLMConfigured?.() || hasHostLlm(),
       };
     },
 
@@ -1322,13 +1366,16 @@ export function createApiRouter(ctx) {
      * GET /api/composio/config - Get current Composio configuration (masked)
      */
     async getComposioConfig() {
-      const cfg = configStore?.get()?.composio || {};
+      // configStore saves flat keys (composioApiKey / composioEntityId).
+      const cfg = configStore?.get() || {};
       const client = getComposioClient();
-      
+      const masked = configStore?.getMaskedKey?.() || null;
       return {
         configured: !!client,
-        apiKey: cfg.apiKey ? '***' + cfg.apiKey.slice(-4) : null,
-        entityId: cfg.entityId || 'default',
+        apiKeyPresent: !!cfg.composioApiKey,
+        apiKeyMasked: masked,
+        apiKey: masked,
+        entityId: cfg.composioEntityId || 'default',
       };
     },
 
@@ -1347,6 +1394,7 @@ export function createApiRouter(ctx) {
 
         // Rebuild client immediately
         ctx.composioClient = null; // Clear old client
+        sourcesCache = null; // new key → old connection list is meaningless
         const client = getComposioClient(); // Build new client
 
         console.log('[Composio] Config saved, client rebuilt:', !!client);
@@ -1364,7 +1412,7 @@ export function createApiRouter(ctx) {
     /**
      * GET /api/composio/apps - List available apps with connection status
      */
-    async getComposioApps() {
+    async getComposioApps({ fresh = false } = {}) {
       try {
         const client = getComposioClient();
         
@@ -1379,10 +1427,11 @@ export function createApiRouter(ctx) {
           return { apps, configured: false };
         }
 
-        // Fetch actual connection status
+        // Connection status: cached/last-known at once, live probe with a hard timeout.
+        const st = await connectedAccounts({ fresh });
+        const status = { checkedAt: st.at, stale: !!st.stale, cached: !!st.cached, error: st.error || null, unknown: !st.items, probeMs: st.ms ?? null };
         try {
-          const result = await client.getConnectedAccounts();
-          const accounts = result?.items || [];
+          const accounts = st.items || [];
           const connectedApps = new Map();
           const pendingApps = new Set();
           
@@ -1416,7 +1465,7 @@ export function createApiRouter(ctx) {
           console.error('[Composio] Failed to fetch connections:', err);
         }
 
-        return { apps, configured: true };
+        return { apps, configured: true, status };
       } catch (err) {
         console.error('[Composio] Get apps error:', err);
         return { error: err.message, apps: [] };
@@ -1535,6 +1584,7 @@ export function createApiRouter(ctx) {
      * POST /api/composio/disconnect - Disconnect an app
      */
     async disconnectComposioApp(data) {
+      sourcesCache = sourcesCache && { ...sourcesCache, at: null }; // force a live re-check next time
       try {
         const client = getComposioClient();
         if (!client) {
@@ -1814,6 +1864,10 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
           }
         });
         return;
+      } else if (url.pathname === '/api/composio/apps/refresh') {
+        const data = await router.getComposioApps({ fresh: true });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
       } else if (url.pathname === '/api/composio/apps' && req.method === 'GET') {
         const data = await router.getComposioApps();
         res.writeHead(200, { 'Content-Type': 'application/json' });

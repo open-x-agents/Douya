@@ -1,3 +1,5 @@
+import { tidyRepoCopy } from './repo-copy.js';
+export { tidyRepoCopy };
 import { buildEmailClusters } from './email-groups.js';
 import { buildSlackCopy, selfSlackIds } from './slack-cards.js';
 /**
@@ -1355,7 +1357,9 @@ function generateClusterCards(grouped) {
 
       // Concrete next action + 1–3 deep-link buttons (never invent URLs)
       const actions = [];
-      const reviewPRs = (cluster.topItems || []).filter(i => i.type === 'pr-review' && i.url).slice(0, 2);
+      // Look across every item: topItems is only the 3 tile links and notification mails outrank PRs there.
+      const allItems = cluster.items?.length ? cluster.items : (cluster.topItems || []);
+      const reviewPRs = allItems.filter(i => i.type === 'pr-review' && i.url).slice(0, 2);
       if (reviewPRs.length > 0) {
         reviewPRs.forEach(pr => {
           const prNumber = pr.url.match(/\/pull\/(\d+)/)?.[1];
@@ -1367,7 +1371,7 @@ function generateClusterCards(grouped) {
         });
         card.nextAction = actions[0].label + (reviewPRs[0].title ? `：${String(reviewPRs[0].title).slice(0, 36)}` : '');
       }
-      const assignedIssues = (cluster.topItems || []).filter(i => i.type === 'issue-assigned' && i.url).slice(0, 1);
+      const assignedIssues = allItems.filter(i => i.type === 'issue-assigned' && i.url).slice(0, 1);
       if (assignedIssues.length > 0 && actions.length < 2) {
         const issue = assignedIssues[0];
         const issueNumber = issue.url.match(/\/issues\/(\d+)/)?.[1];
@@ -1378,20 +1382,20 @@ function generateClusterCards(grouped) {
         });
         if (!card.nextAction) card.nextAction = actions[actions.length - 1].label;
       }
-      const myOpen = (cluster.topItems || []).filter(i => (i.type === 'pr-mine' || i.type === 'pr-mine-recent') && i.url).slice(0, 1);
+      const myOpen = allItems.filter(i => (i.type === 'pr-mine' || i.type === 'pr-mine-recent') && i.url).slice(0, 1);
       if (actions.length === 0 && myOpen.length) {
         const pr = myOpen[0];
         const n = pr.url.match(/\/pull\/(\d+)/)?.[1];
         actions.push({ label: n ? `推进 #${n}` : '推进我的 PR', value: pr.url, primary: true });
         card.nextAction = `先推进「${String(pr.title).slice(0, 36)}」，催 review 或合并`;
       }
-      if (actions.length === 0 && cluster.metadata.prCount > 1 && cluster.metadata.repo) {
-        actions.push({
-          label: `查看 ${cluster.metadata.prCount} 个 PR`,
-          value: `https://github.com/${cluster.metadata.repo}/pulls`,
-          primary: true,
-        });
-        card.nextAction = `逐个推进 ${cluster.metadata.prCount} 个 PR 的 review 与合并`;
+      // prCount counts every PR-typed item (repo-wide activity), not what waits on the user — never put it in
+      // the next step. Point at the first concrete related item instead.
+      if (actions.length === 0 && topLinks.length > 0) {
+        const first = topLinks[0];
+        const num = first.url.match(/\/(?:pull|issues)\/(\d+)/)?.[1] || String(first.title || '').match(/#(\d+)/)?.[1];
+        actions.push({ label: num ? `看 #${num} 的最新进展` : '看最新一条', value: first.url, primary: true });
+        card.nextAction = `先看「${String(first.title || '').replace(/^(Re:\s*)?\[[^\]]+\]\s*/i, '').slice(0, 40)}」的最新回复`;
       }
       if (actions.length === 0 && cluster.url) {
         actions.push({ label: '打开仓库', value: cluster.url, primary: true });
@@ -1617,6 +1621,7 @@ async function generateProjectHeadlinesAndSummaries(grouped, llmClient) {
    - 说明具体工作内容（如果有热点项目名称就提）
    - 说明需要的行动（如果有待 review 的）
    - 句式: "<仓库> 过去 24h 合并了 <N> 个 PR，主要是 <热点 PR 主题>；还有 <M> 个 PR 等待 review。"（尖括号处只能填上面的真实数据）"
+   - 数字为 0 的那一句不要写（不要写「合并了 0 个 PR」「0 个 PR 等待 review」「0 reviews pending」），改为直接说在推进什么"
 
 JSON: {"headline": "英文标题", "summary": "中文摘要"}`;
       
@@ -1639,6 +1644,7 @@ JSON: {"headline": "英文标题", "summary": "中文摘要"}`;
         console.warn(`[Headlines] LLM failed for ${repoName}, using fallback`);
       }
       
+      ({ headline, summary } = tidyRepoCopy(headline, summary));
       // Update cluster
       cluster.title = headline;
       cluster.summary = summary;

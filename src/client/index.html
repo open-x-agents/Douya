@@ -2599,7 +2599,7 @@
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), 240000);
     try {
-      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctl.signal });
+      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-odm-sent-at': String(Date.now()) }, body: JSON.stringify(body), signal: ctl.signal });
       if (res.status >= 500) throw Object.assign(new Error('http ' + res.status), { net: true });
       try { return await res.json(); } catch (_) { throw Object.assign(new Error('bad response'), { net: true }); }
     } catch (e) {
@@ -2624,7 +2624,27 @@
     const after = m.slice(i + 1).filter(x => x.role === 'assistant');
     return { seen: true, reply: after.length ? after[after.length - 1].content : null };
   }
+  // While Chief works, show what it is doing (正在查 GitHub… / 正在写回复…) instead of a static 正在想.
+  function watchChatProgress(onStatus) {
+    let stop = false, last = '';
+    (async () => {
+      await sleep(900);
+      while (!stop) {
+        try {
+          const r = await fetch('/api/opendigitalmate/chat-progress', { method: 'POST', cache: 'no-store' }).then(x => x.json());
+          if (!stop && r && r.running && r.label && r.label !== last) { last = r.label; onStatus(r.label); }
+        } catch (_) {}
+        await sleep(1200);
+      }
+    })();
+    return () => { stop = true; };
+  }
   async function sendChatResilient(body, onStatus = () => {}) {
+    const stopWatch = watchChatProgress(onStatus);
+    try { return await sendChatResilientInner(body, onStatus); }
+    finally { stopWatch(); }
+  }
+  async function sendChatResilientInner(body, onStatus = () => {}) {
     try { return await postChatOnce(body); }
     catch (e) {
       if (e.timeout) throw new ChatFail('豆芽这次想得太久（超过 4 分钟）还没回来。');
@@ -2751,7 +2771,9 @@
       let reply = '';
       try {
         const cardContext = isTT ? '当前在看：今天的时间表' : `当前在看卡片「${card.title || ''}」：${card.body || ''} ${card.url || ''}`;
+        const clientSentAt = Date.now();
         const data = await sendChatResilient({ message: msg, cardId: isTT ? null : card.id, cardContext, sessionId: BOT_SESSION }, t => { if (live()) typing.textContent = t; });
+        const clientRecvAt = Date.now();
         reply = data.text || data.error || '收到了，但模型没有返回内容。';
         if (live()) {
           typing.remove();
@@ -2761,6 +2783,8 @@
           (data.cards || []).filter(c => c.type === 'group').slice(0, 3).forEach(c => { msgs.appendChild(renderGroupCard(c)); });
           msgs.scrollTop = msgs.scrollHeight;
           showActionsSince(msgs, sentAt).catch(() => {});
+          const renderedAt = Date.now();
+          (window.__odmChatTimings = window.__odmChatTimings || []).push({ ...(data.timing || {}), clientSentAt, clientRecvAt, renderedAt, renderMs: renderedAt - clientRecvAt, clientTotalMs: renderedAt - clientSentAt });
         }
         loadToday().catch(() => {}); // the bot may have edited cards
       } catch (err) {

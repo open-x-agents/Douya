@@ -3,7 +3,7 @@
 import { readFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { runMuseChatTurn } from './muse-chat-core.js'
+import { runMuseChatTurn, chatProgress } from './muse-chat-core.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const CLIENT_HTML = join(__dirname, '../client/index.html')
@@ -180,13 +180,21 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     methods: ['POST'],
     requestBody: 'buffered',
     fetch: async (request) => {
+      const timing = { recvAt: Date.now(), clientSentAt: Number(request.headers.get('x-odm-sent-at')) || null }
       const body = await readJson(request)
+      // The open card, read fresh from the store each turn (never the client's stale one-liner).
+      let cardContext = body.cardContext
+      if (body.cardId) {
+        try { cardContext = router.cardSnapshot(body.cardId) || cardContext } catch (err) { log(`cardSnapshot failed: ${err.message}`) }
+      }
+      timing.contextAt = Date.now()
       const result = await runMuseChatTurn(ctx, {
         message: body.message || body.text,
         cardId: body.cardId,
-        cardContext: body.cardContext,
+        cardContext,
         dshHome,
         log,
+        timing,
       })
       if (!result.ok) {
         return json({
@@ -203,10 +211,22 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
         cards: result.cards || [],
         botId: result.botId,
         sessionId: 'dsbot-chief',
+        timing: { ...result.timing, clientSentAt: timing.clientSentAt, serverRecvAt: timing.recvAt, serverRespondAt: Date.now() },
         time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
       })
     },
   }, 'opendigitalmate: /api/chat')
+
+  // What Chief is doing right now, for the typing indicator (正在查 GitHub… / 正在写回复…).
+  effect({
+    path: '/api/opendigitalmate/chat-progress',
+    methods: ['GET', 'POST'],
+    requestBody: 'buffered',
+    fetch: async () => {
+      try { return json(await chatProgress(ctx, { dshHome })) }
+      catch (err) { return json({ running: null, error: String(err?.message || err) }) }
+    },
+  }, 'opendigitalmate: chat-progress')
 
   effect({
     path: '/api/opendigitalmate/muse-chat',

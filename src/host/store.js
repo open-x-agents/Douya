@@ -4,6 +4,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { fixRepoCard } from '../web/repo-copy.js'
 
 /** Statuses a digest must not overwrite with a fresh "active" copy. */
 export const TERMINAL_CARD_STATUSES = new Set(['done', 'dismissed'])
@@ -55,7 +56,7 @@ export function normalizeState(raw) {
     sources: isRecord(raw.sources) ? raw.sources : {},
     week: Array.isArray(raw.week) ? raw.week : [],
     prefs: isRecord(raw.prefs) ? raw.prefs : {},
-    cards: Array.isArray(raw.cards) ? raw.cards : [],
+    cards: Array.isArray(raw.cards) ? raw.cards.map(fixRepoCard) : [],
     completions: Array.isArray(raw.completions) ? dedupeItemCompletions(raw.completions) : [],
     itemStatus: isRecord(raw.itemStatus) ? raw.itemStatus : {},
     cardChats: isRecord(raw.cardChats) ? raw.cardChats : {},

@@ -46,6 +46,12 @@ function schemaToParams(inputSchema) {
 
 export const CARD_WORK_PROMPT = `你是「豆芽」背后的 Main Bot（Chief）。对话不只是问答——用户要你干活时，必须调用工具改 Today 卡片或查信源，不要只嘴上答应。
 
+## 用户正在看的卡片（【当前卡片】）
+- 在卡片对话里，每条用户消息前面都带着这张卡片此刻的快照：id、标题、来源、摘要、数字、下一步、链接，以及「相关条目」（标题、URL、待处理/已完成/已忽略、发件人、时间、消息内容）。
+- 问「这张卡片里有什么 / 有哪几条 / 先处理哪个」→ 直接按快照回答，**不要**再调 GitHub / Gmail / Slack，也不要 git clone 或用 bash 去翻仓库。
+- 需要快照之外的细节（完整正文、全部条目）→ 先调 odm_current_card；确实需要信源最新内容时才调 odm_github_* / odm_gmail_* / odm_slack_*，不要用 bash 克隆仓库代替。
+- 改这张卡片时直接用快照里的 id，不必先 odm_card_list。
+
 ## 什么时候必须动工具
 - 「标完成 / 做完了 / 勾掉」→ odm_card_complete（先 odm_card_list 或 odm_card_find 找到 id）
 - 「删掉 / 不要了 / 去掉促销」→ odm_card_dismiss 或 odm_card_delete（噪音用 dismiss；明确永久删除才 delete）
@@ -157,6 +163,20 @@ export async function registerBotTools(ctx, opts = {}) {
       } catch (err) {
         return JSON.stringify({ found: false, error: err.message })
       }
+    },
+  }))
+
+  register(() => defineTool({
+    name: 'odm_current_card',
+    description: 'The Today card the user has open in 豆芽 right now (or by cardId): id, title, source, summary, numbers, next step, actions, and every related item (title, url, status open/done/dismissed, sender, time, message text). Use before calling GitHub/Gmail/Slack about "this card".',
+    parameters: { cardId: { type: 'string', description: 'Optional card id; default = the card whose chat is open' } },
+    output,
+    async execute(args) {
+      try {
+        if (router?.currentCard) return JSON.stringify(router.currentCard({ cardId: args?.cardId || null }))
+        if (args?.cardId) return JSON.stringify({ found: true, card: await cards.get(args.cardId) })
+        return JSON.stringify({ found: false, error: 'no current card' })
+      } catch (err) { return JSON.stringify({ found: false, error: err.message }) }
     },
   }))
 

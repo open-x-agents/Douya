@@ -10,6 +10,7 @@ import { generateDailyDigest, getSourcesStatus, pushDailyDigest, createComposioC
 import { reminderCard } from '../host/cards.js';
 import { createProfileManager } from './profile.js';
 import { createActionService } from './actions.js';
+import { cardSnapshotText, cardFull } from './card-snapshot.js';
 import { resolveDisplayName, lastGithubIdentity } from './aggregation.js';
 import { recordCompletion, setItemStatus, clearItemStatus, annotateCards, cardItemUrls } from '../host/store.js'
 
@@ -589,6 +590,8 @@ export function createApiRouter(ctx) {
     try { return !!(llmCtx && llmCtx.llm && llmCtx.llm.stream) } catch { return false }
   }
 
+  let lastChatCard = null; // { cardId, at } — the card whose zoom chat spoke last
+
   // ---- Source status cache: the 信源状态 page must paint at once. One Composio call lists every connected
   // account; keep the last answer in memory and on disk, refresh it with a hard timeout, never block forever.
   const SOURCES_TTL_MS = 30_000;
@@ -1118,6 +1121,25 @@ export function createApiRouter(ctx) {
     /**
      * GET /api/completions — durable done/dismissed ledger (survives digests).
      */
+    /** Compact snapshot of a card, read fresh from the store (card-chat turns carry this). */
+    cardSnapshot(cardId) {
+      const st = store.get() || {};
+      const card = (st.cards || []).find(c => c.id === cardId);
+      if (!card) return null;
+      lastChatCard = { cardId, at: Date.now() };
+      return cardSnapshotText(card, st.itemStatus || {});
+    },
+
+    /** Full card for odm_current_card: the given id, else the card most recently chatted about (≤30 min). */
+    currentCard({ cardId } = {}) {
+      const st = store.get() || {};
+      const id = cardId || (lastChatCard && Date.now() - lastChatCard.at < 30 * 60_000 ? lastChatCard.cardId : null);
+      if (!id) return { found: false, error: '当前没有打开的卡片对话；用 odm_card_find 找卡片' };
+      const card = (st.cards || []).find(c => c.id === id);
+      if (!card) return { found: false, error: `找不到卡片 ${id}` };
+      return { found: true, card: cardFull(card, st.itemStatus || {}) };
+    },
+
     async listCompletions() {
       const state = store.get();
       return { completions: state.completions || [] };
@@ -1277,15 +1299,7 @@ export function createApiRouter(ctx) {
           const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
           const home = config.home || '.odm-data';
           const card = data.cardId ? (store.get()?.cards || []).find(c => c.id === data.cardId) : null;
-          let cardContext = data.cardContext || (card ? `卡片「${card.title}」：${card.body || ''} 链接：${card.url || ''}` : null);
-          // Give Chief the real message/mail lines stored on the card (Slack texts, mail subjects).
-          const ll = card && (card.blocks || []).find(b => b?.type === 'link-list');
-          if (ll && Array.isArray(ll.links) && ll.links.some(l => l.text || l.from)) {
-            const st = store.get()?.itemStatus || {};
-            const fmt = iso => { try { return new Date(iso).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
-            const lines = ll.links.slice(0, 15).map(l => `- ${l.from || ''}${l.at ? ` ${fmt(l.at)}` : ''}${l.replies ? `（${l.replies} 条回复）` : ''}${st[l.url] ? `［已${st[l.url].status === 'done' ? '完成' : '忽略'}］` : ''}：${String(l.text || l.title || '').replace(/\s+/g, ' ').slice(0, 400)} ${l.url}`);
-            cardContext = `${cardContext || ''}\n卡片里的条目（UTC+8）：\n${lines.join('\n')}`.slice(0, 6000);
-          }
+          let cardContext = (card && router.cardSnapshot(card.id)) || data.cardContext || null;
           try {
             const result = await chatWithDsBot({
               message,

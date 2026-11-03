@@ -1,4 +1,12 @@
-# Mount Open Digital Mate as a dsh plugin: Muse card UI, Composio tools, today APIs.
+# Open Digital Mate: host plugin + replace stock dsh web UI with Muse.
 - insert:
     - id: opendigitalmate
       name: opendigitalmate
+
+# Surgical replacement of the default web shell (same pattern as dsh-work-shell).
+- id: ui-layout
+  disable: true
+- id: ui-sidebar
+  disable: true
+- id: ui-conversation
+  disable: true

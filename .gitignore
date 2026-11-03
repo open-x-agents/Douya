@@ -1,15 +1,15 @@
-node_modules/
-state.json
-*.log
 
+!.env.example
 # A Feishu app id and secret never go into the repository: they arrive as environment
+# Runtime data of the event store and the evidence ledger (#9) never goes into the repository.
 # variables, or from .env locally, which is ignored.
+*.log
+.dsh-odm/
 .env
 .env.*
-!.env.example
-.release-notes.md
 .odm-data/
-
-# Runtime data of the event store and the evidence ledger (#9) never goes into the repository.
+.release-notes.md
 data/
-.dsh-odm/
+node_modules/
+state.json
+vendor/ds-bot/node_modules/

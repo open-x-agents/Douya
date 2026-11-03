@@ -130,7 +130,7 @@ export function createTodayUpdateCardTool(router) {
         },
         status: {
           type: 'string',
-          enum: ['active', 'done', 'snoozed', 'pinned'],
+          enum: ['active', 'done', 'snoozed', 'dismissed', 'pinned'],
           description: 'New status',
         },
       },
@@ -187,11 +187,74 @@ export function createTodayDeleteCardTool(router) {
 /**
  * Create all today tools
  */
+
+export function createTodayCompleteCardTool(router) {
+  return {
+    name: 'today_complete_card',
+    description: 'Mark a Today card as done/completed (persists to completions ledger).',
+    parameters: {
+      type: 'object',
+      required: ['id'],
+      properties: {
+        id: { type: 'string', description: 'Card ID to complete' },
+      },
+    },
+    execute: async ({ id }) => {
+      const result = await router.updateCard(id, { status: 'done', completedBy: 'bot' })
+      if (!result.success) return { success: false, error: result.error }
+      return { success: true, message: `已完成：${result.card.title}`, card: result.card }
+    },
+  }
+}
+
+export function createTodayDismissCardTool(router) {
+  return {
+    name: 'today_dismiss_card',
+    description: 'Dismiss a Today card.',
+    parameters: {
+      type: 'object',
+      required: ['id'],
+      properties: {
+        id: { type: 'string', description: 'Card ID to dismiss' },
+      },
+    },
+    execute: async ({ id }) => {
+      const result = await router.updateCard(id, { status: 'dismissed', dismissedBy: 'bot' })
+      if (!result.success) return { success: false, error: result.error }
+      return { success: true, message: `已忽略：${result.card.title}`, card: result.card }
+    },
+  }
+}
+
+export function createTodaySnoozeCardTool(router) {
+  return {
+    name: 'today_snooze_card',
+    description: 'Snooze a Today card for N hours (default 24).',
+    parameters: {
+      type: 'object',
+      required: ['id'],
+      properties: {
+        id: { type: 'string', description: 'Card ID to snooze' },
+        hours: { type: 'number', description: 'Hours to snooze', default: 24 },
+      },
+    },
+    execute: async ({ id, hours = 24 }) => {
+      const snoozeUntil = new Date(Date.now() + (Number(hours) || 24) * 3600_000).toISOString()
+      const result = await router.updateCard(id, { status: 'snoozed', snoozeUntil })
+      if (!result.success) return { success: false, error: result.error }
+      return { success: true, message: `已推迟至 ${snoozeUntil}`, card: result.card }
+    },
+  }
+}
+
 export function createTodayTools(router) {
   return [
     createTodayListCardsTool(router),
     createTodayCreateCardTool(router),
     createTodayUpdateCardTool(router),
+    createTodayCompleteCardTool(router),
+    createTodayDismissCardTool(router),
+    createTodaySnoozeCardTool(router),
     createTodayDeleteCardTool(router),
   ];
 }

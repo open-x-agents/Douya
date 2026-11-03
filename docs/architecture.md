@@ -351,3 +351,14 @@ node scripts/source-probe.mjs --fixture test/fixtures/github/ok --dir /tmp/p  # 
 2. 日报的填写入口还没做成卡片表单，只有 `recordReport()` 接口。
 3. 卡片回调的验签（`X-Lark-Signature` / `encrypt_key`）还没做——上线前必须补，否则任何人都能打这个地址；面板的 `POST /api/opendigitalmate/action` 一旦落地同属这个缺口。
 4. 多租户、多应用没做，先按单租户内部用。
+
+## Muse 作为 dsh 主前端
+
+`opendigitalmate` 以 Host + Web client 双面插件挂进 `dsh --profile odm`：
+
+- `cordis.patch.yml` 插入 Host 行，并 `disable` 掉库存 `ui-layout` / `ui-sidebar` / `ui-conversation`
+- `client.js`（`dsh.client.platform: web`, `immediately: true`）把 `/` 重定向到 `/api/opendigitalmate/app`
+- Host 在同一进程注册 Muse HTML 与全部 `/api/*`；对话走进程内 `sessionController`（ds-bot Chief）
+- 卡片完成写入 `state.completions` 持久账本；digest 合并带 `{ digest: true }`，不抹掉 done/dismissed
+
+启动：`npm start` → 单进程 `dsh --profile odm --port 7777`。登录后打开 Muse。

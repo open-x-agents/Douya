@@ -1715,7 +1715,7 @@
 
     const track = async (card, action) => {
       if (!card || !card.id) return;
-      try { await fetch(`/api/cards/${card.id}/interact`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) }); } catch (e) { console.warn('[Interaction] Track failed:', e); }
+      try { await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action }) }); } catch (e) { console.warn('[Interaction] Track failed:', e); }
     };
     container.querySelectorAll('.tile.work').forEach(tile => {
       const card = cards[Number(tile.getAttribute('data-idx'))];
@@ -2325,7 +2325,7 @@
 
     const mark = async (btn, action) => {
       if (!card.id) return;
-      try { await fetch(`/api/cards/${card.id}/interact`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, itemUrl: btn.getAttribute('data-item-url') }) }); } catch (e) { return; }
+      try { await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action, itemUrl: btn.getAttribute('data-item-url') }) }); } catch (e) { return; }
       btn.closest('.z-item').classList.add(action === 'done' ? 'is-done' : 'is-dismissed');
       btn.textContent = action === 'done' ? '✓ 已完成' : '已忽略';
       btn.disabled = true;

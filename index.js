@@ -24,11 +24,12 @@ import {
 } from './src/host/constants.js'
 import { createComposioClient, scheduleDailyDigest, generateDailyDigest, pushDailyDigest } from './src/web/composio.js'
 import { createApiRouter } from './src/web/api.js'
+import { registerMuseHostRoutes } from './src/web/dsh-host-routes.js'
 
 export const name = 'opendigitalmate'
 // The panel and the card callback answer on the channel ds-bot already exposes; nothing
 // else is borrowed from the host.
-export const inject = ['connection', 'tools', 'sessionController']
+export const inject = ['connection', 'tools', 'sessionController', 'systemPrompt']
 
 export const CARD_ROUTE = `${PANEL_ROUTE}/card`
 
@@ -327,141 +328,13 @@ export function createRuntime(ctx, config = {}) {
       },
     }), 'opendigitalmate: card callback')
 
-    // Muse UI is on scripts/server.js (:7777); do not claim dsh "/".
-
-        // Register API routes
-    const router = rt.apiRouter
-    
-    // Helper to create JSON response
-    const jsonResponse = (data, status = 200) => new Response(JSON.stringify(data), {
-      status,
-      headers: { 'content-type': 'application/json' },
+    // Muse UI + full /api surface on this dsh process (replaces stock frontend via client.js).
+    const dshHome = process.env.DSH_HOME || join(process.env.HOME || '', '.dsh')
+    registerMuseHostRoutes(ctx, {
+      router: rt.apiRouter,
+      dshHome,
+      log: (m) => log(m),
     })
-    
-    // GET /api/today
-    ctx.effect(() => register({
-      path: '/api/today',
-      methods: ['GET'],
-      fetch: async () => jsonResponse(await router.getToday()),
-    }), 'opendigitalmate: API /api/today')
-    
-    // GET /api/digest
-    ctx.effect(() => register({
-      path: '/api/digest',
-      methods: ['GET'],
-      fetch: async () => jsonResponse(await router.getDigest()),
-    }), 'opendigitalmate: API /api/digest')
-    
-    // GET /api/sources
-    ctx.effect(() => register({
-      path: '/api/sources',
-      methods: ['GET'],
-      fetch: async () => jsonResponse(await router.getSources()),
-    }), 'opendigitalmate: API /api/sources')
-    
-    // GET /api/config/check
-    ctx.effect(() => register({
-      path: '/api/config/check',
-      methods: ['GET'],
-      fetch: async () => jsonResponse(await router.checkConfig()),
-    }), 'opendigitalmate: API /api/config/check')
-    
-    // POST /api/chat
-    ctx.effect(() => register({
-      path: '/api/chat',
-      methods: ['POST'],
-      requestBody: 'buffered',
-      fetch: async request => {
-        try {
-          const data = await request.json()
-          return jsonResponse(await router.sendChatMessage(data))
-        } catch (err) {
-          return jsonResponse({ error: 'Invalid request' }, 400)
-        }
-      },
-    }), 'opendigitalmate: API /api/chat')
-    
-    // GET /api/composio/apps
-    ctx.effect(() => register({
-      path: '/api/composio/apps',
-      methods: ['GET'],
-      fetch: async () => jsonResponse(await router.getComposioApps()),
-    }), 'opendigitalmate: API /api/composio/apps')
-    
-    // POST /api/composio/connect
-    ctx.effect(() => register({
-      path: '/api/composio/connect',
-      methods: ['POST'],
-      requestBody: 'buffered',
-      fetch: async request => {
-        try {
-          const data = await request.json()
-          return jsonResponse(await router.connectComposioApp(data))
-        } catch (err) {
-          return jsonResponse({ error: 'Invalid request' }, 400)
-        }
-      },
-    }), 'opendigitalmate: API /api/composio/connect')
-    
-    // GET /composio-callback
-    ctx.effect(() => register({
-      path: '/api/composio-callback',
-      methods: ['GET'],
-      fetch: async request => {
-        const url = new URL(request.url)
-        const status = url.searchParams.get('status')
-        const connectedAccountId = url.searchParams.get('connected_account_id')
-        const error = url.searchParams.get('error')
-        
-        const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Composio ${status === 'success' ? '连接成功' : '连接失败'}</title>
-  <style>
-    body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
-    .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-align: center; max-width: 400px; }
-    .icon { font-size: 48px; margin-bottom: 1rem; }
-    h1 { margin: 0 0 0.5rem; font-size: 1.5rem; }
-    p { margin: 0 0 1rem; color: #666; }
-    .countdown { font-weight: bold; color: #333; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="icon">${status === 'success' ? '✅' : '❌'}</div>
-    <h1>${status === 'success' ? 'Composio 连接成功！' : 'Composio 连接失败'}</h1>
-    <p>${status === 'success' 
-      ? `账号已连接 (${connectedAccountId || 'unknown'})`
-      : `错误: ${error || '未知错误'}`
-    }</p>
-    <p class="countdown"><span id="countdown">2</span> 秒后自动关闭窗口...</p>
-  </div>
-  <script>
-    let count = 2;
-    const countdownEl = document.getElementById('countdown');
-    const timer = setInterval(() => {
-      count--;
-      countdownEl.textContent = count;
-      if (count <= 0) {
-        clearInterval(timer);
-        window.close();
-        setTimeout(() => {
-          if (window.opener) window.opener.location.reload();
-          window.location.href = '/';
-        }, 500);
-      }
-    }, 1000);
-  </script>
-</body>
-</html>`
-        
-        return new Response(html, {
-          status: 200,
-          headers: { 'content-type': 'text/html; charset=utf-8' },
-        })
-      },
-    }), 'opendigitalmate: Composio callback')
 
     // Reminder tick timer
     ctx.effect(() => {
@@ -470,15 +343,6 @@ export function createRuntime(ctx, config = {}) {
     }, 'opendigitalmate: precise tick')
   }
 
-  // Muse chat → real ds-bot session (in-process; FlyBot ds-bot has no /api/bot chat page).
-  try {
-    const dshHome = process.env.DSH_HOME || join(process.env.HOME || '', '.dsh')
-    import('./src/web/dsbot-muse-route.js').then(({ installMuseChatRoute }) => {
-      installMuseChatRoute(ctx, { dshHome, log: (m) => log(m) })
-    }).catch(err => log(`muse-chat route failed: ${err.message}`))
-  } catch (err) {
-    log(`muse-chat route setup failed: ${err.message}`)
-  }
 
   // Register Composio / identity / cite tools on the live ds-bot tool registry.
   if (typeof ctx?.effect === 'function' && ctx?.tools?.register) {
@@ -489,6 +353,7 @@ export function createRuntime(ctx, config = {}) {
           composioClient,
           getCards: () => store.get()?.cards || [],
           home,
+          museUrl: process.env.ODM_MUSE_URL || 'http://127.0.0.1:7777',
           log: (m) => log(m),
         }).then(d => { dispose = d })
       ).catch(err => log(`dsbot-tools failed: ${err.message}`))

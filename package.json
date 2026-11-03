@@ -6,11 +6,15 @@
   "main": "index.js",
   "exports": {
     ".": "./index.js",
+    "./client": "./client.js",
     "./panel": "./src/host/panel.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
   "files": [
     "index.js",
+    "client.js",
+    "cordis.patch.yml",
     "src/",
     "README.md",
     "vendor/ds-bot/",
@@ -19,7 +23,7 @@
   "scripts": {
     "test": "node --test 'test/**/*.test.js' 'acceptance-cases/**/*.test.js'",
     "start": "node scripts/start-dsh.mjs",
-    "start:dsbot": "dsh --profile odm --no-open --port 7788",
+    "start:dsbot": "dsh --profile odm --no-open --port 7777",
     "dev": "node scripts/server.js 7777",
     "demo": "node scripts/demo.mjs",
     "start:standalone": "node scripts/server.js"
@@ -49,6 +53,10 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
     }
   }
 }

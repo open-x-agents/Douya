@@ -9,6 +9,7 @@ import { generateDailyDigest, getSourcesStatus, pushDailyDigest, createComposioC
 import { reminderCard } from '../host/cards.js';
 import { createProfileManager } from './profile.js';
 import { resolveDisplayName, lastGithubIdentity } from './aggregation.js';
+import { recordCompletion } from '../host/store.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -799,17 +800,14 @@ export function createApiRouter(ctx) {
           if (ctx.name) await profileManager.save({ name: '' });
         } catch (e) { console.warn('[Identity] digest refresh failed:', e.message); }
         
-        // Just pass the new cards to store.save()
-        // Store will merge them with existing cards by sourceId
-        state.cards = brief.cards;
+        // Digest merges by sourceId but MUST NOT wipe done/dismissed cards or completions.
         state.lastDigest = {
           summary: brief.summary,
           generatedAt: new Date().toISOString(),
           itemCount: brief.cards.length,
           sources: activeAccounts.map(a => a.toolkit.slug),
         };
-        
-        await store.save(state);
+        await store.save({ ...state, cards: brief.cards }, { digest: true });
         
         // Get final merged count
         const finalState = store.get();
@@ -861,7 +859,7 @@ export function createApiRouter(ctx) {
      */
     async createCard(data) {
       try {
-        const { source, type, title, body, url, priority, status } = data;
+        const { source, type, title, body, url, priority, status, nextAction, links, snoozeUntil, sourceId } = data;
         
         if (!title) {
           return { success: false, error: '标题不能为空' };
@@ -871,12 +869,16 @@ export function createApiRouter(ctx) {
         const card = {
           id: `card_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           source: source || 'manual',
+          sourceId: sourceId || null,
           type: type || 'info',
           title,
           body: body || '',
           url: url || null,
           priority: priority || 'medium',
           status: status || 'active',
+          nextAction: nextAction || null,
+          links: Array.isArray(links) ? links : null,
+          snoozeUntil: snoozeUntil || null,
           createdAt: now,
           updatedAt: now,
         };
@@ -915,11 +917,22 @@ export function createApiRouter(ctx) {
           createdAt: card.createdAt, // Prevent createdAt change
           updatedAt: new Date().toISOString(),
         };
+        const by = updates.completedBy || updates.dismissedBy || 'user';
+        if (updates.status === 'done' && card.status !== 'done') {
+          updated.completedAt = updated.completedAt || new Date().toISOString();
+          updated.completedBy = by;
+          state.completions = recordCompletion(state.completions, updated, { action: 'done', by });
+        }
+        if (updates.status === 'dismissed' && card.status !== 'dismissed') {
+          updated.dismissedAt = updated.dismissedAt || new Date().toISOString();
+          updated.dismissedBy = by;
+          state.completions = recordCompletion(state.completions, updated, { action: 'dismissed', by });
+        }
         
         cards[index] = updated;
         await store.save(state);
         
-        console.log('[updateCard] Updated:', id, updated.title);
+        console.log('[updateCard] Updated:', id, updated.title, updated.status);
         return { success: true, card: updated };
       } catch (err) {
         console.error('[updateCard] Error:', err);
@@ -967,14 +980,20 @@ export function createApiRouter(ctx) {
         // Track in profile
         await profileManager.trackInteraction(card.sourceId, action);
         
-        // Update card status if action implies it
+        // Update card status if action implies it — also write durable completions.
         if (action === 'done' && card.status !== 'done') {
           card.status = 'done';
-          card.updatedAt = new Date().toISOString();
+          card.completedAt = new Date().toISOString();
+          card.completedBy = 'user';
+          card.updatedAt = card.completedAt;
+          state.completions = recordCompletion(state.completions, card, { action: 'done', by: 'user' });
           await store.save(state);
-        } else if (action === 'dismiss' && card.status !== 'dismissed') {
+        } else if ((action === 'dismiss' || action === 'dismissed') && card.status !== 'dismissed') {
           card.status = 'dismissed';
-          card.updatedAt = new Date().toISOString();
+          card.dismissedAt = new Date().toISOString();
+          card.dismissedBy = 'user';
+          card.updatedAt = card.dismissedAt;
+          state.completions = recordCompletion(state.completions, card, { action: 'dismissed', by: 'user' });
           await store.save(state);
         }
         
@@ -984,6 +1003,14 @@ export function createApiRouter(ctx) {
         console.error('[trackInteraction] Error:', err);
         return { success: false, error: err.message };
       }
+    },
+
+    /**
+     * GET /api/completions — durable done/dismissed ledger (survives digests).
+     */
+    async listCompletions() {
+      const state = store.get();
+      return { completions: state.completions || [] };
     },
 
     /**
@@ -1586,6 +1613,55 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
           }
         });
         return;
+      } else if (url.pathname === '/api/opendigitalmate/card-update' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const response = await router.updateCard(data.id, data);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid request' }));
+          }
+        });
+        return;
+      } else if (url.pathname === '/api/opendigitalmate/card-delete' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const response = await router.deleteCard(data.id);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid request' }));
+          }
+        });
+        return;
+      } else if (url.pathname === '/api/opendigitalmate/card-interact' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const response = await router.trackCardInteraction(data.id, data.action);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid request' }));
+          }
+        });
+        return;
+      } else if (url.pathname === '/api/completions' && req.method === 'GET') {
+        const data = await router.listCompletions();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
       } else if (url.pathname === '/api/sources' && req.method === 'GET') {
         const data = await router.getSources();
         res.writeHead(200, { 'Content-Type': 'application/json' });

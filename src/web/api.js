@@ -1127,7 +1127,7 @@ export function createApiRouter(ctx) {
       const card = (st.cards || []).find(c => c.id === cardId);
       if (!card) return null;
       lastChatCard = { cardId, at: Date.now() };
-      return cardSnapshotText(card, st.itemStatus || {});
+      return cardSnapshotText(card, st.itemStatus || {}, { actions: st.pendingActions || {} });
     },
 
     /** Full card for odm_current_card: the given id, else the card most recently chatted about (≤30 min). */

@@ -211,33 +211,55 @@ export async function chatWithDsBot({
   }
 }
 
+// Turn a session log into chat messages, skipping what the harness injects (handoff notes, runtime context,
+// skill lists, clock) — those are not the user's words.
+const INJECTED = /^(\[Handoff · part \d+\]|Current runtime context\.|<system-reminder>|Current time: \d{4}-)/
+export function historyMessages(raw) {
+  const out = []
+  for (const line of String(raw || '').split('\n')) {
+    if (!line.trim()) continue
+    let o
+    try { o = JSON.parse(line) } catch { continue }
+    if (o.type !== 'user/message' && o.type !== 'assistant/message') continue
+    const msg = o.data?.message || o.data
+    const role = msg?.role === 'user' ? 'user' : 'assistant'
+    const content = Array.isArray(msg?.content) ? msg.content.map(p => p?.text || '').join('') : (msg?.content || '')
+    if (!clean(content)) continue
+    if (role === 'user' && INJECTED.test(String(content).trim())) continue
+    if (role === 'user' && /^【当前卡片】/.test(String(content).trim())) {
+      const words = String(content).trim().split(/\n\s*\n/).pop()
+      out.push({ role, content: cleanBlock(words) })
+      continue
+    }
+    if (role === 'assistant' && /^Noted\. I have my handoff note/.test(String(content).trim())) continue
+    out.push({ role, content: cleanBlock(content) })
+  }
+  return out
+}
+
 export async function loadDsBotHistory({ home = '.odm-data', baseUrl = DEFAULT_BASE, token = process.env.DSBOT_TOKEN, dshHome = process.env.DSH_HOME || join(process.cwd(), '.dsh-odm'), limit = 40 } = {}) {
   try {
     const auth = await ensureDsbotSession({ baseUrl, home, token })
     const state = await api(auth, 'state', {})
     const mainId = state.mainBotId || state.mainBotIds?.[0]
     if (!mainId) return { sessionId: BOT_SESSION_ID, messages: [], botId: null }
-    const logPath = locateSessionLog(dshHome, mainId)
-    if (!logPath) return { sessionId: BOT_SESSION_ID, messages: [], botId: mainId }
-    let raw = ''
-    if (logPath.endsWith('.zstd')) {
-      const r = spawnSync('zstd', ['-dc', logPath], { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 })
-      raw = r.stdout || ''
-    } else {
-      raw = await readFile(logPath, 'utf8')
-    }
+    // ds-bot moves a long conversation on to fresh "part" Sessions; read the last parts, oldest first.
+    const { resolveChief } = await import('./muse-chat-core.js')
+    const { parts } = await resolveChief(dshHome, mainId)
     const messages = []
-    for (const line of raw.split('\n')) {
-      if (!line.trim()) continue
-      let o
-      try { o = JSON.parse(line) } catch { continue }
-      if (o.type === 'user/message' || o.type === 'assistant/message') {
-        const msg = o.data?.message
-        const role = msg?.role === 'user' ? 'user' : 'assistant'
-        const content = Array.isArray(msg?.content) ? msg.content.map(p => p?.text || '').join('') : (msg?.content || '')
-        if (clean(content)) messages.push({ role, content: cleanBlock(content) })
+    for (const part of (parts.length ? parts : [mainId]).slice(-2)) {
+      const logPath = locateSessionLog(dshHome, part)
+      if (!logPath) continue
+      let raw = ''
+      if (logPath.endsWith('.zstd')) {
+        const r = spawnSync('zstd', ['-dc', logPath], { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 })
+        raw = r.stdout || ''
+      } else {
+        raw = await readFile(logPath, 'utf8')
       }
+      messages.push(...historyMessages(raw))
     }
+    if (!messages.length) return { sessionId: BOT_SESSION_ID, messages: [], botId: mainId }
     return { sessionId: BOT_SESSION_ID, messages: messages.slice(-limit), botId: mainId }
   } catch (err) {
     return { sessionId: BOT_SESSION_ID, messages: [], botId: null, error: err.message }

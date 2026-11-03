@@ -104,3 +104,36 @@ test('stored repo tile with the repo-wide "157 PR" next step is repaired to a co
   assert.equal(fixed.actions[0].label, '看 #2124 的最新进展')
   assert.deepEqual(fixRepoCard(fixed), fixed)
 })
+
+test('Chief replies are read from the current ds-bot part after a handoff; history skips injected messages', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  const { tmpdir } = await import('node:os')
+  const { resolveChief } = await import('../src/web/muse-chat-core.js')
+  const { historyMessages } = await import('../src/web/dsbot-chat.js')
+  const home = mkdtempSync(join(tmpdir(), 'odm-dsh-'))
+  mkdirSync(join(home, 'bot'))
+  writeFileSync(join(home, 'bot', 'state.json'), JSON.stringify({ mainBotIds: ['session-A'], bots: { 'session-A': { id: 'session-A', sessionId: 'session-B', segments: [{ sessionId: 'session-A' }] } } }))
+  assert.deepEqual(await resolveChief(home), { botId: 'session-A', sessionId: 'session-B', parts: ['session-A', 'session-B'] })
+  const raw = [
+    { type: 'user/message', data: { role: 'user', content: [{ type: 'text', text: '[Handoff · part 2] FlyBot moved your own chat…' }] } },
+    { type: 'assistant/message', data: { message: { role: 'assistant', content: [{ type: 'text', text: 'Noted. I have my handoff note and carry on from here.' }] } } },
+    { type: 'user/message', data: { role: 'user', content: [{ type: 'text', text: 'Current time: 2026-11-03, 23:40:23 GMT+08:00' }] } },
+    { type: 'user/message', data: { role: 'user', content: [{ type: 'text', text: '【当前卡片】id=x\n标题：y\n\n这张卡片里有哪几条?' }] } },
+    { type: 'assistant/message', data: { message: { role: 'assistant', content: [{ type: 'text', text: '有 3 条。' }] } } },
+  ].map(x => JSON.stringify(x)).join('\n')
+  assert.deepEqual(historyMessages(raw), [{ role: 'user', content: '这张卡片里有哪几条?' }, { role: 'assistant', content: '有 3 条。' }])
+})
+
+test('snapshot tells Chief what happened to write actions on this card (so it stops saying "not sent")', () => {
+  const now = new Date().toISOString()
+  const t = cardSnapshotText(FLYBOT, {}, { actions: {
+    a1: { id: 'a1', action: 'github_comment', status: 'executed', summary: '评论 ThinkFlowLab/FlyBot#2309', createdAt: now, executedAt: now },
+    a2: { id: 'a2', action: 'github_comment', status: 'cancelled', summary: '评论 ThinkFlowLab/FlyBot#2309', createdAt: now },
+    a3: { id: 'a3', action: 'gmail_archive', status: 'executed', summary: '归档邮件 x', createdAt: now },
+  } })
+  assert.match(t, /与这张卡相关的操作/)
+  assert.match(t, /评论 ThinkFlowLab\/FlyBot#2309 — 已执行/)
+  assert.match(t, /已取消/)
+  assert.doesNotMatch(t, /归档邮件/)
+})

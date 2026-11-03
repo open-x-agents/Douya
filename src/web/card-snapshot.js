@@ -38,7 +38,19 @@ export function cardNumbers(card) {
 }
 
 /** Text block prepended to the user's message in a card chat. */
-export function cardSnapshotText(card, itemStatus = {}, { maxItems = 12, textChars = 160, maxChars = 2600 } = {}) {
+const ACTION_ZH = { pending: '待用户确认（还没执行）', executed: '已执行', cancelled: '已取消', undone: '已撤销', failed: '执行失败', running: '执行中' }
+/** Write actions on this card (by cardId, or naming its repo) in the last 24h, newest first. */
+export function relatedActions(card, actions = {}, { max = 5, sinceMs = 24 * 3600e3 } = {}) {
+  const repo = String(card?.url || '').match(/github\.com\/([^/]+\/[^/?#]+)/)?.[1]
+  const now = Date.now()
+  return Object.values(actions || {})
+    .filter(a => a && (a.cardId === card.id || (repo && String(a.summary || '').includes(repo))))
+    .filter(a => now - Date.parse(a.createdAt || 0) < sinceMs)
+    .sort((x, y) => String(y.createdAt).localeCompare(String(x.createdAt)))
+    .slice(0, max)
+}
+
+export function cardSnapshotText(card, itemStatus = {}, { maxItems = 12, textChars = 160, maxChars = 2600, actions = {} } = {}) {
   if (!card) return ''
   const items = cardItems(card, itemStatus)
   const open = items.filter(i => i.status === 'open').length
@@ -58,6 +70,11 @@ export function cardSnapshotText(card, itemStatus = {}, { maxItems = 12, textCha
       lines.push(`${i + 1}. ${cut(it.title, 150)} — ${meta}${it.url ? ` — ${it.url}` : ''}`)
       if (it.text && cut(it.text, textChars) !== cut(it.title, textChars)) lines.push(`   内容：${cut(it.text, textChars)}`)
     })
+  }
+  const acts = relatedActions(card, actions)
+  if (acts.length) {
+    lines.push('与这张卡相关的操作（以此为准）：')
+    for (const a of acts) lines.push(`- ${cut(a.summary || a.action, 90)} — ${ACTION_ZH[a.status] || a.status}${a.executedAt ? `（${fmtSh(a.executedAt)}）` : ''}`)
   }
   lines.push('（这是此刻卡片的完整快照；条目详情直接引用这里，需要全文用 odm_current_card。）')
   let text = lines.join('\n')

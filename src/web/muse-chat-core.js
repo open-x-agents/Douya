@@ -16,6 +16,24 @@ function flattenContent(content) {
   return cleanBlock(content.map(p => (typeof p === 'string' ? p : (p?.type && p.type !== 'text') ? '' : p?.text || '')).join(''))
 }
 
+/**
+ * Chief's bot id and the Session that currently holds its conversation. ds-bot moves a long conversation on to
+ * a fresh "part" Session (bots[id].sessionId); prompts to the bot id are routed there, but replies have to be
+ * read from the current part. parts = earlier part Sessions, oldest first, then the current one.
+ */
+export async function resolveChief(dshHome, botId = null) {
+  try {
+    const state = JSON.parse(await readFile(join(dshHome, 'bot', 'state.json'), 'utf8'))
+    const id = botId || state.mainBotId || state.mainBotIds?.[0] || Object.keys(state.bots || {})[0] || null
+    const bot = id ? state.bots?.[id] : null
+    const current = bot?.sessionId || id
+    const earlier = (Array.isArray(bot?.segments) ? bot.segments : []).map(s => s?.sessionId).filter(x => x && x !== current)
+    return { botId: id, sessionId: current, parts: [...earlier, current].filter(Boolean) }
+  } catch {
+    return { botId: botId || null, sessionId: botId || null, parts: botId ? [botId] : [] }
+  }
+}
+
 export async function loadMainBotId(dshHome) {
   try {
     const state = JSON.parse(await readFile(join(dshHome, 'bot', 'state.json'), 'utf8'))
@@ -106,8 +124,10 @@ export async function runMuseChatTurn(ctx, {
   T.contextChars = ctxText.length
   T.outboundChars = outbound.length
 
-  const sessionId = botId || await loadMainBotId(dshHome)
-  if (!sessionId) return { ok: false, error: 'no Main Bot' }
+  const chief = await resolveChief(dshHome, botId)
+  const promptTo = chief.botId
+  let sessionId = chief.sessionId // where replies land; re-resolved while waiting (a handoff can happen mid-turn)
+  if (!promptTo || !sessionId) return { ok: false, error: 'no Main Bot' }
   if (!ctx?.sessionController?.prompt) return { ok: false, error: 'sessionController missing' }
 
   try { ensureSessionCompat((await liveAgent(ctx, sessionId))?.session, log) } catch {}
@@ -122,7 +142,7 @@ export async function runMuseChatTurn(ctx, {
   T.promptAt = Date.now()
   await ctx.sessionController.prompt({
     requestId: randomUUID(),
-    sessionId,
+    sessionId: promptTo,
     mode: 'queue',
     content: [{ type: 'text', text: outbound }],
   }, AbortSignal.timeout(30_000))
@@ -132,6 +152,8 @@ export async function runMuseChatTurn(ctx, {
   let reply = ''
   let pageErrLogged = false
   while (Date.now() < deadline) {
+    const now = (await resolveChief(dshHome, promptTo)).sessionId
+    if (now && now !== sessionId) { log(`[muse-chat] Chief moved on to a new part: ${now}`); sessionId = now; T.handoff = true }
     const agent = await liveAgent(ctx, sessionId)
     if (agent?.status === 'running' && typeof agent.whenIdle === 'function') {
       await Promise.race([agent.whenIdle(), new Promise(r => setTimeout(r, 8_000))])
@@ -230,6 +252,7 @@ export function summarizeTiming(T) {
     turnMs: ms(T.turnStartAt, T.turnEndAt),
     turnEndToDetectMs: ms(T.turnEndAt, T.detectedAt),
     polls: T.polls ?? 0,
+    handoff: !!T.handoff,
     serverTotalMs: ms(T.recvAt ?? T.turnCallAt, T.detectedAt),
     systemChars: T.systemChars ?? null, toolCount: T.toolCount ?? null, toolSchemaChars: T.toolSchemaChars ?? null,
   }
@@ -251,7 +274,7 @@ export function progressLabel(name) {
 
 /** What Chief is doing right now (for the 豆芽正在想… indicator). */
 export async function chatProgress(ctx, { dshHome, botId = null } = {}) {
-  const sessionId = botId || await loadMainBotId(dshHome)
+  const { sessionId } = await resolveChief(dshHome, botId)
   if (!sessionId || !ctx?.sessionController?.page) return { running: false }
   const { agent, records } = await tailRecords(ctx, sessionId, 8)
   const types = records.map(r => r.type)

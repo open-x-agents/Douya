@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { askWithEvidence, evidenceFromCards, evidenceFromGroups } from '../src/web/ask-bridge.js'
+import { askWithEvidence, evidenceFromCards, evidenceFromGroups, classifyTalk } from '../src/web/ask-bridge.js'
 
 const cards = [{
   id: 'c1', source: 'github', status: 'active', title: 'acme/widgets', url: 'https://github.com/acme/widgets',
@@ -41,4 +41,36 @@ test('live groups carry their counts and link to their items', () => {
   assert.equal(s[0].ref, 'group:pr:review')
   assert.match(s[0].excerpt, /共3个/)
   assert.equal(s[0].url, 'https://example.test/1')
+})
+
+test('greetings and capability questions are talk, not cite-or-refuse', () => {
+  assert.equal(classifyTalk('你好'), 'greeting')
+  assert.equal(classifyTalk('Hello!'), 'greeting')
+  assert.equal(classifyTalk('谢谢'), 'thanks')
+  assert.equal(classifyTalk('你是谁'), 'capability')
+  assert.equal(classifyTalk('你能做什么？'), 'capability')
+  assert.equal(classifyTalk('?'), 'clarify')
+  assert.equal(classifyTalk('？？'), 'clarify')
+  assert.equal(classifyTalk(''), 'clarify')
+  assert.equal(classifyTalk('有哪些 PR 等我 review？'), null)
+  assert.equal(classifyTalk('今天 Slack 上有什么需要我回的？'), null)
+})
+
+test('你好 answers warmly with no citations and never calls the model', async () => {
+  let called = false
+  const llm = { async *stream() { called = true; yield { type: 'text', text: '{}' } } }
+  const r = await askWithEvidence({ question: '你好', cards, llm })
+  assert.equal(r.status, 'answered')
+  assert.equal(r.talk, 'greeting')
+  assert.equal(r.citations.length, 0)
+  assert.match(r.text, /豆芽/)
+  assert.equal(called, false)
+})
+
+test('? asks a clarifying follow-up instead of refusing for lack of sources', async () => {
+  const r = await askWithEvidence({ question: '?', cards: [] })
+  assert.equal(r.status, 'answered')
+  assert.equal(r.talk, 'clarify')
+  assert.match(r.text, /邮件|PR|Slack/)
+  assert.equal(r.citations.length, 0)
 })

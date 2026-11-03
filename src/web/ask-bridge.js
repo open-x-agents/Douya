@@ -31,6 +31,35 @@ const INTENTS = [
 const clean = v => String(v ?? '').replace(/\s+/g, ' ').replace(/(\d)\s+(万|元|%|分钟|小时|人|个|件|点)/g, '$1$2').trim()
 const WAITING_ZH = { you: '等你处理', others: '等别人', true: '等你处理', false: '仅供参考', fyi: '仅供参考' }
 
+// Non-fact talk: greetings, thanks, capability, and empty/ambiguous inputs. These do not need
+// evidence; inventing work facts here would still be wrong, so the replies stay generic.
+const GREETING = /^(?:你?好+|hi+|hello|hey|哈喽|嗨|早+|早上好|下午好|晚上好|嘿)[!！。.~～\s]*$/i
+const THANKS = /^(?:谢谢|多谢|感谢|thanks?|thx|thank you)[!！。.~～\s]*$/i
+const CAPABILITY = /^(?:你是谁|你叫什么|你能做什么|你会什么|有什么功能|帮我做什么|介绍一下你自己|who are you|what can you do)[?？!！。.\s]*$/i
+const AMBIGUOUS = /^(?:[?？]+|\.{2,}|…+|嗯+|啊+|哦+|呃+)[~～\s]*$/
+
+/**
+ * Classify a message that should NOT go through the cite-or-refuse engine.
+ * @returns {'greeting'|'thanks'|'capability'|'clarify'|null}
+ */
+export function classifyTalk(text) {
+  const t = clean(text)
+  if (!t) return 'clarify'
+  if (GREETING.test(t)) return 'greeting'
+  if (THANKS.test(t)) return 'thanks'
+  if (CAPABILITY.test(t)) return 'capability'
+  if (AMBIGUOUS.test(t)) return 'clarify'
+  return null
+}
+
+const TALK_REPLY = {
+  greeting: '你好！我是豆芽，你的数字同事。可以问我今天的邮件、PR、Slack 或日程，我会按读到的信源回答并附上链接。',
+  thanks: '不客气。有邮件、PR、Slack 或日程上的事，随时再问我。',
+  capability: '我能帮你看已连接信源里的事：GitHub 的 PR 与 issue、Gmail、Slack、日历，以及今天的卡片汇总。问具体事实时我会引用依据；闲聊不用。',
+  clarify: '想问哪一类？可以说「有哪些 PR 等我 review」「最近重要邮件」「Slack 上有什么要回的」或「今天有什么会」。',
+}
+
+
 function linksOfCard(card) {
   const out = []
   const walk = v => {
@@ -125,6 +154,10 @@ async function draftClaims(llm, question, candidates) {
  */
 export async function askWithEvidence({ question, cards = [], cardId = null, composioClient = null, llm = null, log = () => {} }) {
   const text = clean(question)
+  const talk = classifyTalk(text)
+  if (talk) {
+    return { text: TALK_REPLY[talk], status: 'answered', citations: [], cards: [], dropped: 0, candidates: 0, talk }
+  }
   let pool = evidenceFromCards(cards)
   if (cardId) pool = pool.filter(s => s.cardId === cardId)
   const scopedCard = cardId ? cards.find(c => c.id === cardId) : null

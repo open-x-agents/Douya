@@ -78,3 +78,11 @@ test('item status persists by url across a re-aggregated card and undo clears it
   assert.equal(state.completions.length, 0)
   assert.equal(annotateCards([day2], state.itemStatus)[0].itemStatus, undefined)
 })
+
+test('normalizeState collapses duplicate item ledger entries', async () => {
+  const { normalizeState } = await import('../src/host/store.js')
+  const e = { kind: 'item', itemUrl: 'https://x/1', action: 'done', at: 't' }
+  const s = normalizeState({ completions: [{ action: 'done', title: 'card' }, e, { ...e }, { ...e, at: 't2' }] })
+  assert.equal(s.completions.length, 2)
+  assert.equal(s.completions[1].at, 't2')
+})

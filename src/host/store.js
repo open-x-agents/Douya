@@ -32,6 +32,13 @@ export function emptyState() {
 
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
 
+// One ledger entry per item url (the latest wins); card-level entries are kept as-is.
+function dedupeItemCompletions(list) {
+  const lastIdx = new Map()
+  list.forEach((c, i) => { if (c?.kind === 'item' && c.itemUrl) lastIdx.set(c.itemUrl, i) })
+  return list.filter((c, i) => !(c?.kind === 'item' && c.itemUrl) || lastIdx.get(c.itemUrl) === i)
+}
+
 export function normalizeState(raw) {
   const base = emptyState()
   if (raw === null || typeof raw !== 'object') return base
@@ -49,7 +56,7 @@ export function normalizeState(raw) {
     week: Array.isArray(raw.week) ? raw.week : [],
     prefs: isRecord(raw.prefs) ? raw.prefs : {},
     cards: Array.isArray(raw.cards) ? raw.cards : [],
-    completions: Array.isArray(raw.completions) ? raw.completions : [],
+    completions: Array.isArray(raw.completions) ? dedupeItemCompletions(raw.completions) : [],
     itemStatus: isRecord(raw.itemStatus) ? raw.itemStatus : {},
     lastDigest: raw.lastDigest ?? null,
   }

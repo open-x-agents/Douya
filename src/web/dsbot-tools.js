@@ -99,12 +99,18 @@ export async function registerBotTools(ctx, opts = {}) {
 
   const cards = createCardOps({ baseUrl: museUrl, router })
   const disposers = []
-  const register = (tool) => {
+  const failed = []
+  // Takes a thunk so a bad schema in one defineTool() can't abort every later registration.
+  const register = (make) => {
+    let tool
     try {
+      tool = typeof make === 'function' ? make() : make
       const d = ctx.tools.register(tool)
       if (typeof d === 'function') disposers.push(d)
     } catch (err) {
-      log(`dsbot-tools: register ${tool.name} failed: ${err.message}`)
+      failed.push(tool?.name || '?')
+      log(`dsbot-tools: register ${tool?.name || '(defineTool)'} failed: ${err.message}`)
+      console.error(`[odm] dsbot-tools: tool registration failed: ${err.message}`)
     }
   }
 
@@ -124,7 +130,7 @@ export async function registerBotTools(ctx, opts = {}) {
     }
   }
 
-  register(defineTool({
+  register(() => defineTool({
     name: 'odm_whoami',
     description: 'Lookup user display name from connected sources (GitHub preferred).',
     parameters: {},
@@ -140,7 +146,7 @@ export async function registerBotTools(ctx, opts = {}) {
     },
   }))
 
-  register(defineTool({
+  register(() => defineTool({
     name: 'odm_card_list',
     description: 'List Today cards. status: active|done|snoozed|dismissed|all.',
     parameters: { status: { type: 'string', description: 'active (default) | done | snoozed | dismissed | all' } },
@@ -151,7 +157,7 @@ export async function registerBotTools(ctx, opts = {}) {
     },
   }))
 
-  register(defineTool({
+  register(() => defineTool({
     name: 'odm_card_find',
     description: 'Find active cards by title/body keyword.',
     parameters: { query: { type: 'string', required: true, description: 'Keyword' } },
@@ -162,7 +168,7 @@ export async function registerBotTools(ctx, opts = {}) {
     },
   }))
 
-  register(defineTool({
+  register(() => defineTool({
     name: 'odm_today_cards',
     description: 'Alias of odm_card_list.',
     parameters: {
@@ -180,7 +186,7 @@ export async function registerBotTools(ctx, opts = {}) {
     },
   }))
 
-  register(defineTool({
+  register(() => defineTool({
     name: 'odm_card_create',
     description: 'Create a Today card (task/note/reminder).',
     parameters: {
@@ -198,7 +204,7 @@ export async function registerBotTools(ctx, opts = {}) {
     },
   }))
 
-  register(defineTool({
+  register(() => defineTool({
     name: 'odm_card_update',
     description: 'Update card by id (title/body/priority/status/url/nextAction/links).',
     parameters: {
@@ -226,7 +232,7 @@ export async function registerBotTools(ctx, opts = {}) {
     },
   }))
 
-  register(defineTool({
+  register(() => defineTool({
     name: 'odm_card_complete',
     description: 'Mark card done. Writes durable completion record.',
     parameters: { id: { type: 'string', required: true } },
@@ -237,7 +243,7 @@ export async function registerBotTools(ctx, opts = {}) {
     },
   }))
 
-  register(defineTool({
+  register(() => defineTool({
     name: 'odm_card_dismiss',
     description: 'Dismiss card (not hard-delete). Prefer for noise/promo.',
     parameters: { id: { type: 'string', required: true } },
@@ -248,7 +254,7 @@ export async function registerBotTools(ctx, opts = {}) {
     },
   }))
 
-  register(defineTool({
+  register(() => defineTool({
     name: 'odm_card_snooze',
     description: 'Snooze card. Default 24h.',
     parameters: {
@@ -263,7 +269,7 @@ export async function registerBotTools(ctx, opts = {}) {
     },
   }))
 
-  register(defineTool({
+  register(() => defineTool({
     name: 'odm_card_delete',
     description: 'Permanently delete card. Only when user clearly asks.',
     parameters: { id: { type: 'string', required: true } },
@@ -274,14 +280,14 @@ export async function registerBotTools(ctx, opts = {}) {
     },
   }))
 
-  register(defineTool({
+  register(() => defineTool({
     name: 'odm_card_item',
     description: 'Mark ONE related item (PR / issue / mail link) inside a Today card as done / dismiss, or undo. Persists by item url and survives digests. Does not change the whole card.',
     parameters: {
       id: { type: 'string', required: true, description: 'card id' },
       url: { type: 'string', required: true, description: 'item url from odm_card_list items[].url' },
-      action: { type: 'string', required: false, description: 'done | dismiss | undo (default done)' },
-      title: { type: 'string', required: false, description: 'item title for the ledger' },
+      action: { type: 'string', description: 'done | dismiss | undo (default done)' },
+      title: { type: 'string', description: 'item title for the ledger' },
     },
     output,
     async execute(args) {
@@ -290,7 +296,7 @@ export async function registerBotTools(ctx, opts = {}) {
     },
   }))
 
-  register(defineTool({
+  register(() => defineTool({
     name: 'odm_digest_refresh',
     description: 'Regenerate Today digest. Preserves completed cards/history.',
     parameters: {},
@@ -301,7 +307,7 @@ export async function registerBotTools(ctx, opts = {}) {
     },
   }))
 
-  register(defineTool({
+  register(() => defineTool({
     name: 'odm_completions_list',
     description: 'List durable completion/dismiss history (survives digests and restarts).',
     parameters: {},
@@ -312,7 +318,7 @@ export async function registerBotTools(ctx, opts = {}) {
     },
   }))
 
-  register(defineTool({
+  register(() => defineTool({
     name: 'odm_ask_cite',
     description: 'Evidence-first lookup over today cards. Tool only — not chat backend.',
     parameters: {
@@ -335,7 +341,7 @@ export async function registerBotTools(ctx, opts = {}) {
 
   const composioDefs = createComposioTools(composioClient)
   for (const def of composioDefs) {
-    register(defineTool({
+    register(() => defineTool({
       name: `odm_${def.name}`,
       description: def.description,
       parameters: schemaToParams(def.inputSchema),
@@ -347,6 +353,6 @@ export async function registerBotTools(ctx, opts = {}) {
     }))
   }
 
-  log(`dsbot-tools: registered disposers=${disposers.length} composio=${composioDefs.length} cards=${router ? 'in-process' : museUrl}`)
+  log(`dsbot-tools: registered disposers=${disposers.length} failed=${failed.length} composio=${composioDefs.length} cards=${router ? 'in-process' : museUrl}`)
   return () => { for (const d of disposers.splice(0).reverse()) try { d() } catch { /* */ } }
 }

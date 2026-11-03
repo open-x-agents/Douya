@@ -28,7 +28,7 @@ function summarize(card) {
     url: card.url || null,
     nextAction: card.nextAction || null,
     links: card.links || null,
-    items: [...((card.blocks || []).find(b => b?.type === 'link-list')?.links || [])].filter(l => l?.url).slice(0, 12).map(l => ({ title: l.title, url: l.url, status: card.itemStatus?.[l.url]?.status || 'open' })),
+    items: [...((card.blocks || []).find(b => b?.type === 'link-list')?.links || [])].filter(l => l?.url).slice(0, 12).map(l => ({ title: l.title, url: l.url, status: card.itemStatus?.[l.url]?.status || 'open', ...(l.from ? { from: l.from } : {}), ...(l.at ? { at: l.at } : {}), ...(l.text ? { text: String(l.text).slice(0, 300) } : {}), ...(l.replies ? { replies: l.replies } : {}), ...(l.needsYou ? { needsYou: true } : {}) })),
     snoozeUntil: card.snoozeUntil || null,
     completedAt: card.completedAt || null,
   }

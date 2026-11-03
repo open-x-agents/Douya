@@ -859,6 +859,15 @@
   .z-act{border:0;background:#fff;color:var(--ink2);font:500 12px/1 inherit;padding:7px 10px;border-radius:8px;cursor:pointer;text-decoration:none;box-shadow:0 0 0 1px var(--line)}
   .z-act:hover{color:var(--ink);box-shadow:0 0 0 1px rgba(30,40,80,.15)}
   .z-act.done:hover{color:var(--teal)}
+  .z-item-b .z-meta{display:block;font-size:12px;color:var(--ink3)}
+  .z-item:has(.z-text){align-items:flex-start}
+  .z-item.is-done .z-text,.z-item.is-dismissed .z-text{color:var(--ink3)}
+  .z-need{font-style:normal;color:var(--rose);font-weight:600}
+  .z-text{font-size:13.5px;line-height:1.6;color:var(--ink);margin-top:4px;word-break:break-word}
+  .z-text.clamp{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+  .z-text p{margin:0 0 4px}
+  .z-more{border:0;background:none;padding:2px 0;color:var(--sky,#4a73d9);font:600 12px inherit;cursor:pointer}
+  .lk-slack{color:#7b5ad9}
   .chat-fail{display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:var(--rose);font-size:13px;white-space:normal}
   .chat-retry{border:1px solid currentColor;background:#fff;color:var(--rose);border-radius:999px;padding:3px 12px;font:600 12px inherit;cursor:pointer}
   .chat-retry:hover{background:var(--rose-soft)}
@@ -1573,6 +1582,7 @@
   function clip(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
   function linkKind(l) {
     const t = String(l.type || '');
+    if (t === 'slack' || /\.slack\.com\//.test(l.url)) return { k: 'slack', zh: '消息' };
     if (t.startsWith('email') || /mail\.google/.test(l.url)) return { k: 'mail', zh: '邮件' };
     if (/\/issues\//.test(l.url) || t.includes('issue')) return { k: 'issue', zh: 'Issue' };
     if (/\/pull\//.test(l.url) || t.includes('pr')) return { k: 'pr', zh: 'PR' };
@@ -1669,13 +1679,21 @@
     issue: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/><path fill="currentColor" d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"/></svg>',
     mail: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M1.75 2h12.5c.97 0 1.75.78 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 14H1.75A1.75 1.75 0 0 1 0 12.25v-8.5C0 2.78.78 2 1.75 2ZM1.5 5.06v7.19c0 .14.11.25.25.25h12.5c.14 0 .25-.11.25-.25V5.06L8.4 9.2a.75.75 0 0 1-.8 0Zm13-1.31v-.02c0-.13-.11-.23-.25-.23H1.75c-.14 0-.25.1-.25.23v.02L8 7.67Z"/></svg>',
     repo: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.71 1.71.75.75 0 0 1-1.07 1.05A2.5 2.5 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.71A2.5 2.5 0 0 1 4.5 9h8Z"/></svg>',
+    slack: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M1.75 1h12.5c.97 0 1.75.78 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.57 2.57A1.46 1.46 0 0 1 3 14.54V13H1.75A1.75 1.75 0 0 1 0 11.25v-8.5C0 1.78.78 1 1.75 1Zm0 1.5a.25.25 0 0 0-.25.25v8.5c0 .14.11.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.75.75 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25Z"/></svg>',
     link: '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="currentColor" d="M7.78 4.72a.75.75 0 0 1 0 1.06L5.06 8.5a1.75 1.75 0 1 0 2.47 2.47l.5-.5a.75.75 0 1 1 1.06 1.06l-.5.5a3.25 3.25 0 1 1-4.6-4.6l2.73-2.72a.75.75 0 0 1 1.06 0Zm1.44-1.44a3.25 3.25 0 0 1 4.6 4.6l-.5.5a.75.75 0 0 1-1.06-1.06l.5-.5a1.75 1.75 0 1 0-2.47-2.47L7.56 7.08A.75.75 0 1 1 6.5 6.02Z"/></svg>',
   };
   // ---- Related items inside a card: per-item 完成 / 忽略 / 撤销, persisted by url.
   let zoomDoneOpen = false;
+  const fmtSh = iso => { try { const d = new Date(iso); if (isNaN(d)) return ''; const o = { timeZone: 'Asia/Shanghai' }; const day = d.toLocaleDateString('zh-CN', { ...o, month: 'numeric', day: 'numeric' }); const today = new Date().toLocaleDateString('zh-CN', { ...o, month: 'numeric', day: 'numeric' }); return `${day === today ? '今天' : day} ${d.toLocaleTimeString('zh-CN', { ...o, hour: '2-digit', minute: '2-digit', hour12: false })}`; } catch (_) { return ''; } };
   function zoomItemRow(link, s) {
     const k = linkKind(link);
-    const head = `<span class="lk-ic lk-${k.k}">${ICON[k.k] || ICON.link}</span><div class="z-item-b"><b title="${escMd(link.title)}">${escMd(link.title)}</b><span>${link.from ? escMd(link.from) : k.zh}${s ? ` · ${s.status === 'done' ? '已完成' : '已忽略'} ${chatTime(s.at)}` : ''}</span></div>`;
+    const meta = [link.from ? escMd(link.from) : k.zh];
+    if (link.type === 'slack' && link.at) meta.push(fmtSh(link.at));
+    if (link.replies) meta.push(`${link.replies} 条回复`);
+    if (link.needsYou && !s) meta.push(`<em class="z-need">需要你回应${link.reason ? ' · ' + escMd(link.reason) : ''}</em>`);
+    if (s) meta.push(`${s.status === 'done' ? '已完成' : '已忽略'} ${chatTime(s.at)}`);
+    const body = link.text && link.type === 'slack' ? `<div class="z-text md clamp">${renderMd(link.text)}</div>${String(link.text).length > 160 || /\n/.test(link.text) ? '<button class="z-more" type="button">展开</button>' : ''}` : '';
+    const head = `<span class="lk-ic lk-${k.k}">${ICON[k.k] || ICON.link}</span><div class="z-item-b">${body ? '' : `<b title="${escMd(link.title)}">${escMd(link.title)}</b>`}<span class="z-meta">${meta.join(' · ')}</span>${body}</div>`;
     const data = `data-item-url="${escMd(link.url)}" data-item-title="${escMd(link.title)}"`;
     if (s) return `<div class="z-item ${s.status === 'done' ? 'is-done' : 'is-dismissed'}">${s.status === 'done' ? '<span class="z-check">✓</span>' : ''}${head}<div class="z-acts"><a class="z-act" href="${escMd(link.url)}" target="_blank" rel="noopener">打开</a><button class="z-act undo" data-act="undo" ${data}>撤销</button></div></div>`;
     return `<div class="z-item">${head}<div class="z-acts"><a class="z-act" href="${escMd(link.url)}" target="_blank" rel="noopener">打开</a><button class="z-act done" data-act="done" ${data}>完成</button><button class="z-act dismiss" data-act="dismiss" ${data}>忽略</button></div></div>`;
@@ -1696,6 +1714,14 @@
     const sec = $('zItemsSec');
     if (!sec || !card.id) return;
     sec.addEventListener('toggle', e => { if (e.target.matches('details.z-done')) zoomDoneOpen = e.target.open; }, true);
+    sec.addEventListener('click', e => {
+      const more = e.target.closest('.z-more');
+      if (!more) return;
+      e.preventDefault(); e.stopPropagation();
+      const t = more.previousElementSibling;
+      const open = t.classList.toggle('clamp');
+      more.textContent = open ? '展开' : '收起';
+    });
     sec.addEventListener('click', async e => {
       const btn = e.target.closest('button[data-act]');
       if (!btn || btn.disabled) return;

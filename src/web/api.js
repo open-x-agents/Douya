@@ -1224,7 +1224,15 @@ export function createApiRouter(ctx) {
           const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
           const home = config.home || '.odm-data';
           const card = data.cardId ? (store.get()?.cards || []).find(c => c.id === data.cardId) : null;
-          const cardContext = data.cardContext || (card ? `卡片「${card.title}」：${card.body || ''} 链接：${card.url || ''}` : null);
+          let cardContext = data.cardContext || (card ? `卡片「${card.title}」：${card.body || ''} 链接：${card.url || ''}` : null);
+          // Give Chief the real message/mail lines stored on the card (Slack texts, mail subjects).
+          const ll = card && (card.blocks || []).find(b => b?.type === 'link-list');
+          if (ll && Array.isArray(ll.links) && ll.links.some(l => l.text || l.from)) {
+            const st = store.get()?.itemStatus || {};
+            const fmt = iso => { try { return new Date(iso).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
+            const lines = ll.links.slice(0, 15).map(l => `- ${l.from || ''}${l.at ? ` ${fmt(l.at)}` : ''}${l.replies ? `（${l.replies} 条回复）` : ''}${st[l.url] ? `［已${st[l.url].status === 'done' ? '完成' : '忽略'}］` : ''}：${String(l.text || l.title || '').replace(/\s+/g, ' ').slice(0, 400)} ${l.url}`);
+            cardContext = `${cardContext || ''}\n卡片里的条目（UTC+8）：\n${lines.join('\n')}`.slice(0, 6000);
+          }
           try {
             const result = await chatWithDsBot({
               message,

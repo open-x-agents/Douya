@@ -1,4 +1,5 @@
 import { buildEmailClusters } from './email-groups.js';
+import { buildSlackCopy, selfSlackIds } from './slack-cards.js';
 /**
  * Multi-stage aggregation pipeline for daily digest
  * Inspired by Superhuman/Shortwave email triage, Linear inbox, GitHub notifications
@@ -331,7 +332,17 @@ export function normalizeItems(sourceData) {
       sourceId: `slack:msg:${ch.id}:${m.ts || m.iid}`,
       title: String(m.text || '').replace(/\s+/g, ' ').slice(0, 140),
       url: m.permalink, body: String(m.text || '').slice(0, 500),
-      metadata: { channelId: ch.id, channelName: ch.name || ch.id, isDm, user: m.username || m.user_profile?.display_name || m.user_profile?.real_name || m.user || '', ts: m.ts, workspace: ws },
+      metadata: {
+        channelId: ch.id, channelName: ch.name || ch.id, isDm,
+        user: m.user_profile?.real_name || m.user_profile?.display_name || m.username || m.user || '',
+        realName: m.user_profile?.real_name || '',
+        userId: m.user || null,
+        isBot: !!(m.bot_id || m.bot_profile || m.subtype === 'bot_message' || (m.username && (m.username === ch.name || /bot\b|bot$|radar|alert|notif|digest|github|jira|linear|sentry|pagerduty|circleci|vercel|zapier|workflow/i.test(m.username)))),
+        text: String(m.text || '').slice(0, 4000),
+        threadTs: m.thread_ts || (String(m.permalink || '').match(/[?&]thread_ts=([\d.]+)/) || [])[1] || null,
+        replyCount: m.reply_count ?? null,
+        ts: m.ts, workspace: ws,
+      },
       timestamp: m.ts ? new Date(parseFloat(m.ts) * 1000).toISOString() : new Date().toISOString(),
     });
   }
@@ -868,8 +879,11 @@ export function clusterByProjectTheme(items) {
   const slackItems = items.filter(i => i.source === 'slack');
   const byChan = new Map();
   for (const it of slackItems) { const k = it.metadata.channelId || 'unknown'; if (!byChan.has(k)) byChan.set(k, []); byChan.get(k).push(it); }
+  const selfNames = [lastGithubIdentity?.name, lastGithubIdentity?.login].filter(Boolean);
+  const selfIds = selfSlackIds(slackItems, selfNames);
   for (const [chanId, chItems] of byChan) {
     const m0 = chItems[0].metadata;
+    const copy = buildSlackCopy(chItems, { selfNames, selfIds });
     const people = [...new Set(chItems.map(i => i.metadata.user).filter(Boolean))];
     const today = new Date().toISOString().split('T')[0];
     clusters.push({
@@ -877,10 +891,14 @@ export function clusterByProjectTheme(items) {
       type: 'slack-cluster', source: 'slack', sourceId: `slack:cluster:${chanId}:${today}`,
       title: m0.isDm ? `私信 · ${people[0] || ''}` : `#${m0.channelName}`,
       subtitle: m0.workspace || 'Slack',
-      body: `最近 24h 有 ${chItems.length} 条消息${people.length ? `，来自 ${people.slice(0, 3).join('、')}${people.length > 3 ? ` 等 ${people.length} 人` : ''}` : ''}。`,
-      url: chItems[0].url, priority: m0.isDm ? 'high' : chItems.length >= 5 ? 'medium' : 'low', status: 'active',
+      body: copy.body,
+      why: copy.body,
+      nextAction: copy.nextAction,
+      waiting: copy.waiting,
+      slackMessages: copy.msgs,
+      url: chItems[0].url, priority: copy.needCount ? 'high' : chItems.length >= 5 ? 'medium' : 'low', status: 'active',
       clusterSize: chItems.length, items: chItems, topItems: chItems.slice(0, 3),
-      metadata: { channel: m0.channelName, isDm: m0.isDm, people, messageCount: chItems.length },
+      metadata: { channel: m0.channelName, isDm: m0.isDm, people: copy.people.length ? copy.people : people, bots: copy.bots, needCount: copy.needCount, messageCount: chItems.length },
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     });
   }
@@ -1047,8 +1065,9 @@ export function classifyClusters(clusters) {
       reasoning = 'Newsletters';
     }
     else if (cluster.type === 'slack-cluster') {
-      category = cluster.metadata?.isDm ? 'needs-action' : 'fyi';
-      score = cluster.metadata?.isDm ? 82 : 55 + Math.min(20, cluster.clusterSize);
+      const needs = cluster.metadata?.needCount > 0;
+      category = needs ? 'needs-action' : 'fyi';
+      score = needs ? (cluster.metadata?.isDm ? 88 : 80) : 45 + Math.min(15, cluster.clusterSize);
       reasoning = `${cluster.clusterSize} Slack messages`;
     }
     // Calendar cluster with upcoming: urgent
@@ -1472,8 +1491,16 @@ function generateClusterCards(grouped) {
     
     else if (cluster.type === 'slack-cluster') {
       card.blocks.push({ type: 'stat', value: cluster.clusterSize, label: '条消息' });
-      if (cluster.metadata.people?.length) card.blocks.push({ type: 'tags', tags: cluster.metadata.people.slice(0, 3).map(p => ({ text: p, color: 'gray' })) });
-      card.actions.push({ label: cluster.metadata.isDm ? '回复私信' : `打开 #${cluster.metadata.channel}`, value: cluster.url, primary: true });
+      const who = cluster.metadata.people?.length ? cluster.metadata.people : (cluster.metadata.bots || []);
+      if (who.length) card.blocks.push({ type: 'tags', tags: who.slice(0, 3).map(p => ({ text: p, color: cluster.metadata.needCount ? 'orange' : 'gray' })) });
+      // The messages themselves, stored on the card (zoom lists them with 打开/完成/忽略).
+      card.blocks.push({ type: 'link-list', links: (cluster.slackMessages || []).slice(0, 50) });
+      card.nextAction = cluster.nextAction;
+      card.why = cluster.why;
+      card.waiting = cluster.waiting;
+      card.metadata = cluster.metadata;
+      const first = (cluster.slackMessages || []).find(m => m.needsYou) || (cluster.slackMessages || [])[0];
+      card.actions.push({ label: first?.needsYou ? `回复 ${first.from}` : cluster.metadata.isDm ? '回复私信' : `打开 #${cluster.metadata.channel}`, value: first?.url || cluster.url, primary: true });
     }
     // Calendar cluster
     else if (cluster.type === 'calendar-cluster') {

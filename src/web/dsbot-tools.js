@@ -102,10 +102,12 @@ export async function registerBotTools(ctx, opts = {}) {
 
   if (typeof ctx.systemPrompt?.section === 'function') {
     try {
+      // dsh-system-prompt sections take `text` (string or fn); `content` crashes every turn.
       const d = ctx.systemPrompt.section({
         name: 'opendigitalmate-card-work',
-        order: 35,
-        content: CARD_WORK_PROMPT,
+        order: 650,
+        interpolate: false,
+        text: CARD_WORK_PROMPT,
       })
       if (typeof d === 'function') disposers.push(d)
       log('dsbot-tools: systemPrompt section installed')

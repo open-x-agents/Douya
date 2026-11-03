@@ -1,3 +1,8 @@
+# RESOLVED (2026-11-03)
+
+Chat now goes through real ds-bot via `dsh --profile odm` + `src/web/dsbot-chat.js`. Homemade ask-bridge deleted.
+
+---
 # 🚨 CRITICAL: Current Chat is FAKE - Migration to Real ds-bot Agent Required
 
 ## Problem Statement

@@ -12,3 +12,4 @@ state.json
 
 # Runtime data of the event store and the evidence ledger (#9) never goes into the repository.
 data/
+.dsh-odm/

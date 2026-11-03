@@ -1092,14 +1092,22 @@ export function createApiRouter(ctx) {
     },
 
     /**
-     * GET /api/chat/history — persistent Bot transcript (survives restarts).
+     * GET /api/chat/history — transcript from the real ds-bot Chief.
      */
     async getChatHistory() {
-      const { loadHistory, loadMemory, BOT_SESSION_ID } = await import('./bot-chat.js');
+      const { loadDsBotHistory, BOT_SESSION_ID } = await import('./dsbot-chat.js');
       const home = config.home || '.odm-data';
-      const messages = await loadHistory(home);
-      const memory = await loadMemory(home);
-      return { sessionId: BOT_SESSION_ID, messages, memoryPreview: String(memory || '').slice(0, 500) };
+      try {
+        const hist = await loadDsBotHistory({
+          home,
+          baseUrl: process.env.DSBOT_URL || 'http://127.0.0.1:7788',
+          token: process.env.DSBOT_TOKEN,
+        });
+        return { sessionId: hist.sessionId || BOT_SESSION_ID, messages: hist.messages || [], botId: hist.botId || null };
+      } catch (err) {
+        console.error('[getChatHistory] ds-bot:', err.message);
+        return { sessionId: BOT_SESSION_ID, messages: [], error: err.message };
+      }
     },
 
     /**
@@ -1126,119 +1134,39 @@ export function createApiRouter(ctx) {
           chatSessions.set(sessionId, session);
         }
 
-        // Persistent Bot conversation (history + MEMORY.md under .odm-data/bot/). Fact
-        // claims still go through ask-bridge → ask.js; greetings and follow-ups keep context.
+        // Real ds-bot Chief only — no ask-bridge / homemade LLM Q&A layer.
         {
-          const { chatWithBot, BOT_SESSION_ID, loadHistory } = await import('./bot-chat.js');
+          const { chatWithDsBot, BOT_SESSION_ID } = await import('./dsbot-chat.js');
           const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-          if (!llmCtx?.llm) {
-            return { text: '还没配置模型，没法对话。请先在「配置」里设置模型。', cards: [{ type: 'error', title: '模型未配置', description: '配置后即可提问', actions: [{ label: '前往模型设置', value: '打开模型设置页面' }] }], time };
-          }
           const home = config.home || '.odm-data';
           const card = data.cardId ? (store.get()?.cards || []).find(c => c.id === data.cardId) : null;
           const cardContext = data.cardContext || (card ? `卡片「${card.title}」：${card.body || ''} 链接：${card.url || ''}` : null);
-          const result = await chatWithBot({
-            message,
-            cardId: data.cardId || null,
-            cardContext,
-            home,
-            cards: store.get()?.cards || [],
-            composioClient: getComposioClient(),
-            llm: llmCtx.llm,
-            log: m => console.log(m),
-          });
-          // Keep the in-memory map in sync for any legacy readers; disk is the source of truth.
-          session.messages = (result.history || []).map(m => ({ role: m.role, content: m.content }));
-          session.history = result.history || [];
-          chatSessions.set(BOT_SESSION_ID, session);
-          console.log(`[bot] status=${result.status} cites=${(result.citations||[]).length} cards=${(result.cards||[]).length} mem=${result.memoryUpdated}`);
-          return { text: result.text, status: result.status, citations: result.citations, cards: result.cards, memoryUpdated: !!result.memoryUpdated, time, sessionId: BOT_SESSION_ID };
+          try {
+            const result = await chatWithDsBot({
+              message,
+              cardId: data.cardId || null,
+              cardContext,
+              home,
+              baseUrl: process.env.DSBOT_URL || 'http://127.0.0.1:7788',
+              token: process.env.DSBOT_TOKEN,
+              log: m => console.log(m),
+            });
+            session.messages.push({ role: 'user', content: message });
+            session.messages.push({ role: 'assistant', content: result.text || '' });
+            chatSessions.set(BOT_SESSION_ID, session);
+            console.log(`[dsbot] status=${result.status} bot=${result.botId}`);
+            return { text: result.text, status: result.status, citations: result.citations || [], cards: result.cards || [], time, sessionId: BOT_SESSION_ID, botId: result.botId };
+          } catch (err) {
+            console.error('[sendChatMessage] ds-bot:', err);
+            return {
+              text: `没法连上 ds-bot：${err.message}`,
+              status: 'error',
+              citations: [],
+              cards: [{ type: 'error', title: 'ds-bot 未就绪', description: err.message, actions: [{ label: '重试', value: message }] }],
+              time,
+            };
+          }
         }
-
-        // Gather real context from connected sources
-        const composioClient = getComposioClient();
-        const context = await gatherContext(composioClient, store);
-        const contextMessage = buildContextMessage(context);
-
-        // Add user message
-        session.messages.push({ role: 'user', content: message });
-        session.history.push({
-          role: 'user',
-          content: message,
-          time: new Date().toISOString(),
-        });
-
-        // Inject context before LLM call (as a system message after the main system prompt)
-        const messagesWithContext = [
-          ...session.messages.slice(0, -1),  // Previous messages
-          { role: 'system', content: contextMessage },  // Context injection
-          session.messages[session.messages.length - 1],  // Current user message
-        ];
-
-        // Get LLM response with tool support
-        let response;
-        try {
-          response = await callLLM(
-            { llm: llmCtx?.llm },
-            messagesWithContext,
-            sessionId,
-            composioClient  // Pass Composio client for tool execution
-          );
-        } catch (error) {
-          console.error('[sendChatMessage] LLM call failed:', error);
-          
-          // Return error as card
-          return {
-            text: error.message || '调用模型时出错',
-            cards: [{
-              type: 'error',
-              title: '错误',
-              description: error.message || '未知错误',
-              actions: error.message.includes('未配置') 
-                ? [{ label: '前往模型设置', value: '打开模型设置页面' }]
-                : [{ label: '重试', value: message }]  // Retry with same message
-            }],
-            time: new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'}),
-          };
-        }
-
-        // Ensure response is valid
-        if (!response || typeof response !== 'object') {
-          console.error('[sendChatMessage] Invalid response from callLLM:', response);
-          return {
-            text: '模型返回了无效响应',
-            cards: [{
-              type: 'error',
-              title: '响应错误',
-              description: '请检查模型配置或重试',
-              actions: [{ label: '重试', value: message }]
-            }],
-            time: new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'}),
-          };
-        }
-
-        // Add assistant message
-        session.messages.push({ role: 'assistant', content: response.text || '' });
-        session.history.push({
-          role: 'assistant',
-          content: response.text || '',
-          cards: response.cards || [],
-          time: new Date().toISOString(),
-        });
-
-        // Limit session size
-        if (session.messages.length > 20) {
-          session.messages = session.messages.slice(-20);
-        }
-
-        return {
-          text: response.text || '',
-          cards: response.cards || [],
-          time: new Date().toLocaleTimeString('zh-CN', {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-        };
       } catch (err) {
         console.error('[sendChatMessage] Error:', err);
         return {

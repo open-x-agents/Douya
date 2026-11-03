@@ -1,0 +1,4 @@
+# Mount Open Digital Mate as a dsh plugin: Muse card UI, Composio tools, today APIs.
+- insert:
+    - id: opendigitalmate
+      name: opendigitalmate

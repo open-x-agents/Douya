@@ -250,10 +250,19 @@ export function migrateEmailCards(existingCards = [], incomingCards = [], itemSt
   const byKey = new Map(groups.map(g => [g.metadata?.group, g]))
   const linkSet = new Set(incomingCards.flatMap(c => (c.blocks || []).filter(b => b.type === 'link-list').flatMap(b => (b.links || []).map(l => l.url))))
   const nextStatus = { ...itemStatus }
+  const grown = new Set()
   const updates = []
   let merged = 0
-  const grown = new Set()
   const at = new Date().toISOString()
+
+  // Same-day re-digest: keep mail already in today's group (e.g. folded-in legacy tiles) even if
+  // the fresh fetch no longer returns it, so counts never silently shrink within a day.
+  for (const g of groups) {
+    const prev = existingCards.find(c => c && c.type === 'email-group' && (c.id === g.id || c.sourceId === g.sourceId))
+    const prevLinks = (prev?.blocks || []).find(b => b.type === 'link-list')?.links || []
+    const ll = g.blocks.find(b => b.type === 'link-list')
+    for (const l of prevLinks) if (l?.url && !linkSet.has(l.url)) { ll.links.push(l); linkSet.add(l.url); grown.add(g) }
+  }
 
   for (const c of existingCards) {
     if (!c || c.source !== 'gmail' || !LEGACY_EMAIL_TYPES.has(c.type)) continue
@@ -266,7 +275,14 @@ export function migrateEmailCards(existingCards = [], incomingCards = [], itemSt
       }
       continue
     }
-    if (c.status === 'merged') continue
+    if (c.status === 'merged') {
+      const g = groups.find(x => x.id === c.mergedInto)
+      if (g && isSingleMail && c.url && !linkSet.has(c.url)) {
+        g.blocks.find(b => b.type === 'link-list').links.push({ title: clip(clean(c.title), 90), url: c.url, type: 'email', from: nameOf(c.body), at: c.createdAt || null })
+        linkSet.add(c.url); grown.add(g)
+      }
+      continue
+    }
     let into = null
     if (isSingleMail && c.url) {
       const key = classifyEmail({ title: c.title, body: c.body, metadata: c.metadata || {} })

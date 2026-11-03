@@ -59,3 +59,13 @@ test('legacy single-mail tiles merge into groups without losing completions', ()
   assert.equal(itemStatus['https://mail.google.com/mail/u/0/#inbox/old2'].status, 'done')
   assert.equal(cards.find(c => c.id === 'gh'), undefined)
 })
+
+test('same-day re-digest keeps mail already in the group', () => {
+  const first = buildEmailClusters([mail('a1', '30% off', 'A <news@a.example>', ['CATEGORY_PROMOTIONS'])], { today: '2026-11-05', now: 0 })
+  first[0].blocks.find(b => b.type === 'link-list').links.push({ title: 'old', url: 'https://mail.google.com/mail/u/0/#inbox/legacy', from: 'L' })
+  const again = buildEmailClusters([mail('b2', '40% off', 'B <news@b.example>', ['CATEGORY_PROMOTIONS'])], { today: '2026-11-05', now: 0 })
+  const { cards } = migrateEmailCards(first, again, {})
+  const g = cards.find(c => c.type === 'email-group')
+  assert.equal(g.blocks.find(b => b.type === 'link-list').links.length, 3)
+  assert.match(g.nextAction, /促销 3 封/)
+})

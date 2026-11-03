@@ -51,7 +51,11 @@ async function readLastReply(ctx, sessionId, log) {
     ...(Number.isFinite(seq) && seq > 0 ? { throughSeq: seq - 1 } : { throughSeq: -1 }),
     maxMessages: 40,
   }, AbortSignal.timeout(15_000))
-  return lastAssistantText(page?.records || page?.items || [])
+  const records = page?.records || page?.items || []
+  // Only read a reply once its turn ended; mid-turn text ("我先查卡片…") is not the answer.
+  const types = records.map(r => (r?.event || r)?.type)
+  if (types.lastIndexOf('turn/start') > types.lastIndexOf('turn/end')) return ''
+  return lastAssistantText(records)
 }
 
 /**

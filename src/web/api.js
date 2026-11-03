@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { generateDailyDigest, getSourcesStatus, pushDailyDigest, createComposioClient } from './composio.js';
 import { reminderCard } from '../host/cards.js';
 import { createProfileManager } from './profile.js';
+import { createActionService } from './actions.js';
 import { resolveDisplayName, lastGithubIdentity } from './aggregation.js';
 import { recordCompletion, setItemStatus, clearItemStatus, annotateCards, cardItemUrls } from '../host/store.js'
 
@@ -619,8 +620,16 @@ export function createApiRouter(ctx) {
     return null;
   }
 
-  
+
+  // Composio write actions: reversible run now, outgoing ones wait for the user's 确认执行.
+  const actionService = createActionService({ store, getClient: () => getComposioClient(), log: m => console.log(m) });
+
   const router = {
+    /** Bot-side: request an action (never confirms an outgoing one). */
+    async requestAction(action, input = {}, opts = {}) { return actionService.request(action, input, opts); },
+    /** User-side: list / confirm / cancel / undo (HTTP route only, behind owner auth). */
+    async actionsOp(body = {}) { return actionService.userOp(body); },
+
     /**
      * GET /api/today - Get today's summary and tasks
      */
@@ -1715,6 +1724,20 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
           try {
             const data = JSON.parse(body || '{}');
             const response = await router.trackCardInteraction(data.id, data.action);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid request' }));
+          }
+        });
+        return;
+      } else if (url.pathname === '/api/opendigitalmate/actions' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const response = await router.actionsOp(JSON.parse(body || '{}'));
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(response));
           } catch (err) {

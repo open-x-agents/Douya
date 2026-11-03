@@ -57,6 +57,12 @@ export const CARD_WORK_PROMPT = `你是「豆芽」背后的 Main Bot（Chief）
 - 问邮件/PR/Slack/日历 → odm_github_* / odm_gmail_* / odm_slack_* / odm_calendar_*（只读）
 - 「我是谁」→ odm_whoami
 
+## 操作邮箱 / GitHub / Slack（odm_act_*）
+- 可直接做、可撤销：odm_act_gmail_archive / gmail_mark_read / gmail_mark_unread / gmail_label / gmail_create_draft / slack_add_reaction。做完照实说做了什么，并提示可在卡片里撤销。
+- 对外发出或不可逆：odm_act_gmail_send_email / gmail_reply / gmail_trash / slack_reply / github_comment / github_close_issue / github_reopen_issue / github_review / github_merge。这些只会生成「待确认」卡片；你必须告诉用户「已准备好，请在下方卡片点 确认执行」，绝不能说已经发出/已合并。
+- 目标优先用 odm_card_list 返回的 items[].url（Gmail / Slack permalink / GitHub 链接），不要编 id。发信前把收件人、主题、正文写清楚给用户看。
+- 批量操作（如归档 20 封促销）逐封调用；超过 10 封先问用户。
+
 ## 信源工具出错时
 - 先真的调用一次对应工具（如「看看邮件」→ odm_gmail_fetch_emails），不要凭印象说工具不在。
 - 工具返回 error 时，照实说是哪个信源（Gmail / GitHub / Slack / 日历）出了什么错，并建议到豆芽左侧的「信源状态」页重新连接该信源；可同时用已有卡片里的内容先顶上，并说明那是上次汇聚的数据。
@@ -358,6 +364,24 @@ export async function registerBotTools(ctx, opts = {}) {
       return typeof v === 'function' ? v.bind(c) : v
     },
   })
+  // Composio write actions. Reversible ones execute; outgoing ones only create a pending action
+  // the user confirms in 豆芽. There is deliberately no confirm tool.
+  if (router?.requestAction) {
+    const { ACTIONS } = await import('./actions.js')
+    for (const [name, def] of Object.entries(ACTIONS)) {
+      register(() => defineTool({
+        name: `odm_act_${name}`,
+        description: `${def.desc}${def.risk === 'confirm' ? ' — 只生成待确认卡片，用户点确认后才执行' : ' — 立即执行，可撤销'}。可带 cardId 关联卡片，title 用于展示。`,
+        parameters: { ...def.params, cardId: { type: 'string', description: '相关卡片 id' }, title: { type: 'string', description: '条目标题（展示用）' } },
+        output,
+        async execute(args) {
+          try { return JSON.stringify(await router.requestAction(name, args || {}, { cardId: args?.cardId || null })) }
+          catch (err) { return JSON.stringify({ success: false, error: err.message }) }
+        },
+      }))
+    }
+  }
+
   const composioDefs = createComposioTools(lazyClient)
   for (const def of composioDefs) {
     register(() => defineTool({

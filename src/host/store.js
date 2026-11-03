@@ -59,6 +59,7 @@ export function normalizeState(raw) {
     completions: Array.isArray(raw.completions) ? dedupeItemCompletions(raw.completions) : [],
     itemStatus: isRecord(raw.itemStatus) ? raw.itemStatus : {},
     cardChats: isRecord(raw.cardChats) ? raw.cardChats : {},
+    pendingActions: isRecord(raw.pendingActions) ? raw.pendingActions : {},
     lastDigest: raw.lastDigest ?? null,
   }
 }

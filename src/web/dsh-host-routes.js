@@ -125,6 +125,17 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     },
   }, 'opendigitalmate: card-interact')
 
+  // Only the signed-in owner's browser reaches this (dsh owner auth); bot tools have no confirm.
+  effect({
+    path: '/api/opendigitalmate/actions',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request) => {
+      try { return json(await router.actionsOp(await readJson(request))) }
+      catch (err) { return json({ success: false, error: err.message }) }
+    },
+  }, 'opendigitalmate: actions')
+
   effect({
     path: '/api/opendigitalmate/card-chat',
     methods: ['POST'],

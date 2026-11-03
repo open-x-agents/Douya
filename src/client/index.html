@@ -536,7 +536,7 @@
   .dockFoot input{flex:1;border:0;outline:none;font:inherit;font-size:12.5px;padding:5px 2px;color:var(--ink);background:none;min-width:0}
   .dockFoot .send{width:27px;height:27px;border-radius:8px;background:var(--blue);color:#fff;border:0;font-size:13px;cursor:pointer}
   
-  .dockBtn{position:fixed;right:20px;bottom:20px;width:56px;height:56px;border-radius:50%;border:2px solid var(--blue);background:var(--blue);
+  .dockBtn{display:none!important;position:fixed;right:20px;bottom:20px;width:56px;height:56px;border-radius:50%;border:2px solid var(--blue);background:var(--blue);
     cursor:pointer;box-shadow:0 4px 12px rgba(74,108,247,.4);display:grid;place-items:center;z-index:999;transition:.25s var(--ease)}
   .dockBtn:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(74,108,247,.5)}
   .dockBtn svg{fill:white}
@@ -768,7 +768,21 @@
   .lk:hover .lk-arrow{opacity:1}
 
   /* Bottom ask bar */
-  #v-today .today-chat-input{position:sticky;bottom:0;margin:0 -44px;padding:18px 44px 22px;background:linear-gradient(to bottom,rgba(243,244,247,0),rgba(243,244,247,.92) 40%);border:0;box-shadow:none;z-index:5}
+    /* Inline Bot chat sheet on the today page (not the right-side dock). */
+  .today-chat{position:sticky;bottom:0;margin:0 -44px;padding:0 44px 18px;z-index:6;pointer-events:none}
+  .today-chat > *{pointer-events:auto}
+  .today-chat-sheet{max-height:0;overflow:hidden;opacity:0;transform:translateY(12px);transition:.32s var(--ease);background:rgba(255,255,255,.94);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.95);border-radius:22px 22px 18px 18px;box-shadow:var(--shadow-hi);margin:0 auto 10px;max-width:720px;display:flex;flex-direction:column}
+  .today-chat.open .today-chat-sheet{max-height:min(420px,52vh);opacity:1;transform:none}
+  .today-chat-head{display:flex;align-items:center;gap:10px;padding:12px 16px 8px;border-bottom:1px solid rgba(30,40,80,.06)}
+  .today-chat-head b{font-size:13px}
+  .today-chat-head small{font-size:11px;color:var(--ink3);margin-left:4px}
+  .today-chat-head .x{margin-left:auto;border:0;background:rgba(30,40,80,.05);width:28px;height:28px;border-radius:50%;cursor:pointer;color:var(--ink3);font-size:14px}
+  .today-chat-msgs{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px;min-height:120px}
+  .today-chat-msgs .bubble{max-width:88%}
+  .today-chat .today-chat-input{position:static;margin:0;padding:0 0 4px;background:none;box-shadow:none}
+  .today-chat .today-chat-input .input-wrap{max-width:720px;margin:0 auto}
+  #v-today .today-chat .today-chat-input{position:static;margin:0;padding:0;background:none}
+
   #v-today .today-chat-input .input-wrap{max-width:640px;margin:0 auto;background:rgba(255,255,255,.92);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.95);border-radius:999px;box-shadow:var(--shadow-hi);padding:6px 6px 6px 20px}
   #v-today .today-chat-input .send-btn{border-radius:50%;background:linear-gradient(135deg,#6f8df5,#8a74d0)}
   .grid2{padding-bottom:12px}
@@ -1078,7 +1092,7 @@
     <!-- Messages will appear here -->
   </div>
   <div class="dockFoot">
-    <input id="dockInput" placeholder="问我任何事情..." />
+    <input id="dockInput" placeholder="和豆芽对话…（有长期记忆）" />
     <button class="send" id="dockSend">↑</button>
   </div>
 </div>
@@ -1088,6 +1102,9 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
+  const BOT_SESSION = 'bot-main';
+  let botHistoryLoaded = false;
+
   const views = { today: $('v-today'), sources: $('v-sources'), settings: $('v-settings') };
   
   // View navigation
@@ -1106,10 +1123,33 @@
     });
   });
 
+  async function ensureBotHistory() {
+    if (botHistoryLoaded) return;
+    botHistoryLoaded = true;
+    try {
+      const res = await fetch('/api/chat/history');
+      const data = await res.json();
+      const body = $('dockBody');
+      if (!body || body.querySelector('.bubble')) return;
+      (data.messages || []).forEach(m => {
+        if (m.role === 'user') {
+          const b = document.createElement('div');
+          b.className = 'bubble me';
+          b.innerHTML = `${escapeHtml(m.content)}<small>${m.at ? new Date(m.at).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}) : ''}</small>`;
+          body.appendChild(b);
+        } else if (m.role === 'assistant') {
+          addBotMessage(m.content, m.at ? new Date(m.at).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}) : '', null, m.citations);
+        }
+      });
+      body.scrollTop = body.scrollHeight;
+    } catch (e) { console.warn('[bot history]', e); }
+  }
+
   // Dock panel
-  $('dockBtn').addEventListener('click', () => {
+  $('dockBtn').addEventListener('click', async () => {
     $('dockPanel').classList.toggle('open');
     $('dockBtn').classList.remove('has');
+    if ($('dockPanel').classList.contains('open')) await ensureBotHistory();
   });
   $('dockClose').addEventListener('click', () => {
     $('dockPanel').classList.remove('open');
@@ -1148,7 +1188,7 @@
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, sessionId: 'web-default' }),
+        body: JSON.stringify({ message: text, sessionId: BOT_SESSION }),
       });
 
       // Remove typing indicator
@@ -1660,7 +1700,13 @@
     html += order.map(c => renderWorkTile(c, cards.indexOf(c))).join('');
     if (!work.length) html += `<div class="tile empty size-wide"><div class="eyebrow">还没有卡片</div><p class="w-desc">点击右上角「立即汇聚」，豆芽会从已连接的数据源拉取最新动态。</p></div>`;
     html += '</div>';
-    html += `<div class="today-chat-input"><div class="input-wrap"><input type="text" id="todayChatInput" placeholder="问豆芽：今天先做哪件？帮我总结一下…" /><button class="send-btn" id="todayChatSend">↑</button></div></div>`;
+    html += `<div class="today-chat" id="todayChat">
+      <div class="today-chat-sheet" id="todayChatSheet">
+        <div class="today-chat-head"><b>豆芽</b><small>数字同事 · 有长期记忆</small><button class="x" id="todayChatClose" type="button" aria-label="收起对话">✕</button></div>
+        <div class="today-chat-msgs" id="todayChatMsgs"></div>
+      </div>
+      <div class="today-chat-input"><div class="input-wrap"><input type="text" id="todayChatInput" placeholder="和豆芽对话…" autocomplete="off" /><button class="send-btn" id="todayChatSend" type="button">↑</button></div></div>
+    </div>`;
     const prevAsk = $('todayChatInput') ? $('todayChatInput').value : '';
     const hadFocus = document.activeElement && document.activeElement.id === 'todayChatInput';
     container.innerHTML = html;
@@ -1693,30 +1739,118 @@
 
 
   function openDock() {
-    $('dockPanel').classList.add('open');
-    $('dockBtn').classList.remove('has');
+    // Legacy name: expand the inline today chat sheet (no right-side panel).
+    openTodayChat();
+  }
+
+  function openTodayChat() {
+    const wrap = $('todayChat');
+    if (!wrap) return;
+    wrap.classList.add('open');
+    ensureInlineBotHistory();
+    setTimeout(() => $('todayChatInput')?.focus(), 50);
+  }
+
+  function closeTodayChat() {
+    $('todayChat')?.classList.remove('open');
+  }
+
+  function appendInlineBubble(role, text, citations) {
+    const body = $('todayChatMsgs');
+    if (!body) return null;
+    if (role === 'me') {
+      const b = document.createElement('div');
+      b.className = 'bubble me';
+      b.innerHTML = `${escapeHtml(text)}<small>${new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}</small>`;
+      body.appendChild(b);
+      body.scrollTop = body.scrollHeight;
+      return b;
+    }
+    const b = document.createElement('div');
+    b.className = 'bubble';
+    b.innerHTML = `${escapeHtml(text)}<small>${new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}</small>`;
+    const ce = citesEl(citations);
+    if (ce) b.appendChild(ce);
+    body.appendChild(b);
+    body.scrollTop = body.scrollHeight;
+    return b;
+  }
+
+  let inlineHistoryLoaded = false;
+  async function ensureInlineBotHistory() {
+    if (inlineHistoryLoaded) return;
+    inlineHistoryLoaded = true;
+    try {
+      const res = await fetch('/api/chat/history');
+      const data = await res.json();
+      const body = $('todayChatMsgs');
+      if (!body || body.childElementCount) return;
+      (data.messages || []).forEach(m => {
+        if (m.role === 'user') {
+          const b = document.createElement('div');
+          b.className = 'bubble me';
+          b.innerHTML = `${escapeHtml(m.content)}<small>${m.at ? new Date(m.at).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}) : ''}</small>`;
+          body.appendChild(b);
+        } else if (m.role === 'assistant') {
+          const b = document.createElement('div');
+          b.className = 'bubble';
+          b.innerHTML = `${escapeHtml(m.content)}<small>${m.at ? new Date(m.at).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}) : ''}</small>`;
+          const ce = citesEl(m.citations);
+          if (ce) b.appendChild(ce);
+          body.appendChild(b);
+        }
+      });
+      body.scrollTop = body.scrollHeight;
+    } catch (e) { console.warn('[bot history]', e); }
   }
 
   function setupTodayChatInput() {
     const input = $('todayChatInput');
     const sendBtn = $('todayChatSend');
-    
     if (!input || !sendBtn) return;
-    
-    const send = () => {
+
+    const expand = () => openTodayChat();
+    input.addEventListener('focus', expand);
+    $('todayChatClose')?.addEventListener('click', e => { e.preventDefault(); closeTodayChat(); });
+
+    const send = async () => {
       const msg = input.value.trim();
       if (!msg) return;
-      
-      // Open dock and send message
       input.value = '';
-      openDock();
-      $('dockInput').value = msg;
-      sendMessage();
+      openTodayChat();
+      appendInlineBubble('me', msg);
+      const typing = document.createElement('div');
+      typing.className = 'bubble';
+      typing.innerHTML = '<span class="typing">⋯</span>';
+      $('todayChatMsgs').appendChild(typing);
+      $('todayChatMsgs').scrollTop = $('todayChatMsgs').scrollHeight;
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg, sessionId: BOT_SESSION }),
+        });
+        typing.remove();
+        const data = await res.json();
+        if (data.error) { appendInlineBubble('bot', data.error); return; }
+        const b = appendInlineBubble('bot', data.text || '……', data.citations);
+        (data.cards || []).filter(c => c.type === 'group').slice(0, 3).forEach(c => {
+          $('todayChatMsgs').appendChild(renderGroupCard(c));
+        });
+        $('todayChatMsgs').scrollTop = $('todayChatMsgs').scrollHeight;
+        // Keep the legacy dock transcript in sync if it was opened elsewhere
+        if ($('dockBody')) {
+          try { addBotMessage(data.text, data.time, data.cards, data.citations); } catch (_) {}
+        }
+      } catch (err) {
+        typing.remove();
+        appendInlineBubble('bot', '发送失败了，请稍后再试。');
+      }
     };
-    
+
     sendBtn.onclick = send;
     input.onkeydown = (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
         e.preventDefault();
         send();
       }
@@ -2170,7 +2304,8 @@
       push('me', msg);
       const typing = push('bot typing', '豆芽正在想…');
       try {
-        const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg, cardId: isTT ? null : card.id, sessionId: `card-${card.id || 'x'}` }) });
+        const cardContext = isTT ? '当前在看：今天的时间表' : `当前在看卡片「${card.title || ''}」：${card.body || ''} ${card.url || ''}`;
+        const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg, cardId: isTT ? null : card.id, cardContext, sessionId: BOT_SESSION }) });
         first = false;
         const data = await res.json();
         typing.remove();

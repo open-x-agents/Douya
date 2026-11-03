@@ -662,18 +662,20 @@ export function createApiRouter(ctx) {
             }).join('、')
           : '暂无数据';
 
-        let userName = resolveDisplayName(profileManager.getPersonalizationContext().name, identityCache.value || lastGithubIdentity);
-        if (!userName && !identityCache.tried) {
+        // Display name ONLY from connected sources (GitHub name → login). Never profile.json.
+        const home = config.home || '.odm-data';
+        if (!identityCache.value) {
+          const { loadCachedIdentity } = await import('./identity.js');
+          identityCache.value = await loadCachedIdentity(home);
+        }
+        let userName = resolveDisplayName('', identityCache.value || lastGithubIdentity);
+        if (!userName || !identityCache.tried) {
           identityCache.tried = true;
           try {
-            const c = getComposioClient();
-            const r = c && await c.executeAction('GITHUB_GET_THE_AUTHENTICATED_USER', {});
-            const d = r?.data?.data || r?.data;
-            if (d?.login) {
-              identityCache.value = { login: d.login, name: d.name || '' };
-              userName = resolveDisplayName('', identityCache.value);
-              if (userName) await profileManager.save({ name: userName });
-            }
+            const { fetchIdentityFromSources, displayNameOf } = await import('./identity.js');
+            const id = await fetchIdentityFromSources(getComposioClient(), { home, log: console.log });
+            if (id) identityCache.value = id;
+            userName = displayNameOf(identityCache.value || lastGithubIdentity);
           } catch (e) { console.warn('[Identity] lookup failed:', e.message); }
         }
 
@@ -787,14 +789,15 @@ export function createApiRouter(ctx) {
         
         // Learn from generated cards
         await profileManager.learnFromCards(brief.cards);
-        // Persist real display name when profile still has the legacy 'User' placeholder
-        {
+        // Refresh display name from connected sources after digest (never write it into profile.json).
+        try {
+          const { fetchIdentityFromSources } = await import('./identity.js');
+          const id = await fetchIdentityFromSources(client, { home: config.home || '.odm-data', log: console.log });
+          if (id) identityCache.value = id;
+          // Drop any leftover personal name that was once saved into the profile.
           const ctx = profileManager.getPersonalizationContext();
-          const resolvedName = resolveDisplayName(ctx.name);
-          if (resolvedName && (ctx.name === 'User' || !ctx.name)) {
-            await profileManager.save({ name: resolvedName });
-          }
-        }
+          if (ctx.name) await profileManager.save({ name: '' });
+        } catch (e) { console.warn('[Identity] digest refresh failed:', e.message); }
         
         // Just pass the new cards to store.save()
         // Store will merge them with existing cards by sourceId
@@ -1089,6 +1092,17 @@ export function createApiRouter(ctx) {
     },
 
     /**
+     * GET /api/chat/history — persistent Bot transcript (survives restarts).
+     */
+    async getChatHistory() {
+      const { loadHistory, loadMemory, BOT_SESSION_ID } = await import('./bot-chat.js');
+      const home = config.home || '.odm-data';
+      const messages = await loadHistory(home);
+      const memory = await loadMemory(home);
+      return { sessionId: BOT_SESSION_ID, messages, memoryPreview: String(memory || '').slice(0, 500) };
+    },
+
+    /**
      * POST /api/chat - Send a chat message and get LLM response with cards
      */
     async sendChatMessage(data) {
@@ -1112,25 +1126,33 @@ export function createApiRouter(ctx) {
           chatSessions.set(sessionId, session);
         }
 
-        // Every question goes through main's evidence-first ask engine: cite or refuse.
+        // Persistent Bot conversation (history + MEMORY.md under .odm-data/bot/). Fact
+        // claims still go through ask-bridge → ask.js; greetings and follow-ups keep context.
         {
-          const { askWithEvidence } = await import('./ask-bridge.js');
+          const { chatWithBot, BOT_SESSION_ID, loadHistory } = await import('./bot-chat.js');
           const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
           if (!llmCtx?.llm) {
-            return { text: '还没配置模型，没法组织回答。请先在「配置」里设置模型。', cards: [{ type: 'error', title: '模型未配置', description: '配置后即可提问', actions: [{ label: '前往模型设置', value: '打开模型设置页面' }] }], time };
+            return { text: '还没配置模型，没法对话。请先在「配置」里设置模型。', cards: [{ type: 'error', title: '模型未配置', description: '配置后即可提问', actions: [{ label: '前往模型设置', value: '打开模型设置页面' }] }], time };
           }
-          const result = await askWithEvidence({
-            question: message,
-            cards: store.get()?.cards || [],
+          const home = config.home || '.odm-data';
+          const card = data.cardId ? (store.get()?.cards || []).find(c => c.id === data.cardId) : null;
+          const cardContext = data.cardContext || (card ? `卡片「${card.title}」：${card.body || ''} 链接：${card.url || ''}` : null);
+          const result = await chatWithBot({
+            message,
             cardId: data.cardId || null,
+            cardContext,
+            home,
+            cards: store.get()?.cards || [],
             composioClient: getComposioClient(),
             llm: llmCtx.llm,
             log: m => console.log(m),
           });
-          session.history.push({ role: 'user', content: message, time: new Date().toISOString() });
-          session.history.push({ role: 'assistant', content: result.text, citations: result.citations, time: new Date().toISOString() });
-          console.log(`[ask] status=${result.status} candidates=${result.candidates} citations=${result.citations.length} dropped=${result.dropped}`);
-          return { text: result.text, status: result.status, citations: result.citations, cards: result.cards, time };
+          // Keep the in-memory map in sync for any legacy readers; disk is the source of truth.
+          session.messages = (result.history || []).map(m => ({ role: m.role, content: m.content }));
+          session.history = result.history || [];
+          chatSessions.set(BOT_SESSION_ID, session);
+          console.log(`[bot] status=${result.status} cites=${(result.citations||[]).length} cards=${(result.cards||[]).length} mem=${result.memoryUpdated}`);
+          return { text: result.text, status: result.status, citations: result.citations, cards: result.cards, memoryUpdated: !!result.memoryUpdated, time, sessionId: BOT_SESSION_ID };
         }
 
         // Gather real context from connected sources
@@ -1642,6 +1664,10 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
         res.end(JSON.stringify(data));
       } else if (url.pathname === '/api/config/check' && req.method === 'GET') {
         const data = await router.checkConfig();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
+      } else if (url.pathname === '/api/chat/history' && req.method === 'GET') {
+        const data = await router.getChatHistory();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(data));
       } else if (url.pathname === '/api/chat' && req.method === 'POST') {

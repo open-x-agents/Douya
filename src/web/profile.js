@@ -170,7 +170,7 @@ export function createProfileManager(path) {
         .map(([hour]) => hour);
       
       return {
-        name: profile.name || 'User',
+        name: profile.name || '',
         favoriteRepos: topRepos,
         frequentContacts: topSenders,
         typicalActiveHours: activeHours,

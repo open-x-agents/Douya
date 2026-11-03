@@ -17,11 +17,22 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  */
 /** Last authenticated GitHub identity seen during aggregation ({ login, name }). */
 export let lastGithubIdentity = null;
+export function setLastGithubIdentity(identity) {
+  lastGithubIdentity = identity && (identity.login || identity.name)
+    ? { login: identity.login || '', name: identity.name || '' }
+    : null;
+  return lastGithubIdentity;
+}
 
-/** Resolve a display name: explicit profile name, else GitHub name/login. 'User' is the legacy placeholder. */
-export function resolveDisplayName(profileName, identity = lastGithubIdentity) {
-  if (profileName && profileName !== 'User') return profileName;
-  return identity?.name || identity?.login || '';
+/**
+ * Display name from a connected-source identity only (never from a typed/saved profile).
+ * Prefers a human `name` over `login`. Empty string → greet without a personal name.
+ */
+export function resolveDisplayName(_ignoredProfileName, identity = lastGithubIdentity) {
+  const human = String(identity?.name || '').trim();
+  if (human) return human;
+  const login = String(identity?.login || '').trim();
+  return login;
 }
 
 export async function fetchFromSources(composioClient, activeSources) {

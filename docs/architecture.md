@@ -319,12 +319,15 @@ node scripts/source-probe.mjs --fixture test/fixtures/github/ok --dir /tmp/p  # 
 | `src/web/api.js` | HTTP 路由（`/api/today`、`/api/digest/generate`、`/api/chat`、`/api/sources`、`/api/config/*`、`/api/composio/*`）；`mountApiRoutes(server, router, { extraRoutes })` 先分发 ds-bot 形状的路由（`installPanel` 注册的 `/api/opendigitalmate*` 原样可用） |
 | `src/web/aggregation.js` | 汇聚流水线：拉取（GitHub / Gmail / Slack / 日历，经 Composio）→ 归一 → 去重（按完整 URL）→ 按项目 / 发件人 / 频道聚类 → 分类 → 卡片；英文标题 + 中文摘要、每卡 3 个追问由模型生成，数字只来自真实数据 |
 | `src/web/composio.js`、`agent-tools.js`、`chat-groups.js` | Composio v3 客户端；只读工具（PR / issue / 邮件 / Slack 搜索 / 日历）及其预聚合分组 |
-| `src/web/ask-bridge.js` | 对话框与卡片追问的后端，见下 |
+| `src/web/ask-bridge.js` | 依据问答（cite-or-refuse），供 Bot 查事实时调用 |
+| `src/web/bot-chat.js` | 看板里的长期 Bot：`.odm-data/bot/history.json` + `MEMORY.md`；`npm start` 下的对话都走这里（完整 ds-bot 仍用 `npm run start:dsbot`） |
 | `src/web/llm-client.js`、`config-store.js`、`profile.js` | 模型客户端、`.odm-data/config.json`、显示名（运行时从 GitHub 身份推出，不写死） |
 
-### 问答：先找依据再答（接 `src/host/ask.js`）
+### 问答：Bot 对话 + 先找依据再答
 
-对话框和卡片放大里的追问都走 `askWithEvidence()`：
+`npm start` 下对话框与卡片追问都走 `chatWithBot()`（`bot-chat.js`）：同一会话、磁盘持久化的历史与 `MEMORY.md`。完整 ds-bot（Cordis / 飞书 / Agent Memory Repo）仍由 `npm run start:dsbot` 启动，本机未装 Cordis 时看板不依赖它。
+
+涉及邮件 / PR / Slack / 日历的事实时，Bot 先调用 `askWithEvidence()`：
 
 1. 证据：今天的卡片（每张卡一条、卡里每个链接一条，`ref` 是真实链接），加上问题点名的信源的实时只读拉取（邮件 / PR / issue / Slack），各自成组；问题点名了某个信源时只用那个信源，实时结果顶替旧卡片。卡片追问只用这张卡的证据。
 2. 候选：用 `ask.js` 的 `rankSources()` 排出前 6 条。

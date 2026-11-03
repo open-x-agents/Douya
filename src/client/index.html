@@ -514,6 +514,10 @@
   .dockHead b{font-size:13px;display:block;line-height:1.4}
   .dockHead small{font-size:10.5px;color:var(--ink3)}
   .dockHead .x{margin-left:auto;border:0;background:none;color:var(--ink3);font-size:15px;cursor:pointer;line-height:1;padding:3px 5px}
+  .cites{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+  .cites-h{font-size:11px;color:var(--ink3);margin-right:2px}
+  .cites a{display:inline-flex;align-items:center;gap:4px;max-width:100%;font-size:11.5px;line-height:1.3;padding:3px 8px;border-radius:999px;background:rgba(80,110,240,.08);color:#3d55c9;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cites a i{font-style:normal;font-weight:650;font-size:10px;width:15px;height:15px;border-radius:50%;background:#fff;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
   .dockBody{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:#fdfcfb}
   .bubble{max-width:86%;background:#fff;border:1px solid var(--line);border-radius:11px;padding:9px 12px;font-size:13px;line-height:1.65}
   .bubble.me{margin-left:auto;background:#e9eeff;border-color:var(--blue-line)}
@@ -890,7 +894,6 @@
     </div>
     <div class="nav on" data-view="today">今天</div>
     <div class="nav" data-view="sources">信源状态</div>
-    <div class="nav" data-view="panel">晨报面板</div>
     <div class="grp">设置</div>
     <div class="nav" data-view="settings">配置</div>
   </aside>
@@ -906,9 +909,9 @@
             </div>
             <div class="day-side">
               <div class="kpis">
-                <div class="kpi"><b id="nOpen">0</b><span>件在手</span></div>
-                <div class="kpi"><b id="nUrgent" class="c-rose">0</b><span>件优先</span></div>
-                <div class="kpi"><b id="nMeet">0</b><span>个会议</span></div>
+                <div class="kpi"><b id="nOpen">–</b><span>件在手</span></div>
+                <div class="kpi"><b id="nUrgent" class="c-rose">–</b><span>件优先</span></div>
+                <div class="kpi"><b id="nMeet">–</b><span>个会议</span></div>
               </div>
               <div class="day-actions">
                 <span id="digestStatus" class="digest-status"></span>
@@ -925,13 +928,6 @@
           <div class="stamp a in">查看已连接的数据源和权限范围</div>
 
           <div id="sourcesContent"></div>
-        </section>
-
-        <!-- 晨报面板（main 的 panel 页面：来源健康、坏日子状态、冲突并列） -->
-        <section class="view" id="v-panel">
-          <h3 class="concl">晨报面板</h3>
-          <div class="stamp a in">按来源证据生成的早报：哪些来源读到了、哪些没读到、冲突并列 · <a href="/api/opendigitalmate/page" target="_blank" rel="noopener">新窗口打开</a></div>
-          <iframe id="panelFrame" title="晨报面板" style="width:100%;height:calc(100vh - 170px);border:0;border-radius:18px;background:#fff;box-shadow:var(--shadow)"></iframe>
         </section>
 
         <!-- 设置 -->
@@ -1092,7 +1088,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const views = { today: $('v-today'), sources: $('v-sources'), panel: $('v-panel'), settings: $('v-settings') };
+  const views = { today: $('v-today'), sources: $('v-sources'), settings: $('v-settings') };
   
   // View navigation
   document.querySelectorAll('.nav[data-view]').forEach(nav => {
@@ -1102,7 +1098,6 @@
       nav.classList.add('on');
       Object.keys(views).forEach(k => views[k].classList.toggle('on', k === view));
       if (view === 'sources') loadSources();
-      if (view === 'panel') $('panelFrame').src = '/api/opendigitalmate/page?t=' + Date.now();
       if (view === 'settings') {
         checkConfig();
         loadLLMSettings();
@@ -1179,7 +1174,7 @@
       }
 
       // Add successful response
-      addBotMessage(data.text, data.time, data.cards);
+      addBotMessage(data.text, data.time, data.cards, data.citations);
       
     } catch (err) {
       typing.remove();
@@ -1203,7 +1198,16 @@
     return el;
   }
 
-  function addBotMessage(text, time, cards) {
+  function citesEl(citations) {
+    const list = (citations || []).filter(c => c && /^https?:/.test(c.url || ''));
+    if (!list.length) return null;
+    const el = document.createElement('div');
+    el.className = 'cites';
+    el.innerHTML = `<span class="cites-h">依据</span>` + list.slice(0, 6).map((c, i) => `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" title="${escapeHtml(c.title || c.url)}"><i>${i + 1}</i>${escapeHtml(c.label || '')}${c.title ? ' · ' + escapeHtml(clip(c.title, 26)) : ''}</a>`).join('');
+    return el;
+  }
+
+  function addBotMessage(text, time, cards, citations) {
     const body = $('dockBody');
     
     // Add text bubble if present
@@ -1211,6 +1215,8 @@
       const reply = document.createElement('div');
       reply.className = 'bubble';
       reply.innerHTML = `${escapeHtml(text)}<small>${time || new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'})}</small>`;
+      const ce = citesEl(citations);
+      if (ce) reply.appendChild(ce);
       body.appendChild(reply);
     }
 
@@ -1562,7 +1568,7 @@
         <div class="hero-foot">
           <div class="hero-kpi"><b>${totPR}</b><span>PR 待推进</span></div>
           <div class="hero-kpi"><b>${totIss}</b><span>issue 待处理</span></div>
-          ${rings.map(r => `<div class="hero-ring" title="${escapeHtml(r.label)} ${r.value}/${r.max}">${ringSvg(r.value, r.max, r.color, 44, 5)}<div><b>${r.value}<small>/${r.max}</small></b><span>${escapeHtml(r.label)}</span></div></div>`).join('')}
+          ${rings.map(r => { const has = Number(r.max) > 0; return `<div class="hero-ring" title="${escapeHtml(r.label)} ${r.value}${has ? '/' + r.max : ''}">${ringSvg(r.value, has ? r.max : Math.max(1, r.value), r.color, 44, 5)}<div><b>${r.value}${has ? `<small>/${r.max}</small>` : ''}</b><span>${escapeHtml(r.label)}</span></div></div>`; }).join('')}
         </div>
       </div>`;
   }
@@ -2164,11 +2170,15 @@
       push('me', msg);
       const typing = push('bot typing', '豆芽正在想…');
       try {
-        const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: first ? `${ctx}\n${msg}` : msg, sessionId: `card-${card.id || 'x'}` }) });
+        const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg, cardId: isTT ? null : card.id, sessionId: `card-${card.id || 'x'}` }) });
         first = false;
         const data = await res.json();
         typing.remove();
-        push('bot', data.text || data.error || '收到了，但模型没有返回内容。');
+        const b = push('bot', data.text || data.error || '收到了，但模型没有返回内容。');
+        const ce = citesEl(data.citations);
+        if (ce) b.appendChild(ce);
+        (data.cards || []).filter(c => c.type === 'group').slice(0, 3).forEach(c => { msgs.appendChild(renderGroupCard(c)); });
+        msgs.scrollTop = msgs.scrollHeight;
       } catch (err) {
         typing.remove();
         push('bot', '发送失败了，请稍后再试。');

@@ -1635,16 +1635,13 @@ async function generateProjectHeadlinesAndSummaries(grouped, llmClient) {
 
 **生成两部分**:
 1. **headline**（英文，最多 60 字符）: 简洁描述活动重点
-   - 风格示例: "v0.2.14 shipped with new features across 17 PRs"
-   - 风格示例: "Major refactor in progress, 5 reviews pending"
-   - 风格示例: "Bug fixes merged, 3 critical issues remain open"
+   - 风格: "<what shipped / what is in progress>, <N> reviews pending"（N 必须来自上面的真实数据）"
 
 2. **summary**（中文，1-2 句话，最多 100 字）: 说明发生了什么、为什么重要
    - 必须基于真实数据（数字、PR 标题）
    - 说明具体工作内容（如果有热点项目名称就提）
    - 说明需要的行动（如果有待 review 的）
-   - 示例: "repo-a 过去 24h 合并了 17 个 PR，主要是 task-read-model 重构工作；还有 3 个 PR 等待 review。"
-   - 示例: "repo-b 今天没有新 PR，有 2 个 issue 待处理，包括 UI 性能优化。"
+   - 句式: "<仓库> 过去 24h 合并了 <N> 个 PR，主要是 <热点 PR 主题>；还有 <M> 个 PR 等待 review。"（尖括号处只能填上面的真实数据）"
 
 JSON: {"headline": "英文标题", "summary": "中文摘要"}`;
       
@@ -1831,7 +1828,7 @@ async function generateHeroCard(grouped, sourceData, llmClient, profileContext) 
 
 JSON: {"narrative": "你的 1-2 句叙述"}`;
 
-  let narrative = '准备好开启美好的一天！';
+  let narrative = `今天有 ${actionCount + urgentCount} 件待处理，其中 ${urgentCount} 件比较紧急。`;
   try {
     let fullText = '';
     for await (const chunk of llmClient.stream({
@@ -1865,9 +1862,10 @@ JSON: {"narrative": "你的 1-2 句叙述"}`;
       {
         type: 'achievement-rings',
         rings: [
-          { label: '今日合并 PR', value: prsMergedToday, max: 5, color: '#00d084' },
-          { label: '今日关闭 issue', value: issuesClosedToday, max: 3, color: '#4a6cf7' },
-          { label: '已读邮件', value: Math.min(emailsProcessed, 10), max: 10, color: '#ffa600' },
+          // Real counts only; there is no invented daily target, so rings carry no max.
+          { label: '今日合并 PR', value: prsMergedToday, max: null, color: '#00d084' },
+          { label: '今日关闭 issue', value: issuesClosedToday, max: null, color: '#4a6cf7' },
+          { label: '最近 24h 已读邮件', value: emailsProcessed, max: null, color: '#ffa600' },
         ],
       },
     ],
@@ -1922,14 +1920,14 @@ RULES:
 - Start/end times in HH:MM format (24h, Asia/Shanghai timezone)
 - Never overlap with fixed events
 - Mark all as type: "suggested"
-- Titles MUST be short Simplified Chinese (<=14 chars), e.g. "专注：评审 PR #42", "午餐", "散步休息"
+- Titles MUST be short Simplified Chinese (<=14 chars), e.g. "专注：<真实任务名>", "午餐", "散步休息"
 - Realistic durations (focus 1-2h, meals 30-60min, breaks 15-30min)
 - Respect user's active hours
 - If no calendar: still build reasonable schedule from tasks
 
 JSON: {
   "suggestedBlocks": [
-    {"type": "suggested", "category": "focus|meal|break|exercise|winddown", "start": "09:00", "end": "11:00", "title": "专注：评审 PR #42", "color": "green"},
+    {"type": "suggested", "category": "focus|meal|break|exercise|winddown", "start": "09:00", "end": "11:00", "title": "专注：<对应真实任务>", "color": "green"},
     ...
   ]
 }`;
@@ -1948,11 +1946,8 @@ JSON: {
     suggestedBlocks = parsed.suggestedBlocks || [];
   } catch (err) {
     console.warn('[Timetable] LLM failed, using minimal fallback');
-    // Fallback: just add lunch and a focus block
-    suggestedBlocks = [
-      {type: 'suggested', category: 'meal', start: '12:00', end: '13:00', title: 'Lunch break', color: 'orange'},
-      {type: 'suggested', category: 'focus', start: '14:00', end: '16:00', title: '专注时段', color: 'green'},
-    ];
+    // No invented schedule: without the model there are no suggested blocks, only real events.
+    suggestedBlocks = [];
   }
   
   return {

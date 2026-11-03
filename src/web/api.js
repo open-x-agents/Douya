@@ -49,7 +49,7 @@ const COMPOSIO_APPS = [
   { key: 'strava', name: 'Strava', category: '生活', logo: 'https://logos.composio.dev/api/strava', description: '运动记录，用于「我的一天」节奏建议', authMode: 'OAUTH2' },
 ];
 
-// Simple in-memory chat history for demo
+// In-memory chat history per session
 const chatSessions = new Map();
 
 /**
@@ -98,10 +98,9 @@ const CARD_SYSTEM_PROMPT = `你是「豆芽」，一个智能数字同事助手�
 **示例**：
 用户："今天有什么安排？"
 {
-  "text": "今天有 2 个会议，3 件待办",
+  "text": "<根据工具返回的真实数据写的一句话>",
   "cards": [
-    {"type":"event","title":"团队周会","time":"14:00"},
-    {"type":"task","title":"完成设计稿","status":"进行中"}
+    {"type":"event","title":"<真实日程标题>","time":"<真实时间>"}
   ]
 }
 
@@ -1111,6 +1110,27 @@ export function createApiRouter(ctx) {
             history: [],
           };
           chatSessions.set(sessionId, session);
+        }
+
+        // Every question goes through main's evidence-first ask engine: cite or refuse.
+        {
+          const { askWithEvidence } = await import('./ask-bridge.js');
+          const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+          if (!llmCtx?.llm) {
+            return { text: '还没配置模型，没法组织回答。请先在「配置」里设置模型。', cards: [{ type: 'error', title: '模型未配置', description: '配置后即可提问', actions: [{ label: '前往模型设置', value: '打开模型设置页面' }] }], time };
+          }
+          const result = await askWithEvidence({
+            question: message,
+            cards: store.get()?.cards || [],
+            cardId: data.cardId || null,
+            composioClient: getComposioClient(),
+            llm: llmCtx.llm,
+            log: m => console.log(m),
+          });
+          session.history.push({ role: 'user', content: message, time: new Date().toISOString() });
+          session.history.push({ role: 'assistant', content: result.text, citations: result.citations, time: new Date().toISOString() });
+          console.log(`[ask] status=${result.status} candidates=${result.candidates} citations=${result.citations.length} dropped=${result.dropped}`);
+          return { text: result.text, status: result.status, citations: result.citations, cards: result.cards, time };
         }
 
         // Gather real context from connected sources

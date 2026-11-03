@@ -31,6 +31,8 @@ console.log(`📁 Data directory: ${config.home}`);
 
 const runtime = createRuntime(null, config);
 await runtime.store.load();
+// The config store loads asynchronously inside createRuntime; wait for it so the saved keys are read.
+await runtime.configStore?.load?.().catch(() => {});
 
 // Build Composio client from saved config at startup
 const savedConfig = runtime.configStore?.get();

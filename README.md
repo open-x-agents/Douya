@@ -245,18 +245,6 @@ node scripts/server.js
 
 ---
 
-## 截图
-
-### 主界面 - 今天视图
-![今天视图](docs/screenshots/today-view.png)
-
-### 每日汇聚 - Composio 集成
-![每日汇聚](docs/screenshots/digest-view.png)
-
-### 聊天交互
-![聊天面板](docs/screenshots/chat-panel.png)
-
----
 
 ## 还需要做
 

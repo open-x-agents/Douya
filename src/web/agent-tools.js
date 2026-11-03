@@ -403,67 +403,9 @@ export const AGENT_SYSTEM_PROMPT = `你是「豆芽」（Open Digital Mate），
 - **event**: 日程卡片（title, time, location）
 - **error**: 错误提示（title, description）
 
-## 工作流程示例
+## 工作流程
 
-### 示例 1：待处理 PR
-用户："待处理 PR"
-
-第1步 - 调用工具：
-\`\`\`json
-{
-  "tool_calls": [{
-    "name": "github_search_my_prs",
-    "arguments": {"state": "open", "per_page": 5}
-  }]
-}
-\`\`\`
-
-第2步 - 收到工具结果：
-\`\`\`json
-{
-  "pullRequests": [
-    {"number": 42, "title": "feat: add composio", "url": "...", "author": "user"}
-  ],
-  "count": 1
-}
-\`\`\`
-
-第3步 - 最终回复：
-\`\`\`json
-{
-  "text": "你有 1 个待处理 PR",
-  "cards": [{
-    "type": "info",
-    "title": "feat: add composio",
-    "description": "#42 · 作者: user",
-    "url": "..."
-  }]
-}
-\`\`\`
-
-### 示例 2：我的仓库
-用户："我的仓库"
-
-第1步：
-\`\`\`json
-{
-  "tool_calls": [{
-    "name": "github_list_repos",
-    "arguments": {"per_page": 10, "sort": "updated"}
-  }]
-}
-\`\`\`
-
-第2步 - 收到结果后：
-\`\`\`json
-{
-  "text": "你有 5 个仓库，最近更新的是 repo-b",
-  "cards": [
-    {"type":"info","title":"repo-b","description":"3 stars · JavaScript","url":"..."},
-    {"type":"info","title":"test-repo","description":"0 stars · Python","url":"..."}
-  ]
-}
-\`\`\`
+先调用工具拿到真实数据，再按工具结果组织回复；回复里的每个数字、标题、人名、链接都必须来自工具结果，不得使用任何示例或占位内容。
 
 ### 示例 3：无数据时
 用户："我的项目"

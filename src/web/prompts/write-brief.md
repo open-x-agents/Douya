@@ -29,7 +29,7 @@ Generate a JSON brief with 3-12 cards, prioritized by urgency. Each card is VISU
       "priority": "high|medium|low",
       "title": "Card title (max 60 chars)",
       "body": "1–2 句中文：数字含义 + 为什么今天重要（必填）",
-      "nextAction": "动词+对象，例如「先审 #42 的权限改动」",
+      "nextAction": "动词+对象，例如「先审 #<真实编号> 的 <真实改动>」",
       "source": "github|gmail|googlecalendar|slack",
       "sourceId": "stable id for merge, e.g. github:cluster:owner/repo:YYYY-MM-DD",
       "url": "real deep link only",

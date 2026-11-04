@@ -1426,6 +1426,10 @@
       // Remove typing indicator
       typing.remove();
 
+      if (res.status === 401 || res.status === 403) {
+        addBotMessage('登录已失效或未登录。请让主人在这台电脑上重新打开豆芽登录链接。', null);
+        return;
+      }
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
@@ -2768,9 +2772,12 @@
     const t = setTimeout(() => ctl.abort(), 240000);
     try {
       const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-odm-sent-at': String(Date.now()) }, body: JSON.stringify(body), signal: ctl.signal });
+      // Auth wall: without the current dsh login cookie every API returns 401. Don't pretend it's a flaky network.
+      if (res.status === 401 || res.status === 403) throw new ChatFail('登录已失效或未登录。请让主人在这台电脑上重新打开豆芽登录链接（终端：open "$(cat .odm-data/dsh-web.url)"），不要用过期分享链接。');
       if (res.status >= 500) throw Object.assign(new Error('http ' + res.status), { net: true });
       try { return await res.json(); } catch (_) { throw Object.assign(new Error('bad response'), { net: true }); }
     } catch (e) {
+      if (e instanceof ChatFail) throw e;
       if (e.name === 'AbortError') e.timeout = true; else e.net = true;
       throw e;
     } finally { clearTimeout(t); }

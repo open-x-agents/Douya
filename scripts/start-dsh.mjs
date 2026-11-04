@@ -41,7 +41,18 @@ try {
 
 try {
   const cfg = JSON.parse(readFileSync(join(HOME, 'config.json'), 'utf8'))
-  if (!process.env.OPENAI_API_KEY && cfg?.llm?.apiKey) process.env.OPENAI_API_KEY = cfg.llm.apiKey
+  const llm = cfg?.llm || {}
+  const key = llm.apiKey || process.env.OPENAI_API_KEY || process.env.DEEPSEEK_API_KEY
+  // dsh / ds-bot resolve models by provider env name. Muse's llm-client uses OPENAI_* with a custom baseURL.
+  // Export both so a DeepSeek (or other) restart never leaves Chief with "No model is available".
+  if (key) {
+    if (!process.env.OPENAI_API_KEY) process.env.OPENAI_API_KEY = key
+    const provider = String(llm.provider || '').toLowerCase()
+    if (provider === 'deepseek' || /deepseek/.test(String(llm.baseURL || ''))) {
+      if (!process.env.DEEPSEEK_API_KEY) process.env.DEEPSEEK_API_KEY = key
+    }
+  }
+  if (llm.baseURL) process.env.OPENAI_BASE_URL = llm.baseURL.replace(/\/v1\/?$/, '')
   if (!process.env.COMPOSIO_API_KEY && cfg?.composioApiKey) process.env.COMPOSIO_API_KEY = cfg.composioApiKey
 } catch {}
 process.env.OPENAI_BASE_URL ||= 'https://api.deepseek.com'

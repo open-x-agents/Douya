@@ -2288,6 +2288,7 @@
       let res, result;
       try { res = await fetch('/api/digest/generate', { method: 'POST' }); result = await res.json(); }
       finally { clearInterval(poll); $('digestProgress').hidden = true; }
+      if (result?.bot?.id) finishedDigests.add(result.bot.id);
       
       if (!result.success) {
         status.textContent = '⚠️ ' + (result.error || '汇聚失败');
@@ -3209,9 +3210,13 @@
   }
   // Bot digest progress on 今天: 'Gmail 整理中… · GitHub 完成 · Chief 合并中…'
   const DP_ZH = { queued: '排队', fetching: '获取中…', thinking: '整理中…', done: '完成', failed: '失败', timeout: '超时' };
+  const finishedDigests = new Set(); let dpHideTimer = null;
   function renderDigestProgress(p) {
     const el = $('digestProgress'); if (!el || !p) return;
-    if (p.status !== 'running') { el.hidden = true; return; }
+    // A pulse can arrive after the run's HTTP response: a finished run never shows again.
+    if (p.status !== 'running' || finishedDigests.has(p.runId)) { if (p.runId) finishedDigests.add(p.runId); el.hidden = true; return; }
+    clearTimeout(dpHideTimer);
+    if (p.chief?.status === 'done') dpHideTimer = setTimeout(() => { el.hidden = true; }, 3000);
     const chip = (label, st, extra) => { const c = document.createElement('span'); c.className = 'dp-chip ' + (st === 'done' ? 'dp-done' : st === 'failed' || st === 'timeout' ? 'dp-bad' : 'dp-run'); c.textContent = `${label} ${DP_ZH[st] || st}${extra ? ' · ' + extra : ''}`; return c; };
     const head = document.createElement('b'); head.style.marginRight = '4px'; head.textContent = '汇聚中';
     el.replaceChildren(head, ...Object.values(p.channels || {}).map(c => chip(c.label, c.status, c.status === 'done' && c.cards != null ? `${c.cards} 张` : '')), chip('Chief 合并', p.chief?.status || 'queued'));

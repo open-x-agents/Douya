@@ -88,6 +88,17 @@ test('client: Phase C motion is textContent/escaped, reduced-motion aware, and u
   assert.doesNotMatch(c, /innerHTML|insertAdjacentHTML/)
   assert.match(c, /op: 'arrange', order: ids/)
   assert.match(c, /reducedMotion\(\)/)
-  assert.match(html, /prefers-reduced-motion:reduce\)\{\.tile\.work,\.tile\.work\.leaving-done/)
+  assert.match(html, /prefers-reduced-motion:reduce\)[\s\S]*?\.tile\.work\.leaving-done/)
   assert.match(html, /if \(!opts\.force && sig === lastTodaySig\) return/)
+})
+
+test('motion polish: soft ease tokens, zoom close reverse, sheet easing, now-line pulse', () => {
+  const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+  assert.match(html, /--ease-sheet:cubic-bezier/)
+  assert.match(html, /--dur-sheet:420ms/)
+  assert.match(html, /@keyframes zoomToTile/)
+  assert.match(html, /@keyframes nowPulse/)
+  assert.match(html, /cardAppearStagger/)
+  assert.match(html, /modal\.classList\.add\('zoom-out'\)/)
+  assert.match(html, /prefers-reduced-motion:reduce/)
 })

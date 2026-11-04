@@ -14,7 +14,7 @@
     --amber:#c8862a; --amber-soft:#fdf4e6;
     --red:#c0392b; --red-soft:#fdeceb;
     --gray-soft:#f4f3f0;
-    --ease:cubic-bezier(.22,.61,.36,1);
+    --ease:cubic-bezier(.22,.82,.24,1);
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;height:100%;overflow:hidden}
@@ -374,16 +374,17 @@
   .tile-zoom-overlay{
     position:fixed;
     inset:0;
-    background:rgba(0,0,0,.6);
-    backdrop-filter:blur(8px);
+    background:rgba(28,30,40,.28);
+    backdrop-filter:blur(10px);
     z-index:2000;
-    display:none;
+    display:flex;
     align-items:center;
     justify-content:center;
     padding:40px;
-    animation:fadeIn .2s ease;
+    opacity:0;visibility:hidden;pointer-events:none;
+    transition:opacity var(--dur,220ms) var(--ease,ease),visibility var(--dur,220ms);
   }
-  .tile-zoom-overlay.open{display:flex}
+  .tile-zoom-overlay.open{opacity:1;visibility:visible;pointer-events:auto}
   
   .tile-zoom-modal{
     background:rgba(255,255,255,.98);
@@ -395,7 +396,7 @@
     padding:32px;
     box-shadow:0 20px 60px rgba(0,0,0,.3);
     position:relative;
-    animation:zoomIn .3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation:none; /* shared-element zoomFromTile handles enter */
   }
   
   @keyframes fadeIn{from{opacity:0}}
@@ -639,6 +640,11 @@
     --r-lg:22px; --r-md:14px;
     --shadow:0 1px 2px rgba(30,40,80,.04),0 6px 24px -6px rgba(30,40,80,.08);
     --shadow-hi:0 2px 4px rgba(30,40,80,.05),0 18px 40px -10px rgba(30,40,80,.18);
+    --ease:cubic-bezier(.22,.82,.24,1);
+    --ease-sheet:cubic-bezier(.32,.72,.22,1);
+    --ease-out:cubic-bezier(.16,.84,.28,1);
+    --dur:220ms;
+    --dur-sheet:420ms;
   }
   body{background:radial-gradient(1200px 600px at 85% -10%,#e4ecfb 0%,transparent 60%),radial-gradient(900px 500px at -10% 110%,#f6ecdf 0%,transparent 55%),#f3f4f7;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
   .app{grid-template-columns:208px 1fr}
@@ -816,7 +822,7 @@
     /* Inline Bot chat sheet on the today page (not the right-side dock). */
   .today-chat{position:sticky;bottom:0;margin:0 -44px;padding:0 44px 18px;z-index:6;pointer-events:none}
   .today-chat > *{pointer-events:auto}
-  .today-chat-sheet{max-height:0;overflow:hidden;opacity:0;transform:translateY(12px);transition:.36s var(--ease);background:rgba(255,255,255,.96);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.95);border-radius:22px 22px 18px 18px;box-shadow:var(--shadow-hi);margin:0 auto 10px;max-width:760px;display:flex;flex-direction:column}
+  .today-chat-sheet{max-height:0;overflow:hidden;opacity:0;transform:translateY(14px) scale(.985);transform-origin:bottom center;transition:max-height var(--dur-sheet) var(--ease-sheet),opacity var(--dur-sheet) var(--ease-out),transform var(--dur-sheet) var(--ease-sheet);background:rgba(255,255,255,.96);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.95);border-radius:22px 22px 18px 18px;box-shadow:var(--shadow-hi);margin:0 auto 10px;max-width:760px;display:flex;flex-direction:column}
   .today-chat.open .today-chat-sheet{max-height:min(640px,72vh);opacity:1;transform:none}
   .today-chat-head{display:flex;align-items:center;gap:10px;padding:14px 18px 10px;border-bottom:1px solid rgba(30,40,80,.06);flex-shrink:0}
   .today-chat-head b{font-size:14px;font-weight:650}
@@ -1336,11 +1342,21 @@
   .w-slot:empty{display:none}
   .w-slot{margin:0 0 10px}
   .act-card.on-card{margin:0;cursor:default}
-  .tile.work.leaving{transition:transform .3s var(--ease),opacity .3s;transform:scale(.96);opacity:0}
-  @keyframes changedGlow{0%{box-shadow:0 0 0 0 rgba(138,116,208,.55)}100%{box-shadow:0 0 0 14px rgba(138,116,208,0)}}
-  @keyframes cardIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-  .just-changed{animation:changedGlow 1.2s var(--ease) 2}
-  .is-new{animation:cardIn .5s var(--ease) both}
+  .tile.work.leaving{transition:transform var(--dur) var(--ease-out),opacity var(--dur) var(--ease-out);transform:scale(.97);opacity:0}
+  @keyframes changedGlow{0%{box-shadow:0 0 0 0 rgba(138,116,208,.4)}100%{box-shadow:0 0 0 10px rgba(138,116,208,0)}}
+  @keyframes cardIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .just-changed{animation:changedGlow .9s var(--ease-out) 1}
+  .is-new{animation:cardIn .28s var(--ease-out) both}
+  .grid-main > .tile.work.is-new{animation-delay:calc(min(var(--stagger, 0), 8) * 35ms)}
+  /* First paint stagger when the page boots (no is-new yet): soft rise for the first few tiles */
+  .grid-main.cardAppearStagger > .tile.work{animation:cardIn .28s var(--ease-out) both}
+  .grid-main.cardAppearStagger > .tile.work:nth-child(1){animation-delay:0ms}
+  .grid-main.cardAppearStagger > .tile.work:nth-child(2){animation-delay:35ms}
+  .grid-main.cardAppearStagger > .tile.work:nth-child(3){animation-delay:70ms}
+  .grid-main.cardAppearStagger > .tile.work:nth-child(4){animation-delay:105ms}
+  .grid-main.cardAppearStagger > .tile.work:nth-child(5){animation-delay:140ms}
+  .grid-main.cardAppearStagger > .tile.work:nth-child(6){animation-delay:175ms}
+  .grid-main.cardAppearStagger > .tile.work:nth-child(n+7){animation-delay:210ms}
   /* one chat: the dock chat docked beside an open card */
   .z-chat-host{flex:1;min-height:0;display:flex;flex-direction:column}
   .today-chat.in-zoom{position:static!important;margin:0!important;padding:0!important;flex:1;min-height:0;display:flex;flex-direction:column;pointer-events:auto}
@@ -1357,6 +1373,9 @@
   .chat-chips{display:flex;flex-wrap:wrap;gap:6px;max-width:640px;margin:0 auto 8px}
   .chat-chips[hidden]{display:none}
   #v-today .today-chat:not(.open):not(.in-zoom) .chat-chips{display:none}
+  .chat-chips{opacity:0;transform:translateY(6px);transition:opacity var(--dur) var(--ease-out),transform var(--dur) var(--ease-out);pointer-events:none}
+  .today-chat.open .chat-chips,.today-chat.in-zoom .chat-chips{opacity:1;transform:none;pointer-events:auto}
+  /* chat-chips fade with sheet */
   .today-chat.in-zoom .chat-chips{max-width:none}
   .chip{border:1px solid rgba(138,116,208,.25);background:rgba(255,255,255,.9);color:var(--ink2);font:12.5px/1.3 inherit;padding:6px 12px;border-radius:999px;cursor:pointer;transition:background .15s,transform .15s}
   .chip:hover{background:var(--violet-soft);color:var(--ink);transform:translateY(-1px)}
@@ -1539,19 +1558,21 @@
   .wait-chip b{font-weight:700;color:var(--ink)}
   .wait-chip .wc-n{font-size:11px;font-weight:700;color:var(--violet);background:var(--violet-soft,#efeafc);padding:2px 8px;border-radius:999px}
   .tile.work.is-cleared .w-next,.tile.work.is-cleared .w-acts,.tile.work.waiting-only .w-next,.tile.work.waiting-only .w-acts{display:none}
-  /* ===== Phase C: live & motion ===== */
-  .tile.work{transition:transform .28s var(--ease),box-shadow .28s var(--ease),opacity .28s}
+  /* ===== Phase C: live & motion (Muse/Amie soft) ===== */
+  .tile.work{transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease),opacity var(--dur) var(--ease);will-change:transform}
   .grid2 .tile.work:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(40,44,90,.12),0 2px 6px rgba(40,44,90,.05)}
   .grid2 .tile.work.has-face:hover{transform:translateY(-1px)}
+  .grid2 .tile.work:active{transform:scale(.985)}
+  @media (hover:hover) and (pointer:fine){.grid2 .tile.work:active{transform:translateY(-1px) scale(.99)}}
   .tile.work[draggable="true"]{cursor:grab}
-  .tile.work.dragging{opacity:.55;transform:scale(.98) rotate(-.6deg);box-shadow:0 22px 50px rgba(40,44,90,.22);cursor:grabbing}
-  .tile.work.leaving-done{position:relative;pointer-events:none;animation:doneOut 1.25s var(--ease) forwards}
-  .tile.work.leaving-done>*:not(.done-badge){transition:opacity .35s;opacity:.25}
-  .done-badge{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:8px 16px;border-radius:999px;background:var(--teal,#2bb38a);color:#fff;font-weight:700;font-size:14px;box-shadow:0 8px 22px rgba(30,150,110,.35);animation:badgePop .45s var(--ease) both}
-  @keyframes doneOut{0%{opacity:1;transform:none}55%{opacity:1;transform:scale(.97)}100%{opacity:0;transform:scale(.9) translateY(-6px)}}
-  @keyframes badgePop{from{opacity:0;transform:translate(-50%,-50%) scale(.6)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
-  .tile.work.is-urgent{box-shadow:0 0 0 1.5px rgba(236,96,96,.35),0 8px 20px rgba(236,96,96,.08);animation:urgentGlow 2.8s ease-in-out infinite}
-  @keyframes urgentGlow{0%,100%{box-shadow:0 0 0 1.5px rgba(236,96,96,.4),0 8px 22px rgba(236,96,96,.08)}50%{box-shadow:0 0 0 3px rgba(236,96,96,.22),0 14px 34px rgba(236,96,96,.2)}}
+  .tile.work.dragging{opacity:.72;transform:scale(.985);box-shadow:0 18px 40px rgba(40,44,90,.18);cursor:grabbing;z-index:3}
+  .tile.work.leaving-done{position:relative;pointer-events:none;animation:doneOut .9s var(--ease-out) forwards}
+  .tile.work.leaving-done>*:not(.done-badge){transition:opacity .28s var(--ease-out);opacity:.22}
+  .done-badge{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:8px 16px;border-radius:999px;background:var(--teal,#2bb38a);color:#fff;font-weight:700;font-size:14px;box-shadow:0 8px 22px rgba(30,150,110,.35);animation:badgePop .32s var(--ease-out) both}
+  @keyframes doneOut{0%{opacity:1;transform:none}40%{opacity:1;transform:scale(.985)}100%{opacity:0;transform:scale(.94) translateY(-8px)}}
+  @keyframes badgePop{from{opacity:0;transform:translate(-50%,-40%) scale(.7)}60%{opacity:1;transform:translate(-50%,-52%) scale(1.04)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+  .tile.work.is-urgent{box-shadow:0 0 0 1.5px rgba(236,96,96,.28),0 6px 16px rgba(236,96,96,.06);animation:urgentGlow 3.6s var(--ease) infinite}
+  @keyframes urgentGlow{0%,100%{box-shadow:0 0 0 1.5px rgba(236,96,96,.28),0 6px 16px rgba(236,96,96,.06)}50%{box-shadow:0 0 0 2px rgba(236,96,96,.18),0 10px 22px rgba(236,96,96,.1)}}
   .offhours{margin:18px 0 6px}
   .off-toggle{display:flex;align-items:center;gap:8px;width:100%;padding:12px 18px;border-radius:16px;border:1px dashed rgba(90,96,160,.28);background:rgba(255,255,255,.55);color:var(--ink-2,#555b75);font-size:13.5px;cursor:pointer;transition:background .2s}
   .off-toggle:hover{background:rgba(255,255,255,.85)}
@@ -1565,9 +1586,52 @@
   .dt-list li{display:flex;gap:8px;align-items:baseline;font-size:13.5px}
   .dt-list li i{font-style:normal;color:var(--teal,#2bb38a);font-weight:700}
   .dt-list a{color:inherit;text-decoration:none;border-bottom:1px dotted rgba(0,0,0,.2)}
-  .tile-zoom-modal.zoom-in{animation:zoomFromTile .34s cubic-bezier(.2,.8,.2,1) both}
-  @keyframes zoomFromTile{from{opacity:.2;transform:translate(var(--zx,0),var(--zy,0)) scale(.42)}to{opacity:1;transform:none}}
-  @media (prefers-reduced-motion:reduce){.tile.work,.tile.work.leaving-done,.done-badge,.tile.work.is-urgent,.tile.done-today,.tile-zoom-modal.zoom-in{animation:none!important;transition:none!important}.grid2 .tile.work:hover{transform:none}}
+  .tile-zoom-overlay{opacity:0;visibility:hidden;pointer-events:none;transition:opacity var(--dur) var(--ease-out),visibility var(--dur);display:flex!important}
+  .tile-zoom-overlay.open{opacity:1;visibility:visible;pointer-events:auto}
+  .tile-zoom-overlay.closing{opacity:0}
+  .tile-zoom-modal.zoom-in{animation:zoomFromTile .32s var(--ease-out) both}
+  .tile-zoom-modal.zoom-out{animation:zoomToTile .26s var(--ease-out) both}
+  @keyframes zoomFromTile{from{opacity:.15;transform:translate(var(--zx,0),var(--zy,0)) scale(.46)}to{opacity:1;transform:none}}
+  @keyframes zoomToTile{from{opacity:1;transform:none}to{opacity:0;transform:translate(var(--zx,0),var(--zy,0)) scale(.5)}}
+  .tile.done-today{animation:cardIn .32s var(--ease-out) both}
+
+  /* Timetable motion */
+  .tt-now{animation:nowPulse 2.4s var(--ease) infinite}
+  .tt-now::before{animation:nowDot 2.4s var(--ease) infinite}
+  @keyframes nowPulse{0%,100%{opacity:1}50%{opacity:.72}}
+  @keyframes nowDot{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(226,102,122,.35)}50%{transform:scale(1.15);box-shadow:0 0 0 6px rgba(226,102,122,0)}}
+  .tt-bar{transition:left var(--dur) var(--ease),width var(--dur) var(--ease),opacity var(--dur) var(--ease),box-shadow var(--dur) var(--ease),filter var(--dur) var(--ease)}
+  .tt-bar.live{transition:outline-color var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+  .tt-bar.dragging,.tt-bar.soft.dragging{transform:scale(1.02);box-shadow:inset 3px 0 0 currentColor,0 8px 20px rgba(30,40,80,.16)!important}
+  .myday.flash{animation:mydayFlash .9s var(--ease-out)}
+  @keyframes mydayFlash{0%{box-shadow:0 0 0 0 rgba(34,168,152,.35)}100%{box-shadow:0 0 0 12px rgba(34,168,152,0)}}
+
+  /* Toast / tick / sprout */
+  .ui-toast{transition:opacity var(--dur) var(--ease-out),transform var(--dur) var(--ease-out)!important}
+  .sprout-pop{animation:sproutUp .85s var(--ease-out) forwards!important}
+  @keyframes sproutUp{0%{opacity:0;transform:translate(-50%,4px) scale(.45)}28%{opacity:1;transform:translate(-50%,-12px) scale(1.08)}100%{opacity:0;transform:translate(-50%,-28px) scale(.92)}}
+  .f-check li.ticking{animation:tickOut .48s var(--ease-out) .12s forwards}
+  @keyframes tickOut{to{opacity:.35;transform:translateX(4px)}}
+  .f-bar i{transition:width .45s var(--ease-out)}
+  .think-shim{animation:think-shim 2.4s linear infinite}
+  .step{transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease),background var(--dur) var(--ease)}
+  .chip,.z-chip{transition:transform var(--dur) var(--ease-out),background var(--dur) var(--ease),border-color var(--dur) var(--ease),opacity var(--dur) var(--ease)}
+
+  /* Logo: lighter think on small screens */
+  @media (max-width:620px){
+    .douya-think .dy-all{animation-duration:1.45s}
+    @keyframes dy-hop{0%,100%{transform:translateY(0) scale(1,1)}22%{transform:translateY(0) scale(1.03,.96)}45%{transform:translateY(-3px) scale(.98,1.03)}70%{transform:translateY(0) scale(1.02,.98)}}
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    .tile.work,.tile.work.leaving-done,.done-badge,.tile.work.is-urgent,.tile.done-today,
+    .tile-zoom-modal.zoom-in,.tile-zoom-modal.zoom-out,.is-new,.just-changed,.myday.flash,
+    .tt-now,.tt-now::before,.sprout-pop,.f-check li.ticking,.think-shim,.douya *,
+    .ui-toast,.chip,.step,.today-chat-sheet,.chat-chips{animation:none!important;transition:none!important}
+    .grid2 .tile.work:hover,.grid2 .tile.work:active{transform:none}
+    .today-chat.open .today-chat-sheet{transform:none}
+    .tile-zoom-overlay{transition:none!important}
+  }
 </style>
 </head>
 <body>
@@ -3004,7 +3068,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
           tile.appendChild(badge); sprout(badge);
         }
         showUiToast(`「${clip(card.title, 18)}」搞定了`, null, { label: '撤销', onClick: async () => { await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'undo', itemUrl, itemTitle }) }); loadToday({ force: true }); } });
-        setTimeout(() => loadToday({ force: true }).catch(() => {}), reducedMotion() ? 400 : 1100);
+        setTimeout(() => loadToday({ force: true }).catch(() => {}), reducedMotion() ? 200 : 950);
         return;
       }
       showUiToast(`豆芽记下了「${clip(itemTitle, 16)}」（源站未改）`, null, { label: '撤销', onClick: async () => { await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'undo', itemUrl, itemTitle }) }); loadToday(); } });
@@ -3044,7 +3108,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       el.appendChild(badge);
       grid.insertBefore(el, grid.children[i] || null);
       if (done.has(id)) sprout(badge);
-      setTimeout(() => el.remove(), reducedMotion() ? 400 : 1300);
+      setTimeout(() => el.remove(), reducedMotion() ? 180 : 950);
     }
   }
   /** Urgent cards breathe a soft glow (static ring under reduced motion). */
@@ -3224,11 +3288,13 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const changed = cards.filter(c => prevStamp.get(c.id) !== now.get(c.id));
       // Background refresh often rewrites many stamps at once — don't flash the whole grid.
       if (changed.length && changed.length <= 3) {
+        let stagger = 0;
         for (const c of changed) {
           const before = prevStamp.get(c.id);
           const el = c.type === 'timetable' ? container.querySelector('.myday') : container.querySelector(`.tile.work[data-id="${CSS.escape(c.id)}"]`);
           if (!el) continue;
           el.classList.remove(before === undefined ? 'is-new' : 'just-changed'); void el.offsetWidth;
+          if (before === undefined) el.style.setProperty('--stagger', String(stagger++));
           el.classList.add(before === undefined ? 'is-new' : 'just-changed');
           if (c.type === 'timetable') { const nx = container.querySelector('.nx'); if (nx) { nx.classList.remove('just-changed'); void nx.offsetWidth; nx.classList.add('just-changed'); } }
         }
@@ -3452,6 +3518,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     decorateTiles(container, cards);
     playLeaving(container, beforeTiles, cards, hadPrev);
     flashChanged(container, cards);
+    const gridMain = container.querySelector('.grid-main');
+    if (gridMain && !hadPrev && !reducedMotion() && !gridMain.classList.contains('cardAppearStagger')) {
+      gridMain.classList.add('cardAppearStagger');
+      setTimeout(() => gridMain.classList.remove('cardAppearStagger'), 700);
+    }
     markUrgent(container, cards);
     bindOffHours(container);
     bindDragOrder(container);
@@ -5055,16 +5126,28 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
 
   function closeTileZoom() {
     const overlay = $('tileZoomOverlay');
-    if (overlay) overlay.classList.remove('open');
-    // Restore dock preference from before the card opened, THEN move chat back — never openTodayChat here.
-    setChatDockWanted(dockWantedBeforeZoom);
-    returnChat();
-    setChatContext(null);
-    currentZoomCard = null;
-    zoomSelectedItem = null;
-    zoomSeq++;
-    applyDockOpenState();
-    reportView();
+    const modal = overlay && overlay.querySelector('.tile-zoom-modal');
+    const finish = () => {
+      if (overlay) { overlay.classList.remove('open', 'closing'); }
+      if (modal) modal.classList.remove('zoom-in', 'zoom-out');
+      // Restore dock preference from before the card opened, THEN move chat back — never openTodayChat here.
+      setChatDockWanted(dockWantedBeforeZoom);
+      returnChat();
+      setChatContext(null);
+      currentZoomCard = null;
+      zoomSelectedItem = null;
+      zoomSeq++;
+      applyDockOpenState();
+      reportView();
+    };
+    if (overlay && modal && overlay.classList.contains('open') && !reducedMotion()) {
+      modal.classList.remove('zoom-in');
+      modal.classList.add('zoom-out');
+      overlay.classList.add('closing');
+      setTimeout(finish, 260);
+    } else {
+      finish();
+    }
   }
   
   // Wire up close handlers (delegated: overlay markup is after this script)

@@ -138,6 +138,12 @@ test('SSE feed: hello + replay after ?since, live durable + ephemeral events; de
   handlers['agent/assistant-stream']({ agent: { id: 'other' }, frame: { type: 'chunk', attemptId: 'zz', chunk: { type: 'text-delta', text: 'NOT MINE' } } })
   handlers['agent/assistant-stream']({ agent: { id: 'sess-chief' }, frame: { type: 'end', attemptId: 'a1' } })
   await readUntil(/"phase":"end"/)
+  // dsh 0.1.x: the stream arrives as session assistant/chunk events
+  for (const ch of ['第二', '步']) handlers['session/event']({ id: 'sess-chief' }, { type: 'assistant/chunk', data: { turn: 4, step: 1, chunk: { type: 'text-delta', index: 0, text: ch } } })
+  handlers['session/event']({ id: 'sess-chief' }, { type: 'assistant/chunk', data: { turn: 4, step: 1, chunk: { type: 'reasoning-delta', index: 0, text: 'HIDDEN' } } })
+  await readUntil(/"text":"第二步"/)
+  assert.match(buf, /"attemptId":"s4\.1","text":"第二步"/)
+  assert.doesNotMatch(buf, /HIDDEN/, 'reasoning is never streamed')
   assert.match(buf, /"kind":"skeleton","turn":"t_abc1","title":"表格"/)
   assert.match(buf, /"text":"表格已经好了"/, 'three deltas coalesced into one event')
   assert.doesNotMatch(buf, /NOT MINE/)

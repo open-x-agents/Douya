@@ -38,6 +38,12 @@ export function streamEvent(turn, frame) {
 }
 export function sessionEvent(turn, event) {
   if (!turn || !event) return []
+  // dsh 0.1.x has no agent/assistant-stream: the model's stream lands as session events
+  // { type: 'assistant/chunk', data: { turn, step, chunk: { type: 'text-delta', index, text } } }. One model step = one attempt.
+  if (event.type === 'assistant/chunk') {
+    const c = event.data?.chunk
+    return c?.type === 'text-delta' && c.text ? [{ kind: 'stream', turn, attemptId: `s${event.data?.turn ?? ''}.${event.data?.step ?? ''}`, text: String(c.text) }] : []
+  }
   if (event.type === 'tool/call') {
     const name = event.data?.name
     const out = [{ kind: 'progress', turn, label: name === 'odm_ui_render' ? '正在生成视图…' : progressLabel(name) }]
@@ -61,6 +67,18 @@ export function installUiFeed(ctx, { uiService, effect, log = () => {} }) {
   // Coalesced text deltas per attempt.
   const pending = new Map() // attemptId → { ev, timer }
   const flush = (id) => { const p = pending.get(id); if (!p) return; pending.delete(id); clearTimeout(p.timer); uiService.pulse(p.ev) }
+  const push = (ev) => {
+    if (ev.kind === 'stream' && ev.text) {
+      stats.deltas++
+      const p = pending.get(ev.attemptId)
+      if (p) { p.ev.text += ev.text; return }
+      pending.set(ev.attemptId, { ev: { ...ev }, timer: setTimeout(() => flush(ev.attemptId), DELTA_FLUSH_MS) })
+      return
+    }
+    for (const id of [...pending.keys()]) flush(id) // progress / skeleton after text: keep the order
+    if (ev.kind === 'progress') stats.tools++
+    uiService.pulse(ev)
+  }
   const onStream = ({ agent, frame } = {}) => {
     stats.frames++
     const turn = turns.turnOf(agent?.id)
@@ -81,7 +99,8 @@ export function installUiFeed(ctx, { uiService, effect, log = () => {} }) {
   const onSession = (session, event) => {
     const turn = turns.turnOf(session?.id)
     if (!turn) return
-    for (const ev of sessionEvent(turn, event)) { if (ev.kind === 'progress') stats.tools++; uiService.pulse(ev) }
+    if (event?.type === 'assistant/chunk') stats.frames++
+    for (const ev of sessionEvent(turn, event)) push(ev)
   }
   if (typeof ctx?.on === 'function') {
     ctx.on('agent/assistant-stream', onStream)

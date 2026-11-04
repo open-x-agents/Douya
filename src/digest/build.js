@@ -226,7 +226,40 @@ function buildOnce(snaps, candidatesBy, plan, { today, now = Date.now() } = {}) 
     for (const { it } of list) if (!seen.has(it.url)) { seen.add(it.url); ll.links.push({ ...linkOf(it), mergedFrom: it.source }) }
     card.metadata = { ...(card.metadata || {}), mergedFrom: [...new Set(list.map(x => x.it.source))], mergeReason: list[0]?.reason || '' }
   }
-  return { cards, missingInto, stats: { candidates: all.length, merged: [...byId.values()].filter(c => c.mergedInto).length, mergedItems: away.size } }
+  const gh = snaps.github?.all || snaps.github?.items || []
+  let cited = 0
+  if (gh.length) for (const card of cards) if (card.source === 'github') cited += linkCitedNums(card, gh, linkOf)
+  return { cards, missingInto, stats: { citedLinks: cited, candidates: all.length, merged: [...byId.values()].filter(c => c.mergedInto).length, mergedItems: away.size } }
+}
+
+const repoIn = u => (String(u || '').match(/github\.com\/([^/]+\/[^/#?]+)/) || [])[1] || null
+const numIn = u => (String(u || '').match(/\/(?:pull|issues)\/(\d+)/) || [])[1] || null
+/**
+ * A #N in a card's next step / title must be a link the user can see on that card. Cited items
+ * that the card's link list dropped (it is capped) are moved to the front; a number with no item
+ * in the snapshot blanks the next step rather than sending the user to something they cannot open.
+ * Mutates card; returns how many links it added.
+ */
+export function linkCitedNums(card, items = [], toLink = it => ({ title: it.title, url: it.url })) {
+  const ll = (card.blocks || []).find(b => b?.type === 'link-list')
+  const links = ll?.links || []
+  const repo = repoIn(links[0]?.url || card.url)
+  if (!repo) return 0
+  const have = new Set(links.map(l => numIn(l.url)).filter(Boolean))
+  const want = [...new Set([...numsIn(card.nextAction), ...numsIn(card.title)])].filter(n => !have.has(n))
+  if (!want.length) return 0
+  const add = [], missing = []
+  for (const n of want) {
+    const it = items.find(x => repoIn(x.url) === repo && numIn(x.url) === n)
+    if (it) add.push(toLink(it)); else missing.push(n)
+  }
+  if (add.length) {
+    const cap = Math.max(links.length, 10)
+    const block = ll || ((card.blocks ||= []).push({ type: 'link-list', links: [] }), card.blocks.at(-1))
+    block.links = [...add, ...links].slice(0, cap)
+  }
+  if (missing.some(n => numsIn(card.nextAction).includes(n))) { card.nextAction = ''; if (Array.isArray(card.actions)) card.actions = card.actions.filter(a => !missing.some(n => String(a.label || '').includes('#' + n))) }
+  return add.length
 }
 
 /** Every link on the given cards must be one of the snapshot URLs (or a known card/app URL). */

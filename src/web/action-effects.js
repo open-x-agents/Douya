@@ -78,3 +78,72 @@ export function applyActionOutcome(state, a, { now = new Date(), chat = true } =
   }
   return { text, key, marked, cardDone, ok }
 }
+
+const clip = (t, n) => { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t }
+
+/**
+ * For every chat turn (the general Today chat too): what the user already finished recently, so
+ * Chief never lists a sent reply as still open. Invisible context, not a chat message.
+ */
+export function recentOutcomesText(state, { now = Date.now(), hours = 24, max = 8 } = {}) {
+  const since = now - hours * 3600e3
+  const recent = at => { const t = Date.parse(at || ''); return Number.isFinite(t) && t >= since && t <= now + 60e3 }
+  const acts = Object.values(state?.pendingActions || {})
+    .filter(a => a && a.status === 'executed' && !a.undoneAt && recent(a.executedAt))
+    .sort((x, y) => String(y.executedAt).localeCompare(String(x.executedAt))).slice(0, max)
+  const actCards = new Set(acts.map(a => a.cardId).filter(Boolean))
+  const cards = (state?.cards || [])
+    .filter(c => c && c.status === 'done' && recent(c.completedAt) && !actCards.has(c.id) && c.type !== 'hero' && c.type !== 'timetable')
+    .sort((x, y) => String(y.completedAt).localeCompare(String(x.completedAt))).slice(0, 6)
+  if (!acts.length && !cards.length) return ''
+  const lines = ['【刚处理完 · 以此为准】下面这些用户已经做完（邮件/评论已发出），回答「还有什么没做」时不要再列它们，也别说「还没发/待确认」：']
+  for (const a of acts) {
+    const card = (state.cards || []).find(c => c.id === a.cardId)
+    lines.push(`- ${hhmm(a.executedAt)} ${DONE_VERB[a.action] || '已执行'}：${clip(a.summary || a.action, 80)}${card ? `（卡片「${clip(card.title, 30)}」${card.status === 'done' ? '已收掉' : ''}）` : ''}`)
+  }
+  for (const c of cards) lines.push(`- ${hhmm(c.completedAt)} 已收掉卡片：${clip(c.title, 60)}`)
+  return lines.join('\n')
+}
+
+/** One-time, idempotent: run executed actions that predate the outcome path through it (marks a.outcomeAt). */
+export function backfillOutcomes(state, { now = new Date(), hours = 48 } = {}) {
+  const since = now.getTime() - hours * 3600e3
+  const done = []
+  for (const a of Object.values(state?.pendingActions || {})) {
+    if (!a || a.status !== 'executed' || a.undoneAt || a.outcomeAt) continue
+    if (!(Date.parse(a.executedAt || '') >= since)) continue
+    const o = applyActionOutcome(state, a, { now: new Date(a.executedAt), chat: false })
+    a.outcomeAt = now.toISOString()
+    done.push({ id: a.id, action: a.action, marked: o.marked.length, cardDone: o.cardDone })
+  }
+  return done
+}
+
+/**
+ * General (Today) chat history: after the bot message that prepared an action (「已准备好…点确认执行」),
+ * show what became of it — 「✓ 已发送 · HH:MM」 — so the transcript never ends on a stale 「还没发出去」.
+ * Matches by the action's label (e.g. 「回复邮件给 x@y」) in that message; pure, adds no stored message.
+ */
+export function annotateHistoryWithOutcomes(messages = [], actions = {}, { now = Date.now(), hours = 48 } = {}) {
+  const settled = Object.values(actions || {}).filter(a => a && (a.status === 'executed' || a.status === 'undone') && Date.parse(a.executedAt || '') >= now - hours * 3600e3)
+  if (!settled.length || !Array.isArray(messages)) return messages
+  const textOf = m => String(m?.content ?? m?.text ?? '')
+  const out = [], used = new Set()
+  for (const m of messages) {
+    out.push(m)
+    if (m?.role !== 'assistant') continue
+    const t = textOf(m)
+    if (!/确认执行|待确认|还没发|未发送|没发出/.test(t)) continue
+    for (const a of settled) {
+      if (used.has(a.id)) continue
+      const label = String(a.summary || '').split('：')[0].trim()
+      if (label.length < 6 || !t.includes(label)) continue
+      used.add(a.id)
+      const text = a.status === 'undone'
+        ? `↩ 已撤销 · ${hhmm(a.undoneAt || now)}　${a.summary}`
+        : `✓ ${DONE_VERB[a.action] || '已执行'} · ${hhmm(a.executedAt)}　${a.summary}（你在豆芽里点了确认；上面「还没发」已过时）`
+      out.push({ role: 'assistant', content: text, outcome: { actionId: a.id, status: a.status } })
+    }
+  }
+  return out
+}

@@ -72,3 +72,61 @@ test('client shows the outcome line after 确认执行 and labels a failed pendi
   assert.match(html, /'发送失败' : '执行失败'/)
   assert.match(readFileSync(new URL('../src/web/api.js', import.meta.url), 'utf8'), /onOutcome: \(st, a, o\) => applyActionOutcome/)
 })
+
+test('general chat context: recent sends ride along every turn; undone ones do not', async () => {
+  const { recentOutcomesText } = await import('../src/web/action-effects.js')
+  const now = Date.parse('2026-11-04T13:10:00Z')
+  const st = { cards: [{ ...mailCard(), status: 'done', completedAt: '2026-11-04T12:59:53Z' }, { id: 'c2', type: 'project-cluster', title: '已收掉的 PR 卡', status: 'done', completedAt: '2026-11-04T12:00:00Z' }],
+    pendingActions: {
+      a1: { id: 'a1', action: 'gmail_reply', status: 'executed', cardId: 'card_m1', summary: '回复邮件给 fledge@example.com', executedAt: '2026-11-04T12:59:53Z' },
+      a2: { id: 'a2', action: 'github_comment', status: 'executed', undoneAt: '2026-11-04T13:00:00Z', summary: '评论 o/r#9', executedAt: '2026-11-04T12:50:00Z' },
+      a3: { id: 'a3', action: 'gmail_reply', status: 'pending', summary: '回复邮件给 x' },
+      a4: { id: 'a4', action: 'gmail_reply', status: 'executed', summary: '很久以前', executedAt: '2026-11-01T12:00:00Z' } } }
+  const t = recentOutcomesText(st, { now })
+  assert.match(t, /^【刚处理完 · 以此为准】/); assert.match(t, /已发送：回复邮件给 fledge/); assert.match(t, /卡片「Fledge 等你回答」已收掉/)
+  assert.match(t, /已收掉卡片：已收掉的 PR 卡/)
+  assert.doesNotMatch(t, /o\/r#9|回复邮件给 x|很久以前/)
+  assert.equal(recentOutcomesText({ cards: [], pendingActions: {} }, { now }), '')
+  const routes = readFileSync(new URL('../src/web/dsh-host-routes.js', import.meta.url), 'utf8')
+  assert.match(routes, /doneContext = router\.doneSnapshot\(\)/); assert.match(routes, /doneContext: req\.doneContext/)
+  assert.match(readFileSync(new URL('../src/web/muse-chat-core.js', import.meta.url), 'utf8'), /if \(doneText\) outbound = /)
+})
+
+test('backfill: pre-existing executed actions go through the outcome path once', async () => {
+  const { backfillOutcomes } = await import('../src/web/action-effects.js')
+  const now = new Date('2026-11-04T13:10:00Z')
+  const gh = { id: 'g', type: 'project-cluster', status: 'active', title: 'r', blocks: [{ type: 'link-list', links: [{ url: 'https://github.com/o/r/pull/111' }, { url: 'https://github.com/o/r/pull/7' }] }] }
+  const st = { cards: [gh], itemStatus: {}, completions: [], cardChats: {}, pendingActions: { a: { id: 'a', action: 'github_comment', status: 'executed', cardId: 'g', summary: '评论 o/r#111', input: { url: 'https://github.com/o/r/pull/111' }, executedAt: '2026-11-04T09:12:03Z' } } }
+  const r1 = backfillOutcomes(st, { now })
+  assert.deepEqual(r1, [{ id: 'a', action: 'github_comment', marked: 1, cardDone: false }])
+  assert.equal(st.itemStatus['https://github.com/o/r/pull/111'].by, 'action')
+  assert.deepEqual(Object.keys(st.cardChats), [], 'backfill adds no chat spam')
+  assert.deepEqual(backfillOutcomes(st, { now }), [], 'idempotent')
+})
+
+test('next-step numbers come with matching links on the card (or the next step is dropped)', async () => {
+  const { linkCitedNums } = await import('../src/digest/build.js')
+  const links = Array.from({ length: 10 }, (_, i) => ({ title: 't' + i, url: `https://github.com/o/FlyBot/issues/${2340 + i}` }))
+  const card = { source: 'github', title: 'FlyBot：剩下 6 个 open', nextAction: '从 #2307/#2306/#2305 里挑一个修', blocks: [{ type: 'link-list', links }] }
+  const items = [2307, 2306, 2305].map(n => ({ title: 'bug ' + n, url: `https://github.com/o/FlyBot/issues/${n}` }))
+  assert.equal(linkCitedNums(card, items), 3)
+  const ll = card.blocks[0].links
+  assert.equal(ll.length, 10); assert.deepEqual(ll.slice(0, 3).map(l => l.url.split('/').pop()), ['2307', '2306', '2305'])
+  assert.equal(card.nextAction, '从 #2307/#2306/#2305 里挑一个修')
+  const bad = { source: 'github', title: 'x', nextAction: '先修 #9999', blocks: [{ type: 'link-list', links: [{ url: 'https://github.com/o/FlyBot/issues/1' }] }] }
+  linkCitedNums(bad, items); assert.equal(bad.nextAction, '')
+})
+
+test('general chat history: a stale 「还没发出去」 is followed by what actually happened', async () => {
+  const { annotateHistoryWithOutcomes } = await import('../src/web/action-effects.js')
+  const now = Date.parse('2026-11-04T13:10:00Z')
+  const msgs = [
+    { role: 'user', content: '就按这份草稿准备发' },
+    { role: 'assistant', content: '已准备好，**邮件还没发出去**。去豆芽里找到「回复邮件给 fledge@example.com」，点「确认执行」' },
+    { role: 'user', content: '今天还有什么' }, { role: 'assistant', content: '还有 #733' }]
+  const acts = { a1: { id: 'a1', action: 'gmail_reply', status: 'executed', summary: '回复邮件给 fledge@example.com：「Re: x」', executedAt: '2026-11-04T12:59:53Z' } }
+  const out = annotateHistoryWithOutcomes(msgs, acts, { now })
+  assert.equal(out.length, 5); assert.match(out[2].content, /^✓ 已发送 · \d{2}:\d{2}　回复邮件给 fledge@example\.com/); assert.equal(out[3].content, '今天还有什么')
+  assert.equal(annotateHistoryWithOutcomes(msgs, {}, { now }).length, 4)
+  assert.equal(annotateHistoryWithOutcomes(msgs, { a1: { ...acts.a1, status: 'pending' } }, { now }).length, 4, 'still pending → no line')
+})

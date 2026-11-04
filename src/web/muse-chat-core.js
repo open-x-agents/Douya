@@ -234,6 +234,7 @@ export async function runMuseChatTurn(ctx, {
   cardId = null,
   cardContext = null,
   viewContext = '',
+  doneContext = '', // 【刚处理完】 recent sent replies / closed cards (server-built)
   attachments = null, // [{kind:'image'|'file', mediaType?, name, data: base64}]
   dshHome,
   botId = null,
@@ -259,6 +260,8 @@ export async function runMuseChatTurn(ctx, {
   // 【当前视图】 goes first (page / filter / open card / visible cards), then 【当前卡片】, then the user's words.
   const viewText = viewContext ? cleanBlock(viewContext).slice(0, 900) : ''
   if (viewText) outbound = `${viewText.startsWith('【当前视图】') ? viewText : `【当前视图】${viewText}`}\n\n${outbound}`
+  const doneText = doneContext ? cleanBlock(doneContext).slice(0, 1200) : ''
+  if (doneText) outbound = `${doneText}\n\n${outbound}`
   T.viewChars = viewText.length
   T.contextChars = ctxText.length
   T.outboundChars = outbound.length

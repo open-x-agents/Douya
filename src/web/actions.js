@@ -215,7 +215,7 @@ export function createActionService({ store, getClient, log = () => {}, onOutcom
       } catch (e) {
         Object.assign(a, { status: 'failed', error: clip(e.message, 300) })
       }
-      await save(s => { s.pendingActions = { ...(s.pendingActions || {}), [a.id]: a }; if (a.status === 'executed') { ledger(s, a, 'executed'); try { onOutcome?.(s, a, { chat: false }) } catch (e) { log(`[actions] outcome ${e.message}`) } } })
+      await save(s => { s.pendingActions = { ...(s.pendingActions || {}), [a.id]: a }; if (a.status === 'executed') { ledger(s, a, 'executed'); try { if (onOutcome?.(s, a, { chat: false })) s.pendingActions[a.id].outcomeAt = new Date().toISOString() } catch (e) { log(`[actions] outcome ${e.message}`) } } })
       log(`[actions] ${a.status} ${a.id} ${action}`)
       return a.status === 'executed' ? { success: true, executed: true, actionId: a.id, summary, note: a.note || '已执行，用户可在豆芽里撤销' } : { success: false, actionId: a.id, error: a.error }
     },
@@ -248,7 +248,7 @@ export function createActionService({ store, getClient, log = () => {}, onOutcom
         let outcome = null
         await save(s => {
           if (next.status === 'executed') ledger(s, next, 'executed')
-          try { outcome = onOutcome?.(s, next, { chat: true }) || null } catch (e) { log(`[actions] outcome ${e.message}`) }
+          try { outcome = onOutcome?.(s, next, { chat: true }) || null; if (outcome && next.status === 'executed') next.outcomeAt = new Date().toISOString() } catch (e) { log(`[actions] outcome ${e.message}`) }
           // A failed send stays pending (with its reason) so the user can fix and retry — never silently dropped.
           s.pendingActions[id] = next.status === 'failed' ? { ...next, status: 'pending', failedAt: new Date().toISOString() } : next
         })

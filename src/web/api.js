@@ -17,7 +17,7 @@ import { cardSnapshotText, cardFull } from './card-snapshot.js';
 import { createUiService } from '../ui/service.js';
 import { createChatDisplay, attachmentMeta } from './chat-display.js';
 import { callbackUrlFor, callbackPage } from './composio-callback.js';
-import { applyActionOutcome } from './action-effects.js';
+import { applyActionOutcome, recentOutcomesText, annotateHistoryWithOutcomes } from './action-effects.js';
 import { briefTarget, fetchPrBrief } from './card-brief.js';
 import { prepareCardActions, pickNextThing, daySummaryLine, tomorrowMorning, snoozeUntilFor } from './card-prep.js';
 import { hydrateFace, autoFace } from '../ui/face.js';
@@ -735,6 +735,8 @@ export function createApiRouter(ctx) {
     setViewContext(view) { return uiService.setView(view); },
     /** 【当前视图】 text for a chat turn (also records the view). */
     viewSnapshot(view) { return uiService.viewText(view); },
+    /** What the user finished recently (sent replies, closed cards) — rides along every chat turn. */
+    doneSnapshot() { try { return recentOutcomesText(store.get() || {}); } catch { return ''; } },
     /** Full view for odm_ui_state. */
     uiState() { return uiService.state(); },
     chatDisplay() { return chatDisplay; },
@@ -1594,7 +1596,7 @@ export function createApiRouter(ctx) {
           baseUrl: process.env.DSBOT_URL || 'http://127.0.0.1:7788',
           token: process.env.DSBOT_TOKEN,
         });
-        return { sessionId: hist.sessionId || BOT_SESSION_ID, messages: router.dockSurfacesFor(hist.messages || []), botId: hist.botId || null };
+        return { sessionId: hist.sessionId || BOT_SESSION_ID, messages: annotateHistoryWithOutcomes(router.dockSurfacesFor(hist.messages || []), store.get()?.pendingActions || {}), botId: hist.botId || null };
       } catch (err) {
         console.error('[getChatHistory] ds-bot:', err.message);
         return { sessionId: BOT_SESSION_ID, messages: [], error: err.message };

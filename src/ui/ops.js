@@ -344,7 +344,11 @@ export function viewSnapshotText(view, state, { maxChars = 800, now = Date.now()
     if (focus) lines.push(`滚动焦点：${focus}`)
   }
   if (v.highlights.length) lines.push(`高亮中：${v.highlights.map(h => t(h.cardId, 16)).filter(Boolean).join('，')}`)
-  if (v.lastUndo) lines.push(`最近一次布局改动：${cut(v.lastUndo.message, 60)}（${v.lastUndo.by === 'user' ? '用户' : '豆芽'}，可撤销 id=${v.lastUndo.id}）`)
+  // Say what was just undone, so Chief doesn't describe a reverted pin from chat memory. Ids stay out of this
+  // block (odm_ui_op undo defaults to the latest change; odm_ui_state has the ids).
+  const last = (state?.uiLog || []).at(-1)
+  if (last?.op === 'undo') lines.push(`刚刚撤销了：${cut(String(last.message || '').replace(/^已撤销：/, ''), 70)}（已不再生效）`)
+  if (v.lastUndo) lines.push(`可撤销的最近一次布局改动：${cut(v.lastUndo.message, 60)}（${v.lastUndo.by === 'user' ? '用户' : '豆芽'}做的）`)
   let text = lines.join('\n')
   if (text.length > maxChars) text = `${text.slice(0, maxChars - 2)}…`
   return text

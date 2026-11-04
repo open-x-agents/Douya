@@ -7,6 +7,7 @@ import { runMuseChatTurn, chatProgress } from './muse-chat-core.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const CLIENT_HTML = join(__dirname, '../client/index.html')
+const UI_RENDERER = join(__dirname, '../client/ui-renderer.js')
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -162,6 +163,21 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     fetch: async (request) => json(router.setViewContext(await readJson(request))),
   }, 'opendigitalmate: ui-context')
 
+  // P2 temporary views: the vetted renderer (static file) and the owner's surface ops (get / 保存为卡片 / form submit).
+  effect({
+    path: '/api/opendigitalmate/ui-renderer.js',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async () => new Response(await readFile(UI_RENDERER, 'utf8'), { status: 200, headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } }),
+  }, 'opendigitalmate: ui-renderer')
+
+  effect({
+    path: '/api/opendigitalmate/surface',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request) => json(await router.surfaceOp(await readJson(request))),
+  }, 'opendigitalmate: surface')
+
   effect({
     path: '/api/opendigitalmate/card-chat',
     methods: ['POST'],
@@ -236,11 +252,14 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
           time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
         }, 200)
       }
+      // Temporary views Chief generated during this turn ride along as rich blocks under the reply.
+      let surfaces = []
+      try { surfaces = router.surfacesSince(timing.recvAt).map(view => ({ type: 'surface', view })) } catch (err) { log(`surfacesSince failed: ${err.message}`) }
       return json({
         text: result.text,
         status: result.status,
         citations: result.citations || [],
-        cards: result.cards || [],
+        cards: [...(result.cards || []), ...surfaces],
         botId: result.botId,
         sessionId: 'dsbot-chief',
         timing: { ...result.timing, clientSentAt: timing.clientSentAt, serverRecvAt: timing.recvAt, serverRespondAt: Date.now() },

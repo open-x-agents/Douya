@@ -9,10 +9,11 @@ import { fileURLToPath } from 'node:url';
 import { generateDailyDigest, getSourcesStatus, pushDailyDigest, createComposioClient } from './composio.js';
 import { reminderCard } from '../host/cards.js';
 import { createProfileManager } from './profile.js';
-import { createActionService } from './actions.js';
+import { createActionService, ACTIONS } from './actions.js';
 import { cardSnapshotText, cardFull } from './card-snapshot.js';
 import { createUiService } from '../ui/service.js';
 import { uiView } from '../ui/ops.js';
+import { createSurfaceService } from '../ui/surfaces.js';
 import { resolveDisplayName, lastGithubIdentity } from './aggregation.js';
 import { recordCompletion, setItemStatus, clearItemStatus, annotateCards, cardItemUrls } from '../host/store.js'
 
@@ -675,6 +676,8 @@ export function createApiRouter(ctx) {
 
   // 豆芽 Intelligent UI P1: declarative view ops (open / highlight / filter / arrange / navigate) + 当前视图.
   const uiService = createUiService({ store, log: m => console.log(m) });
+  // P2: temporary views Chief generates (odm_ui_render / odm_ui_update). Form drafts only become pending actions.
+  const surfaceService = createSurfaceService({ store, actions: ACTIONS, requestAction: (n, input, o) => actionService.request(n, input, o), emit: e => uiService.emit(e), log: m => console.log(m) });
 
   const router = {
     /** View op from the bot (odm_ui_op) or the owner's browser (撤销 / 固定). Validated against the store. */
@@ -688,6 +691,19 @@ export function createApiRouter(ctx) {
     /** Full view for odm_ui_state. */
     uiState() { return uiService.state(); },
     uiBootId() { return uiService.bootId; },
+    /** Bot: generate a temporary view (validated + hydrated from the store). */
+    async uiRender(input = {}, opts = {}) { return surfaceService.render(input, opts); },
+    /** Bot: patch a view's dataModel. */
+    async uiUpdate(input = {}) { return surfaceService.update(input); },
+    /** Views the bot created since ms (attached to the chat reply's `cards`). */
+    surfacesSince(ms) { return surfaceService.since(ms); },
+    /** Owner's browser: get / save (保存为卡片) / submit a form. */
+    async surfaceOp({ op = 'get', id, component, values } = {}) {
+      if (op === 'get') return surfaceService.get(id);
+      if (op === 'save') return surfaceService.saveAsCard(id);
+      if (op === 'submit') return surfaceService.submit({ surfaceId: id, component, values });
+      return { success: false, error: `unknown op ${op}` };
+    },
 
     /** Bot-side: request an action (never confirms an outgoing one). */
     async requestAction(action, input = {}, opts = {}) { return actionService.request(action, input, opts); },
@@ -724,7 +740,7 @@ export function createApiRouter(ctx) {
         // Work items = everything except system tiles (hero / timetable), so the
         // header count always matches the cards rendered in the grid.
         const SYSTEM_TYPES = new Set(['hero', 'timetable']);
-        const actionable = activeCards.filter(c => !SYSTEM_TYPES.has(c.type) && c.source !== 'system' && c.type !== 'event');
+        const actionable = activeCards.filter(c => !SYSTEM_TYPES.has(c.type) && c.source !== 'system' && c.type !== 'event' && c.type !== 'view');
         const urgent = actionable.filter(c => c.priority === 'urgent' || c.priority === 'high');
         
         // Build sources list
@@ -766,7 +782,7 @@ export function createApiRouter(ctx) {
           meetingHours: Math.round(meetingHours * 10) / 10,
           waitingCount: activeCards.filter(c => c.status === 'waiting').length,
           lastDigestAt: state.lastDigest?.generatedAt || null,
-          cards: annotateCards(activeCards, state.itemStatus),
+          cards: annotateCards(activeCards, state.itemStatus).map(c => (c.type === 'view' ? { ...c, view: surfaceService.cardView(c) } : c)),
           ui: { ...uiView(state), bootId: uiService.bootId, seq: uiService.seq },
           hasDigest: state.lastDigest !== null,
         };
@@ -1056,7 +1072,7 @@ export function createApiRouter(ctx) {
       if (op === 'append') {
         const add = (Array.isArray(messages) ? messages : []).slice(0, 10)
           .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string' && m.text.trim())
-          .map(m => ({ role: m.role, text: m.text.slice(0, 8000), at: new Date().toISOString() }));
+          .map(m => ({ role: m.role, text: m.text.slice(0, 8000), at: new Date().toISOString(), ...(Array.isArray(m.surfaces) && m.surfaces.length ? { surfaces: m.surfaces.filter(x => typeof x === 'string' && /^sf_\w{1,40}$/.test(x)).slice(0, 3) } : {}) }));
         all[key] = [...(all[key] || []), ...add].slice(-40);
         const keys = Object.keys(all);
         if (keys.length > 200) for (const k of keys.sort((a, b) => String(all[a].at(-1)?.at).localeCompare(String(all[b].at(-1)?.at))).slice(0, keys.length - 200)) delete all[k];
@@ -1828,17 +1844,21 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
           }
         });
         return;
+      } else if (url.pathname === '/api/opendigitalmate/ui-renderer.js' && req.method === 'GET') {
+        const js = await readFile(join(__dirname, '../client/ui-renderer.js'), 'utf8');
+        res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(js);
       } else if (url.pathname === '/api/opendigitalmate/ui-events' && req.method === 'GET') {
         const data = await router.uiEvents({ since: url.searchParams.get('since'), boot: url.searchParams.get('boot'), wait: url.searchParams.get('wait') ?? 25000 });
         res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
         res.end(JSON.stringify(data));
-      } else if ((url.pathname === '/api/opendigitalmate/ui-op' || url.pathname === '/api/opendigitalmate/ui-context') && req.method === 'POST') {
+      } else if ((url.pathname === '/api/opendigitalmate/ui-op' || url.pathname === '/api/opendigitalmate/ui-context' || url.pathname === '/api/opendigitalmate/surface') && req.method === 'POST') {
         let body = '';
         req.on('data', chunk => { body += chunk.toString(); });
         req.on('end', async () => {
           try {
             const data = JSON.parse(body || '{}');
-            const response = url.pathname.endsWith('ui-op') ? await router.uiOp(data, { by: 'user' }) : router.setViewContext(data);
+            const response = url.pathname.endsWith('ui-op') ? await router.uiOp(data, { by: 'user' }) : url.pathname.endsWith('surface') ? await router.surfaceOp(data) : router.setViewContext(data);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(response));
           } catch (err) {

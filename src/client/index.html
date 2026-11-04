@@ -1020,6 +1020,79 @@
   .ui-toast-t{flex:1;line-height:1.4}
   .ui-toast-undo{border:0;background:#8a74d0;color:#fff;border-radius:8px;padding:5px 12px;font-weight:600;cursor:pointer}
   .ui-toast-x{border:0;background:transparent;color:rgba(255,255,255,.6);cursor:pointer;font-size:13px}
+
+  /* ===== Intelligent UI P2: temporary views (vetted components) ===== */
+  .sf{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin:8px 0;box-shadow:0 4px 18px rgba(40,30,90,.06);font-size:13px;color:var(--ink);max-width:100%;overflow:hidden}
+  .sf-panel{border-color:#d9d0f3;box-shadow:0 6px 24px rgba(90,60,180,.10)}
+  .sf-card{border:0;box-shadow:none;padding:0;margin:0}
+  .sf-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+  .sf-title{font-size:14.5px;font-weight:700}
+  .sf-badge{font-size:11px;font-weight:600;color:#7a5cc4;background:#f1ecfb;border-radius:999px;padding:2px 8px}
+  .sf-saved{font-size:11.5px;color:#1f7a6e}
+  .sf-head-acts{margin-left:auto;display:flex;gap:6px}
+  .sf-btn{border:1px solid rgba(75,58,134,.22);background:#fff;color:#4b3a86;border-radius:9px;padding:6px 12px;font-size:12.5px;font-weight:600;cursor:pointer}
+  .sf-btn:hover{background:#f6f3fd}
+  .sf-btn.sm{padding:3px 9px;font-size:11.5px}
+  .sf-btn.ghost{border-color:transparent;background:#f6f4fb}
+  .sf-btn.primary{background:#8a74d0;border-color:#8a74d0;color:#fff}
+  .sf-btn:disabled{opacity:.55;cursor:default}
+  .sf-h{margin:12px 0 6px;font-size:12.5px;font-weight:700;color:#4b3a86}
+  .sf-col>.sf-h:first-child,.sf-block>.sf-h:first-child{margin-top:0}
+  .sf-section{padding:10px 0;border-top:1px dashed var(--line)}
+  .sf-text{margin:6px 0;line-height:1.6}
+  .sf-callout{border-radius:10px;padding:9px 12px;margin:6px 0;line-height:1.55}
+  .sf-tone-info{background:#eef4fe;color:#244c86}.sf-tone-warn{background:#fff5e3;color:#8a5600}.sf-tone-success{background:#e6f6f2;color:#1f6e60}
+  .sf-table-wrap{overflow-x:auto;margin:4px 0}
+  .sf-table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .sf-table th{text-align:left;font-weight:600;color:#6b6780;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+  .sf-table td{padding:7px 8px;border-bottom:1px solid #f1eff6;vertical-align:top;line-height:1.45}
+  .sf-table tr:hover td{background:#faf9fd}
+  .sf-sortable{cursor:pointer;user-select:none}
+  .sf-sortable::after{content:' ↕';opacity:.35}
+  .sf-sortable[data-dir=asc]::after{content:' ↑';opacity:.8}.sf-sortable[data-dir=desc]::after{content:' ↓';opacity:.8}
+  .sf-compare th.sf-th-field{color:#8a8698;font-weight:600;width:90px}
+  .sf-compare thead th{white-space:normal;min-width:160px;color:var(--ink)}
+  .sf-link{color:#3d5bd9;text-decoration:none;font-weight:600}
+  .sf-link:hover{text-decoration:underline}
+  .sf-row-acts{display:inline-flex;gap:4px}
+  .sf-list{list-style:none;margin:4px 0;padding:0}
+  .sf-list li{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline;padding:7px 0;border-bottom:1px solid #f1eff6}
+  .sf-meta{color:#8a8698;font-size:12px}
+  .sf-kv{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;margin:6px 0}
+  .sf-kv dt{color:#8a8698}.sf-kv dd{margin:0;font-weight:600}.sf-kv dd.sf-num{color:#8a74d0;font-size:15px}
+  .sf-timeline{list-style:none;margin:6px 0;padding:0 0 0 14px;border-left:2px solid #e6e0f6}
+  .sf-timeline li{position:relative;display:flex;gap:10px;padding:5px 0}
+  .sf-timeline li::before{content:'';position:absolute;left:-19px;top:11px;width:8px;height:8px;border-radius:50%;background:#8a74d0}
+  .sf-timeline time{color:#8a8698;font-size:12px;min-width:84px}
+  .sf-chart{margin:6px 0}
+  .sf-bar-row{display:grid;grid-template-columns:minmax(70px,140px) 1fr 34px;gap:8px;align-items:center;padding:3px 0}
+  .sf-bar-l{color:#6b6780;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sf-bar-t{background:#f2effa;border-radius:6px;height:10px;overflow:hidden}
+  .sf-bar-t i{display:block;height:100%;background:linear-gradient(90deg,#22a898,#8a74d0);border-radius:6px}
+  .sf-bar-v{text-align:right}
+  .sf-chart-line svg{width:100%;height:90px;color:#8a74d0}
+  .sf-chart-axis{display:flex;justify-content:space-between;gap:6px;color:#8a8698;font-size:11px;flex-wrap:wrap}
+  .sf-form{display:flex;flex-direction:column;gap:10px;margin:6px 0}
+  .sf-field{display:flex;flex-direction:column;gap:4px}
+  .sf-field.sf-check{flex-direction:row;align-items:center;gap:8px}
+  .sf-field-l{font-size:12px;font-weight:600;color:#6b6780}
+  .sf-field input[type=text],.sf-field select,.sf-field textarea{border:1px solid var(--line);border-radius:9px;padding:8px 10px;font:inherit;font-size:13px;background:#fff}
+  .sf-field textarea{resize:vertical;line-height:1.55}
+  .sf-form-foot{display:flex;align-items:center;gap:10px}
+  .sf-form-note{color:#8a8698;font-size:11.5px;flex:1}
+  .sf-form-status{color:#1f7a6e;font-size:12px}
+  .sf-buttons{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+  .sf-refs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px;padding-top:8px;border-top:1px solid #f1eff6;color:#8a8698;font-size:11.5px}
+  .sf-ref{border:0;background:#f6f4fb;border-radius:999px;padding:2px 9px;font-size:11.5px;color:#4b3a86;cursor:pointer}
+  .sf-empty{color:#8a8698;font-size:12px;padding:6px 0}
+  .ui-panels{display:flex;flex-direction:column;gap:12px;margin:0 0 16px}
+  .tile.view-tile{padding:16px 18px}
+  .today-chat-msgs .sf,.z-msgs .sf{align-self:stretch}
+  .ui-suggest{position:fixed;top:18px;left:50%;transform:translate(-50%,-20px);display:flex;align-items:center;gap:10px;max-width:min(620px,90vw);padding:10px 12px 10px 16px;border-radius:14px;background:#fff;border:1px solid #d9d0f3;box-shadow:0 12px 36px rgba(60,40,120,.18);font-size:13.5px;opacity:0;pointer-events:none;transition:.25s ease;z-index:9999}
+  .ui-suggest.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+  .ui-suggest span{flex:1}
+  .ui-sg-ok{border:0;background:#8a74d0;color:#fff;border-radius:8px;padding:5px 12px;font-weight:600;cursor:pointer}
+  .ui-sg-no{border:0;background:#f3f1f8;color:#6b6780;border-radius:8px;padding:5px 12px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -1228,6 +1301,7 @@
   </div>
 </div>
 
+<script src="/api/opendigitalmate/ui-renderer.js"></script>
 <script>
 (function() {
   'use strict';
@@ -1974,7 +2048,7 @@
     html += '<div class="grid2">';
     html += renderHero(hero, work);
     html += renderLoad(work);
-    html += order.map(c => renderWorkTile(c, cards.indexOf(c))).join('');
+    html += order.map(c => (c.type === 'view' ? `<article class="tile work size-wide view-tile" data-idx="${cards.indexOf(c)}"></article>` : renderWorkTile(c, cards.indexOf(c)))).join('');
     if (work.length && !order.length) html += `<div class="tile empty size-wide"><div class="eyebrow">筛选后没有卡片</div><p class="w-desc">点上方「显示全部」恢复。</p></div>`;
     if (!work.length) html += `<div class="tile empty size-wide"><div class="eyebrow">还没有卡片</div><p class="w-desc">点击右上角「立即汇聚」，豆芽会从已连接的数据源拉取最新动态。</p></div>`;
     html += '</div>';
@@ -1999,6 +2073,7 @@
     }
 
     decorateTiles(container, cards);
+    mountPanelsAndViews(container, cards);
     reportView();
     const track = async (card, action) => {
       if (!card || !card.id) return;
@@ -2007,6 +2082,7 @@
     container.querySelectorAll('.tile.work').forEach(tile => {
       const card = cards[Number(tile.getAttribute('data-idx'))];
       tile.addEventListener('click', e => {
+        if (card && card.type === 'view') return; // a saved view is used in place
         if (e.target.closest('a')) { track(card, 'open'); return; }
         track(card, 'open');
         openTileZoom(card);
@@ -2120,6 +2196,10 @@
         (data.cards || []).filter(c => c.type === 'group').slice(0, 3).forEach(c => {
           $('todayChatMsgs').appendChild(renderGroupCard(c));
         });
+        mountSurfaces($('todayChatMsgs'), data.cards, { container: $('todayChatMsgs'), sendPrompt: dockPrompt });
+        (window.__odmSurfaceTimings = window.__odmSurfaceTimings || []).push({ at: Date.now(), n: (data.cards || []).filter(c => c.type === 'surface').length, timing: data.timing || null });
+        // The dock lives on 今天; if 豆芽 (or the user) switched pages meanwhile, say the reply arrived.
+        if (currentView() !== 'today') showUiToast(`豆芽回复了：${String(data.text || '').replace(/\s+/g, ' ').slice(0, 48)}`, null, { label: '查看', onClick: () => { showView('today'); openTodayChat(); } });
         $('todayChatMsgs').scrollTop = $('todayChatMsgs').scrollHeight;
         showActionsSince($('todayChatMsgs'), sentAt).catch(() => {});
         loadToday().catch(() => {}); // bot may have edited cards; dock stays open
@@ -2783,7 +2863,7 @@
   }
 
   let toastTimer = null;
-  function showUiToast(message, undoId) {
+  function showUiToast(message, undoId, extra) {
     let el = $('uiToast');
     if (!el) { el = document.createElement('div'); el.id = 'uiToast'; el.className = 'ui-toast'; document.body.appendChild(el); }
     el.textContent = '';
@@ -2796,12 +2876,17 @@
       b.addEventListener('click', async () => { b.disabled = true; await sendUserOp({ op: 'undo', id: undoId }); });
       el.appendChild(b);
     }
+    if (extra && extra.label) {
+      const b2 = document.createElement('button'); b2.type = 'button'; b2.className = 'ui-toast-undo'; b2.textContent = extra.label;
+      b2.addEventListener('click', () => { el.classList.remove('show'); extra.onClick && extra.onClick(); });
+      el.appendChild(b2);
+    }
     const x = document.createElement('button'); x.type = 'button'; x.className = 'ui-toast-x'; x.textContent = '✕';
     x.addEventListener('click', () => el.classList.remove('show'));
     el.appendChild(x);
     el.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.remove('show'), undoId ? 12000 : 5000);
+    toastTimer = setTimeout(() => el.classList.remove('show'), undoId || extra ? 12000 : 5000);
   }
   function rerenderToday() {
     const sc = views.today ? views.today.scrollTop : 0;
@@ -2821,9 +2906,17 @@
       if (row) { row.classList.add('ui-hl'); row.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
     }
   }
+  const HOLDABLE = new Set(['filter', 'clearFilter', 'arrange', 'highlight', 'undo']);
   async function applyUiEvent(e) {
     if (!e || e.seq <= uiSeq) return;
     uiSeq = e.seq;
+    if (e.kind === 'surface') { onSurfaceEvent(e); return; }
+    if (e.kind === 'suggest') { showSuggest(e); return; }
+    if (e.kind === 'cards') { await loadToday(); if (e.message) showUiToast(e.message); return; }
+    if (e.by === 'bot' && HOLDABLE.has((e.op || {}).op) && userTyping()) { holdEvent(e); return; }
+    return applyOpEvent(e, false);
+  }
+  async function applyOpEvent(e, held) {
     const op = e.op || {};
     if (e.ui) uiLayout = e.ui;
     switch (op.op) {
@@ -2842,7 +2935,7 @@
     if (op.op === 'highlight') flashTile(op.card, op.item, true);
     if (op.op === 'arrange' && (op.pin || []).length) flashTile(op.pin[0]);
     const appliedAt = Date.now();
-    (window.__odmUiTimings = window.__odmUiTimings || []).push({ op: op.op, seq: e.seq, by: e.by, serverAt: e.at, appliedAt, latencyMs: appliedAt - e.at });
+    (window.__odmUiTimings = window.__odmUiTimings || []).push({ op: op.op, seq: e.seq, by: e.by, serverAt: e.at, appliedAt, latencyMs: appliedAt - e.at, held: !!held });
     if (e.message) showUiToast(e.message, e.undoId);
     reportView();
   }
@@ -2894,6 +2987,122 @@
   }
   views.today && views.today.addEventListener('scroll', reportView, { passive: true });
   window.__odmViewContext = viewContext;
+
+  // ===== 豆芽 Intelligent UI (P2): temporary views =====
+  // Views are server-hydrated data rendered by /api/opendigitalmate/ui-renderer.js (textContent only). Their
+  // buttons open links / cards, run view ops or send a prompt; a form draft only shows the existing 待你确认 card.
+  const panelViews = new Map(); // surfaceId -> view, shown on 今天
+  const PANEL_KEY = 'odm.panels.v1';
+  function dockPrompt(text) { const i = $('todayChatInput'); if (!i) return; if (currentView() !== 'today') showView('today'); i.value = String(text || ''); $('todayChatSend')?.click(); }
+  function surfaceHost(ctx = {}) {
+    return {
+      openLink: url => { if (window.OdmUi && OdmUi.SAFE_LINK.test(url)) window.open(url, '_blank', 'noopener'); },
+      openCard: id => { const c = lastCards.find(x => x.id === id); if (!c) { showUiToast('这张卡已经不在今天页上了'); return; } if (currentView() !== 'today') showView('today'); openTileZoom(c); },
+      uiOp: op => sendUserOp(op),
+      prompt: text => (ctx.sendPrompt || dockPrompt)(text),
+      submit: async (sid, comp, values) => {
+        let r;
+        try { r = await fetch('/api/opendigitalmate/surface', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'submit', id: sid, component: comp, values }) }).then(x => x.json()); }
+        catch (_) { return { ok: false, message: '连不上豆芽' }; }
+        if (!r || !r.success) return { ok: false, message: (r && r.error) || '提交失败' };
+        if (r.kind === 'prompt') { (ctx.sendPrompt || dockPrompt)(r.text); return { ok: true, message: '已作为你的消息发给豆芽' }; }
+        const list = await actionsApi({ op: 'list' }).catch(() => ({}));
+        const a = ((list && list.actions) || []).find(x => x.id === r.actionId);
+        const target = ctx.container || $('todayChatMsgs');
+        if (a && target) { target.appendChild(actionCardEl(a)); target.scrollTop = target.scrollHeight; }
+        return { ok: true, message: '已生成「待你确认」草稿，在下方卡片里确认前不会发出' };
+      },
+    };
+  }
+  function renderSurface(view, ctx = {}, placement = 'chat') {
+    if (!window.OdmUi) { const d = document.createElement('div'); d.className = 'sf-empty'; d.textContent = '视图组件没加载出来，刷新页面再试'; return d; }
+    const node = OdmUi.render(view, surfaceHost(ctx), {
+      placement,
+      onPanel: v => openPanel(v),
+      onSave: (v, b) => saveSurface(v.id, b),
+      onClose: placement === 'panel' ? v => closePanel(v.id) : placement === 'card' ? v => removeViewCard(v) : null,
+    });
+    node.__odmCtx = { ctx, placement };
+    return node;
+  }
+  function mountSurfaces(container, cards, ctx) {
+    (cards || []).filter(c => c && c.type === 'surface' && c.view).forEach(c => container.appendChild(renderSurface(c.view, ctx, 'chat')));
+  }
+  async function surfaceGet(id) {
+    try { const r = await fetch('/api/opendigitalmate/surface', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'get', id }) }).then(x => x.json()); return r && r.success ? r.view : null; } catch (_) { return null; }
+  }
+  function savePanelIds() { try { localStorage.setItem(PANEL_KEY, JSON.stringify([...panelViews.keys()])); } catch (_) {} }
+  function openPanel(view) {
+    panelViews.set(view.id, view); savePanelIds();
+    if (currentView() !== 'today') showView('today');
+    if (currentZoomCard) closeTileZoom();
+    rerenderToday();
+    views.today && views.today.scrollTo({ top: 0, behavior: 'smooth' });
+    showUiToast(`已把「${view.title}」放到今天页顶部`);
+  }
+  function closePanel(id) { panelViews.delete(id); savePanelIds(); rerenderToday(); }
+  async function refreshPanels() {
+    let ids = [];
+    try { ids = JSON.parse(localStorage.getItem(PANEL_KEY) || '[]'); } catch (_) {}
+    for (const id of ids.slice(0, 5)) { const v = await surfaceGet(id); if (v && !v.expired) panelViews.set(id, v); else panelViews.delete(id); }
+    savePanelIds();
+  }
+  async function saveSurface(id, b) {
+    const r = await fetch('/api/opendigitalmate/surface', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'save', id }) }).then(x => x.json()).catch(() => null);
+    if (!r || !r.success) { if (b) b.disabled = false; showUiToast((r && r.error) || '保存失败'); return; }
+    if (b) b.textContent = '已保存';
+    showUiToast('已保存为今天页上的卡片');
+    loadToday().catch(() => {});
+  }
+  async function removeViewCard(view) {
+    const id = view.savedCardId; if (!id) return;
+    await fetch('/api/opendigitalmate/card-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }).catch(() => {});
+    showUiToast(`已移除视图卡「${view.title}」`);
+    loadToday().catch(() => {});
+  }
+  function mountPanelsAndViews(container, cards) {
+    if (panelViews.size) {
+      const wrap = document.createElement('div'); wrap.className = 'ui-panels';
+      for (const v of panelViews.values()) wrap.appendChild(renderSurface(v, {}, 'panel'));
+      const grid = container.querySelector('.grid2'); if (grid) grid.before(wrap);
+    }
+    container.querySelectorAll('.tile.view-tile').forEach(tile => {
+      const card = cards[Number(tile.getAttribute('data-idx'))];
+      if (!card) return;
+      if (card.view && !card.view.error) tile.appendChild(renderSurface(card.view, {}, 'card'));
+      else { const d = document.createElement('div'); d.className = 'sf-empty'; d.textContent = `视图「${card.title || ''}」引用的卡片已经不在了`; tile.appendChild(d); }
+    });
+  }
+  function onSurfaceEvent(e) {
+    if (e.phase === 'update' && e.view) {
+      if (panelViews.has(e.surfaceId)) panelViews.set(e.surfaceId, e.view);
+      document.querySelectorAll(`[data-surface-id="${CSS.escape(e.surfaceId)}"]`).forEach(old => { const c = old.__odmCtx || { ctx: {}, placement: 'chat' }; old.replaceWith(renderSurface(e.view, c.ctx, c.placement)); });
+    }
+    if (e.phase === 'create' && e.placement === 'panel' && e.view) openPanel(e.view);
+  }
+  // 豆芽建议: a layout change Chief proposed without being asked — nothing changes until the user clicks 应用.
+  function showSuggest(e) {
+    let bar = $('uiSuggest');
+    if (!bar) { bar = document.createElement('div'); bar.id = 'uiSuggest'; bar.className = 'ui-suggest'; document.body.appendChild(bar); }
+    bar.textContent = '';
+    const t = document.createElement('span'); t.textContent = e.message || '豆芽有个布局建议';
+    const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'ui-sg-ok'; ok.textContent = '应用';
+    ok.addEventListener('click', async () => { bar.classList.remove('show'); await sendUserOp(e.op); });
+    const no = document.createElement('button'); no.type = 'button'; no.className = 'ui-sg-no'; no.textContent = '忽略';
+    no.addEventListener('click', () => bar.classList.remove('show'));
+    bar.append(t, ok, no); bar.classList.add('show');
+  }
+  // Hold layout changes while the user is typing their next message, so the page doesn't jump under them.
+  let lastKeyAt = 0, heldTimer = null;
+  const heldEvents = [];
+  document.addEventListener('keydown', e => { if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) lastKeyAt = Date.now(); }, true);
+  function userTyping() { const a = document.activeElement; return !!(a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && String(a.value || '').trim() && Date.now() - lastKeyAt < 4000); }
+  function holdEvent(e) {
+    heldEvents.push(e);
+    clearTimeout(heldTimer);
+    const tick = () => { if (userTyping()) { heldTimer = setTimeout(tick, 600); return; } const list = heldEvents.splice(0); list.forEach(x => applyOpEvent(x, true)); };
+    heldTimer = setTimeout(tick, 600);
+  }
 
   // Tile zoom modal functions
   let currentZoomCard = null;
@@ -2973,7 +3182,10 @@
     chatApi({ op: 'get' }).then(d => {
       if (!live() || !Array.isArray(d.messages) || !d.messages.length) return;
       if (msgs.querySelector('.z-msg')) return; // user already typed before history arrived
-      d.messages.forEach(m => push(m.role === 'user' ? 'me' : 'bot', m.text));
+      d.messages.forEach(m => {
+        push(m.role === 'user' ? 'me' : 'bot', m.text);
+        (m.surfaces || []).forEach(async id => { const ph = document.createElement('div'); msgs.appendChild(ph); const v = await surfaceGet(id); if (!live()) return; ph.replaceWith(v ? renderSurface(v, { container: msgs, sendPrompt: t => sendZoomChat(t) }, 'chat') : Object.assign(document.createElement('div'), { className: 'sf-empty', textContent: '这个视图已过期' })); });
+      });
     });
     if (clearBtn) clearBtn.onclick = async () => {
       await chatApi({ op: 'clear' });
@@ -2981,6 +3193,7 @@
       msgs.innerHTML = '<div class="z-empty-chat" id="zoomEmpty">对话已清空。</div>';
       clearBtn.hidden = true;
     };
+    let lastZoomCards = [];
     const sendZoomChat = async (preset) => {
       const msg = (preset || chatInput.value).trim();
       if (!msg) return;
@@ -2993,6 +3206,7 @@
         const cardContext = isTT ? '当前在看：今天的时间表' : `当前在看卡片「${card.title || ''}」：${card.body || ''} ${card.url || ''}`;
         const clientSentAt = Date.now();
         const data = await sendChatResilient({ message: msg, cardId: isTT ? null : card.id, cardContext, sessionId: BOT_SESSION, viewContext: viewContext('card') }, t => { if (live()) typing.textContent = t; });
+        lastZoomCards = data.cards || [];
         const clientRecvAt = Date.now();
         reply = data.text || data.error || '收到了，但模型没有返回内容。';
         if (live()) {
@@ -3001,6 +3215,7 @@
           const ce = citesEl(data.citations);
           if (ce) b.appendChild(ce);
           (data.cards || []).filter(c => c.type === 'group').slice(0, 3).forEach(c => { msgs.appendChild(renderGroupCard(c)); });
+          mountSurfaces(msgs, data.cards, { container: msgs, sendPrompt: t => sendZoomChat(t) });
           msgs.scrollTop = msgs.scrollHeight;
           showActionsSince(msgs, sentAt).catch(() => {});
           const renderedAt = Date.now();
@@ -3018,7 +3233,8 @@
         }
         return; // nothing to persist; retry will append the pair
       }
-      chatApi({ op: 'append', messages: [{ role: 'user', text: msg }, ...(reply ? [{ role: 'assistant', text: reply }] : [])] });
+      const sfIds = (lastZoomCards || []).filter(c => c.type === 'surface' && c.view).map(c => c.view.id);
+      chatApi({ op: 'append', messages: [{ role: 'user', text: msg }, ...(reply ? [{ role: 'assistant', text: reply, surfaces: sfIds }] : [])] });
     };
     $('zoomChatSend').onclick = () => sendZoomChat();
     chatInput.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendZoomChat(); } };
@@ -3053,7 +3269,7 @@
   });
 
   // Initialize
-  loadToday().then(() => pollUi());
+  refreshPanels().catch(() => {}).then(() => loadToday()).then(() => pollUi());
   setInterval(loadToday, 60000); // Refresh every minute
   
   // Wire up digest button

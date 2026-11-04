@@ -25,6 +25,13 @@ export function createUiService({ store, log = () => {}, now = () => Date.now() 
     const v = validateUiOp(input, state, { now: now() })
     if (!v.ok) return { success: false, ...v }
     const res = applyUiOp(state, v.op, { by, now: now() })
+    // Chief proposing a layout change the user didn't ask for: show 豆芽建议 with 应用 / 忽略, change nothing.
+    if (by === 'bot' && (input.requested === false || input.requested === 'false') && (LAYOUT_OPS.has(v.op.op) || v.op.op === 'highlight')) {
+      const message = `豆芽建议：${res.message.replace(/^豆芽(按你的要求)?/, '')}`
+      const ev = emit({ kind: 'suggest', op: { ...input, requested: undefined }, by, message })
+      log(`[ui] suggest ${v.op.op} → ${message} (seq ${ev.seq})`)
+      return { success: true, suggested: true, op: v.op.op, message, note: '没有改动面板，只给用户显示了一条建议（应用 / 忽略）。' }
+    }
     const persist = LAYOUT_OPS.has(v.op.op) || v.op.op === 'highlight' || v.op.op === 'undo'
     // Open / close / navigate are transient but still logged so Chief can see what it just did.
     await store.save({ ui: persist ? res.ui : state.ui, uiLog: res.log })
@@ -68,5 +75,5 @@ export function createUiService({ store, log = () => {}, now = () => Date.now() 
   }
   function state() { return uiStateFull(view, store.get() || {}, { now: now() }) }
 
-  return { op, poll, setView, getView, viewText, state, get bootId() { return bootId }, get seq() { return seq } }
+  return { op, poll, emit, setView, getView, viewText, state, get bootId() { return bootId }, get seq() { return seq } }
 }

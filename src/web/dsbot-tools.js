@@ -62,7 +62,7 @@ export const CARD_WORK_PROMPT = `你是「豆芽」背后的 Main Bot（Chief）
   - 「去信源状态 / 去配置 / 回今天」→ op=navigate, page=sources|settings|today
   - 「撤销刚才的调整」→ op=undo（可带 id）
 - card 只能填卡片 id（来自【当前视图】或 odm_ui_state 的 cards 列表），item 只能填卡片里的条目 url；id 不确定先调 odm_ui_state，不要猜。工具报错会给候选，按候选改了再调。
-- 用户没要求时不要主动筛选 / 置顶 / 重排，可以用一句话建议。用户手动固定的卡永远在最前，你不能取消。
+- 用户没要求、但你觉得调整布局有帮助时，调 odm_ui_op 并填 requested=false：面板不变，只显示「豆芽建议 · 应用 / 忽略」，由用户决定。用户手动固定的卡永远在最前，你不能取消。
 - reason 写给用户看：15 字以内，说为什么（如「在等你回答」），不要重复卡片标题。
 - 【当前视图】是此刻的真实状态，以它为准（之前的置顶 / 筛选可能已被用户撤销）。回答时说卡片标题，不要把卡片 id、撤销 id 这类内部编号念给用户。
 - 做完用一句话说明改了什么（工具返回的 message），布局改动提醒用户面板上可以点「撤销」。odm_ui_op 只改视图，不发送任何东西；发邮件 / 评论等仍然只能走 odm_act_* 生成待确认卡。
@@ -159,6 +159,9 @@ export async function registerBotTools(ctx, opts = {}) {
         text: CARD_WORK_PROMPT,
       })
       if (typeof d === 'function') disposers.push(d)
+      const { catalogPrompt } = await import('../ui/catalog.js')
+      const d2 = ctx.systemPrompt.section({ name: 'opendigitalmate-ui-catalog', order: 651, interpolate: false, text: catalogPrompt() })
+      if (typeof d2 === 'function') disposers.push(d2)
       log('dsbot-tools: systemPrompt section installed')
     } catch (err) {
       log(`dsbot-tools: systemPrompt failed: ${err.message}`)
@@ -215,6 +218,7 @@ export async function registerBotTools(ctx, opts = {}) {
         ttl: { type: 'string', description: 'highlight 持续时间，如 10m、1h（默认 10m）' },
         page: { type: 'string', enum: ['today', 'sources', 'settings'], description: 'navigate：目标页' },
         id: { type: 'string', description: 'undo：要撤销的操作 id（默认最近一次）' },
+        requested: { type: 'boolean', description: '用户这轮明确要求了这个改动吗？没要求、是你主动想调整布局时填 false：面板不会变，只给用户显示「豆芽建议 · 应用 / 忽略」' },
       },
       output,
       async execute(args) {
@@ -222,6 +226,38 @@ export async function registerBotTools(ctx, opts = {}) {
         catch (err) { return JSON.stringify({ success: false, error: err.message }) }
       },
     }))
+    if (router.uiRender) {
+      register(() => defineTool({
+        name: 'odm_ui_render',
+        description: '生成一个临时视图（表格 / 列表 / 对比 / 键值 / 时间线 / 图表 / 表单 / 提示 / 按钮），显示在回复下方。数据只能引用卡片和条目（source），链接和数字由服务端从 store 填，不能自己写。表单提交只会发一句话或生成待你确认卡。规格见系统提示「临时视图」。',
+        parameters: {
+          title: { type: 'string', required: true, description: '视图标题（≤60 字）' },
+          components: { type: 'string', required: true, description: 'JSON 数组：[{"id":"root","type":"Table","source":{...},"columns":[...]}, ...]' },
+          dataModel: { type: 'string', description: '可选 JSON 对象：表单默认值、说明文字等，组件用 {"$data":"key"} 引用' },
+          placement: { type: 'string', enum: ['chat', 'panel'], description: 'chat（默认，回复下方）| panel（同时放到今天页顶部）' },
+          cardId: { type: 'string', description: '相关卡片 id（卡片对话里填当前卡片）' },
+        },
+        output,
+        async execute(args) {
+          try { return JSON.stringify(await router.uiRender(args || {}, { cardId: args?.cardId || null })) }
+          catch (err) { return JSON.stringify({ success: false, error: err.message }) }
+        },
+      }))
+      register(() => defineTool({
+        name: 'odm_ui_update',
+        description: '更新已生成视图的 dataModel（合并；值为 null 删除该 key），例如改表单默认正文、说明文字。也可改 title。',
+        parameters: {
+          surfaceId: { type: 'string', required: true, description: 'odm_ui_render 返回的 surfaceId' },
+          dataModel: { type: 'string', required: true, description: 'JSON 对象补丁' },
+          title: { type: 'string', description: '新标题（可选）' },
+        },
+        output,
+        async execute(args) {
+          try { return JSON.stringify(await router.uiUpdate(args || {})) }
+          catch (err) { return JSON.stringify({ success: false, error: err.message }) }
+        },
+      }))
+    }
     register(() => defineTool({
       name: 'odm_ui_state',
       description: '用户此刻的豆芽面板完整状态：所在页、放大中的卡片和选中条目、筛选、置顶（用户固定/豆芽置顶）、高亮、屏幕上可见的卡片、最近的视图操作，以及今天页所有卡片（id、标题、来源、是否需要用户处理、是否被筛掉）。找卡片 id 或回答「我在看什么」时用。',

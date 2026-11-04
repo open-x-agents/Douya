@@ -30,6 +30,8 @@ export function emptyState() {
     // Layout the user / bot set on 今天 (pins, order, filter, highlights) and the log of view ops (with undo).
     ui: { layout: { pins: [], order: null }, filter: null, highlights: [] },
     uiLog: [],
+    // Temporary views Chief generated (odm_ui_render), by id; expire at day end unless saved as a card.
+    surfaces: {},
     lastDigest: null,
   }
 }
@@ -66,6 +68,7 @@ export function normalizeState(raw) {
     pendingActions: isRecord(raw.pendingActions) ? raw.pendingActions : {},
     ui: isRecord(raw.ui) ? raw.ui : base.ui,
     uiLog: Array.isArray(raw.uiLog) ? raw.uiLog.slice(-200) : [],
+    surfaces: isRecord(raw.surfaces) ? raw.surfaces : {},
     lastDigest: raw.lastDigest ?? null,
   }
 }

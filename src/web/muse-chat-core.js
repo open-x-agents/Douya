@@ -46,21 +46,6 @@ export async function loadMainBotId(dshHome) {
   }
 }
 
-function lastAssistantText(records = []) {
-  for (let i = records.length - 1; i >= 0; i--) {
-    const rec = records[i]
-    const ev = rec?.event || rec
-    // dsh page records look like { type: 'assistant/message', data: { message: {...} } }
-    const msg = ev?.data?.message || ev?.message || ev
-    const role = msg?.role || msg?.info?.role
-    if (role === 'assistant' || role === 'model') {
-      const text = flattenContent(msg.content || msg.parts || msg.text)
-      if (text) return text
-    }
-  }
-  return ''
-}
-
 // Same call shape ds-bot uses: a live session must be paged through its current seq.
 // sessionController.resolveAgent resolves to { agent } or { error }, not the agent itself.
 async function liveAgent(ctx, sessionId) {
@@ -68,19 +53,156 @@ async function liveAgent(ctx, sessionId) {
   return resolved && !('error' in resolved) ? (resolved.agent ?? resolved) : undefined
 }
 
-async function readLastReply(ctx, sessionId, log) {
-  const agent = await liveAgent(ctx, sessionId)
-  const seq = Number(agent?.session?.seq)
-  const page = await ctx.sessionController.page({
-    address: { kind: 'session', sessionId },
-    ...(Number.isFinite(seq) && seq > 0 ? { throughSeq: seq - 1 } : { throughSeq: -1 }),
-    maxMessages: 40,
-  }, AbortSignal.timeout(15_000))
-  const records = page?.records || page?.items || []
-  // Only read a reply once its turn ended; mid-turn text ("我先查卡片…") is not the answer.
-  const types = records.map(r => (r?.event || r)?.type)
-  if (types.lastIndexOf('turn/start') > types.lastIndexOf('turn/end')) return ''
-  return lastAssistantText(records)
+// session.seq is the next seq to assign; events already on the log are strictly older.
+async function cursorSeq(ctx, sessionId) {
+  try {
+    const seq = Number((await liveAgent(ctx, sessionId))?.session?.seq)
+    if (Number.isInteger(seq)) return seq - 1
+  } catch { /* the prompt's request id still identifies its user message */ }
+  return -1
+}
+
+const REPLY_PAGE = 80
+const REPLY_PAGES = 8
+
+function eventOf(record) {
+  if (record?.event && typeof record.event === 'object') return record.event
+  return record && typeof record === 'object' ? record : {}
+}
+
+function eventSeq(record) {
+  const seq = eventOf(record).seq ?? record?.seq
+  return Number.isInteger(seq) ? seq : null
+}
+
+function messageSource(ev) {
+  const data = ev?.data || {}
+  return data.source || data.message?.source || null
+}
+
+function messageText(ev) {
+  const data = ev?.data || {}
+  const msg = data.message || data
+  return flattenContent(msg?.content ?? msg?.parts ?? data.content ?? msg?.text)
+}
+
+// afterSeq < 0 keeps every record (a fresh part after a handoff). A known seq excludes the log from before this prompt.
+function inWindow(record, afterSeq) {
+  const seq = eventSeq(record)
+  if (seq == null || afterSeq < 0) return true
+  return seq > afterSeq
+}
+
+// An interrupted or blocked turn is resumed; its turn/end is not the answer. A disposed abort is the same.
+function endsReply(reason) {
+  if (reason == null || typeof reason !== 'object') return true
+  if (reason.kind === 'interrupted' || reason.kind === 'blocked') return false
+  if (reason.kind === 'aborted' && reason.reason?.kind === 'disposed') return false
+  return true
+}
+
+function isForeignUser(ev, requestId, ownIds) {
+  if (ev?.type !== 'user/message') return false
+  const source = messageSource(ev)
+  if (source?.kind !== 'user') return false
+  if (requestId && source.rpcId === requestId) return false
+  if (ownIds && source.rpcId && ownIds.has(source.rpcId)) return false
+  return true
+}
+
+function indexByRpc(records, requestId, afterSeq) {
+  for (let i = 0; i < records.length; i++) {
+    if (!inWindow(records[i], afterSeq)) continue
+    const ev = eventOf(records[i])
+    if (ev.type === 'user/message' && messageSource(ev)?.rpcId === requestId) return i
+  }
+  return -1
+}
+
+function findPromptUser(records, { afterSeq, requestId, outbound, handoff }) {
+  const wantId = String(requestId || '')
+  if (wantId) {
+    const hit = indexByRpc(records, wantId, afterSeq)
+    if (hit >= 0) return hit
+    // A handoff moves the same prompt onto a new part whose seq space starts over.
+    if (handoff) {
+      const any = indexByRpc(records, wantId, -1)
+      if (any >= 0) return any
+    }
+  }
+  const wantText = cleanBlock(outbound)
+  if (!wantText) return -1
+  for (let i = 0; i < records.length; i++) {
+    if (!inWindow(records[i], afterSeq)) continue
+    const ev = eventOf(records[i])
+    if (ev.type !== 'user/message') continue
+    const source = messageSource(ev)
+    if (source?.kind && source.kind !== 'user') continue
+    if (cleanBlock(messageText(ev)) === wantText) return i
+  }
+  return -1
+}
+
+/**
+ * Assistant text for this prompt, once that turn has finished.
+ * `afterSeq` is the last session seq before prompt(). `requestId` is that prompt's id
+ * (ds-bot keeps it on the user message as source.rpcId). A later queued turn stays out of this result:
+ * two rapid sends each keep the reply that followed their own user message.
+ * `{ settled: false }` while the user message is still queued or its turn is open.
+ * `{ settled: true, text }` when the turn finished (`text` empty when it finished without one).
+ */
+export function ownReplyFromRecords(records, { afterSeq = -1, requestId = '', outbound = '', handoff = false, ownIds = null } = {}) {
+  const list = Array.isArray(records) ? records : []
+  const userIdx = findPromptUser(list, { afterSeq, requestId, outbound, handoff })
+  if (userIdx < 0) return { settled: false }
+  // Steers admitted into this turn (chat lane) are not the next send. A steer that shows up only after
+  // this turn already ended does not pull that later turn's text into this reply.
+  const pending = ownIds && ownIds.size ? new Set(ownIds) : null
+  let text = ''
+  let closed = null
+  for (let i = userIdx + 1; i < list.length; i++) {
+    const ev = eventOf(list[i])
+    const rpcId = messageSource(ev)?.rpcId
+    if (pending && ev.type === 'user/message' && rpcId && pending.has(rpcId)) {
+      if (closed != null) return { settled: true, text: closed }
+      pending.delete(rpcId)
+    }
+    if (isForeignUser(ev, requestId, ownIds)) return { settled: true, text: closed != null ? closed : cleanBlock(text) }
+    if (closed == null && ev.type === 'assistant/message') {
+      const next = messageText(ev)
+      if (next) text = next
+    } else if (ev.type === 'turn/end' && endsReply(ev.data?.reason)) {
+      if (pending && pending.size > 0) { closed = cleanBlock(text); continue }
+      return { settled: true, text: cleanBlock(text) }
+    }
+  }
+  return { settled: false }
+}
+
+// Newest page first, then older pages until this prompt's cursor is on the page. One huge tool turn
+// would otherwise push the user message out of the tail the reply is read from.
+async function pageEvents(ctx, sessionId, afterSeq) {
+  const live = Number((await liveAgent(ctx, sessionId))?.session?.seq)
+  const throughSeq = Number.isInteger(live) && live > 0 ? live - 1 : -1
+  const chunks = []
+  let beforeSeq
+  const cap = afterSeq >= 0 ? REPLY_PAGES : 2
+  for (let n = 0; n < cap; n++) {
+    const page = await ctx.sessionController.page({
+      address: { kind: 'session', sessionId },
+      throughSeq,
+      ...(beforeSeq === undefined ? {} : { beforeSeq }),
+      maxMessages: REPLY_PAGE,
+    }, AbortSignal.timeout(15_000))
+    const records = page?.records || page?.items || []
+    chunks.unshift(records)
+    if (!page?.hasMore || records.length === 0) break
+    const oldest = eventSeq(records[0])
+    if (oldest == null || oldest === beforeSeq) break
+    if (afterSeq >= 0 && oldest <= afterSeq) break
+    beforeSeq = oldest
+  }
+  return chunks.flat()
 }
 
 /**
@@ -103,7 +225,9 @@ export function ensureSessionCompat(session, log = () => {}) {
 }
 
 /**
- * Prompt Chief and wait for a new assistant reply.
+ * Prompt Chief and wait for the assistant reply that belongs to this prompt.
+ * A second send queued during this turn is its own turn; this call returns when this turn
+ * finishes, with this turn's text, while that later turn is still running.
  */
 export async function runMuseChatTurn(ctx, {
   message,
@@ -117,6 +241,7 @@ export async function runMuseChatTurn(ctx, {
   timing = null,
   onSession = null, // (sessionId) → the UI feed streams this turn's text / tool progress
   lane = null, // chat-lane hooks: lets a follow-up message steer into this turn while it is unanswered
+  waitMs = 180_000,
 } = {}) {
   const text = clean(message)
   const hasAttach = Array.isArray(attachments) && attachments.length > 0
@@ -153,18 +278,16 @@ export async function runMuseChatTurn(ctx, {
   }
   T.attachCount = built.meta.length
   T.attachMode = built.mode
-  // Snapshot previous assistant text if page works.
-  let before = ''
-  try {
-    before = await readLastReply(ctx, sessionId, log)
-  } catch (err) { log(`[muse-chat] page(before) failed: ${err?.message || err}`) }
-
+  const requestId = randomUUID()
+  // Cursor before prompt, so this call only claims a user message it caused.
+  let afterSeq = await cursorSeq(ctx, sessionId)
   T.beforeReadMs = Date.now() - T.turnCallAt
   const preview = built.content.find(p => p.type === 'text')?.text || ''
   log(`[muse-chat] prompt → ${sessionId}: ${preview.slice(0, 80)} attach=${built.meta.length}/${built.mode}`)
   T.promptAt = Date.now()
+  // One request id for the send and a text-fallback retry, so the wait still finds this prompt.
   const sendPrompt = async (content) => ctx.sessionController.prompt({
-    requestId: randomUUID(),
+    requestId,
     sessionId: promptTo,
     mode: 'queue',
     content,
@@ -200,17 +323,20 @@ export async function runMuseChatTurn(ctx, {
   }
 
   T.promptAckMs = Date.now() - T.promptAt
-  // Follow-ups steered into this turn: the reply is only accepted from an idle check that began after
-  // the last steer was admitted, so one reply answers every message of the turn.
+  // A steered follow-up joins this turn. Accept the reply only from a poll that started after the last
+  // steer was admitted, and key that reply to this prompt — not to whichever assistant text is newest.
+  const steerIds = new Set()
   let steeredAt = 0
   let pendingSteers = 0
   if (lane?.setSteer) {
     lane.setSteer(async (more) => {
+      const steerId = randomUUID()
+      steerIds.add(steerId)
       steeredAt = Date.now()
       pendingSteers++
       try {
         await ctx.sessionController.prompt({
-          requestId: randomUUID(),
+          requestId: steerId,
           sessionId: promptTo,
           mode: 'steer',
           content: [{ type: 'text', text: `${STEER_NOTE}\n${more}` }],
@@ -220,32 +346,44 @@ export async function runMuseChatTurn(ctx, {
       } finally { pendingSteers-- }
     })
   }
-  const deadline = Date.now() + 180_000
+  const budget = Number.isFinite(waitMs) && waitMs > 0 ? waitMs : 180_000
+  const deadline = Date.now() + budget
   let reply = ''
   let pageErrLogged = false
   while (Date.now() < deadline) {
     const checkAt = Date.now()
     const now = (await resolveChief(dshHome, promptTo)).sessionId
-    if (now && now !== sessionId) { log(`[muse-chat] Chief moved on to a new part: ${now}`); sessionId = now; T.handoff = true; try { onSession?.(now) } catch {} }
-    const agent = await liveAgent(ctx, sessionId)
-    if (agent?.status === 'running' && typeof agent.whenIdle === 'function') {
-      await Promise.race([agent.whenIdle(), new Promise(r => setTimeout(r, 8_000))])
-    } else if (agent?.status === 'running') {
-      await new Promise(r => setTimeout(r, 500))
-      continue
+    if (now && now !== sessionId) {
+      log(`[muse-chat] Chief moved on to a new part: ${now}`)
+      sessionId = now
+      T.handoff = true
+      afterSeq = await cursorSeq(ctx, sessionId)
+      try { onSession?.(now) } catch {}
     }
     try {
       T.polls = (T.polls || 0) + 1
-      reply = await readLastReply(ctx, sessionId, log)
-      if (reply && reply !== before && pendingSteers === 0 && (!steeredAt || checkAt > steeredAt)) { lane?.closeSteer?.(); break }
+      const records = await pageEvents(ctx, sessionId, afterSeq)
+      // Read this prompt's turn even while a later queued turn is still running.
+      // whenIdle stays pending until that later turn finishes, so it is only a wake-up.
+      const found = ownReplyFromRecords(records, { afterSeq, requestId, outbound, handoff: T.handoff === true, ownIds: steerIds })
+      if (found.settled && pendingSteers === 0 && (!steeredAt || checkAt > steeredAt)) {
+        reply = found.text
+        lane?.closeSteer?.()
+        break
+      }
     } catch (err) {
       if (!pageErrLogged) { pageErrLogged = true; log(`[muse-chat] page failed: ${err?.message || err}`) }
     }
-    await new Promise(r => setTimeout(r, 400))
+    const agent = await liveAgent(ctx, sessionId)
+    if (agent?.status === 'running' && typeof agent.whenIdle === 'function') {
+      await Promise.race([agent.whenIdle(), new Promise(r => setTimeout(r, 400))])
+    } else {
+      await new Promise(r => setTimeout(r, 400))
+    }
   }
 
   lane?.closeSteer?.()
-  if (!reply || reply === before) {
+  if (!reply) {
     return { ok: false, error: 'Bot 没有产生新回复', botId: sessionId, sessionId }
   }
   T.detectedAt = Date.now()

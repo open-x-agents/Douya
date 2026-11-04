@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process'
 import { createWriteStream, writeFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { applyLlmEnv, ensureAgentDefaultModel } from '../src/web/llm-env.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const HOME = join(ROOT, '.odm-data')
@@ -41,20 +42,12 @@ try {
 
 try {
   const cfg = JSON.parse(readFileSync(join(HOME, 'config.json'), 'utf8'))
-  const llm = cfg?.llm || {}
-  const key = llm.apiKey || process.env.OPENAI_API_KEY || process.env.DEEPSEEK_API_KEY
-  // dsh / ds-bot resolve models by provider env name. Muse's llm-client uses OPENAI_* with a custom baseURL.
-  // Export both so a DeepSeek (or other) restart never leaves Chief with "No model is available".
-  if (key) {
-    if (!process.env.OPENAI_API_KEY) process.env.OPENAI_API_KEY = key
-    const provider = String(llm.provider || '').toLowerCase()
-    if (provider === 'deepseek' || /deepseek/.test(String(llm.baseURL || ''))) {
-      if (!process.env.DEEPSEEK_API_KEY) process.env.DEEPSEEK_API_KEY = key
-    }
-  }
-  if (llm.baseURL) process.env.OPENAI_BASE_URL = llm.baseURL.replace(/\/v1\/?$/, '')
+  applyLlmEnv(cfg?.llm || {})
+  ensureAgentDefaultModel(DSH_HOME, cfg?.llm || { provider: 'deepseek', model: 'deepseek-chat' })
   if (!process.env.COMPOSIO_API_KEY && cfg?.composioApiKey) process.env.COMPOSIO_API_KEY = cfg.composioApiKey
-} catch {}
+} catch {
+  ensureAgentDefaultModel(DSH_HOME, { provider: 'deepseek', model: 'deepseek-chat' })
+}
 process.env.OPENAI_BASE_URL ||= 'https://api.deepseek.com'
 process.env.ODM_MUSE_URL = `http://127.0.0.1:${PORT}`
 process.env.DSBOT_URL = process.env.ODM_MUSE_URL

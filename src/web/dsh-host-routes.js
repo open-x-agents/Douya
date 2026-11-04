@@ -300,10 +300,16 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
         })
       } finally { if (turn && feed) feed.turns.unwatch(turn) }
       if (!result.ok) {
+        const err = String(result.error || '')
+        const noModel = /No model is available|没有可用的模型/i.test(err)
+        const text = noModel
+          ? '还没有可用的模型。请打开「配置」→ AI 模型，选择 DeepSeek 并保存 API Key（会写入 DEEPSEEK_API_KEY）。若刚保存仍不行，重启 npm start 后再用 .odm-data/dsh-web.url 里的登录链接打开。'
+          : `没法完成对话：${err}`
         return json({
-          text: `没法完成对话：${result.error}`,
+          text,
           status: 'error',
-          cards: [{ type: 'error', title: 'ds-bot', description: result.error }],
+          error: err,
+          cards: [{ type: 'error', title: 'ds-bot', description: err }],
           time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
         }, 200)
       }

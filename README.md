@@ -12,49 +12,42 @@
 
 ## 快速开始
 
+前置：本机已安装 [dsh](https://github.com/deepseek-ai/dsh)（`dsh` 在 PATH 里），并能使用 `odm` profile（含 ds-bot + opendigitalmate）。豆芽只监听本机 `127.0.0.1`，别人电脑上的浏览器打不开你这台的服务。
+
 ### 1. 安装依赖
 
 ```bash
 npm install
-# 或
-pnpm install
 ```
 
-### 2. 配置环境变量
+### 2. 启动
 
-复制 `.env.example` 到 `.env` 并填写配置：
+```bash
+npm start
+# = node scripts/start-dsh.mjs → dsh --profile odm --port 7777
+```
+
+终端会打印带 `?token=…` 的登录 URL，并写入 `.odm-data/dsh-web.url`。**必须用这个带 token 的链接打开**（直接打开 `http://127.0.0.1:7777` 会 401，页面和聊天都没反应）：
+
+```bash
+open "$(cat .odm-data/dsh-web.url)"   # macOS
+# xdg-open "$(cat .odm-data/dsh-web.url)"  # Linux
+```
+
+### 3. 在「配置」里填密钥（推荐）
+
+1. 左侧打开 **配置**
+2. **AI 模型**：选 DeepSeek，填 API Key，模型 `deepseek-chat`，保存（可点「测试连接」）
+3. **Composio**：填 API Key 并连接 GitHub / Gmail / Slack
+4. 保存后聊天应立即可用。若仍无回复，重启一次 `npm start` 再打开上面的登录链接
+
+也可用环境变量 / `.env`（见 `.env.example`）。DeepSeek **必须**有 `DEEPSEEK_API_KEY`（或在配置页保存；`start-dsh` 会从 `.odm-data/config.json` 自动导出）。只设 `OPENAI_API_KEY` 时，Chief 会报 `No model is available`，表现为「说话没反应」。
+
+### 4. 可选：`.env`
 
 ```bash
 cp .env.example .env
-```
-
-**必需配置（Composio 集成）：**
-- `COMPOSIO_API_KEY` - 从 [Composio](https://app.composio.dev) 获取 API 密钥
-
-**可选配置：**
-- `COMPOSIO_ENTITY_ID` - 实体 ID（默认：'default'）
-- `DIGEST_SCHEDULE` - 每日推送时间（默认：08:00）
-- `PORT` - 服务器端口（默认：7777）
-
-### 3. 启动服务
-
-#### 方式一：独立 Web 服务器（推荐）
-
-```bash
-node scripts/server.js
-```
-
-然后访问 http://localhost:7777
-
-#### 方式二：作为 DSH 插件运行
-
-```yaml
-# cordis 配置中添加
-- insert:
-    - id: opendigitalmate
-      name: opendigitalmate
-      config:
-        composioApiKey: $COMPOSIO_API_KEY
+# 编辑 DEEPSEEK_API_KEY、COMPOSIO_API_KEY
 ```
 
 ---

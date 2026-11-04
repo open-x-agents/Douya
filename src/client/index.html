@@ -1437,8 +1437,8 @@
       const data = await res.json();
 
       // Check for error in response
-      if (data.error) {
-        addBotMessage(data.error, data.time);
+      if (data.status === 'error' || data.error) {
+        addBotMessage(data.text || data.error, data.time);
         return;
       }
 
@@ -2239,7 +2239,7 @@
       try {
         const data = await sendChatResilient({ message: msg, sessionId: BOT_SESSION, viewContext: viewContext('dock'), turn: live.id }, setLabel, { streaming: () => feedState.mode === 'sse' });
         live.finish();
-        if (data.error) { typing.remove(); appendInlineBubble('bot', data.error); return; }
+        if (data.status === 'error' || data.error) { typing.remove(); appendInlineBubble('bot', data.text || data.error); return; }
         const b = appendInlineBubble('bot', data.text || '……', data.citations);
         typing.replaceWith(b); // the final Markdown reply takes the streaming bubble's place (views stay below it)
         (data.cards || []).filter(c => c.type === 'group').slice(0, 3).forEach(c => {

@@ -27,6 +27,9 @@ export function emptyState() {
     completions: [],
     // Per-item (link) status keyed by item url — survives digests, new card ids, restarts.
     itemStatus: {},
+    // Layout the user / bot set on 今天 (pins, order, filter, highlights) and the log of view ops (with undo).
+    ui: { layout: { pins: [], order: null }, filter: null, highlights: [] },
+    uiLog: [],
     lastDigest: null,
   }
 }
@@ -61,6 +64,8 @@ export function normalizeState(raw) {
     itemStatus: isRecord(raw.itemStatus) ? raw.itemStatus : {},
     cardChats: isRecord(raw.cardChats) ? raw.cardChats : {},
     pendingActions: isRecord(raw.pendingActions) ? raw.pendingActions : {},
+    ui: isRecord(raw.ui) ? raw.ui : base.ui,
+    uiLog: Array.isArray(raw.uiLog) ? raw.uiLog.slice(-200) : [],
     lastDigest: raw.lastDigest ?? null,
   }
 }

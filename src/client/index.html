@@ -999,6 +999,27 @@
   .metrics.mail-m{align-items:center}
   .metrics.mail-m .need-pill{margin-left:auto}
   .z-sec h4 .z-bulk{float:right;font-size:12px;font-weight:500;padding:3px 10px}
+
+  /* ===== Intelligent UI P1: bot view ops ===== */
+  .tile.work{position:relative}
+  .pin-btn{position:absolute;top:10px;right:10px;border:0;background:rgba(255,255,255,.85);border-radius:8px;width:26px;height:26px;font-size:13px;cursor:pointer;opacity:0;transition:opacity .2s;z-index:2}
+  .tile.work:hover .pin-btn,.pin-btn.on{opacity:1}
+  .pin-badge{font-size:11.5px;font-weight:600;color:#7a5cc4;background:#f1ecfb;border-radius:999px;padding:3px 10px;align-self:flex-start;margin-bottom:8px;max-width:calc(100% - 40px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pin-badge.by-user{color:#1f7a6e;background:#e3f5f1}
+  .tile.is-pinned{box-shadow:0 0 0 2px rgba(138,116,208,.35),0 6px 22px rgba(60,40,120,.08)}
+  .tile.ui-hl{box-shadow:0 0 0 3px rgba(245,166,35,.65),0 8px 26px rgba(245,166,35,.18)}
+  .hl-chip{font-size:11.5px;font-weight:600;color:#9a5b00;background:#fff3dc;border-radius:999px;padding:3px 10px;align-self:flex-start;margin-bottom:8px}
+  .tile.ui-flash{animation:uiFlash 1.4s ease}
+  @keyframes uiFlash{0%{transform:scale(1)}25%{transform:scale(1.02);box-shadow:0 0 0 4px rgba(138,116,208,.55)}100%{transform:scale(1)}}
+  .z-item.ui-hl{background:#fff6e2;box-shadow:inset 3px 0 0 #f5a623}
+  .z-item.sel{background:#f3f0fb}
+  .ui-filterbar{display:flex;align-items:center;gap:12px;margin:0 0 14px;padding:10px 14px;border-radius:12px;background:#f1ecfb;color:#4b3a86;font-size:13px;font-weight:600}
+  .ui-filterbar button{margin-left:auto;border:1px solid rgba(75,58,134,.25);background:#fff;border-radius:8px;padding:5px 12px;font-size:12.5px;cursor:pointer;color:#4b3a86}
+  .ui-toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,20px);display:flex;align-items:center;gap:10px;max-width:min(640px,90vw);padding:10px 12px 10px 14px;border-radius:14px;background:#1f1d2b;color:#fff;font-size:13.5px;box-shadow:0 12px 36px rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:.25s ease;z-index:9999}
+  .ui-toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+  .ui-toast-t{flex:1;line-height:1.4}
+  .ui-toast-undo{border:0;background:#8a74d0;color:#fff;border-radius:8px;padding:5px 12px;font-weight:600;cursor:pointer}
+  .ui-toast-x{border:0;background:transparent;color:rgba(255,255,255,.6);cursor:pointer;font-size:13px}
 </style>
 </head>
 <body>
@@ -1219,18 +1240,7 @@
   
   // View navigation
   document.querySelectorAll('.nav[data-view]').forEach(nav => {
-    nav.addEventListener('click', () => {
-      const view = nav.getAttribute('data-view');
-      document.querySelectorAll('.nav').forEach(n => n.classList.remove('on'));
-      nav.classList.add('on');
-      Object.keys(views).forEach(k => views[k].classList.toggle('on', k === view));
-      if (view === 'sources') loadSources();
-      if (view === 'settings') {
-        checkConfig();
-        loadLLMSettings();
-        loadComposioSettings();
-      }
-    });
+    nav.addEventListener('click', () => showView(nav.getAttribute('data-view')));
   });
 
   async function ensureBotHistory() {
@@ -1550,6 +1560,7 @@
       const res = await fetch('/api/today');
       const data = await res.json();
       lastToday = data;
+      if (data.ui) { uiLayout = data.ui; if (!uiBoot) { uiBoot = data.ui.bootId || null; uiSeq = Math.max(uiSeq, data.ui.seq || 0); } }
       const name = data.userName || '';
       $('conclText').textContent = `${greetingWord()}${name ? '，' + name : ''}`;
       $('stamp').textContent = `${data.date || ''}${data.sources ? ' · 来自 ' + data.sources : ''}`;
@@ -1557,7 +1568,7 @@
       $('nUrgent').textContent = data.urgentCount || 0;
       $('nMeet').textContent = data.meetingCount || 0;
       $('daySummary').textContent = data.summary || '';
-      renderCardList(data.cards || []);
+      { const sc = views.today ? views.today.scrollTop : 0; renderCardList(data.cards || []); if (views.today) views.today.scrollTop = sc; }
       if (data.hasDigest) {
         $('digestStatus').textContent = data.lastDigestAt ? `已汇聚 · ${new Date(data.lastDigestAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}` : '已汇聚';
       } else {
@@ -1958,12 +1969,13 @@
     const hero = cards.find(c => c.type === 'hero');
     const tt = cards.find(c => c.type === 'timetable');
     const work = cards.filter(c => !SYS_TYPES.has(c.type) && c.source !== 'system');
-    const order = [...work].sort((a, b) => ((b.priority === 'high') - (a.priority === 'high')));
+    const order = arrangeWork(work).filter(c => !filterHidden(c));
     let html = tt ? renderTimetable(tt) : '';
     html += '<div class="grid2">';
     html += renderHero(hero, work);
     html += renderLoad(work);
     html += order.map(c => renderWorkTile(c, cards.indexOf(c))).join('');
+    if (work.length && !order.length) html += `<div class="tile empty size-wide"><div class="eyebrow">筛选后没有卡片</div><p class="w-desc">点上方「显示全部」恢复。</p></div>`;
     if (!work.length) html += `<div class="tile empty size-wide"><div class="eyebrow">还没有卡片</div><p class="w-desc">点击右上角「立即汇聚」，豆芽会从已连接的数据源拉取最新动态。</p></div>`;
     html += '</div>';
     html += `<div class="today-chat" id="todayChat">
@@ -1986,6 +1998,8 @@
       if (hadFocus) $('todayChatInput').focus({ preventScroll: true });
     }
 
+    decorateTiles(container, cards);
+    reportView();
     const track = async (card, action) => {
       if (!card || !card.id) return;
       try { await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action }) }); } catch (e) { console.warn('[Interaction] Track failed:', e); }
@@ -2099,7 +2113,7 @@
       $('todayChatMsgs').scrollTop = $('todayChatMsgs').scrollHeight;
       const sentAt = new Date(Date.now() - 5000).toISOString();
       try {
-        const data = await sendChatResilient({ message: msg, sessionId: BOT_SESSION }, t => { typing.innerHTML = `<span class="typing-note">${escMd(t)}</span>`; });
+        const data = await sendChatResilient({ message: msg, sessionId: BOT_SESSION, viewContext: viewContext('dock') }, t => { typing.innerHTML = `<span class="typing-note">${escMd(t)}</span>`; });
         typing.remove();
         if (data.error) { appendInlineBubble('bot', data.error); return; }
         const b = appendInlineBubble('bot', data.text || '……', data.citations);
@@ -2675,6 +2689,211 @@
   function failBubbleHtml(text) {
     return `<div class="chat-fail"><span>${escMd(text)}</span><button class="chat-retry" type="button">重试</button></div>`;
   }
+  // ===== 豆芽 Intelligent UI (P1): view ops from Chief + 当前视图 context =====
+  // Ops arrive as plain data (op name + card / item ids + short text) and are applied with the existing
+  // components; nothing from the server is ever inserted as HTML. Text goes through textContent.
+  let uiLayout = { pins: [], order: [], filter: null, highlights: [], lastUndo: null };
+  let uiBoot = null, uiSeq = 0, zoomSelectedItem = null;
+  const PAGE_ZH = { today: '今天', sources: '信源状态', settings: '配置' };
+  function currentView() { return Object.keys(views).find(k => views[k].classList.contains('on')) || 'today'; }
+  function showView(view) {
+    if (!views[view]) return;
+    document.querySelectorAll('.nav').forEach(n => n.classList.toggle('on', n.getAttribute('data-view') === view));
+    Object.keys(views).forEach(k => views[k].classList.toggle('on', k === view));
+    if (view === 'sources') loadSources();
+    if (view === 'settings') { checkConfig(); loadLLMSettings(); loadComposioSettings(); }
+    reportView();
+  }
+  function closeAllViews() { if (currentZoomCard) closeTileZoom(); }
+
+  /** Work cards in display order: the user's pins, then 豆芽's pins, then a bot order, then priority. */
+  function arrangeWork(work) {
+    const pinIdx = new Map((uiLayout.pins || []).map((p, i) => [p.cardId, i]));
+    const ordIdx = new Map((uiLayout.order || []).map((id, i) => [id, i]));
+    const base = [...work].sort((a, b) => ((b.priority === 'high') - (a.priority === 'high')));
+    const pos = new Map(base.map((c, i) => [c.id, i]));
+    return base.sort((a, b) => {
+      const pa = pinIdx.has(a.id), pb = pinIdx.has(b.id);
+      if (pa !== pb) return pa ? -1 : 1;
+      if (pa && pb) return pinIdx.get(a.id) - pinIdx.get(b.id);
+      const oa = ordIdx.has(a.id), ob = ordIdx.has(b.id);
+      if (oa !== ob) return oa ? -1 : 1;
+      if (oa && ob) return ordIdx.get(a.id) - ordIdx.get(b.id);
+      return pos.get(a.id) - pos.get(b.id);
+    });
+  }
+  function filterHidden(card) {
+    const f = uiLayout.filter;
+    return !!(f && Array.isArray(f.matchIds) && !f.matchIds.includes(card.id));
+  }
+  // Pins, highlights and the filter bar are added with DOM APIs after the grid HTML is built.
+  function decorateTiles(container, cards) {
+    const pins = new Map((uiLayout.pins || []).map(p => [p.cardId, p]));
+    const hls = new Map((uiLayout.highlights || []).map(h => [h.cardId, h]));
+    container.querySelectorAll('.tile.work').forEach(tile => {
+      const card = cards[Number(tile.getAttribute('data-idx'))];
+      if (!card) return;
+      tile.setAttribute('data-id', card.id);
+      const p = pins.get(card.id);
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'pin-btn' + (p ? ' on' : '');
+      btn.title = p ? (p.by === 'user' ? '取消固定' : '取消豆芽的置顶') : '固定到最前';
+      btn.textContent = p ? '📌' : '📍';
+      btn.addEventListener('click', e => { e.stopPropagation(); userPin(card, !!p); });
+      tile.appendChild(btn);
+      if (p) {
+        tile.classList.add('is-pinned');
+        const badge = document.createElement('div');
+        badge.className = 'pin-badge' + (p.by === 'user' ? ' by-user' : '');
+        badge.textContent = p.by === 'user' ? '📌 你固定的' : `📌 豆芽置顶${p.reason ? ' · ' + p.reason : ''}`;
+        tile.prepend(badge);
+      }
+      const h = hls.get(card.id);
+      if (h) {
+        tile.classList.add('ui-hl');
+        const chip = document.createElement('div');
+        chip.className = 'hl-chip';
+        chip.textContent = `豆芽标出${h.reason ? '：' + h.reason : ''}`;
+        tile.prepend(chip);
+      }
+    });
+    const f = uiLayout.filter;
+    const grid = container.querySelector('.grid2');
+    if (f && grid) {
+      const bar = document.createElement('div');
+      bar.className = 'ui-filterbar';
+      const t = document.createElement('span');
+      t.textContent = `${f.by === 'user' ? '已筛选' : '豆芽筛选'}：${f.label || ''} · 显示 ${(f.matchIds || []).length}/${f.total || 0} 张`;
+      const clear = document.createElement('button');
+      clear.type = 'button'; clear.textContent = '显示全部';
+      clear.addEventListener('click', () => sendUserOp({ op: 'clearFilter' }));
+      bar.append(t, clear);
+      grid.before(bar);
+    }
+  }
+  async function sendUserOp(body) {
+    try {
+      const r = await fetch('/api/opendigitalmate/ui-op', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(x => x.json());
+      if (!r.success) showUiToast(r.error || '操作没成功');
+      return r;
+    } catch (_) { showUiToast('连不上豆芽，稍后再试'); return null; }
+  }
+  function userPin(card, pinned) {
+    return sendUserOp(pinned ? { op: 'arrange', unpin: card.id } : { op: 'arrange', pin: card.id, reason: '你手动固定' });
+  }
+
+  let toastTimer = null;
+  function showUiToast(message, undoId) {
+    let el = $('uiToast');
+    if (!el) { el = document.createElement('div'); el.id = 'uiToast'; el.className = 'ui-toast'; document.body.appendChild(el); }
+    el.textContent = '';
+    const ic = document.createElement('span'); ic.className = 'ui-toast-ic'; ic.textContent = '🌱';
+    const t = document.createElement('span'); t.className = 'ui-toast-t'; t.textContent = message;
+    el.append(ic, t);
+    if (undoId) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'ui-toast-undo'; b.textContent = '撤销';
+      b.addEventListener('click', async () => { b.disabled = true; await sendUserOp({ op: 'undo', id: undoId }); });
+      el.appendChild(b);
+    }
+    const x = document.createElement('button'); x.type = 'button'; x.className = 'ui-toast-x'; x.textContent = '✕';
+    x.addEventListener('click', () => el.classList.remove('show'));
+    el.appendChild(x);
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), undoId ? 12000 : 5000);
+  }
+  function rerenderToday() {
+    const sc = views.today ? views.today.scrollTop : 0;
+    renderCardList(lastCards);
+    if (views.today) views.today.scrollTop = sc; // the page keeps its position
+  }
+  function flashTile(cardId, item) {
+    const tile = document.querySelector(`.tile.work[data-id="${CSS.escape(cardId)}"]`);
+    if (tile && currentView() === 'today' && !currentZoomCard) {
+      const r = tile.getBoundingClientRect();
+      if (r.top < 0 || r.bottom > window.innerHeight) tile.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      tile.classList.remove('ui-flash'); void tile.offsetWidth; tile.classList.add('ui-flash');
+    }
+    if (item && currentZoomCard && currentZoomCard.id === cardId) {
+      const row = [...document.querySelectorAll('#zItemsSec .z-item')].find(r => r.querySelector(`[data-item-url="${CSS.escape(item)}"]`));
+      if (row) { row.classList.add('ui-hl'); row.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    }
+  }
+  async function applyUiEvent(e) {
+    if (!e || e.seq <= uiSeq) return;
+    uiSeq = e.seq;
+    const op = e.op || {};
+    if (e.ui) uiLayout = e.ui;
+    switch (op.op) {
+      case 'openCard': {
+        let card = lastCards.find(c => c.id === op.card);
+        if (!card) { await loadToday(); card = lastCards.find(c => c.id === op.card); }
+        if (!card) break;
+        if (currentView() !== 'today') showView('today');
+        openTileZoom(card);
+        break;
+      }
+      case 'closeCard': closeTileZoom(); break;
+      case 'navigate': if (currentZoomCard) closeTileZoom(); showView(op.page); break;
+      default: rerenderToday();
+    }
+    if (op.op === 'highlight') flashTile(op.card, op.item);
+    if (op.op === 'arrange' && (op.pin || []).length) flashTile(op.pin[0]);
+    const appliedAt = Date.now();
+    (window.__odmUiTimings = window.__odmUiTimings || []).push({ op: op.op, seq: e.seq, by: e.by, serverAt: e.at, appliedAt, latencyMs: appliedAt - e.at });
+    if (e.message) showUiToast(e.message, e.undoId);
+    reportView();
+  }
+  async function pollUi() {
+    for (;;) {
+      try {
+        const q = `since=${uiSeq}&wait=25000${uiBoot ? `&boot=${encodeURIComponent(uiBoot)}` : ''}`;
+        const r = await fetch(`/api/opendigitalmate/ui-events?${q}`, { cache: 'no-store' }).then(x => x.json());
+        if (r.resync || (uiBoot && r.bootId !== uiBoot)) { uiBoot = r.bootId; uiSeq = r.seq || 0; await loadToday(); continue; }
+        uiBoot = r.bootId;
+        for (const e of r.events || []) await applyUiEvent(e);
+        if (!(r.events || []).length && r.seq > uiSeq) uiSeq = r.seq;
+      } catch (_) { await sleep(3000); }
+    }
+  }
+
+  /** What the user sees right now — sent with every chat turn and (debounced) on change. */
+  function viewContext(chat = 'dock') {
+    const route = currentView();
+    const visible = [];
+    let focus = null, best = Infinity;
+    if (route === 'today' && !currentZoomCard) {
+      const vh = window.innerHeight;
+      document.querySelectorAll('.tile.work[data-id]').forEach(t => {
+        const r = t.getBoundingClientRect();
+        if (r.bottom > 40 && r.top < vh - 40 && r.height > 0) {
+          visible.push({ id: t.getAttribute('data-id'), top: r.top, left: r.left });
+          const d = Math.abs(r.top + r.height / 2 - vh / 2);
+          if (d < best) { best = d; focus = t.getAttribute('data-id'); }
+        }
+      });
+      visible.sort((a, b) => a.top - b.top || a.left - b.left);
+    }
+    return {
+      route,
+      zoom: currentZoomCard && currentZoomCard.id ? { cardId: currentZoomCard.id, selectedItem: zoomSelectedItem } : null,
+      visibleCards: visible.map(v => v.id).slice(0, 12),
+      scrollFocus: focus,
+      chat,
+      localTime: new Date().toISOString(),
+    };
+  }
+  let reportTimer = null;
+  function reportView() {
+    clearTimeout(reportTimer);
+    reportTimer = setTimeout(() => {
+      fetch('/api/opendigitalmate/ui-context', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(viewContext(currentZoomCard ? 'card' : 'dock')) }).catch(() => {});
+    }, 700);
+  }
+  views.today && views.today.addEventListener('scroll', reportView, { passive: true });
+  window.__odmViewContext = viewContext;
+
   // Tile zoom modal functions
   let currentZoomCard = null;
   let zoomSeq = 0;
@@ -2772,7 +2991,7 @@
       try {
         const cardContext = isTT ? '当前在看：今天的时间表' : `当前在看卡片「${card.title || ''}」：${card.body || ''} ${card.url || ''}`;
         const clientSentAt = Date.now();
-        const data = await sendChatResilient({ message: msg, cardId: isTT ? null : card.id, cardContext, sessionId: BOT_SESSION }, t => { if (live()) typing.textContent = t; });
+        const data = await sendChatResilient({ message: msg, cardId: isTT ? null : card.id, cardContext, sessionId: BOT_SESSION, viewContext: viewContext('card') }, t => { if (live()) typing.textContent = t; });
         const clientRecvAt = Date.now();
         reply = data.text || data.error || '收到了，但模型没有返回内容。';
         if (live()) {
@@ -2805,7 +3024,11 @@
     content.querySelectorAll('.z-chip').forEach(b => { b.onclick = () => sendZoomChat(b.textContent); });
 
     bindZoomItems(card);
+    zoomSelectedItem = null;
+    const zsec = $('zItemsSec');
+    if (zsec) zsec.addEventListener('click', e => { const row = e.target.closest('.z-item'); const u = row && row.querySelector('[data-item-url]'); if (u) { zoomSelectedItem = u.getAttribute('data-item-url'); zsec.querySelectorAll('.z-item.sel').forEach(x => x.classList.remove('sel')); row.classList.add('sel'); reportView(); } }, true);
     overlay.classList.add('open');
+    reportView();
     setTimeout(() => chatInput && chatInput.focus({ preventScroll: true }), 50);
   }
 
@@ -2814,7 +3037,9 @@
     const overlay = $('tileZoomOverlay');
     if (overlay) overlay.classList.remove('open');
     currentZoomCard = null;
+    zoomSelectedItem = null;
     zoomSeq++;
+    reportView();
   }
   
   // Wire up close handlers (delegated: overlay markup is after this script)
@@ -2827,7 +3052,7 @@
   });
 
   // Initialize
-  loadToday();
+  loadToday().then(() => pollUi());
   setInterval(loadToday, 60000); // Refresh every minute
   
   // Wire up digest button

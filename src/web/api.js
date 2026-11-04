@@ -11,6 +11,8 @@ import { reminderCard } from '../host/cards.js';
 import { createProfileManager } from './profile.js';
 import { createActionService } from './actions.js';
 import { cardSnapshotText, cardFull } from './card-snapshot.js';
+import { createUiService } from '../ui/service.js';
+import { uiView } from '../ui/ops.js';
 import { resolveDisplayName, lastGithubIdentity } from './aggregation.js';
 import { recordCompletion, setItemStatus, clearItemStatus, annotateCards, cardItemUrls } from '../host/store.js'
 
@@ -671,7 +673,22 @@ export function createApiRouter(ctx) {
   // Composio write actions: reversible run now, outgoing ones wait for the user's 确认执行.
   const actionService = createActionService({ store, getClient: () => getComposioClient(), log: m => console.log(m) });
 
+  // 豆芽 Intelligent UI P1: declarative view ops (open / highlight / filter / arrange / navigate) + 当前视图.
+  const uiService = createUiService({ store, log: m => console.log(m) });
+
   const router = {
+    /** View op from the bot (odm_ui_op) or the owner's browser (撤销 / 固定). Validated against the store. */
+    async uiOp(body = {}, { by = 'bot' } = {}) { return uiService.op(body, { by: by === 'user' ? 'user' : 'bot' }); },
+    /** Long-poll for view events: { since, boot, wait }. */
+    async uiEvents({ since = 0, boot = null, wait = 25000 } = {}) { return uiService.poll({ since: Number(since) || 0, boot, waitMs: Math.min(Number(wait) || 0, 30000) }); },
+    /** The browser reports what it shows (debounced); kept in memory for odm_ui_state. */
+    setViewContext(view) { return uiService.setView(view); },
+    /** 【当前视图】 text for a chat turn (also records the view). */
+    viewSnapshot(view) { return uiService.viewText(view); },
+    /** Full view for odm_ui_state. */
+    uiState() { return uiService.state(); },
+    uiBootId() { return uiService.bootId; },
+
     /** Bot-side: request an action (never confirms an outgoing one). */
     async requestAction(action, input = {}, opts = {}) { return actionService.request(action, input, opts); },
     /** User-side: list / confirm / cancel / undo (HTTP route only, behind owner auth). */
@@ -750,6 +767,7 @@ export function createApiRouter(ctx) {
           waitingCount: activeCards.filter(c => c.status === 'waiting').length,
           lastDigestAt: state.lastDigest?.generatedAt || null,
           cards: annotateCards(activeCards, state.itemStatus),
+          ui: { ...uiView(state), bootId: uiService.bootId, seq: uiService.seq },
           hasDigest: state.lastDigest !== null,
         };
       } catch (err) {
@@ -1802,6 +1820,25 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
         req.on('end', async () => {
           try {
             const response = await router.actionsOp(JSON.parse(body || '{}'));
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid request' }));
+          }
+        });
+        return;
+      } else if (url.pathname === '/api/opendigitalmate/ui-events' && req.method === 'GET') {
+        const data = await router.uiEvents({ since: url.searchParams.get('since'), boot: url.searchParams.get('boot'), wait: url.searchParams.get('wait') ?? 25000 });
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(data));
+      } else if ((url.pathname === '/api/opendigitalmate/ui-op' || url.pathname === '/api/opendigitalmate/ui-context') && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const response = url.pathname.endsWith('ui-op') ? await router.uiOp(data, { by: 'user' }) : router.setViewContext(data);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(response));
           } catch (err) {

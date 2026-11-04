@@ -52,6 +52,19 @@ export const CARD_WORK_PROMPT = `你是「豆芽」背后的 Main Bot（Chief）
 - 需要快照之外的细节（完整正文、全部条目）→ 先调 odm_current_card；确实需要信源最新内容时才调 odm_github_* / odm_gmail_* / odm_slack_*，不要用 bash 克隆仓库代替。
 - 改这张卡片时直接用快照里的 id，不必先 odm_card_list。
 
+## 用户眼前的面板（【当前视图】与 odm_ui_op）
+- 每条消息前面带着【当前视图】：用户在哪一页、有没有筛选、放大了哪张卡、置顶了什么、屏幕上能看到哪些卡（括号里是卡片 id）。问「我现在在看什么 / 这个 / 这张」时先按它回答，不要调别的工具。
+- 用户这轮**明确要求**改面板时，调 odm_ui_op 立刻做，不要只回文字：
+  - 「打开 / 放大 / 看看 X 那张卡」→ op=openCard, card=<id>；「关掉 / 返回」→ op=closeCard
+  - 「只看需要我处理的 / 只看邮件 / 只看 GitHub」→ op=filter（needsYou=true 或 sources=gmail,github,slack 或 status=needs-you|waiting-others|priority|fyi）；「显示全部 / 取消筛选」→ op=clearFilter
+  - 「把 X 置顶 / 放最前 / 排到前面」→ op=arrange, pin=<id>, reason=一句理由；「取消置顶」→ arrange, unpin=<id>
+  - 「标出 / 高亮 X（里的某条）」→ op=highlight, card=<id>, item=<条目 url>, reason
+  - 「去信源状态 / 去配置 / 回今天」→ op=navigate, page=sources|settings|today
+  - 「撤销刚才的调整」→ op=undo（可带 id）
+- card 只能填卡片 id（来自【当前视图】或 odm_ui_state 的 cards 列表），item 只能填卡片里的条目 url；id 不确定先调 odm_ui_state，不要猜。工具报错会给候选，按候选改了再调。
+- 用户没要求时不要主动筛选 / 置顶 / 重排，可以用一句话建议。用户手动固定的卡永远在最前，你不能取消。
+- 做完用一句话说明改了什么（工具返回的 message），布局改动提醒用户面板上可以点「撤销」。odm_ui_op 只改视图，不发送任何东西；发邮件 / 评论等仍然只能走 odm_act_* 生成待确认卡。
+
 ## 什么时候必须动工具
 - 「标完成 / 做完了 / 勾掉」→ odm_card_complete（先 odm_card_list 或 odm_card_find 找到 id）
 - 「删掉 / 不要了 / 去掉促销」→ odm_card_dismiss 或 odm_card_delete（噪音用 dismiss；明确永久删除才 delete）
@@ -179,6 +192,45 @@ export async function registerBotTools(ctx, opts = {}) {
       } catch (err) { return JSON.stringify({ found: false, error: err.message }) }
     },
   }))
+
+  // 豆芽 Intelligent UI (P1): view operations on the panel the user has open. Ids only, validated by the server.
+  if (router?.uiOp) {
+    register(() => defineTool({
+      name: 'odm_ui_op',
+      description: '操作用户眼前的豆芽面板（只改视图，不发送任何东西）：openCard 打开卡片放大页、closeCard 关闭、highlight 高亮卡片或其中一条、filter 筛选今天页、clearFilter 清除筛选、arrange 置顶/取消置顶/重排（必须写 reason）、navigate 切页（today/sources/settings）、undo 撤销最近的布局改动。card 必须是卡片 id，item 必须是该卡条目的 url。只在用户这轮明确要求时调用。',
+      parameters: {
+        op: { type: 'string', enum: ['openCard', 'closeCard', 'highlight', 'filter', 'clearFilter', 'arrange', 'navigate', 'undo'], required: true, description: '操作' },
+        card: { type: 'string', description: 'openCard / highlight：卡片 id' },
+        item: { type: 'string', description: 'highlight：卡片里某个条目的 url（可选）' },
+        sources: { type: 'string', description: 'filter：来源，逗号分隔 github,gmail,slack' },
+        needsYou: { type: 'boolean', description: 'filter：只看需要用户处理的' },
+        priority: { type: 'boolean', description: 'filter：只看优先的' },
+        status: { type: 'string', enum: ['needs-you', 'waiting-others', 'priority', 'fyi'], description: 'filter：按状态' },
+        pin: { type: 'string', description: 'arrange：要置顶的卡片 id，逗号分隔' },
+        unpin: { type: 'string', description: 'arrange：取消置顶的卡片 id，逗号分隔' },
+        order: { type: 'string', description: 'arrange：希望的顺序（卡片 id，逗号分隔）' },
+        reason: { type: 'string', description: '给用户看的一句理由（arrange 必填，highlight 建议填）' },
+        ttl: { type: 'string', description: 'highlight 持续时间，如 10m、1h（默认 10m）' },
+        page: { type: 'string', enum: ['today', 'sources', 'settings'], description: 'navigate：目标页' },
+        id: { type: 'string', description: 'undo：要撤销的操作 id（默认最近一次）' },
+      },
+      output,
+      async execute(args) {
+        try { return JSON.stringify(await router.uiOp(args || {}, { by: 'bot' })) }
+        catch (err) { return JSON.stringify({ success: false, error: err.message }) }
+      },
+    }))
+    register(() => defineTool({
+      name: 'odm_ui_state',
+      description: '用户此刻的豆芽面板完整状态：所在页、放大中的卡片和选中条目、筛选、置顶（用户固定/豆芽置顶）、高亮、屏幕上可见的卡片、最近的视图操作，以及今天页所有卡片（id、标题、来源、是否需要用户处理、是否被筛掉）。找卡片 id 或回答「我在看什么」时用。',
+      parameters: {},
+      output,
+      async execute() {
+        try { return JSON.stringify(router.uiState()) }
+        catch (err) { return JSON.stringify({ error: err.message }) }
+      },
+    }))
+  }
 
   register(() => defineTool({
     name: 'odm_card_list',

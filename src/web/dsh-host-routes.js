@@ -136,6 +136,32 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     },
   }, 'opendigitalmate: actions')
 
+  // 豆芽 Intelligent UI: view events for open tabs (long-poll), the owner's own view ops (撤销 / 固定), and the
+  // browser's report of what it shows. Bot ops come in through the odm_ui_op tool, never through these.
+  effect({
+    path: '/api/opendigitalmate/ui-events',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async (request) => {
+      const q = new URL(request.url).searchParams
+      return json(await router.uiEvents({ since: q.get('since'), boot: q.get('boot'), wait: q.get('wait') ?? 25000 }))
+    },
+  }, 'opendigitalmate: ui-events')
+
+  effect({
+    path: '/api/opendigitalmate/ui-op',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request) => json(await router.uiOp(await readJson(request), { by: 'user' })),
+  }, 'opendigitalmate: ui-op')
+
+  effect({
+    path: '/api/opendigitalmate/ui-context',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request) => json(router.setViewContext(await readJson(request))),
+  }, 'opendigitalmate: ui-context')
+
   effect({
     path: '/api/opendigitalmate/card-chat',
     methods: ['POST'],
@@ -187,11 +213,17 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
       if (body.cardId) {
         try { cardContext = router.cardSnapshot(body.cardId) || cardContext } catch (err) { log(`cardSnapshot failed: ${err.message}`) }
       }
+      // What the user is looking at (page, open card, filter, visible cards) — titles resolved from the store.
+      let viewContext = ''
+      if (body.viewContext) {
+        try { viewContext = router.viewSnapshot(body.viewContext) || '' } catch (err) { log(`viewSnapshot failed: ${err.message}`) }
+      }
       timing.contextAt = Date.now()
       const result = await runMuseChatTurn(ctx, {
         message: body.message || body.text,
         cardId: body.cardId,
         cardContext,
+        viewContext,
         dshHome,
         log,
         timing,

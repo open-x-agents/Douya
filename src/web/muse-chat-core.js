@@ -106,6 +106,7 @@ export async function runMuseChatTurn(ctx, {
   message,
   cardId = null,
   cardContext = null,
+  viewContext = '',
   dshHome,
   botId = null,
   log = () => {},
@@ -121,6 +122,10 @@ export async function runMuseChatTurn(ctx, {
   const ctxText = cardContext ? cleanBlock(cardContext).slice(0, 3200) : ''
   if (ctxText) outbound = `${ctxText.startsWith('【当前卡片】') ? ctxText : `【当前卡片】${ctxText}`}\n\n${text}`
   else if (cardId) outbound = `【cardId=${cardId}】\n${text}`
+  // 【当前视图】 goes first (page / filter / open card / visible cards), then 【当前卡片】, then the user's words.
+  const viewText = viewContext ? cleanBlock(viewContext).slice(0, 900) : ''
+  if (viewText) outbound = `${viewText.startsWith('【当前视图】') ? viewText : `【当前视图】${viewText}`}\n\n${outbound}`
+  T.viewChars = viewText.length
   T.contextChars = ctxText.length
   T.outboundChars = outbound.length
 
@@ -238,6 +243,7 @@ export function summarizeTiming(T) {
     serverRecvToContextMs: ms(T.recvAt, T.contextAt),
     contextChars: T.contextChars ?? null,
     outboundChars: T.outboundChars ?? null,
+    viewChars: T.viewChars ?? null,
     beforeReadMs: T.beforeReadMs ?? null,
     promptAckMs: T.promptAckMs ?? null,
     queueToTurnStartMs: ms(T.promptAt, T.turnStartAt),

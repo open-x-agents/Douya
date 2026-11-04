@@ -226,7 +226,7 @@ export function historyMessages(raw) {
     const content = Array.isArray(msg?.content) ? msg.content.map(p => p?.text || '').join('') : (msg?.content || '')
     if (!clean(content)) continue
     if (role === 'user' && INJECTED.test(String(content).trim())) continue
-    if (role === 'user' && /^【当前卡片】/.test(String(content).trim())) {
+    if (role === 'user' && /^【当前(卡片|视图)】/.test(String(content).trim())) {
       const words = String(content).trim().split(/\n\s*\n/).pop()
       out.push({ role, content: cleanBlock(words) })
       continue

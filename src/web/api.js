@@ -812,14 +812,10 @@ export function createApiRouter(ctx) {
         const actionable = activeCards.filter(c => !SYSTEM_TYPES.has(c.type) && c.source !== 'system' && c.type !== 'event' && c.type !== 'view');
         const urgent = actionable.filter(c => c.priority === 'urgent' || c.priority === 'high');
         
-        // Build sources list
-        const sources = [...new Set(activeCards.map(c => c.source).filter(Boolean))].filter(s => s !== 'system');
-        const sourcesText = sources.length > 0 
-          ? sources.map(s => {
-              const map = { github: 'GitHub', gmail: 'Gmail', googlecalendar: '日历', slack: 'Slack', manual: '手动' };
-              return map[s] || s;
-            }).join('、')
-          : '暂无数据';
+        // Source line: the live ACTIVE connected accounts (信源状态's cache, never blocks long); cards only as a fallback.
+        let accts = null;
+        try { const r = await connectedAccounts(); accts = Array.isArray(r?.items) ? r.items : null; } catch { accts = null; }
+        const sourcesText = todaySourcesText(accts, activeCards);
 
         // Display name ONLY from connected sources (GitHub name → login). Never profile.json.
         const home = config.home || '.odm-data';
@@ -2274,3 +2270,14 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
 }
 
 export default { createApiRouter, mountApiRoutes };
+
+const SOURCE_LABEL = { gmail: 'Gmail', github: 'GitHub', slack: 'Slack', googlecalendar: '日历', google_calendar: '日历', notion: 'Notion', linear: 'Linear', outlook: 'Outlook' };
+const SOURCE_ORDER = ['gmail', 'github', 'slack', 'googlecalendar'];
+/** 今天 header 「来自 …」: connected sources (ACTIVE accounts), else the sources the cards came from. */
+export function todaySourcesText(accounts, cards = []) {
+  let slugs = Array.isArray(accounts) ? [...new Set(accounts.filter(a => a?.status === 'ACTIVE' && a?.toolkit?.slug).map(a => a.toolkit.slug))] : null;
+  if (!slugs || !slugs.length) slugs = [...new Set((cards || []).map(c => c?.source).filter(s => s && SOURCE_LABEL[s]))];
+  if (!slugs.length) return '暂无数据';
+  const rank = s => { const i = SOURCE_ORDER.indexOf(s === 'google_calendar' ? 'googlecalendar' : s); return i < 0 ? 99 : i; };
+  return [...new Set(slugs.sort((a, b) => rank(a) - rank(b)).map(s => SOURCE_LABEL[s] || s))].join('、');
+}

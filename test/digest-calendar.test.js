@@ -23,3 +23,12 @@ test('a connected-but-broken source shows as failed with the reason instead of v
   assert.equal(aux.slack.status, 'failed'); assert.match(aux.slack.error, /INITIATED/)
   assert.deepEqual(auxSources([]), {})
 })
+
+test('Today header source line comes from live ACTIVE connected sources, incl. 日历', async () => {
+  const { todaySourcesText } = await import('../src/web/api.js')
+  const acc = (slug, status = 'ACTIVE') => ({ status, toolkit: { slug } })
+  assert.equal(todaySourcesText([acc('googlecalendar'), acc('github'), acc('gmail'), acc('slack'), acc('notion', 'EXPIRED')]), 'Gmail、GitHub、Slack、日历')
+  assert.equal(todaySourcesText([acc('gmail')], [{ source: 'github' }]), 'Gmail')
+  assert.equal(todaySourcesText(null, [{ source: 'github' }, { source: 'bot' }, { source: 'system' }]), 'GitHub')
+  assert.equal(todaySourcesText([], []), '暂无数据')
+})

@@ -150,12 +150,31 @@ function readLastAssistant(logPath) {
   return last
 }
 
+/**
+ * Move bots whose model is one of `from` (e.g. legacy text-only `deepseek/deepseek-chat`) to `to`.
+ * Bots the user pinned to anything else are left alone.
+ */
+export async function syncBotModels({ home = '.odm-data', baseUrl = DEFAULT_BASE, token = process.env.DSBOT_TOKEN, to, from = [], auth = null, call = api } = {}) {
+  if (!to) return { updated: [] }
+  auth ||= await ensureDsbotSession({ baseUrl, home, token })
+  const state = await call(auth, 'state', {})
+  const bots = Array.isArray(state?.bots) ? state.bots : Object.values(state?.bots || {})
+  const updated = []
+  for (const bot of bots) {
+    const cur = bot?.model ?? bot?.appliedModel
+    if (!bot?.id || cur === to || !from.includes(cur)) continue
+    await call(auth, 'update-bot', { id: bot.id, model: to })
+    updated.push(bot.id)
+  }
+  return { updated }
+}
+
 async function ensureModel(auth, botId) {
   try {
     const state = await api(auth, 'state', {})
     const bot = (state.bots || []).find(b => b.id === botId) || state.bots?.[0]
     if (bot && !bot.model && !bot.appliedModel) {
-      await api(auth, 'update-bot', { id: botId, model: 'deepseek/deepseek-chat' })
+      await api(auth, 'update-bot', { id: botId, model: `deepseek/${process.env.ODM_CHAT_MODEL || 'deepseek-flash'}` })
     }
   } catch { /* non-fatal */ }
 }

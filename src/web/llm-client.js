@@ -37,6 +37,10 @@ export function createLLMClient(config) {
       stream: true,
     };
 
+    // deepseek-flash thinks by default; Muse's direct calls (digest, titles, tests) want the fast
+    // non-thinking answer within small max_tokens budgets, same as the old deepseek-chat alias.
+    if (/^deepseek-(flash|v4)/.test(String(model))) body.thinking = { type: 'disabled' };
+
     // Add response_format if provided (OpenAI JSON mode)
     if (responseFormat?.type === 'json_object') {
       body.response_format = { type: 'json_object' };
@@ -107,6 +111,7 @@ export function createLLMClient(config) {
         messages: [{ role: 'user', content: 'Hi! Reply with just "OK"' }],
         max_tokens: 50,
         stream: false,
+        ...(/^deepseek-(flash|v4)/.test(String(model)) ? { thinking: { type: 'disabled' } } : {}),
       });
 
       const response = await fetch(url, {
@@ -169,7 +174,7 @@ export const PROVIDERS = {
   deepseek: {
     name: 'DeepSeek',
     baseURL: 'https://api.deepseek.com/v1',
-    models: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-coder'],
+    models: ['deepseek-flash', 'deepseek-v4-pro', 'deepseek-chat'],
   },
   anthropic: {
     name: 'Anthropic (via OpenAI adapter)',

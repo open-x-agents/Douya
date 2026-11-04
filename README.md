@@ -37,7 +37,7 @@ open "$(cat .odm-data/dsh-web.url)"   # macOS
 ### 3. 在「配置」里填密钥（推荐）
 
 1. 左侧打开 **配置**
-2. **AI 模型**：选 DeepSeek，填 API Key，模型 `deepseek-chat`，保存（可点「测试连接」）
+2. **AI 模型**：选 DeepSeek，填 API Key，模型 `deepseek-flash`（DeepSeek-V4.1-Flash，可读图），保存（可点「测试连接」）
 3. **Composio**：填 API Key 并连接 GitHub / Gmail / Slack
 4. 保存后聊天应立即可用。若仍无回复，重启一次 `npm start` 再打开上面的登录链接
 

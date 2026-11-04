@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { buildChatContent, isImageModelError } from './chat-media.js'
+import { DEEPSEEK_VISION_MODELS } from './llm-env.js'
 
 function clean(v) { return String(v ?? '').replace(/\s+/g, ' ').trim() }
 // Keep line structure (lists, paragraphs) — the client renders Markdown.
@@ -167,12 +168,29 @@ export async function runMuseChatTurn(ctx, {
     content,
   }, AbortSignal.timeout(30_000))
   try {
-    await sendPrompt(built.content)
+    try {
+      await sendPrompt(built.content)
+    } catch (err) {
+      // The prompt target can still carry an older text-only selection (e.g. deepseek-chat) after the
+      // bot moved to a vision model. Re-select the configured vision model on it once, then retry native.
+      const vision = visionChatModel()
+      if (built.mode !== 'native' || !vision || !isModelNoImageError(err) || !ctx.sessionController.selectModel) throw err
+      log(`[muse-chat] ${promptTo} refused images (${err.message}); selecting ${vision.provider}/${vision.model}`)
+      try {
+        await ctx.sessionController.selectModel({ sessionId: promptTo, provider: vision.provider, model: vision.model }, AbortSignal.timeout(15_000))
+      } catch (selErr) {
+        log(`[muse-chat] selectModel ${vision.model} failed: ${selErr?.message || selErr}`)
+        throw err
+      }
+      T.modelReselected = `${vision.provider}/${vision.model}`
+      await sendPrompt(built.content)
+    }
   } catch (err) {
     if (built.mode === 'native' && isImageModelError(err) && hasAttach) {
       log(`[muse-chat] native attach refused (${err.message}); retrying as text`)
       built = await buildChatContent(ctx, { text: outbound, attachments, agent, log }, { preferNative: false })
       T.attachMode = 'text-fallback'
+      T.attachFallbackReason = [err?.data?.reason || err?.reason || err?.code, err?.message].filter(Boolean).join(': ').slice(0, 240)
       await sendPrompt(built.content)
     } else {
       return { ok: false, error: err.message || String(err) }
@@ -261,6 +279,18 @@ async function turnBreakdown(ctx, sessionId, sinceMs) {
   return breakdownFromRecords(records, sinceMs)
 }
 
+/** The configured chat model when it reads images (provider route `deepseek` on llm-pi-ai). */
+export function visionChatModel(env = process.env) {
+  const model = String(env.ODM_CHAT_MODEL || '')
+  return DEEPSEEK_VISION_MODELS.has(model) ? { provider: 'deepseek', model } : null
+}
+
+/** dsh's model-capability refusal (not a staging/attachment-shape error). */
+export function isModelNoImageError(err) {
+  const s = `${err?.data?.reason || err?.reason || ''} ${err?.message || err || ''}`
+  return /MODEL_DOES_NOT_SUPPORT_IMAGES|does not support image input/i.test(s)
+}
+
 export function summarizeTiming(T) {
   const ms = (a, b) => (Number.isFinite(a) && Number.isFinite(b) ? Math.max(0, Math.round(b - a)) : null)
   const steps = (T.steps || []).map(s => ({ ttftMs: ms(s.startAt, s.firstAt ?? s.endAt), stepMs: ms(s.startAt, s.endAt) }))
@@ -274,6 +304,8 @@ export function summarizeTiming(T) {
     viewChars: T.viewChars ?? null,
     attachCount: T.attachCount ?? 0,
     attachMode: T.attachMode ?? null,
+    attachFallbackReason: T.attachFallbackReason ?? null,
+    modelReselected: T.modelReselected ?? null,
     beforeReadMs: T.beforeReadMs ?? null,
     promptAckMs: T.promptAckMs ?? null,
     queueToTurnStartMs: ms(T.promptAt, T.turnStartAt),

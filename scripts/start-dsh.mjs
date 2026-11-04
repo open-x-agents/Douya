@@ -8,7 +8,8 @@ import { spawn } from 'node:child_process'
 import { createWriteStream, writeFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { applyLlmEnv, ensureAgentDefaultModel } from '../src/web/llm-env.js'
+import { applyLlmEnv, ensureAgentDefaultModel, ensureProfileDeepseekCatalog, DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_LEGACY_MODELS } from '../src/web/llm-env.js'
+import { syncBotModels } from '../src/web/dsbot-chat.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const HOME = join(ROOT, '.odm-data')
@@ -40,14 +41,24 @@ try {
   }
 } catch {}
 
+let chatModel = DEEPSEEK_DEFAULT_MODEL
 try {
   const cfg = JSON.parse(readFileSync(join(HOME, 'config.json'), 'utf8'))
   applyLlmEnv(cfg?.llm || {})
-  ensureAgentDefaultModel(DSH_HOME, cfg?.llm || { provider: 'deepseek', model: 'deepseek-chat' })
+  ensureAgentDefaultModel(DSH_HOME, cfg?.llm || { provider: 'deepseek', model: DEEPSEEK_DEFAULT_MODEL })
+  if ((cfg?.llm?.provider || 'deepseek') === 'deepseek' && cfg?.llm?.model) chatModel = cfg.llm.model
   if (!process.env.COMPOSIO_API_KEY && cfg?.composioApiKey) process.env.COMPOSIO_API_KEY = cfg.composioApiKey
 } catch {
-  ensureAgentDefaultModel(DSH_HOME, { provider: 'deepseek', model: 'deepseek-chat' })
+  ensureAgentDefaultModel(DSH_HOME, { provider: 'deepseek', model: DEEPSEEK_DEFAULT_MODEL })
 }
+// Serve deepseek-flash (vision) on the profile's DeepSeek route so Chief can take native image parts.
+try {
+  const patch = join(userProfile, 'cordis.patch.yml')
+  if (existsSync(userProfile) && ensureProfileDeepseekCatalog(patch, { defaultModel: chatModel === DEEPSEEK_DEFAULT_MODEL ? chatModel : null })) {
+    console.log(`🖼  Profile DeepSeek route now serves ${DEEPSEEK_DEFAULT_MODEL} (text+image): ${patch}`)
+  }
+} catch (err) { console.warn(`[start-dsh] profile catalog update skipped: ${err?.message || err}`) }
+process.env.ODM_CHAT_MODEL = chatModel
 process.env.OPENAI_BASE_URL ||= 'https://api.deepseek.com'
 process.env.ODM_MUSE_URL = `http://127.0.0.1:${PORT}`
 process.env.DSBOT_URL = process.env.ODM_MUSE_URL
@@ -86,6 +97,14 @@ child.stdout.on('data', buf => {
     writeFileSync(URL_FILE, m[0] + '\n')
     console.log(`🔑 Login URL saved → ${URL_FILE}`)
     console.log(`🖼  Muse UI: ${m[0].replace(/\?token=.*/, '')}api/opendigitalmate/app (after login)`)
+    // Bots still pinned to a legacy text-only alias move to the configured chat model.
+    if (!DEEPSEEK_LEGACY_MODELS.has(chatModel)) {
+      setTimeout(() => {
+        syncBotModels({ home: HOME, to: `deepseek/${chatModel}`, from: [...DEEPSEEK_LEGACY_MODELS].map(x => `deepseek/${x}`) })
+          .then(r => { if (r.updated.length) console.log(`🧠 Bots moved to deepseek/${chatModel}: ${r.updated.join(', ')}`) })
+          .catch(err => console.warn(`[start-dsh] bot model sync skipped: ${err?.message || err}`))
+      }, 3_000)
+    }
   }
 })
 child.stderr.on('data', buf => process.stderr.write(buf))

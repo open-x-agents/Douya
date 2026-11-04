@@ -50,3 +50,16 @@ test('a quote without a draft intro stays a plain quote; html in quotes is escap
   assert.doesNotMatch(out, /md-draft/)
   assert.match(out, /&lt;b&gt;别急/)
 })
+
+test('a quote followed by 「草稿在上面，还没发…确认执行」 is a draft too, target from the outro', () => {
+  const out = renderMd('> 这条我记着待审。想确认切分按 UTF-8 还是 UTF-16。\n>\n> 另外边界落在标签中间时怎么处理？\n\n草稿在上面，还没发。你说发，我就生成待确认卡片，你在豆芽点「确认执行」后才会提交到 [PR #2353](https://github.com/ThinkFlowLab/FlyBot/pull/2353)。')
+  assert.match(out, /<div class="md-draft" data-kind="github" data-target="PR #2353">/)
+  assert.doesNotMatch(out, /md-quote/)
+  assert.match(out, /草稿在上面/) // the explanation stays visible under the card
+})
+
+test('a reminder quote with no draft wording stays a plain quote', () => {
+  const out = renderMd('今天先回 Fledge。\n\n> 先把卡在你这儿的那件事推完。')
+  assert.match(out, /md-quote/)
+  assert.doesNotMatch(out, /md-draft/)
+})

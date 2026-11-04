@@ -1816,6 +1816,8 @@
   const MD_QUOTE = /^\s*(?:>|&gt;|＞)\s?/;
   // A quote right after "…如下：/草稿：/这样写：" (or naming a PR / 邮件 / Slack target) is an outgoing draft.
   const MD_DRAFT_INTRO = /(草稿|如下|这样写|拟好|准备发|发到|发给|回复给|回复如下|评论如下|内容如下)[^。！？\n]{0,40}[:：]?\s*$/;
+  // Chief often quotes the draft first and explains after (「草稿在上面，还没发…点确认执行」).
+  const MD_DRAFT_OUTRO = /(草稿(在上面|如上|还没发|先放这)|还没(发|提交|发出)|确认(执行|发送)(后|才)|待确认(卡片|卡)|你说发|要发的话|发出去之前)/;
   function mdDraftTarget(intro) {
     const t = String(intro || '');
     const ref = t.match(/(?:PR|pr|Issue|issue)\s*#\s*\d+/) || t.match(/[\w.-]+\/[\w.-]+#\d+/) || t.match(/#\d+/);
@@ -1853,8 +1855,12 @@
         k--;
         const body = renderMdBlocks(inner.join('\n').replace(/^\n+|\n+$/g, ''), depth + 1);
         const introText = intro || lastIntro;
-        if (depth === 0 && MD_DRAFT_INTRO.test(introText)) {
-          const tg = mdDraftTarget(introText);
+        let outroText = '';
+        if (depth === 0) { let j = k + 1; while (j < lines.length && !lines[j].trim()) j++; const nx = []; while (j < lines.length && lines[j].trim() && !MD_QUOTE.test(lines[j])) nx.push(lines[j++]); outroText = nx.join(' '); }
+        const isDraft = depth === 0 && (MD_DRAFT_INTRO.test(introText) || MD_DRAFT_OUTRO.test(outroText));
+        if (isDraft) {
+          const tgI = mdDraftTarget(introText), tgO = mdDraftTarget(outroText);
+          const tg = tgI.kind !== 'msg' ? tgI : tgO;
           html += `<div class="md-draft" data-kind="${tg.kind}" data-target="${escMd(tg.label)}"><div class="md-draft-h"><span class="md-draft-tag">草稿</span><span class="md-draft-to">发到 <b>${escMd(tg.label)}</b></span><span class="md-draft-note">确认后才会发送</span></div><div class="md-draft-b">${body}</div><div class="md-draft-acts"><button type="button" class="md-draft-send">确认发送</button><button type="button" class="md-draft-edit">修改</button></div></div>`;
         } else html += `<blockquote class="md-quote">${body}</blockquote>`;
         lastIntro = '';

@@ -74,7 +74,7 @@ export function normalizeState(raw) {
   }
 }
 
-/** Chat keys follow the card's stable key (no day): 'slack:cluster:C1:2026-11-03' -> 'slack:cluster:C1'. */
+/** Chat keys follow the card's stable key (no day): 'src:cluster:C1:2026-11-03' -> 'src:cluster:C1'. */
 function stableChatKeys(chats) {
   const out = {}
   for (const [k, v] of Object.entries(chats)) {

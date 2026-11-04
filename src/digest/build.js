@@ -134,7 +134,8 @@ function buildOnce(snaps, candidatesBy, plan, { today, now = Date.now() } = {}) 
     if (kind === 'email') {
       const assign = new Map()
       for (const [sid, c] of refCand) assign.set(sid, c.category)
-      const mail = snap.items.filter(it => !away.has(it.sourceId))
+      // Every live mail lands in a group (unseen / unassigned ones by the rule classifier), so counts stay true.
+      const mail = (snap.all || snap.items).filter(it => !away.has(it.sourceId))
       for (const card of buildEmailClusters(mail, { today, now, assign })) {
         const sid = card.items?.[0]?.sourceId
         const cand = card.type === 'email-action' ? refCand.get(sid) : cands.filter(c => c.category === card.metadata?.group).sort((a, b) => b.items.length - a.items.length)[0] || null

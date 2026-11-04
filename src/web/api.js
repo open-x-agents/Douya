@@ -891,12 +891,15 @@ export function createApiRouter(ctx) {
       const last = botDigest?.lastRun?.();
       if (!last) return { success: false, error: 'no bot run yet' };
       const { digestMetrics } = await import('../digest/compare.js');
+      // Real links that are not in this run's fetch but already on stored cards (folded-in older mail) count as valid.
+      const stored = new Set((store.get()?.cards || []).flatMap(c => (c.blocks || []).flatMap(b => (b.links || []).map(l => l?.url))).filter(Boolean));
+      const valid = new Set([...last.validUrls, ...stored]);
       const t0 = Date.now();
       const legacy = await router.generateLegacyDigest({ dryRun: true, sourceData: last.sourceData });
       const legacyMs = Date.now() - t0;
       if (!legacy.success) return { success: false, error: legacy.error };
       const run = router.digestRuns()[0] || null;
-      return { success: true, bot: { ...digestMetrics(last.cards, last.validUrls), ms: run?.ms, tokens: run?.tokens }, legacy: { ...digestMetrics(legacy.cards, last.validUrls), ms: legacyMs, llmChars: legacy.llmChars || null } };
+      return { success: true, bot: { ...digestMetrics(last.cards, valid), ms: run?.ms, tokens: run?.tokens }, legacy: { ...digestMetrics(legacy.cards, valid), ms: legacyMs, llmChars: legacy.llmChars || null } };
     },
     digestRuns() { try { return botDigest?.store?.get().runs || []; } catch { return []; } },
     /**

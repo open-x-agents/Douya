@@ -281,8 +281,8 @@ export function createBotDigest(deps) {
         const timetable = await A.generateTimetable(grouped, sourceData, fake({ suggestedBlocks: runRec.plan.timeline }), deps.profileContext?.() || {})
         const ach = A.generateAchievementsTile(sourceData, items)
         const cards = [hero, timetable, ...built.cards, ...(ach ? [ach] : [])]
+        lastRun = { sourceData, validUrls: new Set([...valid, ...A.normalizeItems(sourceData).map(i => i.url).filter(Boolean)]), cards: built.cards.map(c => JSON.parse(JSON.stringify(c))).concat([hero, timetable]), at: Date.now() }
         const saved = await commit(cards, { summary: runRec.plan.headline || runRec.plan.narrative || '', sources: ok.map(([k]) => k), mode: 'bot' })
-        lastRun = { sourceData, validUrls: valid, cards, at: Date.now() }
         runRec.status = 'done'
         runRec.result = { cards: built.cards.length, total: cards.length, stats: built.stats, invalidLinks: bad.length, needsAction: built.cards.filter(c => c.waiting === 'you').length, saved }
       } catch (err) {

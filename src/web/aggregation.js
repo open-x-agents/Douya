@@ -163,26 +163,33 @@ export async function fetchFromSources(composioClient, activeSources) {
         
         const [todayAndTomorrow, upcoming] = await Promise.all([
           composioClient.executeAction('GOOGLECALENDAR_EVENTS_LIST', {
+            calendarId: 'primary', singleEvents: true, orderBy: 'startTime',
             timeMin: startOfToday,
             timeMax: endOfTomorrow,
             maxResults: 100,
           }),
           composioClient.executeAction('GOOGLECALENDAR_EVENTS_LIST', {
+            calendarId: 'primary', singleEvents: true, orderBy: 'startTime',
             timeMin: new Date().toISOString(),
             timeMax: next2h,
             maxResults: 50,
           }),
         ]);
         
-        const allEvents = todayAndTomorrow?.data?.items || [];
+        for (const r of [todayAndTomorrow, upcoming]) {
+          // A failed execute (successful:false) must not look like an empty calendar.
+          if (!r || r.successful === false || r.error || !Array.isArray(r?.data?.items)) throw new Error(`calendar read failed: ${r?.error || 'no items'}`);
+        }
+        const allEvents = todayAndTomorrow.data.items;
+        const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
         sourceData.googlecalendar = {
           today: allEvents.filter(e => {
             const start = new Date(e.start?.dateTime || e.start?.date);
-            return start < new Date(Date.now() + 24*60*60*1000);
+            return start < endOfToday;
           }),
           tomorrow: allEvents.filter(e => {
             const start = new Date(e.start?.dateTime || e.start?.date);
-            return start >= new Date(Date.now() + 24*60*60*1000);
+            return start >= endOfToday;
           }),
           upcoming: upcoming?.data?.items || [],
         };

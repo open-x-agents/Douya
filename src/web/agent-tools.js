@@ -240,7 +240,7 @@ export function createComposioTools(composioClient) {
 
     {
       name: 'calendar_list_events',
-      description: '获取 Google Calendar 事件',
+      description: '读 Google 日历的事件（实时调用，以最新一次结果为准）。ok:true 时 count=0 表示这段时间确实没有日程；ok:false 时说明原因（not_connected = 没连上，需在「信源状态」连接），不要把失败说成没有日程。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -273,30 +273,72 @@ export function createComposioTools(composioClient) {
 
           const result = await composioClient.executeAction(
             'GOOGLECALENDAR_EVENTS_LIST',
-            { timeMin: time_min, timeMax: time_max, maxResults: max_results }
+            { calendarId: 'primary', timeMin: time_min, timeMax: time_max, maxResults: max_results, singleEvents: true, orderBy: 'startTime' }
           )
-          
-          if (!result.data?.items || result.data.items.length === 0) {
-            return { events: [], count: 0 }
-          }
-
-          return {
-            events: result.data.items.map(event => ({
-              id: event.id,
-              summary: event.summary || '(无标题)',
-              start: event.start?.dateTime || event.start?.date,
-              end: event.end?.dateTime || event.end?.date,
-              location: event.location || '',
-              attendees: (event.attendees || []).length,
-            })),
-            count: result.data.items.length,
-          }
+          return calendarEventsResult(result, { time_min, time_max })
         } catch (error) {
-          return { error: error.message, events: [], count: 0 }
+          return calendarErrorResult(error, { time_min, time_max })
         }
       },
     },
   ]
+}
+
+/** Composio said the call did not run (HTTP error, or 200 with successful:false). */
+export function composioFailure(result) {
+  if (!result || typeof result !== 'object') return 'empty response'
+  if (result.successful === false || result.error) return String(result.error || 'successful=false')
+  return null
+}
+
+/**
+ * A calendar read the model can trust: success says so explicitly (an empty list is a verified empty range on a
+ * connected account), and a failure never looks like "0 events".
+ */
+export function calendarEventsResult(result, { time_min, time_max } = {}) {
+  const failed = composioFailure(result)
+  if (failed) return calendarErrorResult(new Error(failed), { time_min, time_max })
+  const data = result.data || {}
+  const items = Array.isArray(data.items) ? data.items : null
+  if (!items) return calendarErrorResult(new Error('Google Calendar 返回里没有 items 字段'), { time_min, time_max })
+  const events = items.map(event => ({
+    id: event.id,
+    summary: event.summary || '(无标题)',
+    start: event.start?.dateTime || event.start?.date,
+    end: event.end?.dateTime || event.end?.date,
+    allDay: !event.start?.dateTime,
+    location: event.location || '',
+    attendees: (event.attendees || []).length,
+    url: event.htmlLink || '',
+  }))
+  return {
+    ok: true,
+    connected: true,
+    calendar: data.summary || 'primary',
+    timeZone: data.timeZone || null,
+    range: { from: time_min, to: time_max },
+    count: events.length,
+    events,
+    note: events.length
+      ? '本次调用成功（Google 日历已连接）。此前任何连接错误都已过时。'
+      : '本次调用成功（Google 日历已连接）：这段时间日历里确实没有事件。此前任何连接错误都已过时，不要再说没连上。',
+  }
+}
+
+export function calendarErrorResult(error, { time_min, time_max } = {}) {
+  const msg = String(error?.message || error || '')
+  const notConnected = /ConnectedAccountNotFound|No connected account found|no active connection/i.test(msg)
+  return {
+    ok: false,
+    connected: notConnected ? false : null,
+    reason: notConnected ? 'not_connected' : 'call_failed',
+    range: { from: time_min, to: time_max },
+    error: msg.slice(0, 400),
+    note: notConnected
+      ? 'Google 日历当前没有已连接的账号，所以读不到日程（不是「没有日程」）。请用户在豆芽「信源状态」里点 Google 日历的「连接」完成授权，然后再查一次。'
+      : '日历调用失败，结果未知（不是「没有日程」）。',
+    ...(notConnected ? { connect: { source: 'googlecalendar', where: '信源状态 → Google 日历 → 连接' } } : {}),
+  }
 }
 
 /**

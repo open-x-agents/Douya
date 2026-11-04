@@ -140,7 +140,7 @@ function refreshGroupCard(g) {
   if (g.metadata) Object.assign(g.metadata, { count: pseudo.length, senders })
 }
 
-function emailLink(it) {
+export function emailLink(it) {
   return {
     title: clip(clean(it.title) || '(无主题)', 90),
     url: it.url,
@@ -155,11 +155,16 @@ function emailLink(it) {
  * @returns {object[]} clusters of type 'email-group' (one per non-empty category) and
  *   'email-action' (≤ MAX_SINGLES actionable mails from real people)
  */
-export function buildEmailClusters(emailItems, { today = new Date().toISOString().split('T')[0], now = Date.now() } = {}) {
+export function buildEmailClusters(emailItems, { today = new Date().toISOString().split('T')[0], now = Date.now(), assign = null } = {}) {
+  // assign (bot digest): Map sourceId -> 'single' | group key, decided by the Gmail source bot. Unassigned mail
+  // falls back to the rule classifier; singles stay capped at MAX_SINGLES (overflow goes to 需要你处理).
   const buckets = new Map()
+  const wantSingle = new Set()
   for (const it of emailItems) {
     if (!it?.url) continue
-    const k = classifyEmail(it)
+    const a = assign?.get(it.sourceId)
+    if (a === 'single') wantSingle.add(it)
+    const k = a && GROUPS[a] ? a : a === 'single' ? 'action' : classifyEmail(it)
     if (!buckets.has(k)) buckets.set(k, [])
     buckets.get(k).push(it)
   }
@@ -167,7 +172,7 @@ export function buildEmailClusters(emailItems, { today = new Date().toISOString(
 
   // Actionable singles: from real people, with a reply/deadline signal; capped.
   const action = buckets.get('action') || []
-  const singles = action.filter(isActionableSingle)
+  const singles = action.filter(assign ? (i => wantSingle.has(i)) : isActionableSingle)
     .sort((a, b) => ((b.metadata?.labelIds || []).includes('IMPORTANT') - (a.metadata?.labelIds || []).includes('IMPORTANT')) || String(b.createdAt).localeCompare(String(a.createdAt)))
     .slice(0, MAX_SINGLES)
   for (const it of singles) {

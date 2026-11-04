@@ -492,6 +492,19 @@ export async function registerBotTools(ctx, opts = {}) {
     }
   }
 
+  // Bot digest: source bots (one session per channel) and the Chief digest session. Each handler checks the
+  // calling session (exec.agent.id), so these do nothing in ordinary chat except odm_digest_pref_add.
+  if (router?.botDigestRef) {
+    const bd = () => router.botDigestRef()
+    const sidOf = exec => exec?.agent?.id || exec?.sessionId || null
+    const run = async (fn) => { try { const b = bd(); if (!b) return JSON.stringify({ error: 'bot digest unavailable' }); return JSON.stringify(await fn(b)) } catch (err) { return JSON.stringify({ error: err.message }) } }
+    register(() => defineTool({ name: 'odm_digest_snapshot', description: '汇聚信源 Bot 专用：读取本渠道今天的数据快照（每条带 ref；只能引用这些 ref）。', parameters: {}, output, async execute(_a, exec) { return run(b => b.toolSnapshot(sidOf(exec))) } }))
+    register(() => defineTool({ name: 'odm_digest_propose', description: '汇聚信源 Bot 专用：提交本渠道候选卡。cards = JSON 数组字符串，每项 {title, category, needsAction, priority, nextStep, summary, items:[ref…]}。', parameters: { cards: { type: 'string', required: true, description: '候选卡 JSON 数组' } }, output, async execute(a, exec) { return run(b => b.toolPropose(sidOf(exec), a?.cards)) } }))
+    register(() => defineTool({ name: 'odm_digest_note', description: '汇聚信源 Bot 专用：记住用户处理本渠道的一个稳定习惯（下次汇聚会读到）。', parameters: { note: { type: 'string', required: true, description: '一句话习惯' } }, output, async execute(a, exec) { return run(b => b.toolNote(sidOf(exec), a?.note)) } }))
+    register(() => defineTool({ name: 'odm_digest_commit', description: '汇聚 Chief 会话专用：提交合并计划 plan（JSON 字符串：headline, narrative, merges, cards, timeline）。', parameters: { plan: { type: 'string', required: true, description: '合并计划 JSON' } }, output, async execute(a, exec) { return run(b => b.toolCommit(sidOf(exec), a?.plan)) } }))
+    register(() => defineTool({ name: 'odm_digest_pref_add', description: '用户纠正「今天」页汇聚方式时调用（如「这类邮件不用单独出卡」「Slack 机器人告警别出卡」），记成汇聚偏好，下次汇聚 Chief 和各信源 Bot 都会遵守。', parameters: { text: { type: 'string', required: true, description: '偏好原话（简洁、可执行）' }, channel: { type: 'string', description: 'gmail / github / slack；全渠道可省略' } }, output, async execute(a) { return run(b => { const p = b.store.addPref(a?.text, { channel: a?.channel || null, by: 'chief' }); return p ? { ok: true, pref: p } : { ok: false, error: 'empty' } }) } }))
+  }
+
   const composioDefs = createComposioTools(lazyClient)
   for (const def of composioDefs) {
     register(() => defineTool({
@@ -506,6 +519,7 @@ export async function registerBotTools(ctx, opts = {}) {
     }))
   }
 
+  opts.onRegistered?.(registered)
   const summary = `dsbot-tools: registered ${registered.length} tools (failed=${failed.length}${failed.length ? ': ' + failed.join(',') : ''}; composio=${resolveClient() ? 'ready' : 'lazy'}; cards=${router ? 'in-process' : museUrl}): ${registered.join(' ')}`
   log(summary)
   console.log(`[odm] ${summary}`)

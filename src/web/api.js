@@ -682,6 +682,7 @@ export function createApiRouter(ctx) {
   // P2: temporary views Chief generates (odm_ui_render / odm_ui_update). Form drafts only become pending actions.
   const surfaceService = createSurfaceService({ store, actions: ACTIONS, requestAction: (n, input, o) => actionService.request(n, input, o), emit: e => uiService.emit(e), log: m => console.log(m) });
 
+  let botDigest = null; // bot digest runner (src/digest/runner.js), set by index.js in the dsh host
   const router = {
     /** View op from the bot (odm_ui_op) or the owner's browser (撤销 / 固定). Validated against the store. */
     uiServiceRef() { return uiService; },
@@ -870,7 +871,71 @@ export function createApiRouter(ctx) {
     /**
      * POST /api/digest/generate - Manually trigger digest generation with LLM summary
      */
-    async generateDigestNow() {
+    /** Bot digest wiring (set from index.js where the dsh ctx exists). */
+    composio() { return getComposioClient(); },
+    profileContext() { const p = profileManager.getPersonalizationContext() || {}; return { ...p, name: p.name || identityCache.value?.name || '你' }; },
+    setBotDigest(runner) { botDigest = runner || null; return !!botDigest; },
+    botDigestRef() { return botDigest; },
+    digestMode() { const m = store.get()?.prefs?.digestMode; return m === 'legacy' ? 'legacy' : 'bot'; },
+    async setDigestMode({ mode } = {}) {
+      const state = store.get();
+      await store.save({ prefs: { ...(state.prefs || {}), digestMode: mode === 'legacy' ? 'legacy' : 'bot' } });
+      return { success: true, mode: router.digestMode(), botAvailable: !!botDigest };
+    },
+    digestStatus() {
+      const runner = botDigest;
+      return { success: true, mode: router.digestMode(), botAvailable: !!runner, running: !!runner?.running, live: runner?.live?.() || null, last: router.digestRuns()[0] || null, prefs: runner?.store?.get().prefs || [] };
+    },
+    /** Run the legacy pipeline as a dry run on the last bot run's exact source data and compare. Writes nothing. */
+    async compareDigest() {
+      const last = botDigest?.lastRun?.();
+      if (!last) return { success: false, error: 'no bot run yet' };
+      const { digestMetrics } = await import('../digest/compare.js');
+      const t0 = Date.now();
+      const legacy = await router.generateLegacyDigest({ dryRun: true, sourceData: last.sourceData });
+      const legacyMs = Date.now() - t0;
+      if (!legacy.success) return { success: false, error: legacy.error };
+      const run = router.digestRuns()[0] || null;
+      return { success: true, bot: { ...digestMetrics(last.cards, last.validUrls), ms: run?.ms, tokens: run?.tokens }, legacy: { ...digestMetrics(legacy.cards, last.validUrls), ms: legacyMs, llmChars: legacy.llmChars || null } };
+    },
+    digestRuns() { try { return botDigest?.store?.get().runs || []; } catch { return []; } },
+    /**
+     * The one save path for any digest (legacy or bot): learn, refresh identity, fold legacy email tiles,
+     * store.save({digest:true}) = update-or-add by sourceId, done/dismissed never overwritten, itemStatus kept.
+     */
+    async commitDigestCards(cards, { summary = '', sources = [], mode = 'legacy' } = {}) {
+      const client = getComposioClient();
+      const state = store.get();
+      await profileManager.learnFromCards(cards);
+      try {
+        const { fetchIdentityFromSources } = await import('./identity.js');
+        const id = client && await fetchIdentityFromSources(client, { home: config.home || '.odm-data', log: console.log });
+        if (id) identityCache.value = id;
+        const pctx = profileManager.getPersonalizationContext();
+        if (pctx.name) await profileManager.save({ name: '' });
+      } catch (e) { console.warn('[Identity] digest refresh failed:', e.message); }
+      state.lastDigest = { summary, generatedAt: new Date().toISOString(), itemCount: cards.length, sources, mode };
+      const { migrateEmailCards } = await import('./email-groups.js');
+      const mig = migrateEmailCards(state.cards || [], cards, state.itemStatus || {});
+      if (mig.merged) console.log(`[generateDigest] merged ${mig.merged} legacy email tiles into category groups`);
+      await store.save({ ...state, itemStatus: mig.itemStatus, cards: mig.cards }, { digest: true });
+      const finalState = store.get();
+      return { success: true, summary, totalCardCount: finalState.cards.length, timestamp: state.lastDigest.generatedAt, mode };
+    },
+
+    async generateDigestNow({ mode = null } = {}) {
+      const want = mode || router.digestMode();
+      if (want === 'bot' && botDigest && getComposioClient()) {
+        const r = await botDigest.run();
+        if (r.status === 'done') return { ...r.result.saved, mode: 'bot', bot: botDigest.summarize(r) };
+        console.warn(`[generateDigest] bot digest failed (${r.error}); falling back to the legacy pipeline`);
+        const legacy = await router.generateLegacyDigest();
+        return { ...legacy, mode: 'legacy-fallback', botError: r.error, bot: botDigest.summarize(r) };
+      }
+      return router.generateLegacyDigest();
+    },
+
+    async generateLegacyDigest({ dryRun = false, sourceData = null } = {}) {
       try {
         const client = getComposioClient();
         if (!client) {
@@ -914,51 +979,20 @@ export function createApiRouter(ctx) {
         // Run multi-stage aggregation pipeline with profile context
         const { runAggregationPipeline } = await import('./aggregation.js');
         const profileContext = profileManager.getPersonalizationContext();
-        const brief = await runAggregationPipeline(client, activeAccounts, llm, profileContext);
-
-        // CRITICAL: Cards are append/merge-only, NEVER wiped
-        // Store.save() now handles merging internally
-        const state = store.get();
-        
-        // Learn from generated cards
-        await profileManager.learnFromCards(brief.cards);
-        // Refresh display name from connected sources after digest (never write it into profile.json).
-        try {
-          const { fetchIdentityFromSources } = await import('./identity.js');
-          const id = await fetchIdentityFromSources(client, { home: config.home || '.odm-data', log: console.log });
-          if (id) identityCache.value = id;
-          // Drop any leftover personal name that was once saved into the profile.
-          const ctx = profileManager.getPersonalizationContext();
-          if (ctx.name) await profileManager.save({ name: '' });
-        } catch (e) { console.warn('[Identity] digest refresh failed:', e.message); }
-        
-        // Digest merges by sourceId but MUST NOT wipe done/dismissed cards or completions.
-        state.lastDigest = {
-          summary: brief.summary,
-          generatedAt: new Date().toISOString(),
-          itemCount: brief.cards.length,
-          sources: activeAccounts.map(a => a.toolkit.slug),
+        // Count model traffic (chars in / out, and usage when the client reports it) for the digest comparison.
+        const meter = { calls: 0, inChars: 0, outChars: 0, usage: { input: 0, output: 0 } };
+        const metered = Object.create(llm);
+        metered.stream = async function* (req) {
+          meter.calls++; meter.inChars += JSON.stringify(req?.messages || []).length;
+          for await (const ch of llm.stream(req)) {
+            if (ch?.type === 'text' && ch.text) meter.outChars += ch.text.length;
+            const u = ch?.usage; if (u) { meter.usage.input += Number(u.inputTokens ?? u.prompt_tokens ?? 0) || 0; meter.usage.output += Number(u.outputTokens ?? u.completion_tokens ?? 0) || 0; }
+            yield ch;
+          }
         };
-        // Fold persisted per-email / per-sender tiles into today's category groups (never wipes;
-        // done/dismissed keep their records and show as handled items in the group).
-        const { migrateEmailCards } = await import('./email-groups.js');
-        const mig = migrateEmailCards(state.cards || [], brief.cards, state.itemStatus || {});
-        if (mig.merged) console.log(`[generateDigest] merged ${mig.merged} legacy email tiles into category groups`);
-        await store.save({ ...state, itemStatus: mig.itemStatus, cards: mig.cards }, { digest: true });
-        
-        // Get final merged count
-        const finalState = store.get();
-        const newCardCount = finalState.cards.length - (state.cards?.length || 0);
-
-        console.log(`[generateDigest] Generated brief: ${brief.summary}`);
-        console.log(`[generateDigest] Total cards in store: ${finalState.cards.length} (added ${newCardCount >= 0 ? newCardCount : 'and updated'})`);
-
-        return {
-          success: true,
-          summary: brief.summary,
-          totalCardCount: finalState.cards.length,
-          timestamp: state.lastDigest.generatedAt,
-        };
+        const brief = await runAggregationPipeline(client, activeAccounts, metered, profileContext, { sourceData });
+        if (dryRun) return { success: true, dryRun: true, cards: brief.cards, summary: brief.summary, llmChars: meter };
+        return await router.commitDigestCards(brief.cards, { summary: brief.summary, sources: activeAccounts.map(a => a.toolkit.slug), mode: 'legacy' });
       } catch (err) {
         console.error('[generateDigest] Error:', err);
         return {

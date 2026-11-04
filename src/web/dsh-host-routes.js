@@ -91,7 +91,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     path: '/api/digest/generate',
     methods: ['POST'],
     requestBody: 'buffered',
-    fetch: async () => json(await router.generateDigestNow()),
+    fetch: async (request) => { const m = new URL(request.url).searchParams.get('mode'); return json(await router.generateDigestNow({ mode: m === 'legacy' || m === 'bot' ? m : null })) },
   }, 'opendigitalmate: /api/digest/generate')
 
   effect({
@@ -172,6 +172,38 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     requestBody: 'buffered',
     fetch: async (request) => json(await router.setAutoLayout(await readJson(request))),
   }, 'opendigitalmate: layout-pref')
+
+  effect({
+    path: '/api/opendigitalmate/digest-status',
+    methods: ['GET'],
+    fetch: async () => json(router.digestStatus()),
+  }, 'opendigitalmate: digest-status')
+
+  effect({
+    path: '/api/opendigitalmate/digest-compare',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async () => json(await router.compareDigest()),
+  }, 'opendigitalmate: digest-compare')
+
+  effect({
+    path: '/api/opendigitalmate/digest-mode',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request) => json(await router.setDigestMode(await readJson(request))),
+  }, 'opendigitalmate: digest-mode')
+
+  effect({
+    path: '/api/opendigitalmate/digest-pref',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request) => {
+      const b = await readJson(request); const st = router.botDigestRef()?.store
+      if (!st) return json({ success: false, error: 'bot digest unavailable' })
+      if (b?.remove) return json({ success: st.removePref(String(b.remove)) })
+      return json({ success: !!st.addPref(b?.text, { channel: b?.channel || null, by: 'user' }) })
+    },
+  }, 'opendigitalmate: digest-pref')
 
   effect({
     path: '/api/opendigitalmate/ui-context',

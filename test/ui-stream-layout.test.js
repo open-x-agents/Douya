@@ -57,8 +57,7 @@ test('affinity only with enough records, and the page says so when there are too
   const a = affinityOf(profile(46))
   assert.ok(a.score.get('github:cluster:Birfy/agentdescent') > 1); assert.ok(a.score.get('slack:cluster:x') < 0)
   const s = new Map(scoreCards(cards(), { now: at(14), period: 'work', affinity: a }).map(x => [x.id, x]))
-  assert.ok(s.get('ad').why.includes('你常打开'))
-  assert.ok(s.get('slack').score < new Map(scoreCards(cards(), { now: at(14), period: 'work', affinity: affinityOf(profile(0)) }).map(x => [x.id, x])).get('slack').score)
+  assert.equal(s.get('ad').habitWhy, '你常打开'); assert.ok(s.get('slack').habit < 0)
 })
 
 test('stable: kept within a period, recomputed on a new period or new cards, off when disabled', () => {
@@ -203,4 +202,19 @@ test('router: /api/today carries the time-of-day order (frozen, hour override no
   await router.recordDockSurfaces('表格已经放到\n下方', ['sf_t1', 'bad id'])
   const msgs = router.dockSurfacesFor([{ role: 'user', content: 'q' }, { role: 'assistant', content: '表格已经放到 下方' }, { role: 'assistant', content: 'other' }])
   assert.equal(msgs[1].surfaces?.[0]?.id, 'sf_t1'); assert.equal(msgs[2].surfaces, undefined); assert.equal(msgs[0].surfaces, undefined)
+})
+
+test('habit only reorders within the same priority level: an often-opened 促销与订阅 never climbs over work', () => {
+  const p = profile(46); p.preferences.cardInteractions.opened['gmail:group:promo:2026-11-03'] = 40; p.preferences.cardInteractions.opened['gmail:group:social:2026-11-03'] = 30
+  const list = [...cards(), { id: 'social', type: 'email-group', source: 'gmail', waiting: 'fyi', priority: 'low', status: 'active', sourceId: `gmail:group:social:${DAY}`, updatedAt: `${DAY}T00:00:00Z` },
+    { id: 'quiet', type: 'project-cluster', source: 'github', priority: 'medium', status: 'active', sourceId: `github:cluster:o/quiet:${DAY}`, updatedAt: `${DAY}T00:00:00Z` }]
+  for (const h of [9, 14, 20]) {
+    const r = computeAutoLayout(list, { now: at(h), profile: p })
+    const lowest = Math.min(r.order.indexOf('promo'), r.order.indexOf('social'))
+    assert.ok(lowest > r.order.indexOf('quiet'), `hour ${h}: low-value groups stay below medium work (${r.order.join(',')})`)
+    assert.ok(!/你常打开/.test(r.reasons.promo || ''), 'no habit reason that lifts promo over other levels')
+  }
+  // inside one level habit still decides: agentdescent (opened 15×) above the other medium GitHub card
+  const r = computeAutoLayout(list, { now: at(14), profile: p })
+  assert.ok(r.order.indexOf('ad') < r.order.indexOf('quiet'))
 })

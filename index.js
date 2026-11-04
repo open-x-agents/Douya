@@ -344,6 +344,27 @@ export function createRuntime(ctx, config = {}) {
   }
 
 
+  // Bot digest: source bots per channel + a Chief digest session (src/digest). Needs the dsh sessionController.
+  let knownTools = []
+  if (ctx?.sessionController?.create && rt.apiRouter?.setBotDigest) {
+    const dshHomeDir = process.env.DSH_HOME || join(process.env.HOME || '', '.dsh')
+    Promise.all([import('./src/digest/runner.js'), import('./src/web/aggregation.js')]).then(([{ createBotDigest, createDigestStore, readChiefMemory }, agg]) => {
+      const runner = createBotDigest({
+        ctx, store, home, aggregation: agg,
+        client: () => rt.apiRouter.composio(),
+        commit: (cards, meta) => rt.apiRouter.commitDigestCards(cards, meta),
+        emit: (progress) => { try { rt.apiRouter.uiServiceRef()?.pulse({ kind: 'digest', progress }) } catch {} },
+        digestStore: createDigestStore(home),
+        chiefMemory: () => readChiefMemory(dshHomeDir),
+        knownTools: () => knownTools,
+        profileContext: () => { try { return rt.apiRouter.profileContext?.() || {} } catch { return {} } },
+        log: (m) => { log(m); console.log(`[odm] ${m}`) },
+      })
+      rt.apiRouter.setBotDigest(runner)
+      log('bot digest ready (sources: gmail, github, slack)')
+    }).catch(err => log(`bot digest unavailable: ${err.message}`))
+  }
+
   // Register Composio / identity / cite tools on the live ds-bot tool registry.
   if (typeof ctx?.effect === 'function' && ctx?.tools?.register) {
     ctx.effect(() => {
@@ -366,6 +387,7 @@ export function createRuntime(ctx, config = {}) {
           museUrl: process.env.ODM_MUSE_URL || 'http://127.0.0.1:7777',
           router: rt.apiRouter,
           log: (m) => log(m),
+          onRegistered: (names) => { knownTools = names },
         }).then(d => { dispose = d })
       ).catch(err => log(`dsbot-tools failed: ${err.message}`))
       return () => { try { dispose() } catch {} }

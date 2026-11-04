@@ -56,6 +56,8 @@ const KIND_WHY = {
   work: { pr: '工作时段 PR 优先', mention: '工作时段先回 @你的消息' },
   evening: {},
 }
+/** Priority level: habit weight never moves a card across levels. */
+export function levelOf(card) { return card.priority === 'urgent' || card.priority === 'high' ? 0 : card.priority === 'low' || card.waiting === 'fyi' ? 2 : 1 }
 function dueOf(card) { const d = Date.parse(card.dueAt || card.due || ''); return Number.isFinite(d) ? d : null }
 function doneTodayCount(card, itemStatus = {}, now) {
   const day = shDay(now)
@@ -83,15 +85,14 @@ export function scoreCards(cards, { now = Date.now(), period, itemStatus = {}, a
     const w = WEIGHTS[period][kind] || 0
     if (w) parts.push([w, KIND_WHY[period][kind] || null])
     if (period === 'evening') { const d = doneTodayCount(c, itemStatus, now); if (d) parts.push([2.5, `今天完成了 ${d} 条`]) }
-    if (affinity?.enough) {
-      const a = affinity.score.get(cardKey(c)) || 0
-      if (a) parts.push([a, a >= 0.75 ? '你常打开' : a <= -0.6 ? '你常忽略' : null])
-    }
+    // Habit (open / complete / dismiss counts) is kept apart: it may only reorder cards of the same priority level,
+    // so a often-opened 促销与订阅 group never climbs over work that matters more.
+    const habit = affinity?.enough ? (affinity.score.get(cardKey(c)) || 0) : 0
     const upd = Date.parse(c.updatedAt || c.createdAt || '')
     if (Number.isFinite(upd) && now - upd > 48 * 3600e3) parts.push([-1, null])
     const score = parts.reduce((s, [p]) => s + p, 0)
     const why = parts.filter(([p, t]) => t && p > 0).sort((a, b) => b[0] - a[0]).map(([, t]) => t)
-    out.push({ id: c.id, score, why })
+    out.push({ id: c.id, score, habit, level: levelOf(c), why, habitWhy: habit >= 0.75 ? '你常打开' : habit <= -0.6 ? '你常忽略' : null })
   }
   return out
 }
@@ -124,10 +125,22 @@ export function computeAutoLayout(cards, { now = Date.now(), profile = null, ite
   const s = new Map(scored.map(x => [x.id, x]))
   const basePos = new Map(base.map((id, i) => [id, i]))
   const order = [...base].sort((a, b) => (s.get(b)?.score ?? 0) - (s.get(a)?.score ?? 0) || basePos.get(a) - basePos.get(b))
+  // Then habit: re-sort only inside each run of neighbours that share a priority level.
+  const habitMoved = new Set()
+  for (let i = 0; i < order.length;) {
+    let j = i
+    while (j < order.length && s.get(order[j])?.level === s.get(order[i])?.level) j++
+    const run = order.slice(i, j)
+    const sorted = [...run].sort((a, b) => ((s.get(b)?.score ?? 0) + (s.get(b)?.habit ?? 0)) - ((s.get(a)?.score ?? 0) + (s.get(a)?.habit ?? 0)) || run.indexOf(a) - run.indexOf(b))
+    sorted.forEach((id, k) => { if (k < run.indexOf(id) && s.get(id)?.habitWhy) habitMoved.add(id) })
+    order.splice(i, run.length, ...sorted)
+    i = j
+  }
   // Only cards that moved up get a "why it's here" line, so the page doesn't shout.
   const reasons = {}
   order.forEach((id, i) => {
-    if (i < basePos.get(id) && (s.get(id)?.why || []).length) reasons[id] = s.get(id).why.slice(0, 2).join(' · ')
+    const why = [...(s.get(id)?.why || []), ...(habitMoved.has(id) ? [s.get(id).habitWhy] : [])]
+    if (i < basePos.get(id) && why.length) reasons[id] = why.slice(0, 2).join(' · ')
   })
   return { ...meta, order, reasons, computedAt: new Date(now).toISOString(), kept: false }
 }

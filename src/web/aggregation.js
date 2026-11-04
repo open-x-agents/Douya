@@ -707,7 +707,7 @@ export function dedupeItems(items) {
  * Stage 3.5: Cluster items by project/theme (NEW)
  * Groups items into themed tiles: e.g., "REPO-A · RELEASE" with aggregated stats
  */
-export function clusterByProjectTheme(items) {
+export function clusterByProjectTheme(items, opts = {}) {
   const clusters = [];
   
   // Cluster GitHub items by repository
@@ -884,7 +884,7 @@ export function clusterByProjectTheme(items) {
   // plus at most a few actionable mails from real people. Replaces per-sender, newsletter
   // and donut tiles, which produced one tile per promo mail.
   const looseEmails = emailItems.filter(e => !mergedIntoRepo.has(e.sourceId));
-  const emailClusters = buildEmailClusters(looseEmails);
+  const emailClusters = buildEmailClusters(looseEmails, opts.email || {});
   clusters.push(...emailClusters);
   console.log(`[Clustering] Gmail: ${emailClusters.length} category tiles from ${looseEmails.length} emails (${mergedIntoRepo.size} merged into repo tiles)`);
 
@@ -1250,7 +1250,7 @@ export async function writeBrief(grouped, llmClient, profileContext) {
  * Generate rich visual cards from clusters
  * Each card has: title, subtitle, status pill, stat row, mini chart, action button
  */
-function generateClusterCards(grouped) {
+export function generateClusterCards(grouped) {
   const cards = [];
   const allClusters = [...grouped.urgent, ...grouped.action, ...grouped.fyi];
   
@@ -1718,10 +1718,11 @@ const mergedAt = item => item?.pull_request?.merged_at || item?.merged_at || nul
 /**
  * Main aggregation pipeline
  */
-export async function runAggregationPipeline(composioClient, activeSources, llmClient, profileContextIn) {
+export async function runAggregationPipeline(composioClient, activeSources, llmClient, profileContextIn, opts = {}) {
   const profileContext = profileContextIn ? { ...profileContextIn } : {};
   console.log('[Aggregation] Stage 1: Fetching from sources...');
-  const sourceData = await fetchFromSources(composioClient, activeSources);
+  // opts.sourceData: reuse an already-fetched snapshot (the bot digest compares itself with this pipeline on identical data).
+  const sourceData = opts.sourceData || await fetchFromSources(composioClient, activeSources);
   
   console.log('[Aggregation] Stage 2: Normalizing items...');
   const items = normalizeItems(sourceData);
@@ -1774,7 +1775,7 @@ export async function runAggregationPipeline(composioClient, activeSources, llmC
 /**
  * Generate personalized hero greeting card with achievement rings
  */
-async function generateHeroCard(grouped, sourceData, llmClient, profileContext) {
+export async function generateHeroCard(grouped, sourceData, llmClient, profileContext) {
   const now = new Date();
   const hour = now.getHours();
   const timeOfDay = hour < 12 ? '早上' : hour < 17 ? '下午' : '晚上';
@@ -1882,7 +1883,7 @@ JSON: {"narrative": "你的 1-2 句叙述"}`;
 /**
  * Generate My Day timetable with real events + LLM suggestions
  */
-async function generateTimetable(grouped, sourceData, llmClient, profileContext) {
+export async function generateTimetable(grouped, sourceData, llmClient, profileContext) {
   const now = new Date();
   const events = sourceData.googlecalendar?.today || [];
   
@@ -1979,7 +1980,7 @@ JSON: {
 /**
  * Generate achievements tile with streak and contribution heatmap
  */
-function generateAchievementsTile(sourceData, items) {
+export function generateAchievementsTile(sourceData, items) {
   const githubItems = allGithubItems(sourceData);
   
   // Calculate total merged PRs

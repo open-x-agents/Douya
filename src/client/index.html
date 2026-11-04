@@ -1113,6 +1113,11 @@
   .sf-table tbody tr:nth-child(n+8),.sf-list li:nth-child(n+8){animation-delay:.16s}
   .sf-table tbody tr:nth-child(n+12){animation-delay:.24s}
   @keyframes sfRowIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  .digest-progress{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 12px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:rgba(74,108,247,.05);font-size:12.5px;color:var(--ink2)}
+  .digest-progress .dp-chip{display:inline-flex;gap:4px;align-items:center;padding:2px 9px;border-radius:999px;background:#fff;border:1px solid var(--line)}
+  .digest-progress .dp-done{color:#0a8f5a;border-color:#bfe8d4}.digest-progress .dp-bad{color:#c2410c;border-color:#fbd5bf}.digest-progress .dp-run{color:var(--blue)}
+  .digest-run-box{margin:0 0 14px}.digest-run-box table{border-collapse:collapse;font-size:12.5px;width:100%}.digest-run-box td,.digest-run-box th{padding:5px 8px;border-bottom:1px solid var(--line);text-align:left}
 </style>
 </head>
 <body>
@@ -1157,6 +1162,7 @@
               </div>
             </div>
           </header>
+          <div id="digestProgress" class="digest-progress" hidden></div>
           <div id="cardList"></div>
         </section>
 
@@ -1165,6 +1171,7 @@
           <h3 class="concl">信源接入状态</h3>
           <div class="stamp a in">查看已连接的数据源和权限范围</div>
 
+          <div id="digestRunBox" class="digest-run-box"></div>
           <div id="sourcesContent"></div>
         </section>
 
@@ -1172,6 +1179,16 @@
         <section class="view" id="v-settings">
           <h3 class="concl">模型配置</h3>
           <div class="stamp a in">配置 AI 模型用于智能对话</div>
+
+          <div class="card a in" id="digestModeCard">
+            <h3>🧭 汇聚方式</h3>
+            <p style="font-size:12.5px;color:var(--ink2);margin:8px 0">「今天」页卡片由谁整理：每个渠道一个信源 Bot + Chief 合并（推荐），或旧的固定流水线。Bot 汇聚失败时自动回退到旧流水线。</p>
+            <select id="digestModeSelect" style="width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px;background:#fff">
+              <option value="bot">信源 Bot + Chief（推荐）</option>
+              <option value="legacy">旧流水线</option>
+            </select>
+            <div id="digestModeNote" style="font-size:12px;color:var(--ink3);margin-top:6px"></div>
+          </div>
 
           <!-- Model Configuration -->
           <div class="card a in" id="modelCard">
@@ -2266,8 +2283,11 @@
     status.style.color = 'var(--blue)';
     
     try {
-      const res = await fetch('/api/digest/generate', { method: 'POST' });
-      const result = await res.json();
+      // The live feed pushes progress; poll status too in case the feed is down.
+      const poll = setInterval(async () => { try { const st = await (await fetch('/api/opendigitalmate/digest-status')).json(); if (st.running && st.live) renderDigestProgress(st.live); } catch (_) {} }, 2500);
+      let res, result;
+      try { res = await fetch('/api/digest/generate', { method: 'POST' }); result = await res.json(); }
+      finally { clearInterval(poll); $('digestProgress').hidden = true; }
       
       if (!result.success) {
         status.textContent = '⚠️ ' + (result.error || '汇聚失败');
@@ -2277,7 +2297,8 @@
         return;
       }
       
-      status.textContent = `✓ 已汇聚 ${result.newCardCount} 张新卡片`;
+      const failedCh = Object.entries(result.bot?.channels || {}).filter(([, v]) => v.status !== 'done').map(([k]) => k);
+      status.textContent = result.mode === 'bot' ? `✓ Bot 汇聚完成${failedCh.length ? `（${failedCh.join('、')} 未更新）` : ''}` : result.mode === 'legacy-fallback' ? '✓ 已汇聚（Bot 失败，已用旧流水线）' : '✓ 已汇聚';
       status.style.color = 'var(--green)';
       btn.textContent = '⚡ 重新汇聚';
       btn.disabled = false;
@@ -2340,6 +2361,7 @@
     content.innerHTML = `<div class="src-summary"><div><b>${unknown ? '–' : on}</b><span>已连接</span></div><div><b>${apps.length}</b><span>可用信源</span></div>${data.configured === false ? '<p class="src-warn">尚未配置 Composio API Key，请先到「配置」页填写后再连接。</p>' : ''}</div>` + note + renderAppTiles(apps.map(a => ({ ...a, unknown: unknown && !a.connected })));
   }
   async function loadSources(force = false) {
+    loadDigestRun();
     const content = $('sourcesContent');
     const seq = ++srcSeq;
     let painted = false;
@@ -2369,11 +2391,33 @@
       } else content.innerHTML = `<div class="error">加载失败：${escapeHtml(err.message)} <button class="src-recheck" onclick="loadSources(true)">重试</button></div>`;
     }
   }
+  async function loadDigestRun() {
+    const box = $('digestRunBox'); if (!box) return;
+    try {
+      const st = await (await fetch('/api/opendigitalmate/digest-status')).json();
+      const r = st.last;
+      if (!r) { box.innerHTML = st.botAvailable ? '<p class="src-note">还没有运行过 Bot 汇聚。</p>' : ''; return; }
+      const zh = { done: '✓ 完成', failed: '✗ 失败', timeout: '✗ 超时', fetching: '获取中', thinking: '整理中', queued: '排队' };
+      const t = new Date(r.startedAt).toLocaleString('zh-CN', { hour12: false });
+      const rows = Object.entries(r.channels || {}).map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${zh[v.status] || v.status}</td><td>${v.cards ?? '–'}</td><td>${v.items ?? '–'}</td><td>${v.ms != null ? (v.ms / 1000).toFixed(1) + 's' : '–'}</td><td>${escapeHtml(v.error || (v.status === 'done' ? '' : '旧卡保持不变'))}</td></tr>`).join('');
+      box.innerHTML = `<h4 style="margin:0 0 6px">上次汇聚（${st.mode === 'bot' ? '信源 Bot' : '旧流水线'} · ${escapeHtml(t)} · ${r.status === 'done' ? '成功' : '失败：' + escapeHtml(r.error || '')} · ${(r.ms / 1000).toFixed(0)}s）</h4>
+        <table><tr><th>信源 Bot</th><th>状态</th><th>候选卡</th><th>条目</th><th>用时</th><th>说明</th></tr>${rows}
+        <tr><td>Chief 合并</td><td>${zh[r.chief?.status] || r.chief?.status || '–'}</td><td>${(r.chief?.merges || []).length} 次合并</td><td></td><td>${r.chief?.ms != null ? (r.chief.ms / 1000).toFixed(1) + 's' : '–'}</td><td>${escapeHtml(r.chief?.error || '')}</td></tr></table>
+        ${st.prefs?.length ? `<p class="src-note">汇聚偏好：${st.prefs.map(p => escapeHtml(p.text)).join('；')}</p>` : ''}`;
+    } catch (_) { box.innerHTML = ''; }
+  }
+  window.loadDigestRun = loadDigestRun;
+  async function loadDigestMode() {
+    const sel = $('digestModeSelect'); if (!sel) return;
+    try { const st = await (await fetch('/api/opendigitalmate/digest-status')).json(); sel.value = st.mode; $('digestModeNote').textContent = st.botAvailable ? '' : '（Bot 汇聚当前不可用，会使用旧流水线）'; } catch (_) {}
+    sel.onchange = async () => { const r = await (await fetch('/api/opendigitalmate/digest-mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: sel.value }) })).json().catch(() => ({})); $('digestModeNote').textContent = r.success ? '已保存' : '保存失败'; };
+  }
   window.loadSources = loadSources;
   window.__reloadSources = () => { if ($('v-sources').classList.contains('on')) loadSources(true); };
 
   // LLM Settings handlers
   async function loadLLMSettings() {
+    loadDigestMode();
     try {
       const res = await fetch('/api/llm/config');
       const data = await res.json();
@@ -3163,7 +3207,19 @@
       setTimeout(startUiFeed, hello ? 800 : 1500 * feedState.fails); // replays from uiSeq: nothing durable is lost
     };
   }
+  // Bot digest progress on 今天: 'Gmail 整理中… · GitHub 完成 · Chief 合并中…'
+  const DP_ZH = { queued: '排队', fetching: '获取中…', thinking: '整理中…', done: '完成', failed: '失败', timeout: '超时' };
+  function renderDigestProgress(p) {
+    const el = $('digestProgress'); if (!el || !p) return;
+    if (p.status !== 'running') { el.hidden = true; return; }
+    const chip = (label, st, extra) => { const c = document.createElement('span'); c.className = 'dp-chip ' + (st === 'done' ? 'dp-done' : st === 'failed' || st === 'timeout' ? 'dp-bad' : 'dp-run'); c.textContent = `${label} ${DP_ZH[st] || st}${extra ? ' · ' + extra : ''}`; return c; };
+    const head = document.createElement('b'); head.style.marginRight = '4px'; head.textContent = '汇聚中';
+    el.replaceChildren(head, ...Object.values(p.channels || {}).map(c => chip(c.label, c.status, c.status === 'done' && c.cards != null ? `${c.cards} 张` : '')), chip('Chief 合并', p.chief?.status || 'queued'));
+    el.hidden = false;
+  }
+  window.__odmDigestProgress = renderDigestProgress;
   function onLiveEvent(e) {
+    if (e.kind === 'digest') { renderDigestProgress(e.progress); return; }
     const t = e.turn && liveTurns.get(e.turn);
     if (!t) return;
     if (e.kind === 'progress') t.progress(e.label);

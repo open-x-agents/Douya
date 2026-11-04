@@ -1179,9 +1179,16 @@
   .composer-chip .x{border:0;background:transparent;color:var(--ink3);cursor:pointer;font-size:14px;padding:0 2px;line-height:1}
   .composer-chip.err{border-color:#f1b4a2;color:#c2410c;background:#fff5f0}
   .composer-tools{display:flex;gap:4px;align-items:center;flex-shrink:0}
-  .composer-tools button{width:36px;height:36px;border-radius:50%;border:0;background:transparent;color:var(--ink2);cursor:pointer;font-size:18px;display:grid;place-items:center}
-  .composer-tools button:hover{background:rgba(0,0,0,.05);color:var(--ink)}
-  .composer-tools button.rec{background:#fee2e2;color:#b91c1c;animation:pulse-rec 1.2s infinite}
+  /* composer-tools-restore: keep attach/mic discoverable (never hide; glyph fallback if SVG fails) */
+  .composer-tools button{position:relative;width:36px;height:36px;border-radius:50%;border:0;background:rgba(30,40,80,.04);color:var(--ink2);cursor:pointer;display:grid;place-items:center;flex-shrink:0}
+  .composer-tools button .ct-glyph{font-size:18px;line-height:1;display:block}
+  .composer-tools button svg{display:none}
+  .composer-tools button:hover{background:rgba(122,106,216,.12);color:var(--violet)}
+  .composer-tools button.rec{background:rgba(138,116,208,.14);color:#6b5bc4;animation:mic-pulse 1.3s ease-in-out infinite}
+  #v-today .today-chat-input .composer-tools,
+  .today-chat .composer-tools,
+  .today-chat.in-zoom .composer-tools{display:flex!important;visibility:visible!important;opacity:1!important}
+  #todayAttachBtn,#todayMicBtn{display:grid!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important}
   @keyframes pulse-rec{50%{opacity:.7}}
   .composer-tip{font-size:11.5px;color:var(--ink3);padding:0 8px 6px;max-width:640px;margin:0 auto}
   /* Attachments in the user's bubble: thumbnails + file chips (never the model-only 【附件】 note) */
@@ -1285,13 +1292,10 @@
   /* ===== Input bar: aligned 36px icon buttons, lighter send ===== */
   .composer-tools{gap:2px}
   .today-chat-msgs .bubble.bot.streaming,.z-chat .z-msg.bot.streaming,.z-msg.streaming{white-space:pre-wrap}
-  .z-input .composer-tools button{padding:0;border-radius:50%;background:transparent;color:var(--ink3);box-shadow:none;font-size:0}
-  .z-input .composer-tools button:hover{background:rgba(30,40,80,.06);color:var(--ink)}
-  .z-input .composer-tools button.rec{background:rgba(138,116,208,.14);color:#6b5bc4}
-  .composer-tools button{width:36px;height:36px;font-size:0;color:var(--ink3);transition:background .15s,color .15s}
-  .composer-tools button svg{display:block}
-  .composer-tools button:hover{color:var(--ink);background:rgba(30,40,80,.06)}
-  .composer-tools button.rec{background:rgba(138,116,208,.14);color:#6b5bc4;animation:mic-pulse 1.3s ease-in-out infinite}
+  .z-input .composer-tools button{padding:0;border-radius:50%;box-shadow:none}
+  /* keep glyph-first tools; do not force font-size:0 (that hid ＋/🎤 when SVG was the only cue) */
+  .composer-tools button{transition:background .15s,color .15s}
+  .composer-tools button.rec{animation:mic-pulse 1.3s ease-in-out infinite}
   @keyframes mic-pulse{0%,100%{box-shadow:0 0 0 0 rgba(138,116,208,.35)}50%{box-shadow:0 0 0 6px rgba(138,116,208,0)}}
   @media (prefers-reduced-motion:reduce){.composer-tools button.rec{animation:none}}
   .z-input{padding:4px 4px 4px 6px;align-items:center}
@@ -1679,6 +1683,8 @@
   .tile.done-today.just-tucked{animation:doneCatch .7s var(--ease-out)}
   @keyframes doneCatch{0%{box-shadow:0 0 0 0 rgba(43,179,138,.45)}100%{box-shadow:0 0 0 14px rgba(43,179,138,0)}}
   .chat-chips.is-typing{opacity:0!important;transform:translateY(4px) scale(.98);max-height:0;margin:0!important;padding:0;overflow:hidden;pointer-events:none!important}
+  /* never hide composer-tools while typing */
+  .composer-tools,.composer-tools button{pointer-events:auto}
   .composer-tip.is-typing{opacity:0;max-height:0;padding:0!important;margin:0!important;overflow:hidden;pointer-events:none}
   .qa-bar button:focus-visible,.swipe-rail button:focus-visible,.step:focus-visible,.chip:focus-visible,.ss-opts button:focus-visible{
     outline:2px solid rgba(122,106,216,.65);outline-offset:2px
@@ -3819,9 +3825,9 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         <div class="composer-attach" id="todayAttachRail" hidden></div>
         <div class="composer-tip" id="todayComposerTip" hidden></div>
         <div class="input-wrap">
-          <div class="composer-tools">
-            <button type="button" id="todayAttachBtn" title="图片或文件" aria-label="添加图片或文件"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg></button>
-            <button type="button" id="todayMicBtn" title="语音输入" aria-label="语音输入"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v3.5"/></svg></button>
+          <div class="composer-tools" role="group" aria-label="附件与语音">
+            <button type="button" id="todayAttachBtn" title="图片或文件" aria-label="添加图片或文件"><span class="ct-glyph" aria-hidden="true">＋</span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg></button>
+            <button type="button" id="todayMicBtn" title="语音输入" aria-label="语音输入"><span class="ct-glyph" aria-hidden="true">🎤</span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v3.5"/></svg></button>
           </div>
           <input type="text" id="todayChatInput" placeholder="和豆芽对话… 可粘贴/拖入图片" autocomplete="off" enterkeyhint="send" />
           <button class="send-btn" id="todayChatSend" type="button" aria-label="发送" disabled><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>

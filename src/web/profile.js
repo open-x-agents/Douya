@@ -153,6 +153,15 @@ export function createProfileManager(path) {
     /**
      * Get personalization context for LLM
      */
+    /** Signals for the 今天 time-of-day order (src/ui/layout.js): when the day starts and per-card affinity. */
+    affinity() {
+      return {
+        activeHours: { ...(profile.preferences?.activeHours || {}) },
+        cardInteractions: profile.preferences?.cardInteractions || { opened: {}, dismissed: {}, completed: {} },
+        totalInteractions: Number(profile.stats?.totalInteractions) || 0,
+      };
+    },
+
     getPersonalizationContext() {
       const topRepos = Object.entries(profile.preferences.topRepos)
         .sort((a, b) => b[1] - a[1])

@@ -111,6 +111,7 @@ export async function runMuseChatTurn(ctx, {
   botId = null,
   log = () => {},
   timing = null,
+  onSession = null, // (sessionId) → the UI feed streams this turn's text / tool progress
 } = {}) {
   const text = clean(message)
   if (!text) return { ok: true, text: '想问哪一类？可以说邮件、PR、或改一张 Today 卡片。', status: 'answered', botId: null }
@@ -134,6 +135,7 @@ export async function runMuseChatTurn(ctx, {
   let sessionId = chief.sessionId // where replies land; re-resolved while waiting (a handoff can happen mid-turn)
   if (!promptTo || !sessionId) return { ok: false, error: 'no Main Bot' }
   if (!ctx?.sessionController?.prompt) return { ok: false, error: 'sessionController missing' }
+  try { onSession?.(sessionId); if (promptTo !== sessionId) onSession?.(promptTo) } catch {}
 
   try { ensureSessionCompat((await liveAgent(ctx, sessionId))?.session, log) } catch {}
   // Snapshot previous assistant text if page works.
@@ -158,7 +160,7 @@ export async function runMuseChatTurn(ctx, {
   let pageErrLogged = false
   while (Date.now() < deadline) {
     const now = (await resolveChief(dshHome, promptTo)).sessionId
-    if (now && now !== sessionId) { log(`[muse-chat] Chief moved on to a new part: ${now}`); sessionId = now; T.handoff = true }
+    if (now && now !== sessionId) { log(`[muse-chat] Chief moved on to a new part: ${now}`); sessionId = now; T.handoff = true; try { onSession?.(now) } catch {} }
     const agent = await liveAgent(ctx, sessionId)
     if (agent?.status === 'running' && typeof agent.whenIdle === 'function') {
       await Promise.race([agent.whenIdle(), new Promise(r => setTimeout(r, 8_000))])

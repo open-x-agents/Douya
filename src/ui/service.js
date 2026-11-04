@@ -12,12 +12,24 @@ export function createUiService({ store, log = () => {}, now = () => Date.now() 
   const waiters = new Set()
   let view = null // what the user is looking at — memory only, never persisted
 
+  const listeners = new Set() // SSE feed connections (ui-feed.js)
+  const tell = (e) => { for (const fn of [...listeners]) { try { fn(e) } catch {} } }
   const emit = (ev) => {
     const e = { ...ev, seq: ++seq, at: now(), bootId }
     events.push(e)
     while (events.length > 200) events.shift()
     for (const w of [...waiters]) w()
+    tell(e)
     return e
+  }
+  /** Ephemeral events (text deltas, tool progress, skeletons): live listeners only, no seq, never replayed. */
+  const pulse = (ev) => { if (listeners.size) tell({ ...ev, ephemeral: true, at: now(), bootId }) }
+  function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn) }
+  /** Durable events after `since` for a (re)connecting feed; a different bootId means resync from /api/today. */
+  function backlog({ since = 0, boot = null } = {}) {
+    lastPollAt = now()
+    const fresh = !!(boot && boot !== bootId)
+    return { bootId, seq, resync: fresh, events: events.filter(e => e.seq > (fresh ? Infinity : Number(since) || 0)) }
   }
 
   async function op(input, { by = 'bot', source = null } = {}) {
@@ -41,7 +53,7 @@ export function createUiService({ store, log = () => {}, now = () => Date.now() 
     log(`[ui] ${by} ${v.op.op} → ${res.message} (seq ${ev.seq})`)
     return {
       success: true, op: v.op.op, message: res.message, undoId: undoable ? res.entry.id : null, skipped: res.skipped,
-      delivered: waiters.size > 0 || recentlyPolled(), seq: ev.seq,
+      delivered: waiters.size > 0 || listeners.size > 0 || recentlyPolled(), seq: ev.seq,
     }
   }
 
@@ -75,5 +87,5 @@ export function createUiService({ store, log = () => {}, now = () => Date.now() 
   }
   function state() { return uiStateFull(view, store.get() || {}, { now: now() }) }
 
-  return { op, poll, emit, setView, getView, viewText, state, get bootId() { return bootId }, get seq() { return seq } }
+  return { op, poll, emit, pulse, subscribe, backlog, get listeners() { return listeners.size }, setView, getView, viewText, state, get bootId() { return bootId }, get seq() { return seq } }
 }

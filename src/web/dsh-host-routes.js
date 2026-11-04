@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runMuseChatTurn, chatProgress } from './muse-chat-core.js'
+import { installUiFeed } from './ui-feed.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const CLIENT_HTML = join(__dirname, '../client/index.html')
@@ -14,6 +15,10 @@ function json(data, status = 200) {
     status,
     headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
   })
+}
+
+function hourParam(request) {
+  try { const h = new URL(request.url, 'http://x').searchParams.get('hour'); return h !== null && /^\d{1,2}$/.test(h) ? Number(h) : null } catch { return null }
 }
 
 async function readJson(request) {
@@ -47,6 +52,10 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     ctx.effect(() => register(safe), label)
   }
 
+  // Live UI feed (SSE): durable view events + this turn's text deltas, tool progress and view skeletons.
+  let feed = null
+  try { feed = installUiFeed(ctx, { uiService: router.uiServiceRef(), effect, log }) } catch (err) { log(`ui-feed install failed: ${err?.message || err}`) }
+
   // Primary Muse UI (replaces stock dsh frontend via client redirect).
   effect({
     path: '/api/opendigitalmate/app',
@@ -68,7 +77,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     path: '/api/today',
     methods: ['GET'],
     requestBody: 'buffered',
-    fetch: async () => json(await router.getToday()),
+    fetch: async (request) => json(await router.getToday({ hour: hourParam(request) })),
   }, 'opendigitalmate: /api/today')
 
   effect({
@@ -156,6 +165,14 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     fetch: async (request) => json(await router.uiOp(await readJson(request), { by: 'user' })),
   }, 'opendigitalmate: ui-op')
 
+  // 今天 time-of-day order on / off (the user's switch on the page).
+  effect({
+    path: '/api/opendigitalmate/layout-pref',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request) => json(await router.setAutoLayout(await readJson(request))),
+  }, 'opendigitalmate: layout-pref')
+
   effect({
     path: '/api/opendigitalmate/ui-context',
     methods: ['POST'],
@@ -235,15 +252,21 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
         try { viewContext = router.viewSnapshot(body.viewContext) || '' } catch (err) { log(`viewSnapshot failed: ${err.message}`) }
       }
       timing.contextAt = Date.now()
-      const result = await runMuseChatTurn(ctx, {
-        message: body.message || body.text,
-        cardId: body.cardId,
-        cardContext,
-        viewContext,
-        dshHome,
-        log,
-        timing,
-      })
+      // The page names its turn so streamed text / skeletons land in the right bubble.
+      const turn = typeof body.turn === 'string' && /^t_[\w-]{4,40}$/.test(body.turn) ? body.turn : null
+      let result
+      try {
+        result = await runMuseChatTurn(ctx, {
+          message: body.message || body.text,
+          cardId: body.cardId,
+          cardContext,
+          viewContext,
+          dshHome,
+          log,
+          timing,
+          onSession: turn && feed ? (sid) => feed.turns.watch(sid, turn) : null,
+        })
+      } finally { if (turn && feed) feed.turns.unwatch(turn) }
       if (!result.ok) {
         return json({
           text: `没法完成对话：${result.error}`,
@@ -255,6 +278,8 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
       // Temporary views Chief generated during this turn ride along as rich blocks under the reply.
       let surfaces = []
       try { surfaces = router.surfacesSince(timing.recvAt).map(view => ({ type: 'surface', view })) } catch (err) { log(`surfacesSince failed: ${err.message}`) }
+      // Dock replies keep their views across a reload (card chats store theirs with the card chat).
+      if (surfaces.length && !body.cardId) { try { await router.recordDockSurfaces(result.text, surfaces.map(s => s.view.id)) } catch (err) { log(`recordDockSurfaces failed: ${err.message}`) } }
       return json({
         text: result.text,
         status: result.status,
@@ -262,6 +287,8 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
         cards: [...(result.cards || []), ...surfaces],
         botId: result.botId,
         sessionId: 'dsbot-chief',
+        turn,
+        streamed: !!(turn && feed && feed.stats.clients > 0),
         timing: { ...result.timing, clientSentAt: timing.clientSentAt, serverRecvAt: timing.recvAt, serverRespondAt: Date.now() },
         time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
       })

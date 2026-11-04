@@ -9,6 +9,9 @@ import { fileURLToPath } from 'node:url';
 import { generateDailyDigest, getSourcesStatus, pushDailyDigest, createComposioClient } from './composio.js';
 import { reminderCard } from '../host/cards.js';
 import { createProfileManager } from './profile.js';
+import { computeAutoLayout } from '../ui/layout.js';
+/** Stable key for a dock reply: whitespace-collapsed first 160 chars. */
+export const dockKey = (t) => String(t ?? '').replace(/\s+/g, ' ').trim().slice(0, 160);
 import { createActionService, ACTIONS } from './actions.js';
 import { cardSnapshotText, cardFull } from './card-snapshot.js';
 import { createUiService } from '../ui/service.js';
@@ -681,6 +684,25 @@ export function createApiRouter(ctx) {
 
   const router = {
     /** View op from the bot (odm_ui_op) or the owner's browser (撤销 / 固定). Validated against the store. */
+    uiServiceRef() { return uiService; },
+    /** Dock replies → the views shown under them, so /api/chat/history can bring them back after a reload. */
+    async recordDockSurfaces(text, ids) {
+      const key = dockKey(text); const list = (ids || []).filter(id => /^sf_\w{1,40}$/.test(id)).slice(0, 3);
+      if (!key || !list.length) return { ok: false };
+      const prev = (store.get().dockSurfaces || []).filter(r => r.key !== key);
+      await store.save({ dockSurfaces: [...prev, { key, ids: list, at: new Date().toISOString() }].slice(-40) });
+      return { ok: true };
+    },
+    dockSurfacesFor(messages) {
+      const recs = new Map((store.get().dockSurfaces || []).map(r => [r.key, r.ids]));
+      if (!recs.size) return messages;
+      return messages.map(m => {
+        if (m.role !== 'assistant') return m;
+        const ids = recs.get(dockKey(m.content)); if (!ids) return m;
+        const views = ids.map(id => { try { return surfaceService.get(id)?.view || null; } catch { return null; } }).filter(Boolean);
+        return views.length ? { ...m, surfaces: views } : m;
+      });
+    },
     async uiOp(body = {}, { by = 'bot' } = {}) { return uiService.op(body, { by: by === 'user' ? 'user' : 'bot' }); },
     /** Long-poll for view events: { since, boot, wait }. */
     async uiEvents({ since = 0, boot = null, wait = 25000 } = {}) { return uiService.poll({ since: Number(since) || 0, boot, waitMs: Math.min(Number(wait) || 0, 30000) }); },
@@ -713,7 +735,26 @@ export function createApiRouter(ctx) {
     /**
      * GET /api/today - Get today's summary and tasks
      */
-    async getToday() {
+    /** 今天 time-of-day order (P4): frozen per day + period; `hour` is a test override that is never stored. */
+    async autoLayout(cards, { hour = null } = {}) {
+      const state = store.get();
+      const enabled = state.prefs?.autoLayout !== 'off';
+      const a = profileManager.affinity();
+      const profile = { preferences: { activeHours: a.activeHours, cardInteractions: a.cardInteractions }, stats: { totalInteractions: a.totalInteractions } };
+      const override = Number.isInteger(hour) && hour >= 0 && hour <= 23;
+      const auto = computeAutoLayout(cards, { profile, itemStatus: state.itemStatus, prev: state.uiAuto || null, enabled, hour: override ? hour : null });
+      if (enabled && !override && !auto.kept && auto.order.length) {
+        await store.save({ uiAuto: { key: auto.key, order: auto.order, reasons: auto.reasons, computedAt: auto.computedAt } });
+      }
+      return { ...auto, override };
+    },
+    async setAutoLayout({ enabled } = {}) {
+      const state = store.get();
+      await store.save({ prefs: { ...(state.prefs || {}), autoLayout: enabled === false || enabled === 'off' ? 'off' : 'on' } });
+      return { success: true, enabled: store.get().prefs.autoLayout !== 'off' };
+    },
+
+    async getToday({ hour = null } = {}) {
       try {
         const today = new Date().toLocaleDateString('zh-CN', {
           year: 'numeric',
@@ -784,6 +825,7 @@ export function createApiRouter(ctx) {
           lastDigestAt: state.lastDigest?.generatedAt || null,
           cards: annotateCards(activeCards, state.itemStatus).map(c => (c.type === 'view' ? { ...c, view: surfaceService.cardView(c) } : c)),
           ui: { ...uiView(state), bootId: uiService.bootId, seq: uiService.seq },
+          autoLayout: await router.autoLayout(activeCards, { hour }),
           hasDigest: state.lastDigest !== null,
         };
       } catch (err) {
@@ -1296,7 +1338,7 @@ export function createApiRouter(ctx) {
           baseUrl: process.env.DSBOT_URL || 'http://127.0.0.1:7788',
           token: process.env.DSBOT_TOKEN,
         });
-        return { sessionId: hist.sessionId || BOT_SESSION_ID, messages: hist.messages || [], botId: hist.botId || null };
+        return { sessionId: hist.sessionId || BOT_SESSION_ID, messages: router.dockSurfacesFor(hist.messages || []), botId: hist.botId || null };
       } catch (err) {
         console.error('[getChatHistory] ds-bot:', err.message);
         return { sessionId: BOT_SESSION_ID, messages: [], error: err.message };
@@ -1718,7 +1760,8 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
     try {
       // Route dispatch
       if (url.pathname === '/api/today' && req.method === 'GET') {
-        const data = await router.getToday();
+        const hq = url.searchParams.get('hour');
+        const data = await router.getToday({ hour: hq !== null && /^\d{1,2}$/.test(hq) ? Number(hq) : null });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(data));
       } else if (url.pathname === '/api/digest' && req.method === 'GET') {
@@ -1844,6 +1887,10 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
           }
         });
         return;
+      } else if (url.pathname === '/api/opendigitalmate/layout-pref' && req.method === 'POST') {
+        const body = await new Promise(r => { let d = ''; req.on('data', c => { d += c; }); req.on('end', () => { try { r(JSON.parse(d || '{}')); } catch { r({}); } }); });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(await router.setAutoLayout(body)));
       } else if (url.pathname === '/api/opendigitalmate/ui-renderer.js' && req.method === 'GET') {
         const js = await readFile(join(__dirname, '../client/ui-renderer.js'), 'utf8');
         res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' });

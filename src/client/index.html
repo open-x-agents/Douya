@@ -1093,6 +1093,26 @@
   .ui-suggest span{flex:1}
   .ui-sg-ok{border:0;background:#8a74d0;color:#fff;border-radius:8px;padding:5px 12px;font-weight:600;cursor:pointer}
   .ui-sg-no{border:0;background:#f3f1f8;color:#6b6780;border-radius:8px;padding:5px 12px;cursor:pointer}
+
+  /* ===== P4 time-of-day order + P3 streaming ===== */
+  .tod-strip{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px;padding:7px 12px;border-radius:12px;background:#f6f4fb;color:#5d5876;font-size:12.5px}
+  .tod-strip .tod-text{flex:1;min-width:200px}
+  .tod-btn{border:0;background:#fff;color:#4b3a86;border-radius:8px;padding:3px 10px;font-size:12px;cursor:pointer;box-shadow:0 1px 3px rgba(40,30,90,.08)}
+  .why-line{margin-top:10px;font-size:11.5px;color:#7a5cc4;background:#f4f0fc;border-radius:8px;padding:4px 9px;display:inline-block}
+  .ui-held{position:fixed;bottom:92px;left:50%;transform:translate(-50%,10px);padding:7px 14px;border-radius:999px;background:#2f2a45;color:#fff;font-size:12.5px;opacity:0;pointer-events:none;transition:.2s;z-index:9999}
+  .ui-held.show{opacity:.95;transform:translate(-50%,0)}
+  .bubble.streaming{white-space:pre-wrap}
+  .bubble.streaming::after{content:'▍';margin-left:2px;color:#8a74d0;animation:typing 1s infinite}
+  .z-msg.streaming{white-space:pre-wrap}
+  .sf-skel{border:1px dashed #d9d0f3;border-radius:16px;padding:14px 16px;margin:8px 0;background:linear-gradient(90deg,#faf9fd 25%,#f1ecfb 50%,#faf9fd 75%);background-size:200% 100%;animation:sfShimmer 1.2s infinite linear}
+  .sf-skel b{display:block;font-size:13.5px;color:#4b3a86;margin-bottom:8px}
+  .sf-skel i{display:block;height:9px;border-radius:5px;background:#e9e3f7;margin:7px 0}
+  @keyframes sfShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  .sf-table tbody tr,.sf-list li,.sf-timeline li{animation:sfRowIn .28s ease both}
+  .sf-table tbody tr:nth-child(n+4),.sf-list li:nth-child(n+4){animation-delay:.08s}
+  .sf-table tbody tr:nth-child(n+8),.sf-list li:nth-child(n+8){animation-delay:.16s}
+  .sf-table tbody tr:nth-child(n+12){animation-delay:.24s}
+  @keyframes sfRowIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 </style>
 </head>
 <body>
@@ -1631,9 +1651,10 @@
   // Load today's data
   async function loadToday() {
     try {
-      const res = await fetch('/api/today');
+      const res = await fetch(`/api/today${Number.isInteger(window.__odmTodHour) ? `?hour=${window.__odmTodHour}` : ''}`);
       const data = await res.json();
       lastToday = data;
+      takeAutoLayout(data.autoLayout);
       if (data.ui) { uiLayout = data.ui; if (!uiBoot) { uiBoot = data.ui.bootId || null; uiSeq = Math.max(uiSeq, data.ui.seq || 0); } }
       const name = data.userName || '';
       $('conclText').textContent = `${greetingWord()}${name ? '，' + name : ''}`;
@@ -2045,6 +2066,7 @@
     const work = cards.filter(c => !SYS_TYPES.has(c.type) && c.source !== 'system');
     const order = arrangeWork(work).filter(c => !filterHidden(c));
     let html = tt ? renderTimetable(tt) : '';
+    html += '<div class="tod-strip" id="todStrip"></div>';
     html += '<div class="grid2">';
     html += renderHero(hero, work);
     html += renderLoad(work);
@@ -2073,6 +2095,7 @@
     }
 
     decorateTiles(container, cards);
+    renderTodStrip();
     mountPanelsAndViews(container, cards);
     reportView();
     const track = async (card, action) => {
@@ -2161,6 +2184,7 @@
           const ce = citesEl(m.citations);
           if (ce) b.appendChild(ce);
           body.appendChild(b);
+          (m.surfaces || []).forEach(v => body.appendChild(renderSurface(v, { container: body, sendPrompt: dockPrompt }, 'chat')));
         }
       });
       body.scrollTop = body.scrollHeight;
@@ -2188,15 +2212,18 @@
       $('todayChatMsgs').appendChild(typing);
       $('todayChatMsgs').scrollTop = $('todayChatMsgs').scrollHeight;
       const sentAt = new Date(Date.now() - 5000).toISOString();
+      const setLabel = t => { if (!live.firstTextAt) typing.innerHTML = `<span class="typing-note">${escMd(t)}</span>`; };
+      const live = newLiveTurn({ container: $('todayChatMsgs'), typingEl: typing, setLabel, bubbleClass: 'bubble bot', ctx: { container: $('todayChatMsgs'), sendPrompt: dockPrompt } });
       try {
-        const data = await sendChatResilient({ message: msg, sessionId: BOT_SESSION, viewContext: viewContext('dock') }, t => { typing.innerHTML = `<span class="typing-note">${escMd(t)}</span>`; });
-        typing.remove();
-        if (data.error) { appendInlineBubble('bot', data.error); return; }
+        const data = await sendChatResilient({ message: msg, sessionId: BOT_SESSION, viewContext: viewContext('dock'), turn: live.id }, setLabel, { streaming: () => feedState.mode === 'sse' });
+        live.finish();
+        if (data.error) { typing.remove(); appendInlineBubble('bot', data.error); return; }
         const b = appendInlineBubble('bot', data.text || '……', data.citations);
+        typing.replaceWith(b); // the final Markdown reply takes the streaming bubble's place (views stay below it)
         (data.cards || []).filter(c => c.type === 'group').slice(0, 3).forEach(c => {
           $('todayChatMsgs').appendChild(renderGroupCard(c));
         });
-        mountSurfaces($('todayChatMsgs'), data.cards, { container: $('todayChatMsgs'), sendPrompt: dockPrompt });
+        mountSurfaces($('todayChatMsgs'), data.cards, { container: $('todayChatMsgs'), sendPrompt: dockPrompt, skip: live.mounted });
         (window.__odmSurfaceTimings = window.__odmSurfaceTimings || []).push({ at: Date.now(), n: (data.cards || []).filter(c => c.type === 'surface').length, timing: data.timing || null });
         // The dock lives on 今天; if 豆芽 (or the user) switched pages meanwhile, say the reply arrived.
         if (currentView() !== 'today') showUiToast(`豆芽回复了：${String(data.text || '').replace(/\s+/g, ' ').slice(0, 48)}`, null, { label: '查看', onClick: () => { showView('today'); openTodayChat(); } });
@@ -2208,6 +2235,7 @@
           try { addBotMessage(data.text, data.time, data.cards, data.citations); } catch (_) {}
         }
       } catch (err) {
+        live.finish();
         typing.remove();
         const d = document.createElement('div');
         d.className = 'bubble bot fail';
@@ -2733,8 +2761,9 @@
     })();
     return () => { stop = true; };
   }
-  async function sendChatResilient(body, onStatus = () => {}) {
-    const stopWatch = watchChatProgress(onStatus);
+  async function sendChatResilient(body, onStatus = () => {}, opts = {}) {
+    // With the live feed, tool progress arrives as events; the 1.2 s progress poll is only the fallback.
+    const stopWatch = opts.streaming && opts.streaming() ? () => {} : watchChatProgress(onStatus);
     try { return await sendChatResilientInner(body, onStatus); }
     finally { stopWatch(); }
   }
@@ -2788,9 +2817,14 @@
 
   /** Work cards in display order: the user's pins, then 豆芽's pins, then a bot order, then priority. */
   function arrangeWork(work) {
-    const pinIdx = new Map((uiLayout.pins || []).map((p, i) => [p.cardId, i]));
+    // The user's pins always come first, then 豆芽's pins (each group keeps its pin order).
+    const pins = [...(uiLayout.pins || [])].sort((a, b) => (b.by === 'user') - (a.by === 'user'));
+    const pinIdx = new Map(pins.map((p, i) => [p.cardId, i]));
     const ordIdx = new Map((uiLayout.order || []).map((id, i) => [id, i]));
-    const base = [...work].sort((a, b) => ((b.priority === 'high') - (a.priority === 'high')));
+    const auto = autoActive() ? new Map(autoShown.order.map((id, i) => [id, i])) : null;
+    const prio = [...work].sort((a, b) => ((b.priority === 'high') - (a.priority === 'high')));
+    const prioPos = new Map(prio.map((c, i) => [c.id, i]));
+    const base = auto ? [...work].sort((a, b) => (auto.has(a.id) ? auto.get(a.id) : 1e4 + prioPos.get(a.id)) - (auto.has(b.id) ? auto.get(b.id) : 1e4 + prioPos.get(b.id))) : prio;
     const pos = new Map(base.map((c, i) => [c.id, i]));
     return base.sort((a, b) => {
       const pa = pinIdx.has(a.id), pb = pinIdx.has(b.id);
@@ -2815,6 +2849,8 @@
       if (!card) return;
       tile.setAttribute('data-id', card.id);
       const p = pins.get(card.id);
+      const why = !p && autoActive() && autoShown.reasons ? autoShown.reasons[card.id] : '';
+      if (why) { const w = document.createElement('div'); w.className = 'why-line'; w.textContent = `为什么在这里：${why}`; tile.appendChild(w); }
       const btn = document.createElement('button');
       btn.type = 'button'; btn.className = 'pin-btn' + (p ? ' on' : '');
       btn.title = p ? (p.by === 'user' ? '取消固定' : '取消豆芽的置顶') : '固定到最前';
@@ -3026,7 +3062,7 @@
     return node;
   }
   function mountSurfaces(container, cards, ctx) {
-    (cards || []).filter(c => c && c.type === 'surface' && c.view).forEach(c => container.appendChild(renderSurface(c.view, ctx, 'chat')));
+    (cards || []).filter(c => c && c.type === 'surface' && c.view && !(ctx && ctx.skip && ctx.skip.has(c.view.id))).forEach(c => container.appendChild(renderSurface(c.view, ctx, 'chat')));
   }
   async function surfaceGet(id) {
     try { const r = await fetch('/api/opendigitalmate/surface', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'get', id }) }).then(x => x.json()); return r && r.success ? r.view : null; } catch (_) { return null; }
@@ -3078,7 +3114,8 @@
       if (panelViews.has(e.surfaceId)) panelViews.set(e.surfaceId, e.view);
       document.querySelectorAll(`[data-surface-id="${CSS.escape(e.surfaceId)}"]`).forEach(old => { const c = old.__odmCtx || { ctx: {}, placement: 'chat' }; old.replaceWith(renderSurface(e.view, c.ctx, c.placement)); });
     }
-    if (e.phase === 'create' && e.placement === 'panel' && e.view) openPanel(e.view);
+    if (e.phase === 'create' && e.placement === 'panel' && e.view) { openPanel(e.view); return; }
+    if (e.phase === 'create' && e.view) { const t = [...liveTurns.values()].pop(); if (t) t.surface(e.view); }
   }
   // 豆芽建议: a layout change Chief proposed without being asked — nothing changes until the user clicks 应用.
   function showSuggest(e) {
@@ -3087,21 +3124,152 @@
     bar.textContent = '';
     const t = document.createElement('span'); t.textContent = e.message || '豆芽有个布局建议';
     const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'ui-sg-ok'; ok.textContent = '应用';
-    ok.addEventListener('click', async () => { bar.classList.remove('show'); await sendUserOp(e.op); });
+    ok.addEventListener('click', async () => { bar.classList.remove('show'); if (typeof e.onApply === 'function') e.onApply(); else await sendUserOp(e.op); });
     const no = document.createElement('button'); no.type = 'button'; no.className = 'ui-sg-no'; no.textContent = '忽略';
-    no.addEventListener('click', () => bar.classList.remove('show'));
+    no.addEventListener('click', () => { bar.classList.remove('show'); if (typeof e.onIgnore === 'function') e.onIgnore(); });
     bar.append(t, ok, no); bar.classList.add('show');
   }
+
+  // ===== 豆芽 Intelligent UI (P3): live feed — streamed reply text, tool progress, view skeletons =====
+  // One SSE connection (/api/opendigitalmate/ui-feed). Durable events carry a seq and are replayed after a
+  // reconnect (?since=seq); ephemeral ones (text deltas, progress, skeletons) only matter while a turn is open.
+  // The final reply still comes from /api/chat (the session record), so a missed delta never loses text.
+  // Without the feed (standard server, or 3 failed connects) the page falls back to the long-poll.
+  const liveTurns = new Map(); // turn id → handler
+  let feedState = { mode: 'connecting', fails: 0, es: null };
+  window.__odmFeed = () => ({ mode: feedState.mode, fails: feedState.fails, seq: uiSeq });
+  function startUiFeed() {
+    if (typeof EventSource !== 'function') { feedState.mode = 'poll'; return pollUi(); }
+    const q = `since=${uiSeq}${uiBoot ? `&boot=${encodeURIComponent(uiBoot)}` : ''}`;
+    let hello = false;
+    const es = new EventSource(`/api/opendigitalmate/ui-feed?${q}`);
+    feedState.es = es;
+    es.addEventListener('hello', async ev => {
+      hello = true; feedState.fails = 0; feedState.mode = 'sse';
+      let h = {}; try { h = JSON.parse(ev.data); } catch (_) {}
+      if (h.resync || (uiBoot && h.bootId !== uiBoot)) { uiBoot = h.bootId; uiSeq = h.seq || 0; await loadToday(); }
+      else { uiBoot = h.bootId || uiBoot; }
+    });
+    es.addEventListener('ui', ev => {
+      let e; try { e = JSON.parse(ev.data); } catch (_) { return; }
+      if (e.ephemeral) { onLiveEvent(e); return; }
+      applyUiEvent(e).catch(err => console.warn('[ui event]', err));
+    });
+    es.onerror = () => {
+      es.close();
+      if (!hello) feedState.fails++;
+      if (feedState.fails >= 3) { feedState.mode = 'poll'; console.warn('[ui-feed] unavailable, using long-poll'); pollUi(); return; }
+      feedState.mode = 'reconnecting';
+      setTimeout(startUiFeed, hello ? 800 : 1500 * feedState.fails); // replays from uiSeq: nothing durable is lost
+    };
+  }
+  function onLiveEvent(e) {
+    const t = e.turn && liveTurns.get(e.turn);
+    if (!t) return;
+    if (e.kind === 'progress') t.progress(e.label);
+    else if (e.kind === 'skeleton') t.skeleton(e.title);
+    else if (e.kind === 'stream' && e.text) t.delta(e.text, e.attemptId);
+    else if (e.kind === 'stream' && e.phase === 'start') t.start(e.attemptId);
+  }
+  /**
+   * A live turn bound to a chat container. `typingEl` keeps the step label until the first text arrives; then it
+   * becomes the streaming bubble (plain text via textContent). finish() swaps in the final Markdown bubble.
+   */
+  function newLiveTurn({ container, typingEl, setLabel, bubbleClass, ctx }) {
+    const id = `t_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+    const t = { id, sentAt: Date.now(), firstTextAt: null, firstSkeletonAt: null, firstSurfaceAt: null, text: '', attempt: null, skels: [], mounted: new Set(), labels: [] };
+    const scroll = () => { container.scrollTop = container.scrollHeight; };
+    t.progress = (label) => { t.labels.push(label); if (!t.firstTextAt && label) setLabel(label); };
+    t.start = (attemptId) => { t.nextAttempt = attemptId; };
+    t.delta = (text, attemptId) => {
+      if (!t.firstTextAt) { t.firstTextAt = Date.now(); typingEl.className = `${bubbleClass} streaming`; typingEl.textContent = ''; }
+      if (attemptId && t.attempt && attemptId !== t.attempt) t.text = ''; // a new model step rewrites the bubble
+      t.attempt = attemptId || t.attempt;
+      t.text += text;
+      typingEl.textContent = t.text;
+      scroll();
+    };
+    t.skeleton = (title) => {
+      if (!t.firstSkeletonAt) t.firstSkeletonAt = Date.now();
+      const sk = document.createElement('div'); sk.className = 'sf-skel';
+      const b = document.createElement('b'); b.textContent = `${title} · 生成中…`; sk.appendChild(b);
+      for (let i = 0; i < 3; i++) { const l = document.createElement('i'); l.style.width = `${90 - i * 18}%`; sk.appendChild(l); }
+      container.appendChild(sk); t.skels.push(sk); scroll();
+    };
+    t.surface = (view) => {
+      if (t.mounted.has(view.id)) return;
+      t.mounted.add(view.id);
+      if (!t.firstSurfaceAt) t.firstSurfaceAt = Date.now();
+      const el = renderSurface(view, ctx, 'chat');
+      const sk = t.skels.shift();
+      if (sk) sk.replaceWith(el); else container.appendChild(el);
+      scroll();
+    };
+    t.finish = () => {
+      liveTurns.delete(id);
+      t.skels.forEach(sk => sk.remove()); t.skels = [];
+      (window.__odmStreamTimings = window.__odmStreamTimings || []).push({ turn: id, sentAt: t.sentAt, firstTextMs: t.firstTextAt ? t.firstTextAt - t.sentAt : null, firstSkeletonMs: t.firstSkeletonAt ? t.firstSkeletonAt - t.sentAt : null, firstSurfaceMs: t.firstSurfaceAt ? t.firstSurfaceAt - t.sentAt : null, labels: t.labels.slice(0, 8), chars: t.text.length });
+    };
+    liveTurns.set(id, t);
+    return t;
+  }
+
+  // ===== 豆芽 Intelligent UI (P4): time-of-day order on 今天 =====
+  // The server computes the order (src/ui/layout.js) and freezes it per day + period. Within a page session the
+  // order never jumps: a new period is offered through the suggestion bar; 恢复原顺序 undoes it for this session;
+  // 关闭 turns it off (stored). Pins (yours first, then 豆芽's) and orders Chief set always win.
+  let autoShown = null, autoPending = null;
+  function autoUndone() { try { return sessionStorage.getItem('odm.autoUndone') === '1'; } catch (_) { return false; } }
+  function autoActive() { return !!(autoShown && autoShown.enabled && (autoShown.order || []).length && !autoUndone()); }
+  function takeAutoLayout(a) {
+    if (!a) return;
+    if (!a.enabled) { autoShown = a; autoPending = null; return; }
+    if (!autoShown || !autoShown.enabled || autoShown.key === a.key) { autoShown = a; return; }
+    // The period changed while the page is open: suggest, don't move cards under the user.
+    if (autoPending && autoPending.key === a.key) return;
+    autoPending = a;
+    showSuggest({ message: `豆芽建议：已到${a.periodLabel}，${a.rationale}。要按这个重新排吗？`,
+      onApply: () => { autoShown = autoPending; autoPending = null; rerenderToday(); showUiToast(`已按${autoShown.periodLabel}重新排序`); },
+      onIgnore: () => { autoPending = { ...autoPending, ignored: true }; } });
+  }
+  function renderTodStrip() {
+    const el = $('todStrip'); if (!el) return;
+    el.textContent = '';
+    const a = autoShown;
+    if (!a) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    const t = document.createElement('span'); t.className = 'tod-text';
+    const undone = autoUndone();
+    t.textContent = !a.enabled ? '时段排序已关闭，按优先级排列' : undone ? `已恢复原顺序（本次打开有效）· ${a.periodLabel}的建议顺序可随时再用` : `🕘 ${a.note} · ${a.rationale}`;
+    el.appendChild(t);
+    const mk = (label, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'tod-btn'; b.textContent = label; b.addEventListener('click', fn); el.appendChild(b); return b; };
+    if (a.enabled) mk(undone ? '按时段排序' : '恢复原顺序', () => { try { sessionStorage.setItem('odm.autoUndone', undone ? '0' : '1'); } catch (_) {} rerenderToday(); });
+    mk(a.enabled ? '关闭' : '开启时段排序', async () => {
+      await fetch('/api/opendigitalmate/layout-pref', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: !a.enabled }) }).catch(() => {});
+      autoShown = null; await loadToday();
+    });
+  }
+  window.__odmAuto = () => ({ shown: autoShown && { key: autoShown.key, order: autoShown.order, reasons: autoShown.reasons, note: autoShown.note }, active: autoActive(), pending: autoPending && autoPending.key });
+
   // Hold layout changes while the user is typing their next message, so the page doesn't jump under them.
   let lastKeyAt = 0, heldTimer = null;
   const heldEvents = [];
   document.addEventListener('keydown', e => { if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) lastKeyAt = Date.now(); }, true);
   function userTyping() { const a = document.activeElement; return !!(a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && String(a.value || '').trim() && Date.now() - lastKeyAt < 4000); }
+  function showHeldChip() {
+    let chip = $('uiHeld');
+    if (!chip) { chip = document.createElement('div'); chip.id = 'uiHeld'; chip.className = 'ui-held'; document.body.appendChild(chip); }
+    chip.textContent = `⏸ 豆芽有 ${heldEvents.length} 个页面改动，等你打完字再应用`;
+    chip.classList.add('show');
+  }
+  function hideHeldChip() { const chip = $('uiHeld'); if (chip) chip.classList.remove('show'); }
   function holdEvent(e) {
     heldEvents.push(e);
     clearTimeout(heldTimer);
-    const tick = () => { if (userTyping()) { heldTimer = setTimeout(tick, 600); return; } const list = heldEvents.splice(0); list.forEach(x => applyOpEvent(x, true)); };
+    showHeldChip();
+    const tick = () => { if (userTyping()) { heldTimer = setTimeout(tick, 600); return; } const list = heldEvents.splice(0); hideHeldChip(); list.forEach(x => applyOpEvent(x, true)); };
     heldTimer = setTimeout(tick, 600);
+    (window.__odmHeld = window.__odmHeld || []).push({ at: Date.now(), op: e.op && e.op.op });
   }
 
   // Tile zoom modal functions
@@ -3205,17 +3373,20 @@
       try {
         const cardContext = isTT ? '当前在看：今天的时间表' : `当前在看卡片「${card.title || ''}」：${card.body || ''} ${card.url || ''}`;
         const clientSentAt = Date.now();
-        const data = await sendChatResilient({ message: msg, cardId: isTT ? null : card.id, cardContext, sessionId: BOT_SESSION, viewContext: viewContext('card') }, t => { if (live()) typing.textContent = t; });
+        const zLabel = t => { if (live() && !zTurn.firstTextAt) typing.textContent = t; };
+        var zTurn = newLiveTurn({ container: msgs, typingEl: typing, setLabel: zLabel, bubbleClass: 'z-msg bot', ctx: { container: msgs, sendPrompt: t => sendZoomChat(t) } });
+        const data = await sendChatResilient({ message: msg, cardId: isTT ? null : card.id, cardContext, sessionId: BOT_SESSION, viewContext: viewContext('card'), turn: zTurn.id }, zLabel, { streaming: () => feedState.mode === 'sse' });
+        zTurn.finish();
         lastZoomCards = data.cards || [];
         const clientRecvAt = Date.now();
         reply = data.text || data.error || '收到了，但模型没有返回内容。';
         if (live()) {
-          typing.remove();
           const b = push('bot', reply);
+          typing.replaceWith(b); // final Markdown reply in the streaming bubble's place
           const ce = citesEl(data.citations);
           if (ce) b.appendChild(ce);
           (data.cards || []).filter(c => c.type === 'group').slice(0, 3).forEach(c => { msgs.appendChild(renderGroupCard(c)); });
-          mountSurfaces(msgs, data.cards, { container: msgs, sendPrompt: t => sendZoomChat(t) });
+          mountSurfaces(msgs, data.cards, { container: msgs, sendPrompt: t => sendZoomChat(t), skip: zTurn.mounted });
           msgs.scrollTop = msgs.scrollHeight;
           showActionsSince(msgs, sentAt).catch(() => {});
           const renderedAt = Date.now();
@@ -3223,6 +3394,7 @@
         }
         loadToday().catch(() => {}); // the bot may have edited cards
       } catch (err) {
+        if (typeof zTurn !== 'undefined' && zTurn) zTurn.finish();
         if (live()) {
           typing.remove();
           const d = document.createElement('div');
@@ -3269,7 +3441,7 @@
   });
 
   // Initialize
-  refreshPanels().catch(() => {}).then(() => loadToday()).then(() => pollUi());
+  refreshPanels().catch(() => {}).then(() => loadToday()).then(() => startUiFeed());
   setInterval(loadToday, 60000); // Refresh every minute
   
   // Wire up digest button

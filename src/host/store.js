@@ -341,7 +341,13 @@ const baseUrl = (u = '') => String(u).replace(/\/files\/?$/, '').replace(/\/$/, 
 // move the next step to the first remaining button or still-open linked item.
 export function skipClosedNextAction(card, mine = card.itemStatus || {}) {
   const closed = new Set(Object.entries(mine).filter(([, v]) => CLOSED.has(v?.status)).map(([u]) => baseUrl(u)))
-  if (!closed.size || !Array.isArray(card.actions)) return card
+  if (!closed.size) return card
+  const urls = cardItemUrls(card)
+  // Every linked item is closed → blank the stale 「下一步」even when actions[] is missing.
+  if (urls.size && [...urls].every(u => closed.has(baseUrl(u)))) {
+    return { ...card, nextAction: '', actions: Array.isArray(card.actions) ? [] : card.actions }
+  }
+  if (!Array.isArray(card.actions)) return card
   const isClosed = a => a?.value && closed.has(baseUrl(a.value))
   const removed = card.actions.filter(isClosed)
   if (!removed.length) return card

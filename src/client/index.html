@@ -1387,6 +1387,14 @@
   .sprout-pop{position:fixed;z-index:999;font-size:20px;pointer-events:none;transform:translate(-50%,0);animation:sproutUp 1s var(--ease) forwards}
   @keyframes sproutUp{0%{opacity:0;transform:translate(-50%,6px) scale(.4)}30%{opacity:1;transform:translate(-50%,-14px) scale(1.15)}100%{opacity:0;transform:translate(-50%,-34px) scale(.9)}}
   @media (prefers-reduced-motion:reduce){.f-check li.ticking,.sprout-pop,.f-bar i{animation:none!important;transition:none!important}}
+  /* Cleared / waiting-only (done-dismiss) */
+  .wait-strip{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px;align-items:center}
+  .wait-strip:empty{display:none}
+  .wait-chip{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.75);border:1px solid rgba(30,40,80,.08);font-size:12.5px;color:var(--ink2);cursor:pointer;transition:.2s}
+  .wait-chip:hover{background:#fff;box-shadow:0 4px 14px rgba(40,44,90,.08);color:var(--ink)}
+  .wait-chip b{font-weight:700;color:var(--ink)}
+  .wait-chip .wc-n{font-size:11px;font-weight:700;color:var(--violet);background:var(--violet-soft,#efeafc);padding:2px 8px;border-radius:999px}
+  .tile.work.is-cleared .w-next,.tile.work.is-cleared .w-acts,.tile.work.waiting-only .w-next,.tile.work.waiting-only .w-acts{display:none}
   /* ===== Phase C: live & motion ===== */
   .tile.work{transition:transform .28s var(--ease),box-shadow .28s var(--ease),opacity .28s}
   .grid2 .tile.work:hover{transform:translateY(-4px);box-shadow:0 18px 40px rgba(40,44,90,.14),0 2px 6px rgba(40,44,90,.06)}
@@ -2537,21 +2545,25 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const pts = d.map((v, i) => `${(i / (d.length - 1)) * 100},${30 - (v / mx) * 26}`).join(' ');
       metrics += `<svg class="spark" viewBox="0 0 100 32" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
     }
+    const waitingOnly = !!card.waitingOnly || card.clearance === 'waiting';
+    const na = waitingOnly ? '' : nextAction(card);
+    // Stale digest badges (进行中 / 你开的) hide once we're only waiting on others / cleared.
+    const liveTags = waitingOnly ? '' : tagHtml;
     return `
-      <article class="tile work ${big ? 'size-wide' : 'size-normal'}" data-idx="${idx}">
+      <article class="tile work ${big ? 'size-wide' : 'size-normal'}${waitingOnly ? ' waiting-only' : ''}" data-idx="${idx}">
         <header class="w-top">
           ${av}
           <div class="w-src"><span class="w-label">${escapeHtml(label)}</span><span class="w-repo">${escapeHtml(r ? `${r.owner} / ${r.name}` : (card.subtitle || ''))}</span></div>
-          ${big ? '<span class="pill pill-hot">优先</span>' : ''}${isMailGroup(card) ? '' : tagHtml}
+          ${waitingOnly ? `<span class="pill pill-gray">等别人 · ${card.waitingCount || ''}</span>` : (big ? '<span class="pill pill-hot">优先</span>' : '')}${isMailGroup(card) ? '' : liveTags}
         </header>
-        <h3 class="w-head">${escapeHtml(headline(card))}</h3>
+        <h3 class="w-head">${escapeHtml(waitingOnly ? (r ? r.name : headline(card)) : headline(card))}</h3>
         ${isMailGroup(card) && tags.length ? `<div class="w-senders">${tags.map(t => `<span title="${escapeHtml(t.text)}">${escapeHtml(t.text)}</span>`).join('')}</div>` : ''}
-        ${desc ? `<p class="w-desc${card.faceView ? ' short' : ''}">${escapeHtml(desc)}</p>` : ''}
-        ${card.faceView ? renderFace(card.faceView) || (metrics + avRow) : metrics + avRow}
-        <div class="w-next"><span class="w-next-k">下一步</span><span class="w-next-v">${escapeHtml(nextAction(card))}</span></div>
-        ${(card.prepared || []).length ? `<div class="w-acts"><span class="w-acts-k">豆芽备好了</span>${card.prepared.map((p, i) => stepBtnHtml(p, i, i === 0 && p.kind !== 'snooze' ? 'primary' : '')).join('')}</div>` : ''}
+        ${!waitingOnly && desc ? `<p class="w-desc${card.faceView ? ' short' : ''}">${escapeHtml(desc)}</p>` : ''}
+        ${waitingOnly ? '' : (card.faceView ? renderFace(card.faceView) || (metrics + avRow) : metrics + avRow)}
+        ${na ? `<div class="w-next"><span class="w-next-k">下一步</span><span class="w-next-v">${escapeHtml(na)}</span></div>` : ''}
+        ${!waitingOnly && (card.prepared || []).length ? `<div class="w-acts"><span class="w-acts-k">豆芽备好了</span>${card.prepared.map((p, i) => stepBtnHtml(p, i, i === 0 && p.kind !== 'snooze' ? 'primary' : '')).join('')}</div>` : ''}
         <div class="w-slot"></div>
-        <div class="w-links">${links.slice(0, 2).map(linkRow).join('')}</div>
+        ${waitingOnly ? '' : `<div class="w-links">${links.slice(0, 2).map(linkRow).join('')}</div>`}
       </article>`;
   }
 
@@ -2594,6 +2606,17 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const r = await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'done', itemUrl, itemTitle }) }).then(x => x.json()).catch(() => ({}));
       if (!r.success) { li.classList.remove('done', 'ticking'); showUiToast('没标上，稍后再试'); return; }
       sprout(box);
+      if (r.cardDone) {
+        const tile = box.closest('.tile.work');
+        if (tile) {
+          tile.classList.add('leaving-done');
+          const badge = document.createElement('div'); badge.className = 'done-badge'; badge.textContent = '✓ 搞定了';
+          tile.appendChild(badge); sprout(badge);
+        }
+        showUiToast(`「${clip(card.title, 18)}」搞定了`, null, { label: '撤销', onClick: async () => { await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'undo', itemUrl, itemTitle }) }); loadToday({ force: true }); } });
+        setTimeout(() => loadToday({ force: true }).catch(() => {}), reducedMotion() ? 400 : 1100);
+        return;
+      }
       showUiToast(`已完成「${clip(itemTitle, 18)}」`, null, { label: '撤销', onClick: async () => { await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'undo', itemUrl, itemTitle }) }); loadToday(); } });
       setTimeout(() => loadToday().catch(() => {}), 650);
     }));
@@ -2653,6 +2676,23 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function bindOffHours(container) {
     const b = container.querySelector('#offToggle'); if (!b) return;
     b.addEventListener('click', () => { try { localStorage.setItem(OFF_KEY, offOpen() ? '' : new Date().toDateString()); } catch (_) {} renderCardList(lastCards); });
+  }
+  /** Quiet strip for cards that only wait on others — no 「下一步」CTAs, not a full tile. */
+  function renderWaitStrip(list) {
+    if (!list || !list.length) return '';
+    const chips = list.map(c => {
+      const r = repoOf(c);
+      const name = r ? r.name : clip(c.title, 18);
+      const n = c.waitingCount || 0;
+      return `<button type="button" class="wait-chip" data-wait-id="${escapeHtml(c.id)}"><span class="wc-n">等别人${n ? ' · ' + n : ''}</span><b>${escapeHtml(name)}</b></button>`;
+    }).join('');
+    return `<div class="wait-strip" id="waitStrip">${chips}</div>`;
+  }
+  function bindWaitStrip(container, cards) {
+    container.querySelectorAll('.wait-chip[data-wait-id]').forEach(btn => btn.addEventListener('click', () => {
+      const c = cards.find(x => x.id === btn.getAttribute('data-wait-id'));
+      if (c) openTileZoom(c);
+    }));
   }
   /** End of day: what got done today (cards, items, 豆芽's executed actions) — only real completions. */
   function renderDoneToday(d) {
@@ -2743,7 +2783,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (step.kind === 'link') { if (/^https?:\/\//.test(step.url || '')) window.open(step.url, '_blank', 'noopener'); return; }
     if (step.kind === 'ask') {
       if (theCard) setChatContext(theCard);
-      openTodayChat();
+      openTodayChat({ byUser: true });
       dockPrompt(step.prompt || step.label);
       return;
     }
@@ -2936,6 +2976,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function borrowChat(host) {
     const chat = $('todayChat'); if (!chat || !host) return;
     host.appendChild(chat);
+    // in-zoom needs the sheet visible beside the card; do NOT flip the dock preference.
     chat.classList.add('in-zoom', 'open');
     ensureInlineBotHistory();
     const m = $('todayChatMsgs'); if (m) m.scrollTop = m.scrollHeight;
@@ -2944,6 +2985,9 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const chat = $('todayChat'), slot = $('todayChatSlot');
     if (!chat) return;
     chat.classList.remove('in-zoom');
+    // Closing the card zoom must NOT re-expand the bottom dock.
+    if (chatDockWanted) chat.classList.add('open');
+    else chat.classList.remove('open');
     if (slot && chat.parentElement !== slot) slot.appendChild(chat);
   }
 
@@ -2954,9 +2998,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const tt = cards.find(c => c.type === 'timetable');
     const work = cards.filter(c => !SYS_TYPES.has(c.type) && c.source !== 'system');
     const ordered = arrangeWork(work).filter(c => !filterHidden(c));
+    const waiting = ordered.filter(c => c.waitingOnly || c.clearance === 'waiting');
+    const actionable = ordered.filter(c => !(c.waitingOnly || c.clearance === 'waiting'));
     const offHours = !!(lastToday && lastToday.afterHours);
-    const offCards = offHours ? ordered.filter(c => c.workish) : [];
-    const order = offHours ? ordered.filter(c => !c.workish) : ordered;
+    const offCards = offHours ? actionable.filter(c => c.workish) : [];
+    const order = offHours ? actionable.filter(c => !c.workish) : actionable;
     const nx = lastToday && lastToday.next;
     const more = dayMoreOpen();
     let html = renderNextHero(nx);
@@ -2966,6 +3012,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     html += '<div class="grid2 grid-more">' + renderHero(hero, work) + renderLoad(work) + '</div>';
     html += '<div class="tod-strip" id="todStrip"></div>';
     html += '</div></div>';
+    html += renderWaitStrip(waiting);
     html += '<div class="grid2 grid-main">';
     html += renderDoneToday(lastToday && lastToday.doneToday);
     html += order.map(c => (c.type === 'view' ? `<article class="tile work size-wide view-tile" data-idx="${cards.indexOf(c)}"></article>` : renderWorkTile(c, cards.indexOf(c)))).join('');
@@ -2989,7 +3036,9 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (!borrowed) {
       $('todayChatSlot').appendChild(liveChat);
       if ($('todayChatMsgs')) $('todayChatMsgs').scrollTop = msgsScroll;
-      if (hadFocus) $('todayChatInput').focus({ preventScroll: true });
+      // Never programmatically re-expand a closed dock via focus→expand.
+      if (hadFocus && chatDockWanted) $('todayChatInput').focus({ preventScroll: true });
+      else if (!chatDockWanted) liveChat.classList.remove('open');
     }
     const nxEl = container.querySelector('.nx');
     if (nxEl && nx) bindSteps(nxEl, nx.buttons || [], nx.cardId ? cards.find(c => c.id === nx.cardId) : null);
@@ -3007,6 +3056,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     markUrgent(container, cards);
     bindOffHours(container);
     bindDragOrder(container);
+    bindWaitStrip(container, cards);
     mountPendingOnCards(container).catch(() => {});
     if (!chatCtx) paintChatChips();
     renderTodStrip();
@@ -3038,6 +3088,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const myday = container.querySelector('.myday');
     if (myday && tt) myday.addEventListener('click', () => openTileZoom(tt));
     if (fresh) setupTodayChatInput();
+    if (chatDockWanted) liveChat.classList.add('open');
+    else liveChat.classList.remove('open');
   }
 
 
@@ -3046,16 +3098,29 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     openTodayChat();
   }
 
-  function openTodayChat() {
+  // Dock open preference: once the user collapses it, keep it collapsed across late replies / loadToday / zoom close.
+  const DOCK_KEY = 'odm.chatDock.open';
+  let chatDockWanted = (() => { try { return localStorage.getItem(DOCK_KEY) === '1'; } catch (_) { return false; } })();
+  function setChatDockWanted(v) {
+    chatDockWanted = !!v;
+    try { localStorage.setItem(DOCK_KEY, chatDockWanted ? '1' : '0'); } catch (_) {}
+  }
+  /** byUser = explicit click/focus/send; otherwise only expands if still wanted. */
+  function openTodayChat(opts = {}) {
+    if (opts.byUser) setChatDockWanted(true);
+    else if (!chatDockWanted && !opts.force) return;
     const wrap = $('todayChat');
     if (!wrap) return;
     wrap.classList.add('open');
     ensureInlineBotHistory();
-    setTimeout(() => $('todayChatInput')?.focus(), 50);
+    if (opts.focus !== false && opts.byUser) setTimeout(() => $('todayChatInput')?.focus(), 50);
   }
 
   function closeTodayChat() {
-    $('todayChat')?.classList.remove('open');
+    setChatDockWanted(false);
+    const wrap = $('todayChat');
+    if (wrap) wrap.classList.remove('open');
+    try { $('todayChatInput')?.blur(); } catch (_) {}
   }
 
   function appendInlineBubble(role, text, citations) {
@@ -3294,9 +3359,16 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     todayComposer.wire();
     window.__odmTodayComposer = todayComposer;
 
-    const expand = () => openTodayChat();
-    input.addEventListener('focus', expand);
-    $('todayChatClose')?.addEventListener('click', e => { e.preventDefault(); closeTodayChat(); });
+    // Only a real pointer/keyboard gesture on the input reopens a collapsed dock.
+    // Programmatic focus (loadToday restore, zoom return) must NOT flip the preference.
+    let dockGesture = false;
+    input.addEventListener('pointerdown', () => { dockGesture = true; openTodayChat({ byUser: true }); });
+    input.addEventListener('keydown', e => { if (e.key === 'Escape') return; dockGesture = true; });
+    input.addEventListener('focus', () => {
+      if (dockGesture) { dockGesture = false; openTodayChat({ byUser: true }); }
+      else if (chatDockWanted) openTodayChat(); // visual restore only
+    });
+    $('todayChatClose')?.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); closeTodayChat(); });
 
     const send = async () => {
       const msg = input.value.trim();
@@ -3305,7 +3377,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       input.value = '';
       const pending = todayComposer.items.splice(0); // keep blob URLs for the bubble
       todayComposer.render(); todayComposer.showTip('');
-      openTodayChat();
+      openTodayChat({ byUser: true });
       const me = appendInlineBubble('me', msg);
       if (pending.length && me) fillUserBubble(me, msg, pending, chatTime());
       const typing = document.createElement('div');
@@ -3333,10 +3405,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         mountSurfaces($('todayChatMsgs'), data.cards, { container: $('todayChatMsgs'), sendPrompt: dockPrompt, skip: live.mounted });
         (window.__odmSurfaceTimings = window.__odmSurfaceTimings || []).push({ at: Date.now(), n: (data.cards || []).filter(c => c.type === 'surface').length, timing: data.timing || null });
         // The dock lives on 今天; if 豆芽 (or the user) switched pages meanwhile, say the reply arrived.
-        if (currentView() !== 'today') showUiToast(`豆芽回复了：${String(data.text || '').replace(/\s+/g, ' ').slice(0, 48)}`, null, { label: '查看', onClick: () => { showView('today'); openTodayChat(); } });
-        $('todayChatMsgs').scrollTop = $('todayChatMsgs').scrollHeight;
+        if (currentView() !== 'today') showUiToast(`豆芽回复了：${String(data.text || '').replace(/\s+/g, ' ').slice(0, 48)}`, null, { label: '查看', onClick: () => { showView('today'); openTodayChat({ byUser: true }); } });
+        else if (!chatDockWanted) showUiToast('豆芽回复了，点输入框查看', null, { label: '打开', onClick: () => openTodayChat({ byUser: true }) });
+        if (chatDockWanted) $('todayChatMsgs').scrollTop = $('todayChatMsgs').scrollHeight;
         showActionsSince($('todayChatMsgs'), sentAt).catch(() => {});
-        loadToday().catch(() => {}); // bot may have edited cards; dock stays open
+        loadToday().catch(() => {}); // bot may have edited cards; dock stays however the user left it
         // Keep the legacy dock transcript in sync if it was opened elsewhere
         if ($('dockBody')) {
           try { addBotMessage(data.text, data.time, data.cards, data.citations); } catch (_) {}

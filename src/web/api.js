@@ -20,6 +20,7 @@ import { callbackUrlFor, callbackPage } from './composio-callback.js';
 import { prepareCardActions, pickNextThing, daySummaryLine, tomorrowMorning } from './card-prep.js';
 import { hydrateFace, autoFace } from '../ui/face.js';
 import { isAfterHours, isWorkish, doneToday, greetingLine, shHour } from './day-pulse.js';
+import { sweepClearedCards, applyClearance, cardClearance, completeClearedCard } from './card-clearance.js';
 import { findTimetableCard, readPlan, applyPlanEdit, todaysCalendarEvents } from './timetable-plan.js';
 import { uiView } from '../ui/ops.js';
 import { createSurfaceService } from '../ui/surfaces.js';
@@ -838,6 +839,11 @@ export function createApiRouter(ctx) {
         }
         // Get cards from store
         const state = store.get();
+        // All items done → card done (face already says 都处理完了). Survives until genuinely new items reopen it.
+        {
+          const cleared = sweepClearedCards(state, { by: 'system' });
+          if (cleared.length) await store.save(state);
+        }
         const cards = state.cards || [];
         
         // Filter active cards (not done/deleted/snoozed)
@@ -892,7 +898,7 @@ export function createApiRouter(ctx) {
         const meetingsLeft = calToday.filter(b => Date.parse(b.end) > Date.now()).length;
         return {
           afterHours,
-          doneToday: doneNow && (afterHours || hourNow >= 17) ? doneNow : null,
+          doneToday: doneNow || null,
           doneIds: doneNow ? doneNow.cardIds : [],
           greetingLine: greetingLine({ hour: hourNow, cards: activeCards, next: nextThing, meetingsLeft, done: doneNow }),
           summary: activeCards.length === 0
@@ -907,7 +913,13 @@ export function createApiRouter(ctx) {
           meetingHours: Math.round(meetingHours * 10) / 10,
           waitingCount: activeCards.filter(c => c.status === 'waiting').length,
           lastDigestAt: state.lastDigest?.generatedAt || null,
-          cards: annotateCards(activeCards, state.itemStatus).map(c => (c.type === 'view' ? { ...c, view: surfaceService.cardView(c) } : { ...c, workish: isWorkish(c), prepared: prepareCardActions(c, { itemStatus: state.itemStatus || {} }), faceView: hydrateFace(c, c.face || autoFace(c), { itemStatus: state.itemStatus || {}, events: calToday }) || (c.face ? hydrateFace(c, autoFace(c), { itemStatus: state.itemStatus || {}, events: calToday }) : null) })),
+          cards: annotateCards(activeCards, state.itemStatus).map(c => {
+            if (c.type === 'view') return { ...c, view: surfaceService.cardView(c) };
+            const cleared = applyClearance(c, state.itemStatus || {});
+            const prepared = cleared.clearance === 'waiting' || cleared.clearance === 'cleared' ? [] : prepareCardActions(cleared, { itemStatus: state.itemStatus || {} });
+            const faceView = hydrateFace(cleared, cleared.face || autoFace(cleared), { itemStatus: state.itemStatus || {}, events: calToday }) || (cleared.face ? hydrateFace(cleared, autoFace(cleared), { itemStatus: state.itemStatus || {}, events: calToday }) : null);
+            return { ...cleared, workish: isWorkish(cleared), prepared, faceView };
+          }),
           next: nextThing,
           summaryLine: daySummaryLine({ cards: activeCards, itemStatus: state.itemStatus || {}, meetings: meetings.length }),
           ui: { ...uiView(state), bootId: uiService.bootId, seq: uiService.seq },
@@ -1276,22 +1288,47 @@ export function createApiRouter(ctx) {
             n++;
           }
           await store.save(state);
+          let cardDone = false;
+          if (status === 'done' || status === 'dismissed') {
+            const clr = cardClearance(card, state.itemStatus || {});
+            if (clr.kind === 'cleared' && completeClearedCard(state, card, { by })) {
+              cardDone = true;
+              await store.save(state);
+            }
+          }
           const [annotated] = annotateCards([card], state.itemStatus);
-          console.log('[trackInteraction] batch', status, n);
-          return { success: true, count: n, itemStatus: annotated.itemStatus || {} };
+          console.log('[trackInteraction] batch', status, n, cardDone ? '→ card done' : '');
+          return { success: true, count: n, itemStatus: annotated.itemStatus || {}, cardDone, cardId: card.id };
         }
 
         // Per-item 完成 / 忽略 / 撤销 — never touches the whole card's status.
         if (itemUrl) {
           if (!cardItemUrls(card).has(itemUrl)) return { success: false, error: '这张卡片里没有这个条目' };
-          if (action === 'undo') clearItemStatus(state, itemUrl);
-          else if (action === 'done' || action === 'dismiss' || action === 'dismissed') {
+          if (action === 'undo') {
+            clearItemStatus(state, itemUrl);
+            // Undoing an item on a card we auto-completed brings it back to Today.
+            if (card.status === 'done' && card.completedBy && card.completedBy !== 'user-manual') {
+              card.status = 'active';
+              delete card.completedAt; delete card.completedBy;
+              card.updatedAt = new Date().toISOString();
+              card.reopenedAt = card.updatedAt;
+              card.previousStatus = 'done';
+            }
+          } else if (action === 'done' || action === 'dismiss' || action === 'dismissed') {
             setItemStatus(state, { card, url: itemUrl, title: itemTitle, action: action === 'done' ? 'done' : 'dismissed', by });
           } else return { success: false, error: `未知操作: ${action}` };
           await store.save(state);
+          let cardDone = false;
+          if (action === 'done' || action === 'dismiss' || action === 'dismissed') {
+            const clr = cardClearance(card, state.itemStatus || {});
+            if (clr.kind === 'cleared' && completeClearedCard(state, card, { by })) {
+              cardDone = true;
+              await store.save(state);
+            }
+          }
           const [annotated] = annotateCards([card], state.itemStatus);
-          console.log('[trackInteraction] item', action, itemUrl);
-          return { success: true, item: state.itemStatus[itemUrl] || null, itemStatus: annotated.itemStatus || {} };
+          console.log('[trackInteraction] item', action, itemUrl, cardDone ? '→ card done' : '');
+          return { success: true, item: state.itemStatus[itemUrl] || null, itemStatus: annotated.itemStatus || {}, cardDone, cardId: card.id };
         }
         
         // Track in profile

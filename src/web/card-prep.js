@@ -38,6 +38,8 @@ export function prepareCardActions(card, { itemStatus = {}, max = 2 } = {}) {
   if (!isWorkCard(card)) return []
   const out = []
   const open = openLinks(card, itemStatus)
+  // Fully processed cards get no CTAs (they should be swept to done); don't offer 明天再看 either.
+  if (!open.length && cardLinks(card).length) return []
   const ref = `（卡片「${clip(card.title, 30)}」，id ${card.id}）`
   if (card.type === 'email-group') {
     const mails = open.filter(l => linkType(l) === 'email')

@@ -171,7 +171,7 @@ test('routes + page wiring: feed installed, turn ids validated, dock views persi
   const routes = readFileSync(new URL('../src/web/dsh-host-routes.js', import.meta.url), 'utf8')
   assert.match(routes, /installUiFeed\(ctx/)
   assert.match(routes, /\/\^t_\[\\w-\]\{4,40\}\$\/\.test\(body\.turn\)/)
-  assert.match(routes, /feed\.turns\.unwatch\(turn\)/)
+  assert.match(routes, /feed\.turns\.unwatch\(t\)/) // every turn of a (possibly merged) batch is unwatched when it ends
   assert.match(routes, /recordDockSurfaces\(result\.text/)
   const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
   assert.match(html, /new EventSource\(`\/api\/opendigitalmate\/ui-feed\?\$\{q\}`\)/)

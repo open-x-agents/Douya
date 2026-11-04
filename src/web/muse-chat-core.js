@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { buildChatContent, isImageModelError } from './chat-media.js'
 import { DEEPSEEK_VISION_MODELS } from './llm-env.js'
+import { STEER_NOTE } from './chat-lane.js'
 
 function clean(v) { return String(v ?? '').replace(/\s+/g, ' ').trim() }
 // Keep line structure (lists, paragraphs) — the client renders Markdown.
@@ -115,6 +116,7 @@ export async function runMuseChatTurn(ctx, {
   log = () => {},
   timing = null,
   onSession = null, // (sessionId) → the UI feed streams this turn's text / tool progress
+  lane = null, // chat-lane hooks: lets a follow-up message steer into this turn while it is unanswered
 } = {}) {
   const text = clean(message)
   const hasAttach = Array.isArray(attachments) && attachments.length > 0
@@ -198,10 +200,31 @@ export async function runMuseChatTurn(ctx, {
   }
 
   T.promptAckMs = Date.now() - T.promptAt
+  // Follow-ups steered into this turn: the reply is only accepted from an idle check that began after
+  // the last steer was admitted, so one reply answers every message of the turn.
+  let steeredAt = 0
+  let pendingSteers = 0
+  if (lane?.setSteer) {
+    lane.setSteer(async (more) => {
+      steeredAt = Date.now()
+      pendingSteers++
+      try {
+        await ctx.sessionController.prompt({
+          requestId: randomUUID(),
+          sessionId: promptTo,
+          mode: 'steer',
+          content: [{ type: 'text', text: `${STEER_NOTE}\n${more}` }],
+        }, AbortSignal.timeout(30_000))
+        T.steered = (T.steered || 0) + 1
+        steeredAt = Date.now()
+      } finally { pendingSteers-- }
+    })
+  }
   const deadline = Date.now() + 180_000
   let reply = ''
   let pageErrLogged = false
   while (Date.now() < deadline) {
+    const checkAt = Date.now()
     const now = (await resolveChief(dshHome, promptTo)).sessionId
     if (now && now !== sessionId) { log(`[muse-chat] Chief moved on to a new part: ${now}`); sessionId = now; T.handoff = true; try { onSession?.(now) } catch {} }
     const agent = await liveAgent(ctx, sessionId)
@@ -214,13 +237,14 @@ export async function runMuseChatTurn(ctx, {
     try {
       T.polls = (T.polls || 0) + 1
       reply = await readLastReply(ctx, sessionId, log)
-      if (reply && reply !== before) break
+      if (reply && reply !== before && pendingSteers === 0 && (!steeredAt || checkAt > steeredAt)) { lane?.closeSteer?.(); break }
     } catch (err) {
       if (!pageErrLogged) { pageErrLogged = true; log(`[muse-chat] page failed: ${err?.message || err}`) }
     }
     await new Promise(r => setTimeout(r, 400))
   }
 
+  lane?.closeSteer?.()
   if (!reply || reply === before) {
     return { ok: false, error: 'Bot 没有产生新回复', botId: sessionId, sessionId }
   }
@@ -306,6 +330,7 @@ export function summarizeTiming(T) {
     attachMode: T.attachMode ?? null,
     attachFallbackReason: T.attachFallbackReason ?? null,
     modelReselected: T.modelReselected ?? null,
+    steered: T.steered ?? 0,
     beforeReadMs: T.beforeReadMs ?? null,
     promptAckMs: T.promptAckMs ?? null,
     queueToTurnStartMs: ms(T.promptAt, T.turnStartAt),

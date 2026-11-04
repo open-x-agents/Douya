@@ -2417,6 +2417,8 @@
       try {
         const data = await sendChatResilient({ message: msg, attachments: atts, sessionId: BOT_SESSION, viewContext: viewContext('dock'), turn: live.id }, setLabel, { streaming: () => feedState.mode === 'sse' });
         live.finish();
+        // Merged: this message rode along in the next message's turn — that one bubble carries the single reply.
+        if (data.status === 'merged') { typing.remove(); return; }
         if (data.status === 'error' || data.error) { typing.remove(); appendInlineBubble('bot', data.text || data.error); return; }
         const b = appendInlineBubble('bot', data.text || '……', data.citations);
         typing.replaceWith(b); // the final Markdown reply takes the streaming bubble's place (views stay below it)
@@ -3651,6 +3653,11 @@
         var zTurn = newLiveTurn({ container: msgs, typingEl: typing, setLabel: zLabel, bubbleClass: 'z-msg bot', ctx: { container: msgs, sendPrompt: t => sendZoomChat(t) } });
         const data = await sendChatResilient({ message: msg, attachments: atts, cardId: isTT ? null : card.id, cardContext, sessionId: BOT_SESSION, viewContext: viewContext('card'), turn: zTurn.id }, zLabel, { streaming: () => feedState.mode === 'sse' });
         zTurn.finish();
+        if (data.status === 'merged') { // answered together with the next message (one reply, below it)
+          if (live()) typing.remove();
+          chatApi({ op: 'append', messages: [{ role: 'user', text: msg }] });
+          return;
+        }
         lastZoomCards = data.cards || [];
         const clientRecvAt = Date.now();
         reply = data.text || data.error || '收到了，但模型没有返回内容。';

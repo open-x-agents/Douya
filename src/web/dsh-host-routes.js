@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runMuseChatTurn, chatProgress } from './muse-chat-core.js'
+import { createChatLane } from './chat-lane.js'
 import { installUiFeed } from './ui-feed.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -265,6 +266,30 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     fetch: async () => json(await router.getChatHistory()),
   }, 'opendigitalmate: /api/chat/history')
 
+  // One lane per Chief: turns never overlap, and quick follow-ups merge into one turn (see chat-lane.js).
+  const chatLane = createChatLane({
+    log,
+    run: async (req, hooks) => {
+      const watched = new Set()
+      const watch = (sid) => { watched.add(sid); const t = hooks.primaryTurn(); if (t && feed) feed.turns.watch(sid, t) }
+      const turns = new Set([req.turn].filter(Boolean))
+      hooks.onPrimaryChange((next) => { if (next.turn) turns.add(next.turn); for (const sid of watched) watch(sid) })
+      try {
+        return await runMuseChatTurn(ctx, {
+          message: req.message,
+          cardId: req.cardId,
+          cardContext: req.cardContext,
+          viewContext: req.viewContext,
+          attachments: req.attachments,
+          dshHome,
+          log,
+          timing: req.timing,
+          onSession: feed ? watch : null,
+          lane: hooks,
+        })
+      } finally { if (feed) for (const t of turns) feed.turns.unwatch(t) }
+    },
+  })
   // In-process ds-bot chat (same runtime — no side server).
   effect({
     path: '/api/chat',
@@ -286,20 +311,19 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
       timing.contextAt = Date.now()
       // The page names its turn so streamed text / skeletons land in the right bubble.
       const turn = typeof body.turn === 'string' && /^t_[\w-]{4,40}$/.test(body.turn) ? body.turn : null
-      let result
-      try {
-        result = await runMuseChatTurn(ctx, {
-          message: body.message || body.text,
-          cardId: body.cardId,
-          cardContext,
-          viewContext,
-          attachments: body.attachments || body.files || null,
-          dshHome,
-          log,
-          timing,
-          onSession: turn && feed ? (sid) => feed.turns.watch(sid, turn) : null,
-        })
-      } finally { if (turn && feed) feed.turns.unwatch(turn) }
+      const result = await chatLane.submit({
+        message: body.message || body.text,
+        cardId: body.cardId,
+        cardContext,
+        viewContext,
+        attachments: body.attachments || body.files || null,
+        turn,
+        timing,
+      })
+      if (result.status === 'merged') {
+        // This message joined a later request's turn; that request carries the one reply.
+        return json({ text: '', status: 'merged', mergedInto: result.mergedInto, turn, sessionId: 'dsbot-chief', time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
+      }
       if (!result.ok) {
         const err = String(result.error || '')
         const noModel = /No model is available|没有可用的模型/i.test(err)
@@ -326,6 +350,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
         attachments: result.attachments || [],
         cards: [...(result.cards || []), ...surfaces],
         botId: result.botId,
+        mergedCount: result.mergedCount || 1,
         sessionId: 'dsbot-chief',
         turn,
         streamed: !!(turn && feed && feed.stats.clients > 0),

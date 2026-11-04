@@ -41,6 +41,12 @@ export const ACTIONS = {
     label: a => `归档邮件 ${a.title ? `「${clip(a.title, 40)}」` : msgId(a)}`,
     labels: a => ({ message_id: msgId(a), add: [], remove: ['INBOX'] }),
   },
+  gmail_archive_many: {
+    risk: 'direct', desc: '一次归档多封邮件（移出收件箱，可整体撤销）', params: { items: { type: 'array', items: { type: 'object' }, description: '[{url,title}]，用 odm_card_list 的 items' } },
+    label: a => `归档 ${(a.items || []).length} 封邮件`,
+    preview: a => ({ body: (a.items || []).slice(0, 12).map(x => `· ${x.title || gmailIdFromUrl(x.url)}`).join('\n') + ((a.items || []).length > 12 ? `\n… 共 ${(a.items || []).length} 封` : '') }),
+    many: a => (a.items || []).map(x => ({ message_id: gmailIdFromUrl(x.url) || x.message_id, add: [], remove: ['INBOX'] })).filter(x => x.message_id),
+  },
   gmail_mark_read: {
     risk: 'direct', desc: '把一封邮件标为已读（可撤销）', params: gmailTarget,
     label: a => `标为已读 ${a.title ? `「${clip(a.title, 40)}」` : msgId(a)}`,
@@ -164,7 +170,7 @@ async function runLabels(client, spec) {
  */
 export function createActionService({ store, getClient, log = () => {} }) {
   const save = async mutate => { const state = store.get(); mutate(state); await store.save(state); return state }
-  const pub = a => a && ({ id: a.id, action: a.action, risk: a.risk, status: a.status, summary: a.summary, preview: a.preview || null, cardId: a.cardId || null, createdAt: a.createdAt, executedAt: a.executedAt || null, undoneAt: a.undoneAt || null, error: a.error || null, note: a.note || null, canUndo: !!a.undo && a.status === 'executed' })
+  const pub = a => a && ({ prepId: a.prepId || null, id: a.id, action: a.action, risk: a.risk, status: a.status, summary: a.summary, preview: a.preview || null, cardId: a.cardId || null, createdAt: a.createdAt, executedAt: a.executedAt || null, undoneAt: a.undoneAt || null, error: a.error || null, note: a.note || null, canUndo: !!a.undo && a.status === 'executed' })
   const ledger = (state, a, verb) => {
     state.completions = [...(state.completions || []), { id: `cmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, kind: 'action', action: verb, actionName: a.action, actionId: a.id, title: a.summary, cardId: a.cardId || null, by: a.confirmedBy || 'bot', at: new Date().toISOString() }].slice(-500)
   }
@@ -174,6 +180,13 @@ export function createActionService({ store, getClient, log = () => {} }) {
     const client = getClient()
     if (!client) throw new Error('Composio 未配置：请到豆芽「配置」页填写 API Key，并在「信源状态」页连接信源')
     if (def.labels) return runLabels(client, def.labels(a.input))
+    if (def.many) {
+      const specs = def.many(a.input)
+      need(specs.length, '没有可操作的邮件')
+      const undos = [], done = []
+      for (const spec of specs) { const r = await runLabels(client, spec); if (r.undo) undos.push(r.undo); done.push(spec.message_id) }
+      return { args: { message_ids: done }, res: { count: done.length }, undo: undos.length ? { batch: undos } : null, note: `已处理 ${done.length} 封` }
+    }
     const args = def.args(a.input)
     const res = ok(await client.executeAction(def.slug, args))
     return { args, res, undo: def.undo ? def.undo(a.input, res, args) : null }
@@ -181,14 +194,16 @@ export function createActionService({ store, getClient, log = () => {} }) {
 
   return {
     /** Called by bot tools. direct → runs now; confirm → pending only. */
-    async request(action, input = {}, { cardId = null } = {}) {
+    async request(action, input = {}, { cardId = null, hold = false, prepId = null } = {}) {
       const def = ACTIONS[action]
       if (!def) return { success: false, error: `unknown action ${action}` }
       let summary
       try { summary = def.label(input) } catch (e) { return { success: false, error: e.message } }
       const a = { id: `act_${randomUUID().slice(0, 12)}`, action, risk: def.risk, input, summary, cardId: input.cardId || cardId, createdAt: new Date().toISOString(), status: 'pending' }
-      if (def.risk === 'confirm') {
-        try { def.args(input) } catch (e) { return { success: false, error: e.message } }
+      if (def.risk === 'confirm' || hold) {
+        // hold: a card's prepared action — even a reversible one waits for the user's 确认执行.
+        try { if (def.args) def.args(input); else if (def.many) need(def.many(input).length, '没有可操作的邮件') } catch (e) { return { success: false, error: e.message } }
+        if (prepId) a.prepId = prepId
         a.preview = def.preview ? def.preview(input) : null
         await save(s => { s.pendingActions = { ...(s.pendingActions || {}), [a.id]: a } })
         log(`[actions] pending ${a.id} ${action}`)
@@ -223,7 +238,7 @@ export function createActionService({ store, getClient, log = () => {} }) {
       if (op === 'confirm') {
         if (a.status !== 'pending') return { success: false, error: `状态是 ${a.status}，不能再执行`, action: pub(a) }
         const def = ACTIONS[a.action]
-        if (dryRun) return { success: true, dryRun: true, slug: def.slug, args: def.args(a.input), action: pub(a) }
+        if (dryRun) return { success: true, dryRun: true, slug: def.slug || null, args: def.args ? def.args(a.input) : def.many ? def.many(a.input) : def.labels(a.input), action: pub(a) }
         const next = { ...a, status: 'running', confirmedBy: 'user', confirmedAt: new Date().toISOString() }
         await save(s => { s.pendingActions[id] = next })
         try {
@@ -236,7 +251,7 @@ export function createActionService({ store, getClient, log = () => {} }) {
       if (op === 'undo') {
         if (a.status !== 'executed' || !a.undo) return { success: false, error: '这个操作不能撤销', action: pub(a) }
         const client = getClient()
-        try { ok(await client.executeAction(a.undo.slug, a.undo.args)) } catch (e) { return { success: false, error: clip(e.message, 300), action: pub(a) } }
+        try { for (const u of a.undo.batch || [a.undo]) ok(await client.executeAction(u.slug, u.args)) } catch (e) { return { success: false, error: clip(e.message, 300), action: pub(a) } }
         const next = { ...a, status: 'undone', undoneAt: new Date().toISOString() }
         await save(s => { s.pendingActions[id] = next; ledger(s, { ...next, confirmedBy: 'user' }, 'undone') })
         return { success: true, action: pub(next) }

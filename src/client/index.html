@@ -1255,6 +1255,83 @@
   .z-input .z-send svg{width:16px;height:16px}
   .z-input .z-send:disabled,#v-today .today-chat-input .send-btn:disabled,.today-chat-input .send-btn:disabled{background:rgba(30,40,80,.08);color:var(--ink3);box-shadow:none;cursor:default;transform:none}
   .today-chat-input .send-btn,#v-today .today-chat-input .send-btn{width:36px;height:36px;font-size:0;box-shadow:0 2px 8px -3px rgba(100,90,200,.5)}
+  /* ===== Phase A: focus & actions ===== */
+  #todayChatSlot{display:contents}
+  #v-today .kpis{display:none}
+  .nx{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:18px;align-items:start;margin:4px 0 12px;padding:22px 24px 20px;border-radius:26px;
+    background:linear-gradient(135deg,rgba(255,255,255,.97) 0%,rgba(240,236,253,.95) 55%,rgba(226,240,252,.95) 100%);border:1px solid rgba(255,255,255,.95);box-shadow:var(--shadow-hi);overflow:hidden}
+  .nx::after{content:"";position:absolute;right:-60px;top:-60px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(138,116,208,.16),transparent 70%);pointer-events:none}
+  .nx-mark{padding-top:2px}
+  .nx-eyebrow{font-size:11.5px;font-weight:700;letter-spacing:.08em;color:var(--violet)}
+  .nx-meeting .nx-eyebrow{color:var(--rose)}
+  .nx-title{margin:6px 0 4px;font-size:24px;line-height:1.3;font-weight:720;letter-spacing:-.015em;color:var(--ink)}
+  .nx-next{margin:0 0 6px;font-size:14.5px;line-height:1.55;color:var(--ink2)}
+  .nx-why{font-size:12.5px;color:var(--ink3)}
+  .nx-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .nx-slot:not(:empty){margin-top:12px}
+  .nx-count{text-align:right;padding:6px 4px;min-width:112px}
+  .nx-count b{display:block;font-size:26px;font-weight:760;color:var(--rose);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .nx-count span{font-size:12px;color:var(--ink3)}
+  .nx-up{text-align:right;max-width:220px;font-size:12px;color:var(--ink3);padding-top:4px}
+  .nx-up b{display:block;font-size:13.5px;color:var(--ink);font-weight:620;margin:2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .nx-up em{font-style:normal}
+  @media (max-width:720px){.nx{grid-template-columns:minmax(0,1fr)}.nx-mark{display:none}.nx-count,.nx-up{text-align:left}}
+  .step{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 14px;border-radius:999px;border:1px solid rgba(30,40,80,.1);background:rgba(255,255,255,.85);color:var(--ink);font:600 13px/1 inherit;cursor:pointer;text-decoration:none;transition:transform .18s var(--ease),box-shadow .18s var(--ease),background .18s}
+  .step:hover{transform:translateY(-1px);box-shadow:0 6px 16px -8px rgba(30,40,80,.35);background:#fff}
+  .step:active{transform:scale(.97)}
+  .step.primary{background:linear-gradient(135deg,#6f8df5,#8a74d0);color:#fff;border-color:transparent;box-shadow:0 8px 20px -10px rgba(111,141,245,.8)}
+  .step.busy{opacity:.6;pointer-events:none}
+  .st-ic{font-style:normal;font-size:12px;opacity:.85}
+  .dayline{display:flex;align-items:center;gap:12px;margin:0 0 12px;padding:8px 6px 8px 14px;border-radius:14px;background:rgba(255,255,255,.55);font-size:13px;color:var(--ink2)}
+  .dl-sum{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dl-toggle{border:0;background:rgba(30,40,80,.05);color:var(--ink2);font:600 12.5px inherit;padding:6px 12px;border-radius:999px;cursor:pointer}
+  .dl-toggle:hover{background:rgba(30,40,80,.09)}
+  .dl-toggle i{font-style:normal;margin-left:2px}
+  .daymore{display:grid;grid-template-rows:0fr;transition:grid-template-rows .35s var(--ease),opacity .3s;opacity:0}
+  .daymore.open{grid-template-rows:1fr;opacity:1;margin-bottom:14px}
+  .daymore-in{overflow:hidden;min-height:0}
+  .grid-more{padding-bottom:0!important;margin-top:12px}
+  .w-acts{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:-2px 0 10px}
+  .w-acts-k{font-size:11px;font-weight:700;color:var(--violet);letter-spacing:.04em;margin-right:2px}
+  .w-acts .step{height:30px;padding:0 12px;font-size:12.5px}
+  .w-slot:empty{display:none}
+  .w-slot{margin:0 0 10px}
+  .act-card.on-card{margin:0;cursor:default}
+  .tile.work.leaving{transition:transform .3s var(--ease),opacity .3s;transform:scale(.96);opacity:0}
+  @keyframes changedGlow{0%{box-shadow:0 0 0 0 rgba(138,116,208,.55)}100%{box-shadow:0 0 0 14px rgba(138,116,208,0)}}
+  @keyframes cardIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .just-changed{animation:changedGlow 1.2s var(--ease) 2}
+  .is-new{animation:cardIn .5s var(--ease) both}
+  /* one chat: the dock chat docked beside an open card */
+  .z-chat-host{flex:1;min-height:0;display:flex;flex-direction:column}
+  .today-chat.in-zoom{position:static!important;margin:0!important;padding:0!important;flex:1;min-height:0;display:flex;flex-direction:column;pointer-events:auto}
+  .today-chat.in-zoom::before{display:none!important}
+  .today-chat.in-zoom .today-chat-sheet{max-height:none!important;flex:1;min-height:0;opacity:1;transform:none;margin:0;border:0;border-radius:0;box-shadow:none;background:transparent;max-width:none;backdrop-filter:none}
+  .today-chat.in-zoom .today-chat-head{display:none}
+  .today-chat.in-zoom .today-chat-input{padding:10px 14px 14px!important;border-top:1px solid rgba(0,0,0,.05)!important;background:rgba(255,255,255,.6)!important}
+  .today-chat.in-zoom .today-chat-input .input-wrap{max-width:none!important;border-radius:16px!important;box-shadow:0 0 0 1px var(--line) inset!important}
+  .chat-ctx{display:flex;align-items:center;gap:6px;max-width:640px;margin:0 auto 8px;font-size:12px;color:var(--ink3)}
+  .chat-ctx[hidden]{display:none}
+  .chat-ctx b{color:var(--violet);font-weight:650;background:var(--violet-soft);padding:3px 10px;border-radius:999px;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chat-ctx button{border:0;background:transparent;color:var(--ink3);cursor:pointer;font-size:12px}
+  .today-chat.in-zoom .chat-ctx{max-width:none}
+  .chat-chips{display:flex;flex-wrap:wrap;gap:6px;max-width:640px;margin:0 auto 8px}
+  .chat-chips[hidden]{display:none}
+  #v-today .today-chat:not(.open):not(.in-zoom) .chat-chips{display:none}
+  .today-chat.in-zoom .chat-chips{max-width:none}
+  .chip{border:1px solid rgba(138,116,208,.25);background:rgba(255,255,255,.9);color:var(--ink2);font:12.5px/1.3 inherit;padding:6px 12px;border-radius:999px;cursor:pointer;transition:background .15s,transform .15s}
+  .chip:hover{background:var(--violet-soft);color:var(--ink);transform:translateY(-1px)}
+  .rp-lead{font-size:15px;font-weight:650;color:var(--ink);line-height:1.5}
+  details.rp-more{margin:4px 0 2px}
+  details.rp-more > summary{cursor:pointer;font-size:12.5px;color:var(--violet);list-style:none;padding:2px 0}
+  details.rp-more > summary::-webkit-details-marker{display:none}
+  .rp-opts{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .z-hist{margin-top:16px;border-top:1px solid var(--line);padding-top:10px}
+  .z-hist > summary{cursor:pointer;font-size:12.5px;color:var(--ink3)}
+  .z-hist-b{display:flex;flex-direction:column;gap:8px;margin-top:10px;opacity:.85}
+  .z-hist-b .bubble{max-width:92%}
+  .z-acts-row{margin:12px 0 10px}
+  @media (prefers-reduced-motion:reduce){.nx,.step,.daymore,.tile.work,.just-changed,.is-new{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
@@ -1991,7 +2068,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       $('nOpen').textContent = data.openCount || 0;
       $('nUrgent').textContent = data.urgentCount || 0;
       $('nMeet').textContent = data.meetingCount || 0;
-      $('daySummary').textContent = data.summary || '';
+      $('daySummary').textContent = data.greetingLine || ''; // the counts live in the one-line summary under the hero
       { const sc = views.today ? views.today.scrollTop : 0; renderCardList(data.cards || []); if (views.today) views.today.scrollTop = sc; }
       if (data.hasDigest) {
         $('digestStatus').textContent = data.lastDigestAt ? `已汇聚 · ${new Date(data.lastDigestAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}` : '已汇聚';
@@ -2384,32 +2461,202 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         ${desc ? `<p class="w-desc">${escapeHtml(desc)}</p>` : ''}
         ${metrics}${avRow}
         <div class="w-next"><span class="w-next-k">下一步</span><span class="w-next-v">${escapeHtml(nextAction(card))}</span></div>
-        <div class="w-links">${links.map(linkRow).join('')}</div>
+        ${(card.prepared || []).length ? `<div class="w-acts"><span class="w-acts-k">豆芽备好了</span>${card.prepared.map((p, i) => stepBtnHtml(p, i, i === 0 && p.kind !== 'snooze' ? 'primary' : '')).join('')}</div>` : ''}
+        <div class="w-slot"></div>
+        <div class="w-links">${links.slice(0, 2).map(linkRow).join('')}</div>
       </article>`;
   }
 
-  function renderCardList(cards) {
-    const container = $('cardList');
-    lastCards = cards;
-    const hero = cards.find(c => c.type === 'hero');
-    const tt = cards.find(c => c.type === 'timetable');
-    const work = cards.filter(c => !SYS_TYPES.has(c.type) && c.source !== 'system');
-    const order = arrangeWork(work).filter(c => !filterHidden(c));
-    let html = tt ? renderTimetable(tt) : '';
-    html += '<div class="tod-strip" id="todStrip"></div>';
-    html += '<div class="grid2">';
-    html += renderHero(hero, work);
-    html += renderLoad(work);
-    html += order.map(c => (c.type === 'view' ? `<article class="tile work size-wide view-tile" data-idx="${cards.indexOf(c)}"></article>` : renderWorkTile(c, cards.indexOf(c)))).join('');
-    if (work.length && !order.length) html += `<div class="tile empty size-wide"><div class="eyebrow">筛选后没有卡片</div><p class="w-desc">点上方「显示全部」恢复。</p></div>`;
-    if (!work.length) html += `<div class="tile empty size-wide">${douyaSvg({ size: 56, state: 'idle', id: 'te' })}<div class="eyebrow">还没有卡片</div><p class="w-desc">点击右上角「立即汇聚」，豆芽会从已连接的数据源拉取最新动态。</p></div>`;
-    html += '</div>';
-    html += `<div class="today-chat" id="todayChat">
+  // ===== Focus & actions (Phase A): one "next thing" hero, prepared steps on every card, one chat =====
+  const MORE_KEY = 'odm.dayMore.v1';
+  const dayMoreOpen = () => { try { return localStorage.getItem(MORE_KEY) === '1'; } catch (_) { return false; } };
+  function stepBtnHtml(b, i, cls = '') {
+    const attrs = `data-step="${i}"${b.hint ? ` title="${escapeHtml(b.hint)}"` : ''}`;
+    if (b.kind === 'link' && /^https?:\/\//.test(b.url || '')) return `<a class="step ${cls}" href="${escapeHtml(b.url)}" target="_blank" rel="noopener" ${attrs}>${escapeHtml(b.label)} ↗</a>`;
+    const ic = b.kind === 'ask' ? '<i class="st-ic">✦</i>' : b.kind === 'act' ? '<i class="st-ic">✎</i>' : b.kind === 'snooze' ? '<i class="st-ic">☾</i>' : '';
+    return `<button type="button" class="step ${cls} k-${escapeHtml(b.kind)}" ${attrs}>${ic}${escapeHtml(b.label)}</button>`;
+  }
+  function countdownText(ms) {
+    const m = Math.round((ms - Date.now()) / 60000);
+    if (m <= 0) return '进行中';
+    if (m < 60) return `${m} 分钟后`;
+    return `${Math.floor(m / 60)} 小时 ${m % 60} 分后`;
+  }
+  function renderNextHero(nx) {
+    if (!nx) return '';
+    const btns = (nx.buttons || []).map((b, i) => stepBtnHtml(b, i, i === 0 ? 'primary' : '')).join('');
+    const eyebrow = nx.kind === 'meeting' ? (nx.live ? '正在开会' : '马上开会') : nx.kind === 'block' ? '按安排，现在' : nx.kind === 'none' ? '现在' : '现在最该做的一件事';
+    const side = nx.kind === 'meeting' && nx.startsAtMs
+      ? `<div class="nx-count" data-at="${nx.startsAtMs}"><b>${escapeHtml(countdownText(nx.startsAtMs))}</b><span>${escapeHtml(nx.at || '')}–${escapeHtml(nx.endsAt || '')}</span></div>`
+      : nx.upcoming ? `<div class="nx-up"><span>接下来</span><b>${escapeHtml(nx.upcoming.at)} ${escapeHtml(nx.upcoming.title)}</b><em>${nx.upcoming.startsInMin < 60 ? nx.upcoming.startsInMin + ' 分钟后' : '还早'}</em></div>` : '';
+    return `<section class="nx nx-${escapeHtml(nx.kind)}" data-sys="next" ${nx.cardId ? `data-card="${escapeHtml(nx.cardId)}"` : ''}>
+      <div class="nx-mark">${douyaSvg({ size: 54, state: nx.kind === 'none' ? 'idle' : 'idle', id: 'nx' })}</div>
+      <div class="nx-b">
+        <div class="nx-eyebrow">${escapeHtml(eyebrow)}</div>
+        <h2 class="nx-title">${escapeHtml(nx.title || '')}</h2>
+        ${nx.next ? `<p class="nx-next">${escapeHtml(nx.next)}</p>` : ''}
+        ${nx.why ? `<div class="nx-why">${escapeHtml(nx.why)}</div>` : ''}
+        ${btns ? `<div class="nx-btns">${btns}</div>` : ''}
+        <div class="nx-slot"></div>
+      </div>
+      ${side}
+    </section>`;
+  }
+  function renderDayLine(data) {
+    const open = dayMoreOpen();
+    return `<div class="dayline">
+      <span class="dl-sum">${escapeHtml(data.summaryLine || data.summary || '')}</span>
+      <button type="button" class="dl-toggle" id="dayMoreToggle" aria-expanded="${open}">${open ? '收起今天全貌' : '今天全貌'} <i>${open ? '▴' : '▾'}</i></button>
+    </div>`;
+  }
+  /** One prepared step clicked (hero or card face). Nothing outgoing runs without 确认执行. */
+  async function runStep(step, { card = null, slot = null, btn = null } = {}) {
+    if (!step) return;
+    const cardId = step.cardId || (card && card.id) || null;
+    const theCard = card || (cardId ? lastCards.find(c => c.id === cardId) : null);
+    if (step.kind === 'open') { if (theCard) openTileZoom(theCard); return; }
+    if (step.kind === 'timetable') { const tt = lastCards.find(c => c.type === 'timetable'); if (tt) openTileZoom(tt); return; }
+    if (step.kind === 'link') { if (/^https?:\/\//.test(step.url || '')) window.open(step.url, '_blank', 'noopener'); return; }
+    if (step.kind === 'ask') {
+      if (theCard) setChatContext(theCard);
+      openTodayChat();
+      dockPrompt(step.prompt || step.label);
+      return;
+    }
+    if (btn) { btn.disabled = true; btn.classList.add('busy'); }
+    const r = await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardId, prepId: step.kind === 'snooze' ? 'snooze' : step.id }) }).then(x => x.json()).catch(e => ({ success: false, error: e.message }));
+    if (btn) { btn.disabled = false; btn.classList.remove('busy'); }
+    if (!r.success) { showUiToast(r.error || '没成功，稍后再试'); return; }
+    if (r.kind === 'snooze') {
+      const tile = document.querySelector(`.tile.work[data-id="${CSS.escape(cardId)}"]`);
+      if (tile) { tile.classList.add('leaving'); await sleep(320); }
+      showUiToast('明早 9 点再提醒你', null, { label: '撤销', onClick: async () => { await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardId, prepId: 'unsnooze' }) }); loadToday(); } });
+      loadToday().catch(() => {});
+      return;
+    }
+    if (r.kind === 'act' && r.action && slot) {
+      slot.querySelectorAll('.act-card').forEach(x => x.remove());
+      const el = actionCardEl(r.action);
+      el.classList.add('on-card');
+      slot.appendChild(el);
+    }
+  }
+  function bindSteps(root, steps, card) {
+    root.querySelectorAll('[data-step]').forEach(el => {
+      el.addEventListener('click', e => {
+        e.stopPropagation();
+        const s = steps[Number(el.getAttribute('data-step'))];
+        if (!s || (s.kind === 'link')) return; // links open natively
+        e.preventDefault();
+        runStep(s, { card, slot: root.querySelector('.w-slot, .nx-slot'), btn: el });
+      });
+    });
+  }
+  /** Pending prepared actions stay visible on their card face until confirmed / cancelled. */
+  async function mountPendingOnCards(container) {
+    const r = await actionsApi({ op: 'list' });
+    for (const a of (r.actions || []).filter(a => a.status === 'pending' && a.cardId)) {
+      const slot = container.querySelector(`.tile.work[data-id="${CSS.escape(a.cardId)}"] .w-slot`);
+      if (!slot || slot.querySelector(`[data-action-id="${a.id}"]`)) continue;
+      const el = actionCardEl(a); el.classList.add('on-card'); slot.appendChild(el);
+    }
+  }
+  // Things that changed since the last render flash in place (Chief edited a card / the timetable).
+  let prevStamp = null;
+  function cardStamp(c) { return `${c.updatedAt || ''}|${c.planEditedAt || ''}|${c.status || ''}|${Object.keys(c.itemStatus || {}).length}`; }
+  function flashChanged(container, cards) {
+    const now = new Map(cards.map(c => [c.id, cardStamp(c)]));
+    if (prevStamp) {
+      for (const c of cards) {
+        const before = prevStamp.get(c.id);
+        if (before === now.get(c.id)) continue;
+        const el = c.type === 'timetable' ? container.querySelector('.myday') : container.querySelector(`.tile.work[data-id="${CSS.escape(c.id)}"]`);
+        if (!el) continue;
+        el.classList.remove(before === undefined ? 'is-new' : 'just-changed'); void el.offsetWidth;
+        el.classList.add(before === undefined ? 'is-new' : 'just-changed');
+        if (c.type === 'timetable') { const nx = container.querySelector('.nx'); if (nx) { nx.classList.remove('just-changed'); void nx.offsetWidth; nx.classList.add('just-changed'); } }
+      }
+    }
+    prevStamp = now;
+  }
+  // ---- One chat entry: the dock chat is the only chat; opening a card sets its context and moves it beside the card.
+  let chatCtx = null; // { card, key, name, isTT }
+  function chatKeyFor(card) {
+    const r = repoOf(card); const isTT = card.type === 'timetable';
+    return isTT ? 'timetable' : r ? `repo:${r.owner}/${r.name}` : isMailGroup(card) ? `mail:${(card.metadata && card.metadata.group) || card.title}` : ((card.sourceId || '').replace(/:\d{4}-\d{2}-\d{2}$/, '') || card.id);
+  }
+  function setChatContext(card) {
+    if (!card) { chatCtx = null; } else {
+      const r = repoOf(card); const isTT = card.type === 'timetable';
+      chatCtx = { card, key: chatKeyFor(card), isTT, name: r ? r.name : (isTT ? '今天的安排' : clip(card.title, 20)) };
+    }
+    paintChatContext();
+  }
+  function paintChatContext() {
+    const el = $('chatCtx'), inp = $('todayChatInput');
+    if (el) {
+      el.hidden = !chatCtx;
+      if (chatCtx) { el.querySelector('b').textContent = chatCtx.name; }
+    }
+    if (inp) inp.placeholder = chatCtx ? `关于「${chatCtx.name}」，问我或让我去做…` : '和豆芽对话… 可粘贴/拖入图片';
+    paintChatChips();
+  }
+  function paintChatChips() {
+    const box = $('chatChips'); if (!box) return;
+    const chips = chatCtx ? chipsForCard(chatCtx.card) : chipsForDay();
+    box.replaceChildren(...chips.map(c => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = c; b.onclick = () => dockPrompt(c); return b; }));
+    box.hidden = !chips.length;
+  }
+  /** Chips from the card's current state (never generic when there is something specific to say). */
+  function chipsForCard(card) {
+    if (!card) return [];
+    if (card.type === 'timetable') {
+      const tt = blockOf(card, 'timetable') || {};
+      const nowM = new Date().getHours() * 60 + new Date().getMinutes();
+      const left = [...(tt.suggestedBlocks || [])].filter(b => (toMin(b.end) || 0) > nowM);
+      return [left.length ? `把「${clip(ttTitle(left[0].title), 10)}」往后挪半小时` : '帮我把今晚剩下的时间排一下', '明天上午留两小时专注，放哪里？'];
+    }
+    const st = card.itemStatus || {};
+    const open = linksOf(card).filter(l => !st[l.url]);
+    const out = [];
+    const prep = (card.prepared || []).filter(p => p.kind === 'ask');
+    if (prep[0]) out.push(prep[0].label);
+    if (isMailGroup(card)) {
+      if (!open.length) out.push('这组都处理完了，还有别的要看吗？');
+      else if (card.waiting === 'you') out.push(open.length > 1 ? `这 ${open.length} 封里哪封最急？` : `「${clip(open[0].title, 12)}」要我怎么回？`);
+      else out.push(`这 ${open.length} 封里有要我回的吗？`);
+    } else if (card.source === 'github' || repoOf(card)) {
+      const prs = open.filter(l => linkKind(l).k === 'pr'), iss = open.filter(l => linkKind(l).k === 'issue');
+      if (prs.length > 1) out.push(`这 ${prs.length} 个 PR 先推哪个？`);
+      else if (prs[0]) out.push(`#${(prs[0].url.match(/\/pull\/(\d+)/) || [])[1]} 卡在哪？`);
+      if (iss.length) out.push(`${iss.length} 个 issue 里哪个今天必须回？`);
+    } else if (card.type === 'slack-cluster' || card.source === 'slack') {
+      const need = open.filter(l => l.needsYou);
+      out.push(need.length ? `${need.length} 条在等我回，怎么回？` : '这里有我需要知道的吗？');
+    } else if (card.nextAction) out.push(`「${clip(card.nextAction, 14)}」怎么开始？`);
+    out.push(card.waiting === 'you' ? '今天不做的话会怎样？' : '这张可以先放着吗？');
+    return [...new Set(out)].slice(0, 3);
+  }
+  function chipsForDay() {
+    const nx = lastToday && lastToday.next;
+    const out = [];
+    if (nx && nx.kind === 'meeting') out.push(`「${clip(nx.title, 12)}」会前要准备什么？`);
+    else if (nx && nx.kind === 'card') out.push(`先做「${clip(nx.title, 12)}」，怎么开始？`);
+    out.push('今天还剩什么最重要？');
+    if ((lastToday && lastToday.openCount) > 3) out.push('哪些今天可以不管？');
+    return out.slice(0, 3);
+  }
+  function chatTemplate() {
+    const wrap = document.createElement('div');
+    wrap.className = 'today-chat'; wrap.id = 'todayChat';
+    wrap.innerHTML = `
       <div class="today-chat-sheet" id="todayChatSheet">
         <div class="today-chat-head"><b>豆芽</b><small>数字同事 · 有长期记忆</small><button class="x" id="todayChatClose" type="button" aria-label="收起对话">✕</button></div>
         <div class="today-chat-msgs" id="todayChatMsgs"></div>
       </div>
       <div class="today-chat-input">
+        <div class="chat-ctx" id="chatCtx" hidden><span>正在聊</span><b></b><button type="button" id="chatCtxClear" aria-label="不针对这张卡">✕</button></div>
+        <div class="chat-chips" id="chatChips" hidden></div>
         <div class="composer-attach" id="todayAttachRail" hidden></div>
         <div class="composer-tip" id="todayComposerTip" hidden></div>
         <div class="input-wrap">
@@ -2421,22 +2668,112 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
           <button class="send-btn" id="todayChatSend" type="button" aria-label="发送" disabled><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
         </div>
         <input type="file" id="todayFilePick" hidden multiple accept="image/*,.pdf,.txt,.md,.csv,.json,.js,.ts,.py,.yaml,.yml,.html,.css,.sh,.log" />
-      </div>
-    </div>`;
-    // Keep the live chat dock (open state, transcript, in-flight reply) across refreshes:
-    // detach it, rebuild the grid, then put the same node back in place of the fresh one.
-    const liveChat = $('todayChat');
+      </div>`;
+    wrap.querySelector('#chatCtxClear').addEventListener('click', e => { e.preventDefault(); setChatContext(null); });
+    return wrap;
+  }
+  /** Lead line big, details folded, drafts and 【选项】 chips always visible. */
+  function shapeReply(bubble) {
+    const md = bubble && bubble.querySelector(':scope > .md');
+    if (!md || md.dataset.shaped) return;
+    md.dataset.shaped = '1';
+    const kids = [...md.children];
+    if (!kids.length) return;
+    // 【选项】A｜B｜C → reply chips
+    const optEl = [...kids].reverse().find(k => /^\s*【选项】/.test(k.textContent || ''));
+    let opts = [];
+    if (optEl) {
+      opts = String(optEl.textContent).replace(/^\s*【选项】\s*/, '').split(/[｜|]/).map(s => s.trim()).filter(Boolean).slice(0, 4);
+      optEl.remove();
+    }
+    const rest = [...md.children];
+    const lead = rest[0];
+    if (lead && lead.tagName === 'P' && (lead.textContent || '').length <= 90) lead.classList.add('rp-lead');
+    const body = rest.slice(lead && lead.classList.contains('rp-lead') ? 1 : 0);
+    const foldable = body.filter(k => !k.classList.contains('md-draft'));
+    const textLen = foldable.reduce((n, k) => n + (k.textContent || '').length, 0);
+    if (lead && lead.classList.contains('rp-lead') && foldable.length && textLen > 240) {
+      const det = document.createElement('details'); det.className = 'rp-more';
+      const sum = document.createElement('summary'); sum.textContent = `展开细节（${foldable.length} 段）`;
+      det.appendChild(sum);
+      const firstDraft = body.find(k => k.classList.contains('md-draft'));
+      foldable.forEach(k => det.appendChild(k));
+      if (firstDraft) md.insertBefore(det, firstDraft); else md.appendChild(det);
+      det.addEventListener('toggle', () => { sum.textContent = det.open ? '收起细节' : `展开细节（${foldable.length} 段）`; });
+    }
+    if (opts.length) {
+      const row = document.createElement('div'); row.className = 'rp-opts';
+      opts.forEach(o => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = o; b.onclick = () => dockPrompt(o); row.appendChild(b); });
+      md.appendChild(row);
+    }
+  }
+  // Card chat history (the conversation used to live on the card): shown read-only in the card, new turns append to it.
+  const cardChatApi = (key, body) => fetch('/api/opendigitalmate/card-chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, ...body }) }).then(r => r.json()).catch(() => ({}));
+  function borrowChat(host) {
+    const chat = $('todayChat'); if (!chat || !host) return;
+    host.appendChild(chat);
+    chat.classList.add('in-zoom', 'open');
+    ensureInlineBotHistory();
+    const m = $('todayChatMsgs'); if (m) m.scrollTop = m.scrollHeight;
+  }
+  function returnChat() {
+    const chat = $('todayChat'), slot = $('todayChatSlot');
+    if (!chat) return;
+    chat.classList.remove('in-zoom');
+    if (slot && chat.parentElement !== slot) slot.appendChild(chat);
+  }
+
+  function renderCardList(cards) {
+    const container = $('cardList');
+    lastCards = cards;
+    const hero = cards.find(c => c.type === 'hero');
+    const tt = cards.find(c => c.type === 'timetable');
+    const work = cards.filter(c => !SYS_TYPES.has(c.type) && c.source !== 'system');
+    const order = arrangeWork(work).filter(c => !filterHidden(c));
+    const nx = lastToday && lastToday.next;
+    const more = dayMoreOpen();
+    let html = renderNextHero(nx);
+    html += renderDayLine(lastToday || {});
+    html += `<div class="daymore${more ? ' open' : ''}" id="dayMore"><div class="daymore-in">`;
+    html += tt ? renderTimetable(tt) : '';
+    html += '<div class="grid2 grid-more">' + renderHero(hero, work) + renderLoad(work) + '</div>';
+    html += '<div class="tod-strip" id="todStrip"></div>';
+    html += '</div></div>';
+    html += '<div class="grid2">';
+    html += order.map(c => (c.type === 'view' ? `<article class="tile work size-wide view-tile" data-idx="${cards.indexOf(c)}"></article>` : renderWorkTile(c, cards.indexOf(c)))).join('');
+    if (work.length && !order.length) html += `<div class="tile empty size-wide"><div class="eyebrow">筛选后没有卡片</div><p class="w-desc">点上方「显示全部」恢复。</p></div>`;
+    if (!work.length) html += `<div class="tile empty size-wide">${douyaSvg({ size: 56, state: 'idle', id: 'te' })}<div class="eyebrow">还没有卡片</div><p class="w-desc">点击右上角「立即汇聚」，豆芽会从已连接的数据源拉取最新动态。</p></div>`;
+    html += '</div>';
+    html += '<div id="todayChatSlot"></div>';
+    // Keep the one live chat (open state, transcript, in-flight reply) across refreshes: it is a single node that
+    // lives in the dock slot, or beside an open card. Rebuild the grid around it.
+    let liveChat = $('todayChat');
+    const borrowed = !!(liveChat && liveChat.classList.contains('in-zoom'));
     const hadFocus = document.activeElement && document.activeElement.id === 'todayChatInput';
     const msgsScroll = $('todayChatMsgs') ? $('todayChatMsgs').scrollTop : 0;
-    if (liveChat) liveChat.remove();
+    if (liveChat && !borrowed) liveChat.remove();
     container.innerHTML = html;
-    if (liveChat) {
-      $('todayChat').replaceWith(liveChat);
+    const fresh = !liveChat;
+    if (!liveChat) liveChat = chatTemplate();
+    if (!borrowed) {
+      $('todayChatSlot').appendChild(liveChat);
       if ($('todayChatMsgs')) $('todayChatMsgs').scrollTop = msgsScroll;
       if (hadFocus) $('todayChatInput').focus({ preventScroll: true });
     }
-
+    const nxEl = container.querySelector('.nx');
+    if (nxEl && nx) bindSteps(nxEl, nx.buttons || [], nx.cardId ? cards.find(c => c.id === nx.cardId) : null);
+    const mt = $('dayMoreToggle');
+    if (mt) mt.addEventListener('click', () => {
+      const open = !$('dayMore').classList.contains('open');
+      try { localStorage.setItem(MORE_KEY, open ? '1' : '0'); } catch (_) {}
+      $('dayMore').classList.toggle('open', open);
+      mt.setAttribute('aria-expanded', String(open));
+      mt.innerHTML = `${open ? '收起今天全貌' : '今天全貌'} <i>${open ? '▴' : '▾'}</i>`;
+    });
     decorateTiles(container, cards);
+    flashChanged(container, cards);
+    mountPendingOnCards(container).catch(() => {});
+    if (!chatCtx) paintChatChips();
     renderTodStrip();
     mountPanelsAndViews(container, cards);
     reportView();
@@ -2446,8 +2783,10 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     };
     container.querySelectorAll('.tile.work').forEach(tile => {
       const card = cards[Number(tile.getAttribute('data-idx'))];
+      if (card && Array.isArray(card.prepared)) bindSteps(tile, card.prepared, card);
       tile.addEventListener('click', e => {
         if (card && card.type === 'view') return; // a saved view is used in place
+        if (e.target.closest('.w-acts, .w-slot, .act-card')) return;
         if (e.target.closest('a')) { track(card, 'open'); return; }
         track(card, 'open');
         openTileZoom(card);
@@ -2462,7 +2801,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     });
     const myday = container.querySelector('.myday');
     if (myday && tt) myday.addEventListener('click', () => openTileZoom(tt));
-    if (!liveChat) setupTodayChatInput();
+    if (fresh) setupTodayChatInput();
   }
 
 
@@ -2497,6 +2836,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const b = document.createElement('div');
     b.className = 'bubble bot';
     b.innerHTML = `${renderMd(text)}<small>${chatTime()}</small>`;
+    shapeReply(b);
     const ce = citesEl(citations);
     if (ce) b.appendChild(ce);
     body.appendChild(b);
@@ -2523,6 +2863,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
           const b = document.createElement('div');
           b.className = 'bubble bot';
           b.innerHTML = `${renderMd(m.content)}<small>${m.at ? chatTime(m.at) : ''}</small>`;
+          shapeReply(b);
           const ce = citesEl(m.citations);
           if (ce) b.appendChild(ce);
           body.appendChild(b);
@@ -2740,7 +3081,10 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const setLabel = t => { if (!live.firstTextAt) setThinking(typing, t); };
       const live = newLiveTurn({ container: $('todayChatMsgs'), typingEl: typing, setLabel, bubbleClass: 'bubble bot', ctx: { container: $('todayChatMsgs'), sendPrompt: dockPrompt } });
       try {
-        const data = await sendChatResilient({ message: msg, attachments: atts, sessionId: BOT_SESSION, viewContext: viewContext('dock'), turn: live.id }, setLabel, { streaming: () => feedState.mode === 'sse' });
+        const ctx = chatCtx;
+        const ctxBody = ctx ? { cardId: ctx.isTT ? null : ctx.card.id, cardContext: ctx.isTT ? '当前在看：今天的时间表' : `当前在看卡片「${ctx.card.title || ''}」：${ctx.card.body || ''} ${ctx.card.url || ''}` } : {};
+        const data = await sendChatResilient({ message: msg, attachments: atts, sessionId: BOT_SESSION, viewContext: viewContext(ctx ? 'card' : 'dock'), turn: live.id, ...ctxBody }, setLabel, { streaming: () => feedState.mode === 'sse' });
+        if (ctx && data && data.status !== 'merged' && !data.error) { const ah = pending.length ? await attMetaForHistory(pending) : null; cardChatApi(ctx.key, { op: 'append', messages: [{ role: 'user', text: msg, ...(ah ? { attachments: ah } : {}) }, ...(data.text ? [{ role: 'assistant', text: data.text }] : [])] }); }
         live.finish();
         // Merged: this message rode along in the next message's turn — that one bubble carries the single reply.
         if (data.status === 'merged') { typing.remove(); return; }
@@ -3910,141 +4254,43 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       if (linksOf(card).length) html += `<div class="z-sec" id="zItemsSec">${zoomItemsHtml(card)}</div>`;
     }
     const name = r ? r.name : (isTT ? '今天的安排' : clip(card.title, 20));
-    const FALLBACK_SUGG = {
-      github: ['这些 PR 现在卡在哪？', '帮我起草一条催 review 的评论', '今天只做一件事的话，做哪件？'],
-      gmail: ['这些邮件里哪封需要我回复？', '帮我起草一条回复', '哪些可以直接归档？'],
-      slack: ['这个频道今天在讨论什么？', '有没有需要我回应的消息？', '帮我起草一条回复'],
-    };
-    const sugg = isTT ? ['帮我把今晚剩下的时间排一下', '明天上午留两小时专注，放哪里？'] :
-      (Array.isArray(card.suggestedQuestions) && card.suggestedQuestions.length ? card.suggestedQuestions : (FALLBACK_SUGG[card.source] || ['帮我总结一下这张卡片', '下一步我该做什么？', '这件事有多紧急？']));
-    const chatKey = isTT ? 'timetable' : r ? `repo:${r.owner}/${r.name}` : isMailGroup(card) ? `mail:${(card.metadata && card.metadata.group) || card.title}` : ((card.sourceId || '').replace(/:\d{4}-\d{2}-\d{2}$/, '') || card.id);
+    if (!isTT && (card.prepared || []).length) html = html.replace('<div class="z-next">', `<div class="w-acts z-acts-row"><span class="w-acts-k">豆芽备好了</span>${card.prepared.map((p, i) => stepBtnHtml(p, i, i === 0 && p.kind !== 'snooze' ? 'primary' : '')).join('')}</div><div class="w-slot z-slot"></div><div class="z-next">`);
+    html += '<details class="z-hist" id="zHist" hidden><summary></summary><div class="z-hist-b" id="zHistB"></div></details>';
     const modal = overlay.querySelector('.tile-zoom-modal');
     const hdr = modal.querySelector('.tile-zoom-header');
     if (hdr) hdr.remove(); // keep the node; re-attached into the left column below
+    // One chat: the same 豆芽 chat moves beside the card and talks about it (context chip), then goes back to the dock.
     content.innerHTML = `
       <div class="z-split">
         <section class="z-left" id="zLeft">${html}</section>
         <aside class="z-chat" id="zChat">
           <div class="z-chat-head">
-            <div><b>和豆芽聊「${escapeHtml(name)}」</b><span>继续这个任务 · 对话会记在这张卡上</span></div>
-            <button class="z-chat-clear" id="zoomChatClear" title="清空这张卡的对话" hidden>清空</button>
+            <div><b>和豆芽聊「${escapeHtml(name)}」</b><span>同一个对话 · 这里说的会记在这张卡上</span></div>
           </div>
-          <div class="z-msgs" id="zoomMsgs"><div class="z-empty-chat" id="zoomEmpty">${douyaSvg({ size: 52, state: 'idle', id: 'ze' + Date.now() })}<div>问我这张卡的进展，或者直接让我去做：标完成、改下一步、起草回复…</div></div></div>
-          <div class="z-compose">
-            <div class="z-sugg">${sugg.map(s => `<button class="z-chip">${escapeHtml(s)}</button>`).join('')}</div>
-            <div class="composer-attach" id="zoomAttachRail" hidden></div>
-            <div class="composer-tip" id="zoomComposerTip" hidden></div>
-            <div class="z-input">
-              <div class="composer-tools">
-                <button type="button" id="zoomAttachBtn" title="图片或文件" aria-label="添加图片或文件"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg></button>
-                <button type="button" id="zoomMicBtn" title="语音输入" aria-label="语音输入"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v3.5"/></svg></button>
-              </div>
-              <input type="text" id="zoomChatInput" placeholder="关于「${escapeHtml(name)}」，问我或让我去做…" enterkeyhint="send" />
-              <button id="zoomChatSend" class="z-send" aria-label="发送" disabled><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg><span>发送</span></button>
-              <input type="file" id="zoomFilePick" hidden multiple accept="image/*,.pdf,.txt,.md,.csv,.json,.js,.ts,.py,.yaml,.yml,.html,.css,.sh,.log" />
-            </div>
-          </div>
+          <div class="z-chat-host" id="zChatHost"></div>
         </aside>
       </div>`;
     if (hdr) $('zLeft').prepend(hdr);
-
-    const msgs = $('zoomMsgs');
-    const chatInput = $('zoomChatInput');
-    const clearBtn = $('zoomChatClear');
     const token = ++zoomSeq;
     const live = () => token === zoomSeq && currentZoomCard === card;
-    const push = (cls, text) => {
-      const em = $('zoomEmpty'); if (em) em.remove();
-      const d = document.createElement('div');
-      d.className = 'z-msg ' + cls;
-      if (cls === 'bot') d.innerHTML = renderMd(text); else d.textContent = text;
-      msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
-      if (clearBtn) clearBtn.hidden = false;
-      return d;
-    };
-    const chatApi = (body) => fetch('/api/opendigitalmate/card-chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: chatKey, ...body }) }).then(r => r.json()).catch(() => ({}));
-    actionsApi({ op: 'list' }).then(r => { if (!live()) return; (r.actions || []).filter(a => a.status === 'pending' && a.cardId && a.cardId === card.id).reverse().forEach(a => { const em = $('zoomEmpty'); if (em) em.remove(); msgs.appendChild(actionCardEl(a)); }); });
-    chatApi({ op: 'get' }).then(d => {
+    setChatContext(card);
+    borrowChat($('zChatHost'));
+    if (!isTT && (card.prepared || []).length) bindSteps($('zLeft'), card.prepared, card);
+    actionsApi({ op: 'list' }).then(r2 => { if (!live()) return; const slot = $('zLeft') && $('zLeft').querySelector('.z-slot'); (r2.actions || []).filter(a => a.status === 'pending' && a.cardId === card.id).reverse().forEach(a => { const el = actionCardEl(a); el.classList.add('on-card'); (slot || $('zLeft')).appendChild(el); }); });
+    cardChatApi(chatCtx.key, { op: 'get' }).then(d => {
       if (!live() || !Array.isArray(d.messages) || !d.messages.length) return;
-      if (msgs.querySelector('.z-msg')) return; // user already typed before history arrived
-      d.messages.forEach(m => {
-        const el = push(m.role === 'user' ? 'me' : 'bot', m.role === 'user' ? cardChatText(m.text) : m.text);
-        const legacy = m.role === 'user' && !(m.attachments && m.attachments.length) ? [...String(m.text || '').matchAll(/(图片|文件)「([^」]+)」/g)].filter(() => String(m.text).includes('【附件】')).map(x => ({ kind: x[1] === '图片' ? 'image' : 'file', name: x[2] })) : [];
-        if (m.role === 'user' && ((m.attachments && m.attachments.length) || legacy.length)) fillUserBubble(el, cardChatText(m.text), m.attachments && m.attachments.length ? m.attachments : legacy, null);
-        (m.surfaces || []).forEach(async id => { const ph = document.createElement('div'); msgs.appendChild(ph); const v = await surfaceGet(id); if (!live()) return; ph.replaceWith(v ? renderSurface(v, { container: msgs, sendPrompt: t => sendZoomChat(t) }, 'chat') : Object.assign(document.createElement('div'), { className: 'sf-empty', textContent: '这个视图已过期' })); });
+      const box = $('zHistB'), det = $('zHist'); if (!box || !det) return;
+      det.hidden = false;
+      det.querySelector('summary').textContent = `之前在这张卡上的对话 · ${d.messages.length} 条`;
+      d.messages.slice(-12).forEach(m => {
+        const el = document.createElement('div');
+        el.className = 'bubble ' + (m.role === 'user' ? 'me' : 'bot');
+        if (m.role === 'user') fillUserBubble(el, cardChatText(m.text), m.attachments || [], null);
+        else { el.innerHTML = renderMd(m.text); shapeReply(el); }
+        box.appendChild(el);
       });
     });
-    if (clearBtn) clearBtn.onclick = async () => {
-      await chatApi({ op: 'clear' });
-      if (!live()) return;
-      msgs.innerHTML = '<div class="z-empty-chat" id="zoomEmpty">对话已清空。</div>';
-      clearBtn.hidden = true;
-    };
-    let lastZoomCards = [];
-    const zoomComposer = makeComposer({ railId: 'zoomAttachRail', tipId: 'zoomComposerTip', inputId: 'zoomChatInput', pickId: 'zoomFilePick', attachBtnId: 'zoomAttachBtn', micBtnId: 'zoomMicBtn' });
-    zoomComposer.wire();
-    const sendZoomChat = async (preset) => {
-      const msg = (preset || chatInput.value).trim();
-      const atts = preset ? [] : zoomComposer.payload();
-      if (!msg && !atts.length) return;
-      chatInput.value = '';
-      const pending = preset ? [] : zoomComposer.items.splice(0);
-      if (!preset) { zoomComposer.render(); zoomComposer.showTip(''); }
-      const me = push('me', msg);
-      if (pending.length && me) fillUserBubble(me, msg, pending, null);
-      const attHist = pending.length ? attMetaForHistory(pending) : Promise.resolve(null);
-      const typing = push('bot thinking', '');
-      typing.innerHTML = thinkingHtml();
-      const sentAt = new Date(Date.now() - 5000).toISOString();
-      let reply = '';
-      try {
-        const cardContext = isTT ? '当前在看：今天的时间表' : `当前在看卡片「${card.title || ''}」：${card.body || ''} ${card.url || ''}`;
-        const clientSentAt = Date.now();
-        const zLabel = t => { if (live() && !zTurn.firstTextAt) setThinking(typing, t); };
-        var zTurn = newLiveTurn({ container: msgs, typingEl: typing, setLabel: zLabel, bubbleClass: 'z-msg bot', ctx: { container: msgs, sendPrompt: t => sendZoomChat(t) } });
-        const data = await sendChatResilient({ message: msg, attachments: atts, cardId: isTT ? null : card.id, cardContext, sessionId: BOT_SESSION, viewContext: viewContext('card'), turn: zTurn.id }, zLabel, { streaming: () => feedState.mode === 'sse' });
-        zTurn.finish();
-        if (data.status === 'merged') { // answered together with the next message (one reply, below it)
-          if (live()) typing.remove();
-          attHist.then(ah => chatApi({ op: 'append', messages: [{ role: 'user', text: msg, ...(ah ? { attachments: ah } : {}) }] }));
-          return;
-        }
-        lastZoomCards = data.cards || [];
-        const clientRecvAt = Date.now();
-        reply = data.text || data.error || '收到了，但模型没有返回内容。';
-        if (live()) {
-          const b = push('bot', reply);
-          typing.replaceWith(b); // final Markdown reply in the streaming bubble's place
-          const ce = citesEl(data.citations);
-          if (ce) b.appendChild(ce);
-          (data.cards || []).filter(c => c.type === 'group').slice(0, 3).forEach(c => { msgs.appendChild(renderGroupCard(c)); });
-          mountSurfaces(msgs, data.cards, { container: msgs, sendPrompt: t => sendZoomChat(t), skip: zTurn.mounted });
-          msgs.scrollTop = msgs.scrollHeight;
-          showActionsSince(msgs, sentAt).catch(() => {});
-          const renderedAt = Date.now();
-          (window.__odmChatTimings = window.__odmChatTimings || []).push({ ...(data.timing || {}), clientSentAt, clientRecvAt, renderedAt, renderMs: renderedAt - clientRecvAt, clientTotalMs: renderedAt - clientSentAt });
-        }
-        loadToday().catch(() => {}); // the bot may have edited cards
-      } catch (err) {
-        if (typeof zTurn !== 'undefined' && zTurn) zTurn.finish();
-        if (live()) {
-          typing.remove();
-          const d = document.createElement('div');
-          d.className = 'z-msg bot fail';
-          d.innerHTML = failBubbleHtml(err instanceof ChatFail ? err.message : '发送失败了。');
-          d.querySelector('.chat-retry').onclick = () => { d.remove(); const mine = [...msgs.querySelectorAll('.z-msg.me')].pop(); if (mine && mine.textContent === msg) mine.remove(); sendZoomChat(msg); };
-          msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
-        }
-        return; // nothing to persist; retry will append the pair
-      }
-      const sfIds = (lastZoomCards || []).filter(c => c.type === 'surface' && c.view).map(c => c.view.id);
-      attHist.then(ah => chatApi({ op: 'append', messages: [{ role: 'user', text: msg, ...(ah ? { attachments: ah } : {}) }, ...(reply ? [{ role: 'assistant', text: reply, surfaces: sfIds }] : [])] }));
-    };
-    $('zoomChatSend').onclick = () => sendZoomChat();
-    { const zs = $('zoomChatSend'); const sync = () => { if (zs) zs.disabled = !chatInput.value.trim() && !zoomComposer.items.length; }; chatInput.addEventListener('input', sync); const iv = setInterval(() => { if (!document.body.contains(zs)) clearInterval(iv); else sync(); }, 600); sync(); }
-    chatInput.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendZoomChat(); } };
-    content.querySelectorAll('.z-chip').forEach(b => { b.onclick = () => sendZoomChat(b.textContent); });
-
+    const chatInput = $('todayChatInput');
     bindZoomItems(card);
     zoomSelectedItem = null;
     const zsec = $('zItemsSec');
@@ -4058,6 +4304,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function closeTileZoom() {
     const overlay = $('tileZoomOverlay');
     if (overlay) overlay.classList.remove('open');
+    returnChat();
+    setChatContext(null);
     currentZoomCard = null;
     zoomSelectedItem = null;
     zoomSeq++;

@@ -448,6 +448,14 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     log('composio callback: webServer unavailable, /composio-callback not mounted')
   }
 
+  // A card's prepared step (pending action held for 确认执行, or 明天再看). Owner auth via the /api fence.
+  effect({
+    path: '/api/opendigitalmate/card-prep',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request) => json(await router.cardPrepRun(await readJson(request))),
+  }, 'opendigitalmate: card prepared step')
+
   effect({
     path: '/api/composio/connect',
     methods: ['POST'],

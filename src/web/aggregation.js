@@ -1908,6 +1908,9 @@ export async function generateTimetable(grouped, sourceData, llmClient, profileC
       end,
       title: event.summary || 'Event',
       color: 'blue',
+      // Only real links from the event itself (meeting link first, else the calendar entry).
+      ...(/^https:\/\//.test(event.hangoutLink || event.htmlLink || '') ? { url: event.hangoutLink || event.htmlLink } : {}),
+      ...(Array.isArray(event.attendees) ? { attendees: event.attendees.filter(a => a && !a.self).slice(0, 8).map(a => ({ name: a.displayName || String(a.email || '').split('@')[0], status: a.responseStatus || null })) } : {}),
     };
   });
   

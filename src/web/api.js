@@ -17,6 +17,7 @@ import { cardSnapshotText, cardFull } from './card-snapshot.js';
 import { createUiService } from '../ui/service.js';
 import { createChatDisplay, attachmentMeta } from './chat-display.js';
 import { callbackUrlFor, callbackPage } from './composio-callback.js';
+import { prepareCardActions, pickNextThing, daySummaryLine, tomorrowMorning } from './card-prep.js';
 import { findTimetableCard, readPlan, applyPlanEdit, todaysCalendarEvents } from './timetable-plan.js';
 import { uiView } from '../ui/ops.js';
 import { createSurfaceService } from '../ui/surfaces.js';
@@ -765,6 +766,29 @@ export function createApiRouter(ctx) {
       return { success: false, error: `unknown op ${op}` };
     },
 
+    /**
+     * Owner's browser: run one of a card's prepared steps. The step is recomputed from the card's current data
+     * (the client only names it), so targets can't be forged. act → a PENDING action held for 确认执行;
+     * snooze → hidden until tomorrow 09:00. 'ask' steps go through the chat, not here.
+     */
+    async cardPrepRun({ cardId, prepId } = {}) {
+      const state = store.get();
+      const card = (state.cards || []).find(c => c.id === cardId);
+      if (!card) return { success: false, error: '这张卡已经不在了' };
+      if (prepId === 'unsnooze') { await router.updateCard(card.id, { status: 'active', snoozeUntil: null }); return { success: true, kind: 'unsnooze' }; }
+      const step = prepareCardActions(card, { itemStatus: state.itemStatus || {}, max: 4 }).find(p => p.id === prepId);
+      if (!step) return { success: false, error: '这一步已经过时了，刷新一下' };
+      if (step.kind === 'snooze') {
+        const until = tomorrowMorning();
+        await router.updateCard(card.id, { status: 'snoozed', snoozeUntil: until });
+        return { success: true, kind: 'snooze', until };
+      }
+      if (step.kind !== 'act') return { success: false, error: '这一步要在对话里交给豆芽' };
+      const r = await actionService.request(step.action, step.input, { cardId: card.id, hold: true, prepId: step.id });
+      if (!r.success) return { success: false, error: r.error || '没能准备好这个操作' };
+      const listed = await actionService.userOp({ op: 'list' });
+      return { success: true, kind: 'act', action: (listed.actions || []).find(a => a.id === r.actionId) || null };
+    },
     /** Bot-side: request an action (never confirms an outgoing one). */
     async requestAction(action, input = {}, opts = {}) { return actionService.request(action, input, opts); },
     /** User-side: list / confirm / cancel / undo (HTTP route only, behind owner auth). */
@@ -801,6 +825,15 @@ export function createApiRouter(ctx) {
           weekday: 'long',
         });
 
+        // Wake snoozed cards whose time has come (明天再看 / odm_card_snooze).
+        {
+          const st0 = store.get();
+          const due = (st0.cards || []).filter(c => c.status === 'snoozed' && (c.snoozeUntil || c.snoozedUntil) && new Date(c.snoozeUntil || c.snoozedUntil).getTime() <= Date.now());
+          if (due.length) {
+            for (const c of due) { c.status = 'active'; c.wokeAt = new Date().toISOString(); delete c.snoozeUntil; delete c.snoozedUntil; }
+            await store.save({ cards: st0.cards });
+          }
+        }
         // Get cards from store
         const state = store.get();
         const cards = state.cards || [];
@@ -862,7 +895,9 @@ export function createApiRouter(ctx) {
           meetingHours: Math.round(meetingHours * 10) / 10,
           waitingCount: activeCards.filter(c => c.status === 'waiting').length,
           lastDigestAt: state.lastDigest?.generatedAt || null,
-          cards: annotateCards(activeCards, state.itemStatus).map(c => (c.type === 'view' ? { ...c, view: surfaceService.cardView(c) } : c)),
+          cards: annotateCards(activeCards, state.itemStatus).map(c => (c.type === 'view' ? { ...c, view: surfaceService.cardView(c) } : { ...c, prepared: prepareCardActions(c, { itemStatus: state.itemStatus || {} }) })),
+          next: pickNextThing({ cards: activeCards, itemStatus: state.itemStatus || {} }),
+          summaryLine: daySummaryLine({ cards: activeCards, itemStatus: state.itemStatus || {}, meetings: meetings.length }),
           ui: { ...uiView(state), bootId: uiService.bootId, seq: uiService.seq },
           autoLayout: await router.autoLayout(activeCards, { hour }),
           hasDigest: state.lastDigest !== null,

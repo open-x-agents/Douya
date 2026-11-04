@@ -168,3 +168,17 @@ test('headline cut mid "0 reviews pending" is cleaned', async () => {
   assert.equal(tidyRepoCopy('SciBench-stat adaptation + coevolution fixes in progress, 0', '').headline, 'SciBench-stat adaptation + coevolution fixes in progress')
   assert.equal(tidyRepoCopy('Session sorting fix in progress, 1 review pending', '').headline, 'Session sorting fix in progress, 1 review pending')
 })
+
+test('next step skips an item the user already closed (inherited itemStatus)', async () => {
+  const { annotateCards } = await import('../src/host/store.js')
+  const u384 = 'https://github.com/o/r/issues/384', u5 = 'https://github.com/o/r/pull/5'
+  const card = { id: 'c', type: 'project-cluster', nextAction: '处理 issue #384',
+    actions: [{ label: '处理 issue #384', value: u384 }],
+    blocks: [{ type: 'link-list', links: [{ title: 'plugin x', url: u384 }, { title: '[o/r] Fix y', url: u5 }] }] }
+  const [a] = annotateCards([card], { [u384]: { status: 'done' } })
+  assert.equal(a.actions.some(x => x.value === u384), false)
+  assert.match(a.nextAction, /Fix y/)
+  assert.equal(a.actions[0].value, u5)
+  const [b] = annotateCards([card], { [u384]: { status: 'waiting' } })
+  assert.equal(b.nextAction, '处理 issue #384')
+})

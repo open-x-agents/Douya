@@ -297,6 +297,35 @@ export function annotateCards(cards = [], itemStatus = {}) {
   return cards.map(card => {
     const mine = {}
     for (const url of cardItemUrls(card)) if (itemStatus[url]) mine[url] = itemStatus[url]
-    return Object.keys(mine).length ? { ...card, itemStatus: mine } : card
+    return Object.keys(mine).length ? skipClosedNextAction({ ...card, itemStatus: mine }, mine) : card
   })
+}
+
+const CLOSED = new Set(['done', 'dismissed'])
+const baseUrl = (u = '') => String(u).replace(/\/files\/?$/, '').replace(/\/$/, '')
+
+// A new day's card inherits yesterday's done/dismissed marks, but its next step was picked without them.
+// Never point the user (or the hero focus list) at something they already closed: drop those buttons and
+// move the next step to the first remaining button or still-open linked item.
+export function skipClosedNextAction(card, mine = card.itemStatus || {}) {
+  const closed = new Set(Object.entries(mine).filter(([, v]) => CLOSED.has(v?.status)).map(([u]) => baseUrl(u)))
+  if (!closed.size || !Array.isArray(card.actions)) return card
+  const isClosed = a => a?.value && closed.has(baseUrl(a.value))
+  const removed = card.actions.filter(isClosed)
+  if (!removed.length) return card
+  const actions = card.actions.filter(a => !isClosed(a))
+  let nextAction = card.nextAction
+  if (removed.some(a => nextAction && String(nextAction).startsWith(a.label))) {
+    if (actions.length) nextAction = actions[0].label
+    else {
+      const ll = (card.blocks || []).find(b => b?.type === 'link-list')
+      const open = ll?.links?.find(l => l?.url && !closed.has(baseUrl(l.url)))
+      if (open) {
+        const num = open.url.match(/\/(?:pull|issues)\/(\d+)/)?.[1]
+        actions.push({ label: num ? `看 #${num} 的最新进展` : '看最新一条', value: open.url, primary: true })
+        nextAction = `先看「${String(open.title || '').replace(/^(Re:\s*)?\[[^\]]+\]\s*/i, '').slice(0, 40)}」的最新进展`
+      } else nextAction = ''
+    }
+  }
+  return { ...card, actions, nextAction }
 }

@@ -2808,11 +2808,12 @@
     renderCardList(lastCards);
     if (views.today) views.today.scrollTop = sc; // the page keeps its position
   }
-  function flashTile(cardId, item) {
+  // Only an explicit highlight scrolls to its card; layout changes flash in place (the page keeps its position).
+  function flashTile(cardId, item, scroll = false) {
     const tile = document.querySelector(`.tile.work[data-id="${CSS.escape(cardId)}"]`);
     if (tile && currentView() === 'today' && !currentZoomCard) {
       const r = tile.getBoundingClientRect();
-      if (r.top < 0 || r.bottom > window.innerHeight) tile.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (scroll && (r.top < 0 || r.bottom > window.innerHeight)) tile.scrollIntoView({ behavior: 'smooth', block: 'center' });
       tile.classList.remove('ui-flash'); void tile.offsetWidth; tile.classList.add('ui-flash');
     }
     if (item && currentZoomCard && currentZoomCard.id === cardId) {
@@ -2838,7 +2839,7 @@
       case 'navigate': if (currentZoomCard) closeTileZoom(); showView(op.page); break;
       default: rerenderToday();
     }
-    if (op.op === 'highlight') flashTile(op.card, op.item);
+    if (op.op === 'highlight') flashTile(op.card, op.item, true);
     if (op.op === 'arrange' && (op.pin || []).length) flashTile(op.pin[0]);
     const appliedAt = Date.now();
     (window.__odmUiTimings = window.__odmUiTimings || []).push({ op: op.op, seq: e.seq, by: e.by, serverAt: e.at, appliedAt, latencyMs: appliedAt - e.at });

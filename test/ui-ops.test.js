@@ -131,7 +131,7 @@ test('当前视图: compact, titles from the store, unknown ids from the client 
   const view = sanitizeViewContext({ route: 'today', zoom: { cardId: 'fly', selectedItem: 'https://github.com/ThinkFlowLab/FlyBot/pull/2320' }, visibleCards: ['fledge', 'ghost<script>', 'promo'], scrollFocus: 'fledge', extra: 'x' })
   assert.equal(view.extra, undefined)
   const t = viewSnapshotText(view, s, { now: NOW })
-  assert.match(t, /^【当前视图】今天页 · 已筛选：需要你处理（显示 1\/4 张）/)
+  assert.match(t, /^【当前视图】今天页 · 已筛选：需要你处理（显示 1\/4 张） · 没有置顶/)
   assert.match(t, /放大中：FlyBot gate and panel fixes（fly） · 选中条目：https:\/\/github.com\/ThinkFlowLab\/FlyBot\/pull\/2320/)
   assert.match(t, /屏幕上可见（从上到下）：\[Fledge\]/)
   assert.doesNotMatch(t, /ghost|script/)

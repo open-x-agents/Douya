@@ -22,7 +22,7 @@ const SOURCE_ALIAS = {
   manual: 'manual', 待办: 'manual',
 }
 const SYSTEM_TYPES = new Set(['hero', 'timetable'])
-const MAX_REASON = 80
+const MAX_REASON = 40
 const MAX_PINS = 12
 const LOG_MAX = 200
 
@@ -329,6 +329,7 @@ export function viewSnapshotText(view, state, { maxChars = 800, now = Date.now()
   if (view.route === 'today' || !view.route) {
     if (v.filter) parts.push(`已筛选：${v.filter.label}（显示 ${v.filter.matchIds.length}/${v.filter.total} 张）`)
     else parts.push('未筛选')
+    if (!v.pins.length) parts.push('没有置顶')
   }
   const lines = [parts.join(' · ')]
   if (view.zoom?.cardId) {

@@ -241,6 +241,8 @@ export async function runMuseChatTurn(ctx, {
   timing = null,
   onSession = null, // (sessionId) → the UI feed streams this turn's text / tool progress
   lane = null, // chat-lane hooks: lets a follow-up message steer into this turn while it is unanswered
+  display = null, // chat-display store: what the user's bubbles show for this prompt (history rehydrate)
+  displayItems = null, // [{ text, attachments }] — one per user bubble (a merged turn stands for several)
   waitMs = 180_000,
 } = {}) {
   const text = clean(message)
@@ -279,6 +281,7 @@ export async function runMuseChatTurn(ctx, {
   T.attachCount = built.meta.length
   T.attachMode = built.mode
   const requestId = randomUUID()
+  try { display?.record(requestId, displayItems || [{ text: message, attachments: hasAttach ? attachments : [] }]) } catch (err) { log(`[muse-chat] display record failed: ${err.message}`) }
   // Cursor before prompt, so this call only claims a user message it caused.
   let afterSeq = await cursorSeq(ctx, sessionId)
   T.beforeReadMs = Date.now() - T.turnCallAt
@@ -332,6 +335,7 @@ export async function runMuseChatTurn(ctx, {
     lane.setSteer(async (more) => {
       const steerId = randomUUID()
       steerIds.add(steerId)
+      try { display?.record(steerId, [{ text: more }]) } catch {}
       steeredAt = Date.now()
       pendingSteers++
       try {

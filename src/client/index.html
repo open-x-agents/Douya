@@ -1139,9 +1139,20 @@
   .composer-tools button.rec{background:#fee2e2;color:#b91c1c;animation:pulse-rec 1.2s infinite}
   @keyframes pulse-rec{50%{opacity:.7}}
   .composer-tip{font-size:11.5px;color:var(--ink3);padding:0 8px 6px;max-width:640px;margin:0 auto}
-  .bubble.me .att-row,.z-msg.me .att-row{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px}
-  .bubble.me .att-row img,.z-msg.me .att-row img{max-width:min(220px,70vw);max-height:160px;border-radius:10px;display:block}
-  .bubble.me .att-file,.z-msg.me .att-file{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:8px;background:rgba(255,255,255,.25);font-size:12px}
+  /* Attachments in the user's bubble: thumbnails + file chips (never the model-only 【附件】 note) */
+  .att-row{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 6px}
+  .att-row:last-child{margin-bottom:2px}
+  .att-thumb{display:block;padding:0;border:0;background:none;cursor:zoom-in;border-radius:12px;overflow:hidden;box-shadow:0 1px 0 rgba(255,255,255,.25) inset,0 2px 8px rgba(20,20,60,.18)}
+  .att-thumb img{display:block;max-width:180px;max-height:180px;min-width:56px;min-height:40px;object-fit:cover;border-radius:12px}
+  .att-chip{display:inline-flex;align-items:center;gap:8px;max-width:240px;padding:6px 10px 6px 7px;border-radius:12px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.28);font-size:12.5px;line-height:1.25;color:inherit;text-align:left}
+  .att-chip .att-ic{flex:none;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:rgba(255,255,255,.26)}
+  .att-chip .att-ic svg{width:16px;height:16px}
+  .att-chip .att-nm{display:flex;flex-direction:column;min-width:0}
+  .att-chip .att-nm b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .att-chip .att-nm i{font-style:normal;opacity:.75;font-size:11px}
+  .att-lightbox{position:fixed;inset:0;z-index:9999;background:rgba(14,16,30,.72);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;cursor:zoom-out;animation:attFade .18s ease}
+  .att-lightbox img{max-width:92vw;max-height:88vh;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+  @keyframes attFade{from{opacity:0}to{opacity:1}}
   #v-today .today-chat-input .input-wrap{padding-left:8px}
   .z-input{display:flex;gap:6px;align-items:center}
   .z-input .composer-tools{margin-right:2px}
@@ -1540,7 +1551,7 @@
         if (m.role === 'user') {
           const b = document.createElement('div');
           b.className = 'bubble me';
-          b.innerHTML = `${escapeHtml(m.content)}<small>${m.at ? new Date(m.at).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}) : ''}</small>`;
+          fillUserBubble(b, m.content, m.attachments, m.at ? new Date(m.at).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}) : '');
           body.appendChild(b);
         } else if (m.role === 'assistant') {
           addBotMessage(m.content, m.at ? new Date(m.at).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}) : '', null, m.citations);
@@ -2500,7 +2511,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         if (m.role === 'user') {
           const b = document.createElement('div');
           b.className = 'bubble me';
-          b.innerHTML = `${escapeHtml(m.content)}<small>${m.at ? new Date(m.at).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}) : ''}</small>`;
+          fillUserBubble(b, m.content, m.attachments, m.at ? new Date(m.at).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}) : '');
           body.appendChild(b);
         } else if (m.role === 'assistant') {
           const b = document.createElement('div');
@@ -2630,18 +2641,66 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     }
     return { addFiles, payload, clear, render, showTip, wire, get items() { return state.items; } };
   }
-  function userBubbleWithAttach(text, attachments) {
-    const wrap = document.createElement('div');
-    if (attachments?.length) {
-      const row = document.createElement('div'); row.className = 'att-row';
-      for (const a of attachments) {
-        if (a.kind === 'image' && a.preview) { const img = document.createElement('img'); img.src = a.preview; img.alt = a.name || ''; row.appendChild(img); }
-        else { const f = document.createElement('span'); f.className = 'att-file'; f.textContent = `📎 ${a.name || '文件'}`; row.appendChild(f); }
-      }
-      wrap.appendChild(row);
+  // ---- attachments in user bubbles: thumbnails (click to enlarge) + file chips
+  const ATT_FILE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>';
+  const ATT_IMG_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>';
+  function fmtBytes(n) { n = Number(n) || 0; if (!n) return ''; if (n < 1024) return n + ' B'; if (n < 1048576) return Math.round(n / 1024) + ' KB'; return (n / 1048576).toFixed(1) + ' MB'; }
+  function openAttLightbox(src, alt) {
+    const ov = document.createElement('div'); ov.className = 'att-lightbox';
+    const img = document.createElement('img'); img.src = src; img.alt = alt || ''; ov.appendChild(img);
+    const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = e => { if (e.key === 'Escape') close(); };
+    ov.addEventListener('click', close); document.addEventListener('keydown', onKey);
+    document.body.appendChild(ov);
+  }
+  /** atts: live composer items ({kind,name,bytes,preview,data,mediaType}) or history meta ({kind,name,bytes,ref}). */
+  function attachRowEl(atts) {
+    const row = document.createElement('div'); row.className = 'att-row';
+    for (const a of atts || []) {
+      const src = a.kind === 'image' ? (a.preview || (a.data ? 'data:' + (a.mediaType || 'image/png') + ';base64,' + a.data : a.ref ? '/api/opendigitalmate/chat-attachment?ref=' + encodeURIComponent(a.ref) : '')) : '';
+      if (src) {
+        const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'att-thumb'; btn.title = a.name || '';
+        const img = document.createElement('img'); img.src = src; img.alt = a.name || ''; img.loading = 'lazy';
+        img.onerror = () => btn.replaceWith(chipEl(a));
+        btn.appendChild(img); btn.addEventListener('click', e => { e.stopPropagation(); openAttLightbox(src, a.name); });
+        row.appendChild(btn);
+      } else row.appendChild(chipEl(a));
     }
-    if (text) { const t = document.createElement('div'); t.textContent = text; wrap.appendChild(t); }
-    return wrap;
+    return row;
+    function chipEl(x) {
+      const c = document.createElement('span'); c.className = 'att-chip'; c.title = x.name || '';
+      c.innerHTML = `<span class="att-ic">${x.kind === 'image' ? ATT_IMG_SVG : ATT_FILE_SVG}</span><span class="att-nm"><b></b><i></i></span>`;
+      c.querySelector('b').textContent = x.name || (x.kind === 'image' ? '图片' : '文件');
+      c.querySelector('i').textContent = [fmtBytes(x.bytes), (x.name || '').includes('.') ? x.name.split('.').pop().toUpperCase() : ''].filter(Boolean).join(' · ') || (x.kind === 'image' ? '图片' : '文件');
+      return c;
+    }
+  }
+  // Older card-chat entries may hold the prompt's model-only note; the bubble shows only the user's words.
+  function cardChatText(t) { t = String(t || ''); const i = t.indexOf('\n\n【附件】\n'); return (i >= 0 ? t.slice(0, i) : t.startsWith('【附件】\n') ? '' : t).replace(/^（附件）$/, ''); }
+  /** A user bubble's content: attachments above the text. */
+  function fillUserBubble(el, text, atts, time) {
+    el.textContent = '';
+    if (atts && atts.length) el.appendChild(attachRowEl(atts));
+    if (text) { const t = document.createElement('div'); t.className = 'me-text'; t.textContent = text; el.appendChild(t); }
+    if (time != null) { const sm = document.createElement('small'); sm.textContent = time; el.appendChild(sm); }
+    return el;
+  }
+  /** Bubble-safe meta for card-chat history: images get the same content-hash ref the server saved. */
+  async function attMetaForHistory(items) {
+    const out = [];
+    for (const a of items || []) {
+      const m = { kind: a.kind, name: a.name, bytes: a.bytes || 0, mediaType: a.mediaType || null };
+      if (a.kind === 'image' && a.data && crypto.subtle) {
+        try {
+          const bin = Uint8Array.from(atob(a.data), ch => ch.charCodeAt(0));
+          const h = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bin))].map(x => x.toString(16).padStart(2, '0')).join('');
+          const ext = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' }[String(a.mediaType || '').toLowerCase()] || 'png';
+          m.ref = h + '.' + ext;
+        } catch (_) {}
+      }
+      out.push(m);
+    }
+    return out;
   }
 
   function setupTodayChatInput() {
@@ -2664,18 +2723,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const pending = todayComposer.items.splice(0); // keep blob URLs for the bubble
       todayComposer.render(); todayComposer.showTip('');
       openTodayChat();
-      const me = appendInlineBubble('me', msg || (atts.length ? '（附件）' : ''));
-      if (pending.length && me) {
-        const row = document.createElement('div'); row.className = 'att-row';
-        for (const a of pending) {
-          if (a.kind === 'image') {
-            const img = document.createElement('img');
-            img.src = a.preview || ('data:' + (a.mediaType || 'image/png') + ';base64,' + a.data);
-            img.alt = a.name || ''; row.appendChild(img);
-          } else { const f = document.createElement('span'); f.className = 'att-file'; f.textContent = '📎 ' + (a.name || '文件'); row.appendChild(f); }
-        }
-        me.prepend(row);
-      }
+      const me = appendInlineBubble('me', msg);
+      if (pending.length && me) fillUserBubble(me, msg, pending, chatTime());
       const typing = document.createElement('div');
       typing.className = 'bubble thinking';
       typing.innerHTML = thinkingHtml();
@@ -3884,7 +3933,9 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       if (!live() || !Array.isArray(d.messages) || !d.messages.length) return;
       if (msgs.querySelector('.z-msg')) return; // user already typed before history arrived
       d.messages.forEach(m => {
-        push(m.role === 'user' ? 'me' : 'bot', m.text);
+        const el = push(m.role === 'user' ? 'me' : 'bot', m.role === 'user' ? cardChatText(m.text) : m.text);
+        const legacy = m.role === 'user' && !(m.attachments && m.attachments.length) ? [...String(m.text || '').matchAll(/(图片|文件)「([^」]+)」/g)].filter(() => String(m.text).includes('【附件】')).map(x => ({ kind: x[1] === '图片' ? 'image' : 'file', name: x[2] })) : [];
+        if (m.role === 'user' && ((m.attachments && m.attachments.length) || legacy.length)) fillUserBubble(el, cardChatText(m.text), m.attachments && m.attachments.length ? m.attachments : legacy, null);
         (m.surfaces || []).forEach(async id => { const ph = document.createElement('div'); msgs.appendChild(ph); const v = await surfaceGet(id); if (!live()) return; ph.replaceWith(v ? renderSurface(v, { container: msgs, sendPrompt: t => sendZoomChat(t) }, 'chat') : Object.assign(document.createElement('div'), { className: 'sf-empty', textContent: '这个视图已过期' })); });
       });
     });
@@ -3904,18 +3955,9 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       chatInput.value = '';
       const pending = preset ? [] : zoomComposer.items.splice(0);
       if (!preset) { zoomComposer.render(); zoomComposer.showTip(''); }
-      const me = push('me', msg || (atts.length ? '（附件）' : ''));
-      if (pending.length && me) {
-        const row = document.createElement('div'); row.className = 'att-row';
-        for (const a of pending) {
-          if (a.kind === 'image') {
-            const img = document.createElement('img');
-            img.src = a.preview || ('data:' + (a.mediaType || 'image/png') + ';base64,' + a.data);
-            img.alt = a.name || ''; row.appendChild(img);
-          } else { const f = document.createElement('span'); f.className = 'att-file'; f.textContent = '📎 ' + (a.name || '文件'); row.appendChild(f); }
-        }
-        me.prepend(row);
-      }
+      const me = push('me', msg);
+      if (pending.length && me) fillUserBubble(me, msg, pending, null);
+      const attHist = pending.length ? attMetaForHistory(pending) : Promise.resolve(null);
       const typing = push('bot thinking', '');
       typing.innerHTML = thinkingHtml();
       const sentAt = new Date(Date.now() - 5000).toISOString();
@@ -3929,7 +3971,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         zTurn.finish();
         if (data.status === 'merged') { // answered together with the next message (one reply, below it)
           if (live()) typing.remove();
-          chatApi({ op: 'append', messages: [{ role: 'user', text: msg }] });
+          attHist.then(ah => chatApi({ op: 'append', messages: [{ role: 'user', text: msg, ...(ah ? { attachments: ah } : {}) }] }));
           return;
         }
         lastZoomCards = data.cards || [];
@@ -3961,7 +4003,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         return; // nothing to persist; retry will append the pair
       }
       const sfIds = (lastZoomCards || []).filter(c => c.type === 'surface' && c.view).map(c => c.view.id);
-      chatApi({ op: 'append', messages: [{ role: 'user', text: msg }, ...(reply ? [{ role: 'assistant', text: reply, surfaces: sfIds }] : [])] });
+      attHist.then(ah => chatApi({ op: 'append', messages: [{ role: 'user', text: msg, ...(ah ? { attachments: ah } : {}) }, ...(reply ? [{ role: 'assistant', text: reply, surfaces: sfIds }] : [])] }));
     };
     $('zoomChatSend').onclick = () => sendZoomChat();
     { const zs = $('zoomChatSend'); const sync = () => { if (zs) zs.disabled = !chatInput.value.trim() && !zoomComposer.items.length; }; chatInput.addEventListener('input', sync); const iv = setInterval(() => { if (!document.body.contains(zs)) clearInterval(iv); else sync(); }, 600); sync(); }

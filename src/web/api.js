@@ -15,6 +15,7 @@ export const dockKey = (t) => String(t ?? '').replace(/\s+/g, ' ').trim().slice(
 import { createActionService, ACTIONS } from './actions.js';
 import { cardSnapshotText, cardFull } from './card-snapshot.js';
 import { createUiService } from '../ui/service.js';
+import { createChatDisplay, attachmentMeta } from './chat-display.js';
 import { findTimetableCard, readPlan, applyPlanEdit, todaysCalendarEvents } from './timetable-plan.js';
 import { uiView } from '../ui/ops.js';
 import { createSurfaceService } from '../ui/surfaces.js';
@@ -680,6 +681,7 @@ export function createApiRouter(ctx) {
 
   // 豆芽 Intelligent UI P1: declarative view ops (open / highlight / filter / arrange / navigate) + 当前视图.
   const uiService = createUiService({ store, log: m => console.log(m) });
+  const chatDisplay = createChatDisplay({ home: config.home || '.odm-data' });
   // P2: temporary views Chief generates (odm_ui_render / odm_ui_update). Form drafts only become pending actions.
   const surfaceService = createSurfaceService({ store, actions: ACTIONS, requestAction: (n, input, o) => actionService.request(n, input, o), emit: e => uiService.emit(e), log: m => console.log(m) });
 
@@ -714,6 +716,7 @@ export function createApiRouter(ctx) {
     viewSnapshot(view) { return uiService.viewText(view); },
     /** Full view for odm_ui_state. */
     uiState() { return uiService.state(); },
+    chatDisplay() { return chatDisplay; },
     /** 我的一天: Chief reads / edits the suggested blocks; persisted on the timetable card, pushed live to open tabs. */
     timetableGet() {
       const card = findTimetableCard(store.get().cards || []);
@@ -1179,8 +1182,9 @@ export function createApiRouter(ctx) {
       const all = { ...(state.cardChats || {}) };
       if (op === 'append') {
         const add = (Array.isArray(messages) ? messages : []).slice(0, 10)
-          .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string' && m.text.trim())
-          .map(m => ({ role: m.role, text: m.text.slice(0, 8000), at: new Date().toISOString(), ...(Array.isArray(m.surfaces) && m.surfaces.length ? { surfaces: m.surfaces.filter(x => typeof x === 'string' && /^sf_\w{1,40}$/.test(x)).slice(0, 3) } : {}) }));
+          .map(m => (m && m.role === 'user' && Array.isArray(m.attachments) ? { ...m, attachments: m.attachments.slice(0, 8).map(a => attachmentMeta(a, a?.kind === 'image' && /^[a-f0-9]{64}\.(png|jpg|gif|webp)$/.test(String(a?.ref || '')) ? a.ref : null)) } : m))
+          .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.text === 'string' && (m.text.trim() || m.attachments?.length))
+          .map(m => ({ role: m.role, text: m.text.slice(0, 8000), at: new Date().toISOString(), ...(m.attachments?.length ? { attachments: m.attachments } : {}), ...(Array.isArray(m.surfaces) && m.surfaces.length ? { surfaces: m.surfaces.filter(x => typeof x === 'string' && /^sf_\w{1,40}$/.test(x)).slice(0, 3) } : {}) }));
         all[key] = [...(all[key] || []), ...add].slice(-40);
         const keys = Object.keys(all);
         if (keys.length > 200) for (const k of keys.sort((a, b) => String(all[a].at(-1)?.at).localeCompare(String(all[b].at(-1)?.at))).slice(0, keys.length - 200)) delete all[k];
@@ -1401,6 +1405,7 @@ export function createApiRouter(ctx) {
       try {
         const hist = await loadDsBotHistory({
           home,
+          display: chatDisplay,
           baseUrl: process.env.DSBOT_URL || 'http://127.0.0.1:7788',
           token: process.env.DSBOT_TOKEN,
         });

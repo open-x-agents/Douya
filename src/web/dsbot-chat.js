@@ -1,6 +1,7 @@
 // Muse UI → real ds-bot Chief via DSH `/api/bot` send + session log read.
 // (FlyBot ds-bot has `send` but no `chat` page endpoint.)
 
+import { stripAttachNote, legacyAttachments } from './chat-display.js'
 import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -233,7 +234,7 @@ export async function chatWithDsBot({
 // Turn a session log into chat messages, skipping what the harness injects (handoff notes, runtime context,
 // skill lists, clock) — those are not the user's words.
 const INJECTED = /^(\[Handoff · part \d+\]|Current runtime context\.|<system-reminder>|Current time: \d{4}-)/
-export function historyMessages(raw) {
+export function historyMessages(raw, { display = null } = {}) {
   const out = []
   for (const line of String(raw || '').split('\n')) {
     if (!line.trim()) continue
@@ -245,9 +246,19 @@ export function historyMessages(raw) {
     const content = Array.isArray(msg?.content) ? msg.content.map(p => p?.text || '').join('') : (msg?.content || '')
     if (!clean(content)) continue
     if (role === 'user' && INJECTED.test(String(content).trim())) continue
-    if (role === 'user' && /^【当前(卡片|视图)】/.test(String(content).trim())) {
-      const words = String(content).trim().split(/\n\s*\n/).pop()
-      out.push({ role, content: cleanBlock(words) })
+    if (role === 'user') {
+      // Bubbles show what the user typed + attachment chips, never the prompt's model-only context.
+      const rpcId = (o.data?.source || msg?.source)?.rpcId
+      const shown = display?.lookup?.(rpcId)
+      if (shown) { for (const it of shown) out.push({ role, content: it.text, attachments: it.attachments }); continue }
+      const parts = Array.isArray(msg?.content) ? msg.content : []
+      let words = stripAttachNote(String(content).trim())
+      if (/^【当前(卡片|视图)】/.test(words)) words = words.split(/\n\s*\n/).pop()
+      words = words.replace(/^（(补充一条|我连续发了几条消息)[^）]*）\s*/, '')
+      const atts = legacyAttachments(parts, content)
+      const shownText = cleanBlock(words) === '请看我附上的内容。' && atts.length ? '' : cleanBlock(words)
+      if (!shownText && !atts.length) continue
+      out.push({ role, content: shownText, ...(atts.length ? { attachments: atts } : {}) })
       continue
     }
     if (role === 'assistant' && /^Noted\. I have my handoff note/.test(String(content).trim())) continue
@@ -256,7 +267,7 @@ export function historyMessages(raw) {
   return out
 }
 
-export async function loadDsBotHistory({ home = '.odm-data', baseUrl = DEFAULT_BASE, token = process.env.DSBOT_TOKEN, dshHome = process.env.DSH_HOME || join(process.cwd(), '.dsh-odm'), limit = 40 } = {}) {
+export async function loadDsBotHistory({ display = null, home = '.odm-data', baseUrl = DEFAULT_BASE, token = process.env.DSBOT_TOKEN, dshHome = process.env.DSH_HOME || join(process.cwd(), '.dsh-odm'), limit = 40 } = {}) {
   try {
     const auth = await ensureDsbotSession({ baseUrl, home, token })
     const state = await api(auth, 'state', {})
@@ -276,7 +287,7 @@ export async function loadDsBotHistory({ home = '.odm-data', baseUrl = DEFAULT_B
       } else {
         raw = await readFile(logPath, 'utf8')
       }
-      messages.push(...historyMessages(raw))
+      messages.push(...historyMessages(raw, { display }))
     }
     if (!messages.length) return { sessionId: BOT_SESSION_ID, messages: [], botId: mainId }
     return { sessionId: BOT_SESSION_ID, messages: messages.slice(-limit), botId: mainId }

@@ -259,6 +259,21 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     fetch: async () => json(await router.checkConfig()),
   }, 'opendigitalmate: /api/config/check')
 
+  // Thumbnails for images the user attached in chat (saved by content hash in chat-display.js).
+  effect({
+    path: '/api/opendigitalmate/chat-attachment',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async (request) => {
+      const ref = new URL(request.url).searchParams.get('ref') || ''
+      const p = router.chatDisplay().imagePath(ref)
+      if (!p) return json({ error: 'not found' }, 404)
+      const ext = ref.split('.').pop()
+      const { MIME_OF_EXT } = await import('./chat-display.js')
+      return new Response(await readFile(p), { status: 200, headers: { 'content-type': MIME_OF_EXT[ext] || 'application/octet-stream', 'cache-control': 'private, max-age=31536000, immutable' } })
+    },
+  }, 'opendigitalmate: chat attachment')
+
   effect({
     path: '/api/chat/history',
     methods: ['GET'],
@@ -286,6 +301,8 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
           timing: req.timing,
           onSession: feed ? watch : null,
           lane: hooks,
+          display: router.chatDisplay(),
+          displayItems: req.displayItems || null,
         })
       } finally { if (feed) for (const t of turns) feed.turns.unwatch(t) }
     },

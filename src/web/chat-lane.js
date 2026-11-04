@@ -22,7 +22,9 @@ export function combineRequests(reqs) {
   const texts = reqs.map(r => String(r.message ?? '').trim()).filter(Boolean)
   const message = texts.length > 1 ? `${MERGE_NOTE}\n${texts.map((t, i) => `${i + 1}. ${t}`).join('\n')}` : (texts[0] || '')
   const attachments = reqs.flatMap(r => (Array.isArray(r.attachments) ? r.attachments : []))
-  return { ...last, message, attachments: attachments.length ? attachments : null, mergedCount: reqs.length }
+  // The prompt is one combined text; the bubbles stay one per message (see chat-display.js).
+  const displayItems = reqs.map(r => ({ text: String(r.message ?? '').trim(), attachments: Array.isArray(r.attachments) ? r.attachments : [] }))
+  return { ...last, message, attachments: attachments.length ? attachments : null, mergedCount: reqs.length, displayItems }
 }
 
 export function createChatLane({ run, windowMs = 800, keyOf = r => r.cardId || 'dock', log = () => {} } = {}) {

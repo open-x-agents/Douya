@@ -257,11 +257,14 @@ export function applyUiOp(state, op, { by = 'bot', now = Date.now(), id = null }
       // A user's pins always sit above the bot's, in the order the user set them.
       pins = [...pins.filter(p => p.by === 'user'), ...pins.filter(p => p.by !== 'user')].slice(-MAX_PINS)
       ui.layout = { ...ui.layout, pins }
-      if (op.order?.length) ui.layout.order = { keys: op.order.map(cid => cardKey(byId.get(cid))), by, reason: op.reason, at }
+      // A user's drag order (stable keys, survives digests) is never overwritten by a bot's reorder.
+      let reordered = false
+      if (op.order?.length && ui.layout.order?.by === 'user' && by !== 'user') skipped.push({ card: op.order[0], why: '顺序是你手动拖的，豆芽不改' })
+      else if (op.order?.length) { ui.layout.order = { keys: op.order.map(cid => cardKey(byId.get(cid))), by, reason: op.reason, at }; reordered = true }
       const parts = []
       if (added.length) parts.push(`把「${added.map(title).join('」「')}」置顶`)
       if (op.unpin?.length && op.unpin.length > skipped.filter(s => op.unpin.includes(s.card)).length) parts.push(`取消了 ${op.unpin.length - skipped.filter(s => op.unpin.includes(s.card)).length} 张的置顶`)
-      if (op.order?.length) parts.push(`调整了 ${op.order.length} 张卡的顺序`)
+      if (reordered) parts.push(`调整了 ${op.order.length} 张卡的顺序`)
       message = parts.length ? `${who}${parts.join('，')}${op.reason ? `：${op.reason}` : ''}` : `${who}没有改动布局（${skipped.map(s => s.why).join('；') || '无变化'}）`
       if (!parts.length) delete entry.undo
       break

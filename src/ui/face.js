@@ -102,7 +102,7 @@ export function hydrateFace(card, spec, { itemStatus = {}, now = Date.now(), eve
   const status = l => (st[l.url]?.status === 'done' ? 'done' : st[l.url]?.status === 'dismissed' ? 'dismissed' : 'open')
   const open = all.filter(l => status(l) === 'open'), handled = all.length - open.length
   const pick = (list, n) => { const fx = (f.focus || []).map(u => list.find(l => l.url === u)).filter(Boolean); return [...fx, ...list.filter(l => !fx.includes(l))].slice(0, n) }
-  const item = l => ({ title: cut(l.title, 80), url: l.url, kind: kindOf(l), kindZh: KIND_ZH[kindOf(l)], from: fromOf(l) || null, at: tsOf(l), done: status(l) !== 'open', needsYou: !!l.needsYou })
+  const item = l => ({ title: cut(l.title, 80), url: l.url, src: l.mergedFrom || card.source || null, kind: kindOf(l), kindZh: KIND_ZH[kindOf(l)], from: fromOf(l) || null, at: tsOf(l), done: status(l) !== 'open', needsYou: !!l.needsYou })
   const parts = []
   for (const p of FACE_LAYOUTS[f.layout].parts) {
     if (p === 'people') {
@@ -146,5 +146,8 @@ export function hydrateFace(card, spec, { itemStatus = {}, now = Date.now(), eve
   }
   const meaningful = parts.filter(x => x.type !== 'cta')
   if (!meaningful.length) return null
-  return { layout: f.layout, by: f.by || 'bot', note: f.note || '', parts }
+  const merged = (card.metadata?.mergedFrom || []).length && f.layout === 'timeline'
+  const SRC = { gmail: '邮件', github: 'GitHub', slack: 'Slack' }
+  const chans = merged ? [...new Set([card.source, ...card.metadata.mergedFrom].map(x => SRC[x] || x).filter(Boolean))] : []
+  return { layout: f.layout, by: f.by || 'bot', note: f.note || (chans.length >= 2 ? `同一件事 · ${chans.join(' + ')}` : ''), parts }
 }

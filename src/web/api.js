@@ -19,6 +19,7 @@ import { createChatDisplay, attachmentMeta } from './chat-display.js';
 import { callbackUrlFor, callbackPage } from './composio-callback.js';
 import { prepareCardActions, pickNextThing, daySummaryLine, tomorrowMorning } from './card-prep.js';
 import { hydrateFace, autoFace } from '../ui/face.js';
+import { isAfterHours, isWorkish, doneToday, greetingLine, shHour } from './day-pulse.js';
 import { findTimetableCard, readPlan, applyPlanEdit, todaysCalendarEvents } from './timetable-plan.js';
 import { uiView } from '../ui/ops.js';
 import { createSurfaceService } from '../ui/surfaces.js';
@@ -883,7 +884,17 @@ export function createApiRouter(ctx) {
           } catch (e) { console.warn('[Identity] lookup failed:', e.message); }
         }
 
+        // Day pulse (Phase C): time-aware, all from live data.
+        const hourNow = Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : shHour();
+        const afterHours = isAfterHours({ hour: Number.isInteger(hour) ? hourNow : null });
+        const nextThing = pickNextThing({ cards: activeCards, itemStatus: state.itemStatus || {} });
+        const doneNow = doneToday({ completions: state.completions || [], itemStatus: state.itemStatus || {}, pendingActions: state.pendingActions || {} });
+        const meetingsLeft = calToday.filter(b => Date.parse(b.end) > Date.now()).length;
         return {
+          afterHours,
+          doneToday: doneNow && (afterHours || hourNow >= 17) ? doneNow : null,
+          doneIds: doneNow ? doneNow.cardIds : [],
+          greetingLine: greetingLine({ hour: hourNow, cards: activeCards, next: nextThing, meetingsLeft, done: doneNow }),
           summary: activeCards.length === 0
             ? '今天还没有待办，点「立即汇聚」拉取最新动态'
             : `今天 ${meetings.length} 个会，${actionable.length} 件在手，其中 ${urgent.length} 件优先`,
@@ -896,8 +907,8 @@ export function createApiRouter(ctx) {
           meetingHours: Math.round(meetingHours * 10) / 10,
           waitingCount: activeCards.filter(c => c.status === 'waiting').length,
           lastDigestAt: state.lastDigest?.generatedAt || null,
-          cards: annotateCards(activeCards, state.itemStatus).map(c => (c.type === 'view' ? { ...c, view: surfaceService.cardView(c) } : { ...c, prepared: prepareCardActions(c, { itemStatus: state.itemStatus || {} }), faceView: hydrateFace(c, c.face || autoFace(c), { itemStatus: state.itemStatus || {}, events: calToday }) || (c.face ? hydrateFace(c, autoFace(c), { itemStatus: state.itemStatus || {}, events: calToday }) : null) })),
-          next: pickNextThing({ cards: activeCards, itemStatus: state.itemStatus || {} }),
+          cards: annotateCards(activeCards, state.itemStatus).map(c => (c.type === 'view' ? { ...c, view: surfaceService.cardView(c) } : { ...c, workish: isWorkish(c), prepared: prepareCardActions(c, { itemStatus: state.itemStatus || {} }), faceView: hydrateFace(c, c.face || autoFace(c), { itemStatus: state.itemStatus || {}, events: calToday }) || (c.face ? hydrateFace(c, autoFace(c), { itemStatus: state.itemStatus || {}, events: calToday }) : null) })),
+          next: nextThing,
           summaryLine: daySummaryLine({ cards: activeCards, itemStatus: state.itemStatus || {}, meetings: meetings.length }),
           ui: { ...uiView(state), bootId: uiService.bootId, seq: uiService.seq },
           autoLayout: await router.autoLayout(activeCards, { hour }),

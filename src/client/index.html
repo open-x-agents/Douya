@@ -1387,6 +1387,34 @@
   .sprout-pop{position:fixed;z-index:999;font-size:20px;pointer-events:none;transform:translate(-50%,0);animation:sproutUp 1s var(--ease) forwards}
   @keyframes sproutUp{0%{opacity:0;transform:translate(-50%,6px) scale(.4)}30%{opacity:1;transform:translate(-50%,-14px) scale(1.15)}100%{opacity:0;transform:translate(-50%,-34px) scale(.9)}}
   @media (prefers-reduced-motion:reduce){.f-check li.ticking,.sprout-pop,.f-bar i{animation:none!important;transition:none!important}}
+  /* ===== Phase C: live & motion ===== */
+  .tile.work{transition:transform .28s var(--ease),box-shadow .28s var(--ease),opacity .28s}
+  .grid2 .tile.work:hover{transform:translateY(-4px);box-shadow:0 18px 40px rgba(40,44,90,.14),0 2px 6px rgba(40,44,90,.06)}
+  .tile.work[draggable="true"]{cursor:grab}
+  .tile.work.dragging{opacity:.55;transform:scale(.98) rotate(-.6deg);box-shadow:0 22px 50px rgba(40,44,90,.22);cursor:grabbing}
+  .tile.work.leaving-done{position:relative;pointer-events:none;animation:doneOut 1.25s var(--ease) forwards}
+  .tile.work.leaving-done>*:not(.done-badge){transition:opacity .35s;opacity:.25}
+  .done-badge{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:8px 16px;border-radius:999px;background:var(--teal,#2bb38a);color:#fff;font-weight:700;font-size:14px;box-shadow:0 8px 22px rgba(30,150,110,.35);animation:badgePop .45s var(--ease) both}
+  @keyframes doneOut{0%{opacity:1;transform:none}55%{opacity:1;transform:scale(.97)}100%{opacity:0;transform:scale(.9) translateY(-6px)}}
+  @keyframes badgePop{from{opacity:0;transform:translate(-50%,-50%) scale(.6)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+  .tile.work.is-urgent{box-shadow:0 0 0 1.5px rgba(236,96,96,.45),0 10px 26px rgba(236,96,96,.12);animation:urgentGlow 2.8s ease-in-out infinite}
+  @keyframes urgentGlow{0%,100%{box-shadow:0 0 0 1.5px rgba(236,96,96,.4),0 8px 22px rgba(236,96,96,.08)}50%{box-shadow:0 0 0 3px rgba(236,96,96,.22),0 14px 34px rgba(236,96,96,.2)}}
+  .offhours{margin:18px 0 6px}
+  .off-toggle{display:flex;align-items:center;gap:8px;width:100%;padding:12px 18px;border-radius:16px;border:1px dashed rgba(90,96,160,.28);background:rgba(255,255,255,.55);color:var(--ink-2,#555b75);font-size:13.5px;cursor:pointer;transition:background .2s}
+  .off-toggle:hover{background:rgba(255,255,255,.85)}
+  .off-toggle i{margin-left:auto;font-style:normal;color:var(--violet,#7a6ad8);font-size:12.5px}
+  .offhours .grid-off{margin-top:12px;opacity:.92}
+  .tile.done-today{background:linear-gradient(135deg,rgba(230,250,240,.95),rgba(240,244,255,.95));border:1px solid rgba(60,180,130,.22);animation:cardIn .6s var(--ease) both}
+  .dt-head{display:flex;align-items:center;gap:12px}
+  .dt-head h3{margin:2px 0 0;font-size:22px}
+  .dt-head h3 span{margin-left:10px;font-size:13px;font-weight:500;color:var(--ink-3,#7a7f95)}
+  .dt-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:6px}
+  .dt-list li{display:flex;gap:8px;align-items:baseline;font-size:13.5px}
+  .dt-list li i{font-style:normal;color:var(--teal,#2bb38a);font-weight:700}
+  .dt-list a{color:inherit;text-decoration:none;border-bottom:1px dotted rgba(0,0,0,.2)}
+  .tile-zoom-modal.zoom-in{animation:zoomFromTile .34s cubic-bezier(.2,.8,.2,1) both}
+  @keyframes zoomFromTile{from{opacity:.2;transform:translate(var(--zx,0),var(--zy,0)) scale(.42)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.tile.work,.tile.work.leaving-done,.done-badge,.tile.work.is-urgent,.tile.done-today,.tile-zoom-modal.zoom-in{animation:none!important;transition:none!important}.grid2 .tile.work:hover{transform:none}}
 </style>
 </head>
 <body>
@@ -2110,10 +2138,15 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   const chatTime = (at) => (at ? new Date(at) : new Date()).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 
   // Load today's data
-  async function loadToday() {
+  let lastTodaySig = '';
+  async function loadToday(opts = {}) {
     try {
       const res = await fetch(`/api/today${Number.isInteger(window.__odmTodHour) ? `?hour=${window.__odmTodHour}` : ''}`);
       const data = await res.json();
+      // Background refresh: nothing changed → leave the page (and any open menu / scroll / hover) untouched.
+      const sig = JSON.stringify(data);
+      if (!opts.force && sig === lastTodaySig) return;
+      lastTodaySig = sig;
       lastToday = data;
       takeAutoLayout(data.autoLayout);
       if (data.ui) { uiLayout = data.ui; if (!uiBoot) { uiBoot = data.ui.bootId || null; uiSeq = Math.max(uiSeq, data.ui.seq || 0); } }
@@ -2576,6 +2609,88 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   // Countdowns on the page tick in place.
   setInterval(() => document.querySelectorAll('[data-at]').forEach(el => { const b = el.querySelector('b'); if (b) b.textContent = countdownText(Number(el.getAttribute('data-at'))); }), 30000);
 
+  // ===== Live & motion (Phase C): in-place refresh, leaving/urgent motion, after-hours collapse, drag order, 今天搞定了什么 =====
+  const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /** Snapshot the main-grid tiles before a re-render so cards that went away can leave with a check, in place. */
+  function captureTiles(container) {
+    const m = new Map();
+    container.querySelectorAll('.grid-main > .tile.work[data-id]').forEach((el, i) => m.set(el.getAttribute('data-id'), { el, i }));
+    return m;
+  }
+  function playLeaving(container, before, cards, hadPrev) {
+    if (!hadPrev || !before.size) return;
+    const grid = container.querySelector('.grid-main'); if (!grid) return;
+    const ids = new Set(cards.map(c => c.id));
+    const done = new Set((lastToday && lastToday.doneIds) || []);
+    for (const [id, { el, i }] of before) {
+      if (ids.has(id)) continue;
+      el.removeAttribute('data-id'); el.setAttribute('aria-hidden', 'true'); el.classList.remove('is-new', 'just-changed', 'is-urgent', 'dragging');
+      el.classList.add('leaving-done');
+      const badge = document.createElement('div'); badge.className = 'done-badge';
+      badge.textContent = done.has(id) ? '✓ 搞定了' : '已收起';
+      el.appendChild(badge);
+      grid.insertBefore(el, grid.children[i] || null);
+      if (done.has(id)) sprout(badge);
+      setTimeout(() => el.remove(), reducedMotion() ? 400 : 1300);
+    }
+  }
+  /** Urgent cards breathe a soft glow (static ring under reduced motion). */
+  function markUrgent(container, cards) {
+    for (const c of cards) {
+      if (!(c.priority === 'urgent' || (c.priority === 'high' && c.waiting === 'you'))) continue;
+      const el = container.querySelector(`.tile.work[data-id="${CSS.escape(c.id)}"]`);
+      if (el) el.classList.add('is-urgent');
+    }
+  }
+  // After hours (server: before 07:00 / from 19:00 / weekends, Shanghai) the work cards fold into one line.
+  const OFF_KEY = 'odm.offhours.open';
+  const offOpen = () => { try { return localStorage.getItem(OFF_KEY) === new Date().toDateString(); } catch (_) { return false; } };
+  function renderOffHours(offCards, cards) {
+    if (!offCards.length) return '';
+    const open = offOpen();
+    return `<div class="offhours${open ? ' open' : ''}"><button type="button" class="off-toggle" id="offToggle" aria-expanded="${open}">🌙 下班时间 · ${offCards.length} 张工作卡先收起来了 <i>${open ? '收起 ▴' : '展开 ▾'}</i></button>${open ? `<div class="grid2 grid-off">${offCards.map(c => renderWorkTile(c, cards.indexOf(c))).join('')}</div>` : ''}</div>`;
+  }
+  function bindOffHours(container) {
+    const b = container.querySelector('#offToggle'); if (!b) return;
+    b.addEventListener('click', () => { try { localStorage.setItem(OFF_KEY, offOpen() ? '' : new Date().toDateString()); } catch (_) {} renderCardList(lastCards); });
+  }
+  /** End of day: what got done today (cards, items, 豆芽's executed actions) — only real completions. */
+  function renderDoneToday(d) {
+    if (!d || !d.count) return '';
+    const rows = (d.highlights || []).map(h => `<li class="k-${escapeHtml(h.kind)}"><i>✓</i>${h.url ? `<a href="${escapeHtml(h.url)}" target="_blank" rel="noopener">${escapeHtml(h.text)}</a>` : `<span>${escapeHtml(h.text)}</span>`}</li>`).join('');
+    return `<article class="tile done-today size-wide"><div class="dt-head">${douyaSvg({ size: 40, state: 'idle', id: 'dt' })}<div><div class="eyebrow">今天搞定了什么</div><h3>${escapeHtml(String(d.count))} 件<span>${escapeHtml(d.line || '')}</span></h3></div></div>${rows ? `<ul class="dt-list">${rows}</ul>` : ''}</article>`;
+  }
+  /** Drag a card to reorder; the order is saved as a user arrange op (stable keys, survives digests; 豆芽 won't override). */
+  function bindDragOrder(container) {
+    const grid = container.querySelector('.grid-main'); if (!grid || !window.matchMedia('(pointer: fine)').matches) return;
+    const tiles = () => [...grid.querySelectorAll(':scope > .tile.work[data-id]')];
+    tiles().forEach(t => t.setAttribute('draggable', 'true'));
+    let dragEl = null, start = '';
+    grid.addEventListener('dragstart', e => {
+      const t = e.target && e.target.closest ? e.target.closest('.tile.work[data-id]') : null;
+      if (!t || t !== e.target) return;
+      dragEl = t; start = tiles().map(x => x.getAttribute('data-id')).join('|');
+      t.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', t.getAttribute('data-id')); } catch (_) {}
+    });
+    grid.addEventListener('dragover', e => {
+      if (!dragEl) return; e.preventDefault();
+      const over = e.target.closest && e.target.closest('.tile.work[data-id]');
+      if (!over || over === dragEl || over.parentNode !== grid) return;
+      const r = over.getBoundingClientRect();
+      const after = (e.clientY - r.top) > r.height * 0.6 || ((e.clientY - r.top) > r.height * 0.4 && (e.clientX - r.left) > r.width / 2);
+      grid.insertBefore(dragEl, after ? over.nextSibling : over);
+    });
+    grid.addEventListener('drop', e => { if (dragEl) e.preventDefault(); });
+    grid.addEventListener('dragend', async () => {
+      if (!dragEl) return;
+      dragEl.classList.remove('dragging'); dragEl = null;
+      const ids = tiles().map(x => x.getAttribute('data-id'));
+      if (ids.join('|') === start) return;
+      const r = await sendUserOp({ op: 'arrange', order: ids, reason: '你拖动调整了顺序' });
+      if (r && r.success) loadToday({ force: true });
+    });
+  }
   // ===== Focus & actions (Phase A): one "next thing" hero, prepared steps on every card, one chat =====
   const MORE_KEY = 'odm.dayMore.v1';
   const dayMoreOpen = () => { try { return localStorage.getItem(MORE_KEY) === '1'; } catch (_) { return false; } };
@@ -2838,7 +2953,10 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const hero = cards.find(c => c.type === 'hero');
     const tt = cards.find(c => c.type === 'timetable');
     const work = cards.filter(c => !SYS_TYPES.has(c.type) && c.source !== 'system');
-    const order = arrangeWork(work).filter(c => !filterHidden(c));
+    const ordered = arrangeWork(work).filter(c => !filterHidden(c));
+    const offHours = !!(lastToday && lastToday.afterHours);
+    const offCards = offHours ? ordered.filter(c => c.workish) : [];
+    const order = offHours ? ordered.filter(c => !c.workish) : ordered;
     const nx = lastToday && lastToday.next;
     const more = dayMoreOpen();
     let html = renderNextHero(nx);
@@ -2848,11 +2966,13 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     html += '<div class="grid2 grid-more">' + renderHero(hero, work) + renderLoad(work) + '</div>';
     html += '<div class="tod-strip" id="todStrip"></div>';
     html += '</div></div>';
-    html += '<div class="grid2">';
+    html += '<div class="grid2 grid-main">';
+    html += renderDoneToday(lastToday && lastToday.doneToday);
     html += order.map(c => (c.type === 'view' ? `<article class="tile work size-wide view-tile" data-idx="${cards.indexOf(c)}"></article>` : renderWorkTile(c, cards.indexOf(c)))).join('');
-    if (work.length && !order.length) html += `<div class="tile empty size-wide"><div class="eyebrow">筛选后没有卡片</div><p class="w-desc">点上方「显示全部」恢复。</p></div>`;
+    if (work.length && !ordered.length) html += `<div class="tile empty size-wide"><div class="eyebrow">筛选后没有卡片</div><p class="w-desc">点上方「显示全部」恢复。</p></div>`;
     if (!work.length) html += `<div class="tile empty size-wide">${douyaSvg({ size: 56, state: 'idle', id: 'te' })}<div class="eyebrow">还没有卡片</div><p class="w-desc">点击右上角「立即汇聚」，豆芽会从已连接的数据源拉取最新动态。</p></div>`;
     html += '</div>';
+    html += renderOffHours(offCards, cards);
     html += '<div id="todayChatSlot"></div>';
     // Keep the one live chat (open state, transcript, in-flight reply) across refreshes: it is a single node that
     // lives in the dock slot, or beside an open card. Rebuild the grid around it.
@@ -2861,6 +2981,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const hadFocus = document.activeElement && document.activeElement.id === 'todayChatInput';
     const msgsScroll = $('todayChatMsgs') ? $('todayChatMsgs').scrollTop : 0;
     if (liveChat && !borrowed) liveChat.remove();
+    const beforeTiles = captureTiles(container);
+    const hadPrev = !!prevStamp;
     container.innerHTML = html;
     const fresh = !liveChat;
     if (!liveChat) liveChat = chatTemplate();
@@ -2880,7 +3002,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       mt.innerHTML = `${open ? '收起今天全貌' : '今天全貌'} <i>${open ? '▴' : '▾'}</i>`;
     });
     decorateTiles(container, cards);
+    playLeaving(container, beforeTiles, cards, hadPrev);
     flashChanged(container, cards);
+    markUrgent(container, cards);
+    bindOffHours(container);
+    bindDragOrder(container);
     mountPendingOnCards(container).catch(() => {});
     if (!chatCtx) paintChatChips();
     renderTodStrip();
@@ -3250,7 +3376,9 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     
     try {
       // The live feed pushes progress; poll status too in case the feed is down.
-      const poll = setInterval(async () => { try { const st = await (await fetch('/api/opendigitalmate/digest-status')).json(); if (st.running && st.live) renderDigestProgress(st.live); } catch (_) {} }, 2500);
+      // Cards already on the page stay; new / edited ones fade in as the digest saves them.
+      let tick = 0;
+      const poll = setInterval(async () => { try { const st = await (await fetch('/api/opendigitalmate/digest-status')).json(); if (st.running && st.live) renderDigestProgress(st.live); if (st.running && (++tick % 2 === 0)) loadToday().catch(() => {}); } catch (_) {} }, 2500);
       let res, result;
       try { res = await fetch('/api/digest/generate', { method: 'POST' }); result = await res.json(); }
       finally { clearInterval(poll); $('digestProgress').hidden = true; }
@@ -4405,6 +4533,14 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     zoomSelectedItem = null;
     const zsec = $('zItemsSec');
     if (zsec) zsec.addEventListener('click', e => { const row = e.target.closest('.z-item'); const u = row && row.querySelector('[data-item-url]'); if (u) { zoomSelectedItem = u.getAttribute('data-item-url'); zsec.querySelectorAll('.z-item.sel').forEach(x => x.classList.remove('sel')); row.classList.add('sel'); reportView(); } }, true);
+    { const src = document.querySelector(`.tile.work[data-id="${CSS.escape(card.id || '')}"]`) || (isTT ? document.querySelector('.myday') : null);
+      const modal = overlay.querySelector('.tile-zoom-modal');
+      if (modal && src && !reducedMotion()) {
+        const r = src.getBoundingClientRect();
+        modal.style.setProperty('--zx', `${Math.round(r.left + r.width / 2 - window.innerWidth / 2)}px`);
+        modal.style.setProperty('--zy', `${Math.round(r.top + r.height / 2 - window.innerHeight / 2)}px`);
+        modal.classList.remove('zoom-in'); void modal.offsetWidth; modal.classList.add('zoom-in');
+      } }
     overlay.classList.add('open');
     reportView();
     setTimeout(() => chatInput && chatInput.focus({ preventScroll: true }), 50);
@@ -4433,7 +4569,9 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
 
   // Initialize
   refreshPanels().catch(() => {}).then(() => loadToday()).then(() => startUiFeed());
-  setInterval(loadToday, 60000); // Refresh every minute
+  // Background refresh: every 30s while visible, and right away when the tab comes back. Identical data is a no-op.
+  setInterval(() => { if (!document.hidden) loadToday().catch(() => {}); }, 30000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) loadToday().catch(() => {}); });
   
   // Wire up digest button
   const digestBtn = $('generateDigestBtn');

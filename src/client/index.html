@@ -1665,6 +1665,60 @@
     .tile.work .swipe-face,.snooze-sheet,.snooze-sheet .ss-panel{transition:none!important}
   }
 
+  /* ===== UX polish pack: swipe auto-commit, tuck, mobile density, chips, a11y ===== */
+  .tile.work.swipe-commit .swipe-rail.left button[data-qa="snooze"]{max-width:0;min-width:0;padding:0;opacity:0;overflow:hidden}
+  .tile.work.swipe-commit .swipe-rail.left button[data-qa="done"]{min-width:100%;flex:1}
+  .tile.work.swipe-commit .swipe-rail.right button[data-qa="ask"]{min-width:100%;flex:1}
+  .tile.work.swipe-commit .swipe-face{box-shadow:inset 0 0 0 2px rgba(43,179,138,.35)}
+  .tile.work.swipe-commit.swipe-ask .swipe-face{box-shadow:inset 0 0 0 2px rgba(122,106,216,.35)}
+  .tile.work .swipe-rail button{transition:min-width .18s var(--ease),max-width .18s var(--ease),opacity .18s var(--ease),padding .18s var(--ease),transform .18s var(--ease)}
+  .tile.work.swipe-armed .swipe-rail button[data-qa="done"],
+  .tile.work.swipe-armed .swipe-rail button[data-qa="ask"]{transform:scale(1.04)}
+  .tile.work.leaving-done.tuck-done{animation:doneTuck .85s var(--ease-out) forwards}
+  @keyframes doneTuck{0%{opacity:1;transform:none}35%{opacity:.95;transform:scale(.96) translateY(-4px)}100%{opacity:0;transform:scale(.78) translateY(28px)}}
+  .tile.done-today.just-tucked{animation:doneCatch .7s var(--ease-out)}
+  @keyframes doneCatch{0%{box-shadow:0 0 0 0 rgba(43,179,138,.45)}100%{box-shadow:0 0 0 14px rgba(43,179,138,0)}}
+  .chat-chips.is-typing{opacity:0!important;transform:translateY(4px) scale(.98);max-height:0;margin:0!important;padding:0;overflow:hidden;pointer-events:none!important}
+  .composer-tip.is-typing{opacity:0;max-height:0;padding:0!important;margin:0!important;overflow:hidden;pointer-events:none}
+  .qa-bar button:focus-visible,.swipe-rail button:focus-visible,.step:focus-visible,.chip:focus-visible,.ss-opts button:focus-visible{
+    outline:2px solid rgba(122,106,216,.65);outline-offset:2px
+  }
+  .tile.work.swipeable:focus-within{box-shadow:0 0 0 2px rgba(122,106,216,.18)}
+  @media (max-width:620px){
+    .nx{padding:18px 16px 16px;border-radius:22px;margin:0 0 10px}
+    .nx-title{font-size:21px}
+    .nx-next{font-size:14px}
+    .nx-btns .step{min-height:44px;padding:0 16px}
+    .nx-btns .step.primary{min-height:46px}
+    .dayline{padding:6px 4px 6px 10px;margin-bottom:8px;font-size:12.5px}
+    .wait-strip{padding:8px 10px;margin-bottom:12px;gap:6px}
+    .grid2{gap:10px;padding-bottom:28px}
+    .today-chat.open .today-chat-sheet{max-height:min(86vh,820px)}
+    .today-chat-msgs{min-height:52vh}
+    .today-chat-input{padding-bottom:max(10px,env(safe-area-inset-bottom))}
+    .w-acts{margin-top:auto;padding-top:4px}
+    .w-acts .step.primary{width:100%;justify-content:center}
+    .qa-bar{gap:8px}
+    .qa-bar button{min-height:40px;padding:8px 14px;font-size:13px}
+  }
+  @media (max-width:900px){
+    .tile-zoom-modal{height:100dvh!important;max-height:100dvh!important;width:100vw!important;border-radius:0!important}
+    .z-split{display:flex;flex-direction:column;height:100%}
+    .z-left{flex:0 0 auto;max-height:38vh;overflow-y:auto;padding:18px 16px 12px}
+    .z-chat{flex:1;min-height:0;display:flex;flex-direction:column;border-left:0;border-top:1px solid var(--line);height:auto}
+    .z-chat-host,.today-chat.in-zoom{min-height:0;flex:1}
+    .today-chat.in-zoom .today-chat-input{position:sticky;bottom:0;z-index:2;padding:10px 12px max(12px,env(safe-area-inset-bottom))!important;background:rgba(255,255,255,.92)!important;backdrop-filter:blur(12px)}
+    .today-chat.in-zoom .today-chat-sheet{min-height:0}
+  }
+  @media (min-width:901px){
+    .z-split{grid-template-columns:minmax(0,1.15fr) minmax(380px,460px)}
+    .z-chat{box-shadow:inset 1px 0 0 rgba(30,40,80,.04)}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .tile.work.leaving-done.tuck-done,.tile.done-today.just-tucked,.tile.work.swipe-armed .swipe-rail button{animation:none!important;transition:none!important;transform:none!important}
+    .chat-chips.is-typing,.composer-tip.is-typing{transition:none!important}
+  }
+
   /* Logo: lighter think on small screens */
   @media (max-width:620px){
     .douya-think .dy-all{animation-duration:1.45s}
@@ -3040,7 +3094,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       ? `<div class="w-acts">${stepBtnHtml(primary, 0, 'primary')}${secondary.length ? `<details class="w-more"><summary>更多</summary>${secondary.map((p, i) => stepBtnHtml(p, i + 1, '')).join('')}</details>` : ''}</div>`
       : '';
     const qa = waitingOnly ? '' : `<div class="qa-bar" aria-label="快捷操作"><button type="button" data-qa="done">完成</button><button type="button" data-qa="snooze">推迟</button><button type="button" data-qa="ask">交给豆芽</button></div>`;
-    const rails = waitingOnly ? '' : `<div class="swipe-rails" aria-hidden="true"><div class="swipe-rail left"><button type="button" data-qa="done">完成</button><button type="button" data-qa="snooze">推迟</button></div><div class="swipe-rail right"><button type="button" data-qa="ask">交给豆芽</button></div></div>`;
+    const rails = waitingOnly ? '' : `<div class="swipe-rails" role="group" aria-label="滑动快捷操作"><div class="swipe-rail left"><button type="button" data-qa="done" aria-label="完成这张卡">完成</button><button type="button" data-qa="snooze" aria-label="推迟这张卡">推迟</button></div><div class="swipe-rail right"><button type="button" data-qa="ask" aria-label="交给豆芽处理">交给豆芽</button></div></div>`;
     return `
       <article class="tile work swipeable ${big ? 'size-wide' : 'size-normal'}${waitingOnly ? ' waiting-only' : ''}${hasFace ? ' has-face' : ''}" data-idx="${idx}">
         ${rails}
@@ -3119,9 +3173,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       if (r.cardDone) {
         const tile = box.closest('.tile.work');
         if (tile) {
-          tile.classList.add('leaving-done');
-          const badge = document.createElement('div'); badge.className = 'done-badge'; badge.textContent = '✓ 搞定了';
-          tile.appendChild(badge); sprout(badge);
+          softHaptic('commit');
+          markDoneTuck(tile);
         }
         showUiToast(`「${clip(card.title, 18)}」搞定了`, null, { label: '撤销', onClick: async () => { await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'undo', itemUrl, itemTitle }) }); loadToday({ force: true }); } });
         setTimeout(() => loadToday({ force: true }).catch(() => {}), reducedMotion() ? 200 : 950);
@@ -3170,10 +3223,35 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       await runQuickSnooze(card, prepId);
     }));
   }
+  function softHaptic(kind) {
+    try {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return;
+      if (kind === 'commit') navigator.vibrate(14);
+      else if (kind === 'armed') navigator.vibrate(8);
+      else if (kind === 'snooze') navigator.vibrate([10, 30, 10]);
+      else navigator.vibrate(10);
+    } catch (_) {}
+  }
+  function markDoneTuck(tile) {
+    if (!tile) return;
+    const dest = document.querySelector('.tile.done-today');
+    tile.classList.add('leaving-done');
+    if (dest && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      tile.classList.add('tuck-done');
+      dest.classList.remove('just-tucked');
+      void dest.offsetWidth;
+      dest.classList.add('just-tucked');
+      setTimeout(() => dest.classList.remove('just-tucked'), 800);
+    }
+    const badge = document.createElement('div'); badge.className = 'done-badge'; badge.textContent = '✓ 搞定了';
+    tile.appendChild(badge); sprout(badge);
+  }
   async function runQuickSnooze(card, prepId = 'snooze:tomorrow') {
     const cardId = card.id;
     const r = await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardId, prepId }) }).then(x => x.json()).catch(e => ({ success: false, error: e.message }));
     if (!r.success) { showUiToast(r.error || '没推迟成'); return; }
+    softHaptic('snooze');
     const tile = document.querySelector(`.tile.work[data-id="${CSS.escape(cardId)}"]`);
     if (tile) { tile.classList.add('leaving'); await sleep(280); }
     showUiToast(SNOOZE_LABEL[prepId] || SNOOZE_LABEL.snooze, null, { label: '撤销', onClick: async () => { await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardId, prepId: 'unsnooze' }) }); loadToday(); } });
@@ -3183,12 +3261,9 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (!card || !card.id) return;
     const r = await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'done' }) }).then(x => x.json()).catch(() => ({}));
     if (!r.success) { showUiToast(r.error || '没标上'); return; }
+    softHaptic('commit');
     const tile = document.querySelector(`.tile.work[data-id="${CSS.escape(card.id)}"]`);
-    if (tile) {
-      tile.classList.add('leaving-done');
-      const badge = document.createElement('div'); badge.className = 'done-badge'; badge.textContent = '✓ 搞定了';
-      tile.appendChild(badge); sprout(badge);
-    }
+    markDoneTuck(tile);
     showUiToast(`「${clip(card.title, 18)}」搞定了`, null, { label: '撤销', onClick: async () => {
       await fetch('/api/opendigitalmate/card-update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, status: 'active' }) }).catch(() => {});
       loadToday({ force: true });
@@ -3197,6 +3272,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   }
   function runQuickAsk(card) {
     if (!card) return;
+    softHaptic('armed');
     setChatContext(card);
     openTodayChat({ byUser: true, contextual: true });
     const prep = (card.prepared || []).find(p => p.kind === 'ask');
@@ -3210,7 +3286,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function resetSwipe(tile) {
     if (!tile) return;
     const face = tile.querySelector('.swipe-face');
-    tile.classList.remove('swiping', 'swipe-open');
+    tile.classList.remove('swiping', 'swipe-open', 'swipe-commit', 'swipe-ask', 'swipe-armed');
     tile.dataset.swipeX = '0';
     if (face) face.style.transform = '';
   }
@@ -3226,9 +3302,25 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const face = tile.querySelector('.swipe-face');
     if (!face || tile.dataset.swipeBound) return;
     tile.dataset.swipeBound = '1';
-    let sx = 0, sy = 0, dx = 0, active = false, axis = null;
-    const max = 148;
-    const onStart = (x, y) => { sx = x; sy = y; dx = 0; active = true; axis = null; tile.classList.add('swiping'); tile.dataset.moved = '0'; };
+    let sx = 0, sy = 0, dx = 0, raw = 0, active = false, axis = null, armed = false;
+    const revealR = 132, revealL = 110, rubber = 0.42;
+    const damp = (mx) => {
+      if (mx < 0) {
+        const lim = revealR, over = Math.abs(mx) - lim;
+        return over > 0 ? -lim - over * rubber : mx;
+      }
+      const lim = revealL, over = mx - lim;
+      return over > 0 ? lim + over * rubber : mx;
+    };
+    const setArmed = (next, ask) => {
+      if (next === armed) return;
+      armed = next;
+      tile.classList.toggle('swipe-armed', next);
+      tile.classList.toggle('swipe-commit', next);
+      tile.classList.toggle('swipe-ask', !!(next && ask));
+      if (next) softHaptic('armed');
+    };
+    const onStart = (x, y) => { sx = x; sy = y; dx = 0; raw = 0; active = true; axis = null; armed = false; tile.classList.add('swiping'); tile.classList.remove('swipe-open', 'swipe-commit', 'swipe-ask', 'swipe-armed'); tile.dataset.moved = '0'; };
     const onMove = (x, y, ev) => {
       if (!active) return;
       const mx = x - sx, my = y - sy;
@@ -3239,30 +3331,58 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       }
       if (axis !== 'x') return;
       if (ev && ev.cancelable) ev.preventDefault();
-      dx = Math.max(-max, Math.min(max, mx));
+      raw = mx;
+      dx = damp(mx);
       face.style.transform = `translateX(${dx}px)`;
       if (Math.abs(dx) > 10) tile.dataset.moved = '1';
+      const w = tile.clientWidth || 320;
+      const commit = Math.abs(raw) > Math.max(w * 0.55, 168);
+      setArmed(commit, raw < 0);
     };
     const onEnd = () => {
       if (!active && axis !== 'x') { resetSwipe(tile); return; }
       active = false; tile.classList.remove('swiping');
+      const w = tile.clientWidth || 320;
+      const commit = Math.abs(raw) > Math.max(w * 0.55, 168);
+      if (commit && raw > 0) {
+        face.style.transform = `translateX(${w}px)`;
+        tile.classList.add('swipe-commit');
+        setTimeout(() => runQuickDone(card), reducedMotion() ? 40 : 160);
+        raw = 0; dx = 0; axis = null; return;
+      }
+      if (commit && raw < 0) {
+        face.style.transform = `translateX(${-w}px)`;
+        tile.classList.add('swipe-commit', 'swipe-ask');
+        setTimeout(() => { resetSwipe(tile); runQuickAsk(card); }, reducedMotion() ? 40 : 160);
+        raw = 0; dx = 0; axis = null; return;
+      }
       if (dx <= -72) {
         face.style.transform = 'translateX(-132px)';
         tile.classList.add('swipe-open');
+        tile.classList.remove('swipe-commit', 'swipe-ask', 'swipe-armed');
         tile.dataset.swipeX = '-132';
       } else if (dx >= 72) {
         face.style.transform = 'translateX(110px)';
         tile.classList.add('swipe-open');
+        tile.classList.remove('swipe-commit', 'swipe-ask', 'swipe-armed');
         tile.dataset.swipeX = '110';
       } else {
         resetSwipe(tile);
       }
-      dx = 0; axis = null;
+      raw = 0; dx = 0; axis = null;
     };
     tile.addEventListener('touchstart', e => { if (e.touches.length !== 1) return; onStart(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
     tile.addEventListener('touchmove', e => { if (e.touches.length !== 1) return; onMove(e.touches[0].clientX, e.touches[0].clientY, e); }, { passive: false });
     tile.addEventListener('touchend', onEnd);
     tile.addEventListener('touchcancel', () => { active = false; resetSwipe(tile); });
+  }
+  function syncComposerTyping() {
+    const input = $('todayChatInput');
+    const chips = $('chatChips');
+    const tip = $('todayComposerTip');
+    const typing = !!(input && String(input.value || '').trim());
+    if (chips) chips.classList.toggle('is-typing', typing);
+    if (tip) tip.classList.toggle('is-typing', typing);
   }
   function bindEmptyCtas(container) {
     container.querySelectorAll('[data-empty-act]').forEach(btn => {
@@ -3314,6 +3434,14 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       if (ids.has(id)) continue;
       el.removeAttribute('data-id'); el.setAttribute('aria-hidden', 'true'); el.classList.remove('is-new', 'just-changed', 'is-urgent', 'dragging');
       el.classList.add('leaving-done');
+      if (done.has(id)) {
+        const dest = document.querySelector('.tile.done-today');
+        if (dest && !reducedMotion()) {
+          el.classList.add('tuck-done');
+          dest.classList.remove('just-tucked'); void dest.offsetWidth; dest.classList.add('just-tucked');
+          setTimeout(() => dest.classList.remove('just-tucked'), 800);
+        }
+      }
       const badge = document.createElement('div'); badge.className = 'done-badge';
       badge.textContent = done.has(id) ? '✓ 搞定了' : '已收起';
       el.appendChild(badge);
@@ -4087,6 +4215,10 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const todayComposer = makeComposer({ railId: 'todayAttachRail', tipId: 'todayComposerTip', inputId: 'todayChatInput', pickId: 'todayFilePick', attachBtnId: 'todayAttachBtn', micBtnId: 'todayMicBtn' });
     todayComposer.wire();
     window.__odmTodayComposer = todayComposer;
+    const syncType = () => syncComposerTyping();
+    input.addEventListener('input', syncType);
+    input.addEventListener('change', syncType);
+    syncType();
 
     // Only a real pointer/keyboard gesture on the dock input reopens a collapsed dock.
     // Programmatic focus (loadToday, zoom open/close) and in-zoom typing must NOT flip the preference.
@@ -4109,6 +4241,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const atts = todayComposer.payload();
       if (!msg && !atts.length) return;
       input.value = '';
+      syncComposerTyping();
       const pending = todayComposer.items.splice(0); // keep blob URLs for the bubble
       todayComposer.render(); todayComposer.showTip('');
       openTodayChat({ byUser: true });

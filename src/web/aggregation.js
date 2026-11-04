@@ -1638,7 +1638,7 @@ JSON: {"headline": "英文标题", "summary": "中文摘要"}`;
           if (chunk.type === 'text' && chunk.text) fullText += chunk.text;
         }
         const parsed = JSON.parse(fullText);
-        headline = (parsed.headline || headline).substring(0, 60);
+        headline = tidyRepoCopy(parsed.headline || headline, '').headline.substring(0, 60);
         summary = parsed.summary || summary;
       } catch (err) {
         console.warn(`[Headlines] LLM failed for ${repoName}, using fallback`);

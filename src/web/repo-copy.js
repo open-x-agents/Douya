@@ -5,6 +5,8 @@ export function tidyRepoCopy(headline = '', summary = '') {
   const h = String(headline)
     .replace(/[,，;；·\-–—]\s*0 (?:PRs? |reviews? |review requests? )?(?:pending|awaiting review|to review)\b\.?/gi, '')
     .replace(/^\s*0 (?:reviews? )?pending[,，]?\s*/i, '')
+    // headline cut at 60 chars mid-phrase: "…, 0 revi" / "…, 0" / "…; 0 reviews pend"
+    .replace(/\s*[,，;；]\s*0(?:\s+[a-z]*){0,2}…?\s*$/i, '')
     .trim()
   const sm = String(summary)
     .replace(/[，,；;]?\s*(?:还有|另有|目前)?\s*0\s*个\s*PR\s*(?:等待|等|待)\s*review[。.]?/g, '。')

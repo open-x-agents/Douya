@@ -137,3 +137,34 @@ test('snapshot tells Chief what happened to write actions on this card (so it st
   assert.match(t, /已取消/)
   assert.doesNotMatch(t, /归档邮件/)
 })
+
+test('a newer day folds yesterday\'s card for the same thing (merged, not deleted); others stay', async () => {
+  const { supersedeOlderDays, normalizeState } = await import('../src/host/store.js')
+  const cards = [
+    { id: 'h3', sourceId: 'system:hero:2026-11-03', status: 'active' },
+    { id: 'h4', sourceId: 'system:hero:2026-11-04', status: 'active' },
+    { id: 'f3', sourceId: 'github:cluster:ThinkFlowLab/FlyBot:2026-11-03', status: 'active' },
+    { id: 'f4', sourceId: 'github:cluster:ThinkFlowLab/FlyBot:2026-11-04' },
+    { id: 'a3', sourceId: 'github:cluster:o/adapter:2026-11-03', status: 'active' },
+    { id: 'd3', sourceId: 'github:cluster:o/done:2026-11-03', status: 'done' },
+    { id: 'd4', sourceId: 'github:cluster:o/done:2026-11-04', status: 'active' },
+    { id: 't1', sourceId: null, type: 'task', status: 'active' },
+  ]
+  const out = supersedeOlderDays(cards)
+  const by = Object.fromEntries(out.map(c => [c.id, c]))
+  assert.equal(out.length, cards.length, 'nothing deleted')
+  assert.equal(by.h3.status, 'merged'); assert.equal(by.h3.mergedInto, 'h4')
+  assert.equal(by.f3.status, 'merged'); assert.equal(by.f3.mergedInto, 'f4')
+  assert.equal(by.a3.status, 'active', 'no successor today → stays')
+  assert.equal(by.d3.status, 'done', 'terminal untouched')
+  assert.equal(by.t1.status, 'active')
+  assert.equal(supersedeOlderDays(out), out, 'idempotent')
+  assert.equal(normalizeState({ cards }).cards.find(c => c.id === 'f3').status, 'merged')
+})
+
+test('headline cut mid "0 reviews pending" is cleaned', async () => {
+  const { tidyRepoCopy } = await import('../src/web/repo-copy.js')
+  assert.equal(tidyRepoCopy('Advancing algorithm selection via EvolveSpec/CLI/MCP, 0 revi', '').headline, 'Advancing algorithm selection via EvolveSpec/CLI/MCP')
+  assert.equal(tidyRepoCopy('SciBench-stat adaptation + coevolution fixes in progress, 0', '').headline, 'SciBench-stat adaptation + coevolution fixes in progress')
+  assert.equal(tidyRepoCopy('Session sorting fix in progress, 1 review pending', '').headline, 'Session sorting fix in progress, 1 review pending')
+})

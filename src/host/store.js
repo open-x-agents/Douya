@@ -56,7 +56,7 @@ export function normalizeState(raw) {
     sources: isRecord(raw.sources) ? raw.sources : {},
     week: Array.isArray(raw.week) ? raw.week : [],
     prefs: isRecord(raw.prefs) ? raw.prefs : {},
-    cards: Array.isArray(raw.cards) ? raw.cards.map(fixRepoCard) : [],
+    cards: Array.isArray(raw.cards) ? supersedeOlderDays(raw.cards.map(fixRepoCard)) : [],
     completions: Array.isArray(raw.completions) ? dedupeItemCompletions(raw.completions) : [],
     itemStatus: isRecord(raw.itemStatus) ? raw.itemStatus : {},
     cardChats: isRecord(raw.cardChats) ? raw.cardChats : {},
@@ -133,6 +133,34 @@ export function mergeCards(existingCards = [], incomingCards = [], { digest = fa
 }
 
 /**
+ * Digest cards carry day-scoped sourceIds ("github:cluster:owner/repo:2026-11-04"). When a newer day's card
+ * exists for the same thing, the older still-active card is folded into it (status 'merged' + mergedInto) —
+ * never deleted, so its record, item statuses (url-keyed) and card chat (repo-keyed) carry over. Cards with no
+ * newer successor stay active; done/dismissed/snoozed are never touched. Idempotent.
+ */
+const DAY_SCOPED = /^(.+):(\d{4}-\d{2}-\d{2})$/
+export function supersedeOlderDays(cards = []) {
+  const latest = new Map() // prefix -> { day, id }
+  for (const c of cards) {
+    const m = typeof c?.sourceId === 'string' && c.sourceId.match(DAY_SCOPED)
+    if (!m) continue
+    const cur = latest.get(m[1])
+    if (!cur || m[2] > cur.day) latest.set(m[1], { day: m[2], id: c.id })
+  }
+  let changed = 0
+  const out = cards.map(c => {
+    const m = typeof c?.sourceId === 'string' && c.sourceId.match(DAY_SCOPED)
+    if (!m) return c
+    const top = latest.get(m[1])
+    if (!top || m[2] >= top.day || top.id === c.id) return c
+    if (c.status && c.status !== 'active') return c
+    changed++
+    return { ...c, status: 'merged', mergedInto: top.id, supersededAt: new Date().toISOString(), supersededBy: 'newer-day' }
+  })
+  return changed ? out : cards
+}
+
+/**
  * Append a durable completion/dismiss record (capped).
  */
 export function recordCompletion(completions = [], card, { action = 'done', by = 'user' } = {}) {
@@ -191,6 +219,7 @@ export function createStore(path) {
         cards = next.cards
       } else if (Array.isArray(next.cards)) {
         cards = mergeCards(existing.cards || [], next.cards, { digest })
+        if (digest) cards = supersedeOlderDays(cards)
       } else {
         cards = existing.cards || []
       }

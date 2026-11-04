@@ -23,6 +23,7 @@ export function createTurnWatch() {
     watch(sessionId, turn) { if (sessionId && turn) bySession.set(sessionId, turn) },
     unwatch(turn) { for (const [s, t] of bySession) if (t === turn) bySession.delete(s) },
     turnOf(sessionId) { return bySession.get(sessionId) || null },
+    list() { return [...bySession.keys()].map(k => String(k).slice(0, 24)) },
     get size() { return bySession.size },
   }
 }
@@ -54,13 +55,16 @@ export function sessionEvent(turn, event) {
 export function installUiFeed(ctx, { uiService, effect, log = () => {} }) {
   const turns = createTurnWatch()
   const encoder = new TextEncoder()
-  const stats = { deltas: 0, starts: 0, tools: 0, clients: 0 }
+  const stats = { deltas: 0, starts: 0, tools: 0, clients: 0, frames: 0, recent: [] }
+  const note = (r) => { stats.recent.push(r); if (stats.recent.length > 30) stats.recent.shift() }
 
   // Coalesced text deltas per attempt.
   const pending = new Map() // attemptId → { ev, timer }
   const flush = (id) => { const p = pending.get(id); if (!p) return; pending.delete(id); clearTimeout(p.timer); uiService.pulse(p.ev) }
   const onStream = ({ agent, frame } = {}) => {
+    stats.frames++
     const turn = turns.turnOf(agent?.id)
+    if (frame?.type !== 'chunk' || stats.recent.filter(r => r.c === frame?.chunk?.type).length < 3) note({ a: String(agent?.id || '').slice(0, 24), t: frame?.type, c: frame?.chunk?.type, w: !!turn, watching: [...turns.list()].slice(0, 3) })
     const ev = streamEvent(turn, frame)
     if (!ev) return
     if (ev.text) {
@@ -118,6 +122,7 @@ export function installUiFeed(ctx, { uiService, effect, log = () => {} }) {
 
   const keepalive = setInterval(() => uiService.pulse({ kind: 'keepalive' }), KEEPALIVE_MS)
   keepalive.unref?.()
+  effect({ path: '/api/opendigitalmate/ui-feed-stats', methods: ['GET'], requestBody: 'buffered', fetch: async () => new Response(JSON.stringify({ ...stats, hasOn: typeof ctx?.on === 'function' }), { headers: { 'content-type': 'application/json' } }) }, 'opendigitalmate: ui-feed-stats')
   log('ui-feed: installed (SSE + assistant-stream)')
   return { turns, stats }
 }

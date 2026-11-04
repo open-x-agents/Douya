@@ -2984,11 +2984,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function returnChat() {
     const chat = $('todayChat'), slot = $('todayChatSlot');
     if (!chat) return;
+    // Blur before removing in-zoom so a lingering focus handler cannot reopen the dock.
+    try { $('todayChatInput')?.blur(); } catch (_) {}
     chat.classList.remove('in-zoom');
-    // Closing the card zoom must NOT re-expand the bottom dock.
-    if (chatDockWanted) chat.classList.add('open');
-    else chat.classList.remove('open');
     if (slot && chat.parentElement !== slot) slot.appendChild(chat);
+    // Preference was snapshotted at zoom open; closeTileZoom restores it, then we sync the class.
+    applyDockOpenState();
   }
 
   function renderCardList(cards) {
@@ -3099,17 +3100,33 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   }
 
   // Dock open preference: once the user collapses it, keep it collapsed across late replies / loadToday / zoom close.
+  // Chatting beside a card (in-zoom) must NEVER flip this preference — that was reopening the dock on zoom close.
   const DOCK_KEY = 'odm.chatDock.open';
   let chatDockWanted = (() => { try { return localStorage.getItem(DOCK_KEY) === '1'; } catch (_) { return false; } })();
+  let dockWantedBeforeZoom = false; // snapshot at openTileZoom; restored on closeTileZoom
   function setChatDockWanted(v) {
     chatDockWanted = !!v;
     try { localStorage.setItem(DOCK_KEY, chatDockWanted ? '1' : '0'); } catch (_) {}
   }
-  /** byUser = explicit click/focus/send; otherwise only expands if still wanted. */
+  function chatInZoom() {
+    return !!($('todayChat') && $('todayChat').classList.contains('in-zoom')) || !!currentZoomCard;
+  }
+  function applyDockOpenState() {
+    const wrap = $('todayChat'); if (!wrap) return;
+    if (wrap.classList.contains('in-zoom')) return; // zoom owns visibility
+    if (chatDockWanted) wrap.classList.add('open');
+    else wrap.classList.remove('open');
+  }
+  /** byUser = explicit click/focus/send on the dock. While in-zoom, byUser only keeps the sheet usable — does not claim the dock. */
   function openTodayChat(opts = {}) {
+    const wrap = $('todayChat');
+    if (opts.byUser && chatInZoom()) {
+      // Typing / sending beside a card: keep the borrowed sheet open, leave dock preference alone.
+      if (wrap) wrap.classList.add('open');
+      return;
+    }
     if (opts.byUser) setChatDockWanted(true);
     else if (!chatDockWanted && !opts.force) return;
-    const wrap = $('todayChat');
     if (!wrap) return;
     wrap.classList.add('open');
     ensureInlineBotHistory();
@@ -3359,14 +3376,19 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     todayComposer.wire();
     window.__odmTodayComposer = todayComposer;
 
-    // Only a real pointer/keyboard gesture on the input reopens a collapsed dock.
-    // Programmatic focus (loadToday restore, zoom return) must NOT flip the preference.
+    // Only a real pointer/keyboard gesture on the dock input reopens a collapsed dock.
+    // Programmatic focus (loadToday, zoom open/close) and in-zoom typing must NOT flip the preference.
     let dockGesture = false;
-    input.addEventListener('pointerdown', () => { dockGesture = true; openTodayChat({ byUser: true }); });
-    input.addEventListener('keydown', e => { if (e.key === 'Escape') return; dockGesture = true; });
+    input.addEventListener('pointerdown', () => {
+      if (input.dataset.zoomFocus) return;
+      dockGesture = true;
+      openTodayChat({ byUser: true }); // no-ops preference while in-zoom
+    });
+    input.addEventListener('keydown', e => { if (e.key === 'Escape') return; if (input.dataset.zoomFocus) return; dockGesture = true; });
     input.addEventListener('focus', () => {
+      if (input.dataset.zoomFocus) return;
       if (dockGesture) { dockGesture = false; openTodayChat({ byUser: true }); }
-      else if (chatDockWanted) openTodayChat(); // visual restore only
+      else if (chatDockWanted && !chatInZoom()) openTodayChat(); // visual restore only when dock is wanted
     });
     $('todayChatClose')?.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); closeTodayChat(); });
 
@@ -4584,6 +4606,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (hdr) $('zLeft').prepend(hdr);
     const token = ++zoomSeq;
     const live = () => token === zoomSeq && currentZoomCard === card;
+    // Remember whether the bottom dock was open BEFORE this card — close must restore exactly that.
+    dockWantedBeforeZoom = chatDockWanted;
     setChatContext(card);
     borrowChat($('zChatHost'));
     if (!isTT && (card.prepared || []).length) bindSteps($('zLeft'), card.prepared, card);
@@ -4616,18 +4640,26 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       } }
     overlay.classList.add('open');
     reportView();
-    setTimeout(() => chatInput && chatInput.focus({ preventScroll: true }), 50);
+    // Focus the borrowed input for typing beside the card — must NOT count as "user opened the dock".
+    setTimeout(() => {
+      if (!chatInput || currentZoomCard !== card) return;
+      chatInput.dataset.zoomFocus = '1';
+      try { chatInput.focus({ preventScroll: true }); } finally { delete chatInput.dataset.zoomFocus; }
+    }, 50);
   }
 
 
   function closeTileZoom() {
     const overlay = $('tileZoomOverlay');
     if (overlay) overlay.classList.remove('open');
+    // Restore dock preference from before the card opened, THEN move chat back — never openTodayChat here.
+    setChatDockWanted(dockWantedBeforeZoom);
     returnChat();
     setChatContext(null);
     currentZoomCard = null;
     zoomSelectedItem = null;
     zoomSeq++;
+    applyDockOpenState();
     reportView();
   }
   

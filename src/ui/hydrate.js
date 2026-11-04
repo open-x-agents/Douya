@@ -13,7 +13,7 @@ const SOURCE_ZH = { github: 'GitHub', gmail: 'Gmail', slack: 'Slack', googlecale
 const PRIO_ZH = { urgent: '紧急', high: '高', medium: '中', low: '低' }
 const one = (v) => String(v ?? '').replace(/\s+/g, ' ').trim()
 const cut = (v, n) => { const s = one(v); return s.length > n ? `${s.slice(0, n - 1)}…` : s }
-const fmtSh = (iso) => { if (!iso) return ''; const d = new Date(iso); if (Number.isNaN(+d)) return ''; return d.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) }
+const fmtSh = (iso) => { if (!iso) return ''; const d = new Date(iso); if (Number.isNaN(+d) || +d < Date.UTC(2000, 0, 1)) return ''; return d.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) }
 const dayOf = (iso) => { const d = new Date(iso); return Number.isNaN(+d) ? '' : new Date(+d + 8 * 3600e3).toISOString().slice(5, 10) }
 export const SAFE_LINK = /^https:\/\/([a-z0-9-]+\.)*(github\.com|google\.com|slack\.com)(\/|$)/i
 class RefError extends Error { constructor(path, msg) { super(msg); this.path = path } }
@@ -80,7 +80,7 @@ export function resolveRows(src, state, path = 'source') {
         rows.push({
           key: it.url || `${c.id}:${it.title}`, cardId: c.id, url: it.url, from: it.from || null, threadId: t === 'email' ? gmailThread(it.url) : null,
           fields: { title: cut(it.title, 160), from: cut(it.from, 60), at: fmtSh(it.at), status: STATUS_ZH[it.status], type: TYPE_ZH[t], replies: it.replies ? String(it.replies) : '', text: cut(it.text, 200), cardTitle: cut(c.title, 60), source: SOURCE_ZH[c.source] || c.source || '' },
-          sort: { at: it.at ? Date.parse(it.at) || 0 : 0, replies: it.replies || 0 },
+          sort: { at: it.at && Date.parse(it.at) > Date.UTC(2000, 0, 1) ? Date.parse(it.at) : 0, replies: it.replies || 0 },
           group: { status: STATUS_ZH[it.status], from: cut(it.from, 30) || '（未知）', type: TYPE_ZH[t], source: SOURCE_ZH[c.source] || c.source, cardTitle: cut(c.title, 30), day: dayOf(it.at) || '（无日期）', priority: PRIO_ZH[c.priority] || '—' },
         })
       }

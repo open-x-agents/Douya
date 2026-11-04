@@ -13,6 +13,17 @@ import { readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/** Gmail messageTimestamp arrives as an ISO string ("2026-11-04T00:30:00Z"), epoch ms or epoch seconds.
+ *  parseInt() on the ISO form gave 2026 → 1970-01-01T00:00:02.026Z. Unknown → now. */
+export function emailTimeIso(v, now = Date.now()) {
+  if (v === undefined || v === null || v === '') return new Date(now).toISOString()
+  const s = String(v).trim()
+  let ms = /^\d+$/.test(s) ? Number(s) : Date.parse(s)
+  if (Number.isFinite(ms) && /^\d+$/.test(s) && ms < 1e11) ms *= 1000
+  return Number.isFinite(ms) && ms > Date.UTC(2000, 0, 1) ? new Date(ms).toISOString() : new Date(now).toISOString()
+}
+
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
@@ -519,7 +530,7 @@ export function normalizeItems(sourceData) {
         title: email.subject || '(no subject)',
         url: `https://mail.google.com/mail/u/0/#inbox/${emailId}`,
         body: `From: ${email.sender || 'unknown'}`,
-        createdAt: email.messageTimestamp ? new Date(parseInt(email.messageTimestamp)).toISOString() : new Date().toISOString(),
+        createdAt: emailTimeIso(email.messageTimestamp),
         metadata: {
           from: email.sender,
           snippet: email.preview,
@@ -543,7 +554,7 @@ export function normalizeItems(sourceData) {
           title: email.subject || '(no subject)',
           url: `https://mail.google.com/mail/u/0/#inbox/${emailId}`,
           body: `From: ${email.sender || 'unknown'}`,
-          createdAt: email.messageTimestamp ? new Date(parseInt(email.messageTimestamp)).toISOString() : new Date().toISOString(),
+          createdAt: emailTimeIso(email.messageTimestamp),
           metadata: {
             from: email.sender,
             snippet: email.preview,
@@ -570,7 +581,7 @@ export function normalizeItems(sourceData) {
         title: email.subject || '(no subject)',
         url: `https://mail.google.com/mail/u/0/#inbox/${emailId}`,
         body: `From: ${email.sender || 'unknown'}`,
-        createdAt: email.messageTimestamp ? new Date(parseInt(email.messageTimestamp)).toISOString() : new Date().toISOString(),
+        createdAt: emailTimeIso(email.messageTimestamp),
         metadata: {
           from: email.sender,
           snippet: email.preview,

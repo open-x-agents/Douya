@@ -254,3 +254,14 @@ test('catalog prompt is generated from the catalog; routes + tools are wired', (
   assert.ok(tools.includes("name: 'odm_ui_render'") && tools.includes("name: 'odm_ui_update'"))
   assert.equal(resolveSubmitArgs({ a: 'x{{b}}y' }, { b: '1' }, fixture()).a, 'x1y')
 })
+
+test('times: bogus 1970 item dates are blank in views; Gmail ISO timestamps parse', async () => {
+  const { emailTimeIso } = await import('../src/web/aggregation.js')
+  assert.equal(emailTimeIso('2026-11-04T00:30:00Z'), '2026-11-04T00:30:00.000Z')
+  assert.equal(emailTimeIso('1793752200000'), '2026-11-04T00:30:00.000Z')
+  assert.equal(emailTimeIso(1793752200), '2026-11-04T00:30:00.000Z')
+  assert.equal(emailTimeIso('garbage', NOW), new Date(NOW).toISOString())
+  const st = fixture(); st.cards[1].blocks[0].links[0].at = '1970-01-01T00:00:02.026Z'
+  const t = hydrate(ok(spec([{ id: 't', type: 'Table', source: { card: 'fledge' }, columns: ['title', 'at'] }])), st)
+  assert.equal(t.view.components.t.rows[0].cells.at, '')
+})

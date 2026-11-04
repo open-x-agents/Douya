@@ -3249,6 +3249,7 @@
       autoShown = null; await loadToday();
     });
   }
+  window.__odmLoadToday = () => loadToday(); // test hook (live checks simulate a new period with __odmTodHour)
   window.__odmAuto = () => ({ shown: autoShown && { key: autoShown.key, order: autoShown.order, reasons: autoShown.reasons, note: autoShown.note }, active: autoActive(), pending: autoPending && autoPending.key });
 
   // Hold layout changes while the user is typing their next message, so the page doesn't jump under them.

@@ -312,6 +312,19 @@
     margin:24px -40px -40px;
   }
   @media (max-width:620px){.today-chat-input{margin:16px -16px -24px;padding:12px 16px}}
+
+  /* Today chat: phone = proper conversation sheet; closed stays the compact input bar */
+  @media (max-width:620px){
+    .today-chat{margin:0 -16px;padding:0 10px 8px}
+    .today-chat-sheet{max-width:none;border-radius:20px 20px 16px 16px;margin:0 auto 8px}
+    .today-chat.open .today-chat-sheet{max-height:min(82vh,760px)}
+    .today-chat-msgs{min-height:48vh;padding:12px 14px;gap:10px}
+    .today-chat-head{padding:12px 14px 8px}
+    .today-chat .today-chat-input{padding:8px 4px 10px!important}
+    #v-today .today-chat-input .input-wrap{max-width:none;padding:8px 8px 8px 16px}
+    #v-today .today-chat.open{padding-top:12px}
+  }
+
   
   .today-chat-input .input-wrap{
     max-width:720px;
@@ -803,13 +816,13 @@
     /* Inline Bot chat sheet on the today page (not the right-side dock). */
   .today-chat{position:sticky;bottom:0;margin:0 -44px;padding:0 44px 18px;z-index:6;pointer-events:none}
   .today-chat > *{pointer-events:auto}
-  .today-chat-sheet{max-height:0;overflow:hidden;opacity:0;transform:translateY(12px);transition:.32s var(--ease);background:rgba(255,255,255,.94);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.95);border-radius:22px 22px 18px 18px;box-shadow:var(--shadow-hi);margin:0 auto 10px;max-width:720px;display:flex;flex-direction:column}
-  .today-chat.open .today-chat-sheet{max-height:min(420px,52vh);opacity:1;transform:none}
-  .today-chat-head{display:flex;align-items:center;gap:10px;padding:12px 16px 8px;border-bottom:1px solid rgba(30,40,80,.06)}
-  .today-chat-head b{font-size:13px}
-  .today-chat-head small{font-size:11px;color:var(--ink3);margin-left:4px}
-  .today-chat-head .x{margin-left:auto;border:0;background:rgba(30,40,80,.05);width:28px;height:28px;border-radius:50%;cursor:pointer;color:var(--ink3);font-size:14px}
-  .today-chat-msgs{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px;min-height:120px}
+  .today-chat-sheet{max-height:0;overflow:hidden;opacity:0;transform:translateY(12px);transition:.36s var(--ease);background:rgba(255,255,255,.96);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.95);border-radius:22px 22px 18px 18px;box-shadow:var(--shadow-hi);margin:0 auto 10px;max-width:760px;display:flex;flex-direction:column}
+  .today-chat.open .today-chat-sheet{max-height:min(640px,72vh);opacity:1;transform:none}
+  .today-chat-head{display:flex;align-items:center;gap:10px;padding:14px 18px 10px;border-bottom:1px solid rgba(30,40,80,.06);flex-shrink:0}
+  .today-chat-head b{font-size:14px;font-weight:650}
+  .today-chat-head small{font-size:12px;color:var(--ink3);margin-left:4px}
+  .today-chat-head .x{margin-left:auto;border:0;background:rgba(30,40,80,.05);width:36px;height:36px;border-radius:50%;cursor:pointer;color:var(--ink3);font-size:16px;display:grid;place-items:center}
+  .today-chat-msgs{flex:1;overflow-y:auto;padding:14px 18px;display:flex;flex-direction:column;gap:10px;min-height:200px;-webkit-overflow-scrolling:touch}
   .today-chat-msgs .bubble{max-width:88%}
   .today-chat .today-chat-input{position:static;margin:0;padding:0 0 4px;background:none;box-shadow:none}
   .today-chat .today-chat-input .input-wrap{max-width:720px;margin:0 auto}
@@ -1408,6 +1421,82 @@
   .face.f-quote + .w-next,.tile.work:has(.face.f-quote) .w-next{background:rgba(30,40,80,.035);border:1px solid rgba(30,40,80,.05)}
   .face.f-quote + .w-next .w-next-k,.tile.work:has(.face.f-quote) .w-next-k{color:var(--ink3);font-weight:600}
   .face.f-quote + .w-next .w-next-v,.tile.work:has(.face.f-quote) .w-next-v{color:var(--ink2)}
+
+  /* ===== Card polish (Muse density + phone) ===== */
+  .grid2 .tile.work{padding:16px 16px 14px;gap:0}
+  .grid2 .tile.work.has-face{padding:14px 15px 12px}
+  .w-top{gap:8px;margin-bottom:8px}
+  .av{width:28px;height:28px;border-radius:8px}
+  .av.src-slack{background:var(--violet-soft);color:var(--violet)}
+  .av.src-gmail,.av.src-mail{background:var(--peach-soft);color:var(--peach)}
+  .av.src-github{background:var(--teal-soft);color:var(--teal)}
+  .av.src-googlecalendar,.av.src-calendar{background:var(--sky-soft);color:var(--sky)}
+  .w-label{font-size:10px;letter-spacing:.05em}
+  .w-repo{font-size:12px}
+  .w-head{font-size:15.5px;line-height:1.35;margin:0 0 6px;overflow-wrap:anywhere;word-break:break-word}
+  .size-normal .w-head{font-size:15px}
+  .tile.work.has-face .w-head{margin-bottom:8px}
+  .tile.work.has-face .w-desc,.tile.work.has-face .w-desc.short{display:none}
+  .pill{font-size:10.5px;padding:2px 8px}
+  .w-top .w-tags .pill:not(.pill-hot){opacity:.85}
+  .face{gap:8px;margin:0 0 10px}
+  .f-stats{gap:14px}
+  .f-stat b{font-size:22px;font-weight:700}
+  .f-stat span{font-size:11px}
+  .f-people{gap:6px;font-size:12px}
+  .f-pl{font-weight:650;color:var(--ink3);font-size:10.5px;letter-spacing:.03em;background:rgba(30,40,80,.05);padding:2px 7px;border-radius:999px}
+  .face.f-waiting .f-pl{color:var(--rose);background:var(--rose-soft)}
+  .f-av{width:24px;height:24px;font-size:11px}
+  .f-stage{gap:8px;font-size:11.5px}
+  .f-bar{height:6px}
+  .f-check{gap:1px}
+  .f-check li{padding:6px 4px;gap:8px;font-size:12.5px;min-height:36px}
+  .f-box{width:20px;height:20px;border-radius:6px;flex-shrink:0}
+  .f-meta{max-width:72px;font-size:10.5px}
+  .f-quote{padding:9px 11px 9px 12px}
+  .f-tl{gap:5px}
+  .f-tl li{font-size:12px;grid-template-columns:40px minmax(0,1fr)}
+  .f-cmp{gap:6px}
+  .f-cmp-i{padding:8px 9px;border-radius:10px}
+  .f-count b{font-size:22px}
+  .f-note{font-size:12px;margin-bottom:2px}
+  /* Next-step: one quiet bar; primary CTA below */
+  .w-next{margin-top:auto;display:flex;gap:8px;align-items:baseline;padding:8px 10px;border-radius:10px;background:rgba(30,40,80,.035);border:1px solid rgba(30,40,80,.04);margin-bottom:8px}
+  .w-next-k{font-size:10.5px;font-weight:650;color:var(--ink3);flex-shrink:0;letter-spacing:.03em}
+  .w-next-v{font-size:12.5px;line-height:1.45;color:var(--ink2);min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+  .face.f-quote + .w-next,.tile.work:has(.face.f-quote) .w-next,
+  .face.f-waiting + .w-next,.tile.work:has(.face.f-waiting) .w-next,
+  .face.f-inbox + .w-next,.tile.work:has(.face.f-inbox) .w-next,
+  .face.f-progress + .w-next,.tile.work:has(.face.f-progress) .w-next,
+  .face.f-checklist + .w-next,.tile.work:has(.face.f-checklist) .w-next,
+  .face.f-meeting + .w-next,.tile.work:has(.face.f-meeting) .w-next{background:rgba(30,40,80,.03);border-color:transparent}
+  .w-acts{margin:0 0 4px;gap:8px}
+  .w-acts .step{min-height:36px;height:auto;padding:8px 14px;font-size:13px}
+  .w-acts .step.primary{min-height:40px;padding:10px 16px}
+  .tile.work .w-more > summary{min-height:36px;display:inline-flex;align-items:center;padding:6px 4px}
+  .metrics{gap:14px;margin:0 0 10px}
+  .metrics .m b{font-size:22px}
+  .metrics.mail-m .need-pill{font-size:10.5px}
+  .tile.work.has-face .metrics.mail-m .need-pill{display:none}
+  .grid2 .tile.work.has-face:hover{transform:translateY(-2px)}
+  .grid2 .tile.work:hover{transform:translateY(-2px)}
+  /* Phone-width cards (~390) */
+  @media (max-width:620px){
+    .grid2{grid-template-columns:1fr!important;gap:12px}
+    .grid2 .size-wide,.grid2 .size-normal,.grid2 .size-hero,.grid2 .size-load{grid-column:span 1!important}
+    .grid2 .tile.work{padding:14px 14px 12px;border-radius:18px}
+    .w-head{font-size:15px;-webkit-line-clamp:3}
+    .w-acts .step,.w-acts .step.primary{min-height:44px;padding:12px 16px;font-size:14px}
+    .f-check li{min-height:44px;padding:8px 4px}
+    .f-box{width:22px;height:22px}
+    .w-next{padding:10px 11px;margin-bottom:10px}
+    .w-next-v{-webkit-line-clamp:3}
+    .f-stats{gap:12px;flex-wrap:wrap}
+    .f-stat b{font-size:20px}
+    .f-quote .f-linkchip{padding:8px 10px;min-height:44px}
+    .pill{max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  }
+
   .f-tl{list-style:none;margin:0;padding:0 0 0 6px;border-left:2px solid rgba(30,40,80,.08);display:flex;flex-direction:column;gap:6px}
   .f-tl li{position:relative;display:grid;grid-template-columns:44px minmax(0,1fr);gap:6px;align-items:baseline;font-size:12.5px;padding-left:10px}
   .f-dot{position:absolute;left:-12px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--sky);border:2px solid #fff}
@@ -1452,7 +1541,8 @@
   .tile.work.is-cleared .w-next,.tile.work.is-cleared .w-acts,.tile.work.waiting-only .w-next,.tile.work.waiting-only .w-acts{display:none}
   /* ===== Phase C: live & motion ===== */
   .tile.work{transition:transform .28s var(--ease),box-shadow .28s var(--ease),opacity .28s}
-  .grid2 .tile.work:hover{transform:translateY(-4px);box-shadow:0 18px 40px rgba(40,44,90,.14),0 2px 6px rgba(40,44,90,.06)}
+  .grid2 .tile.work:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(40,44,90,.12),0 2px 6px rgba(40,44,90,.05)}
+  .grid2 .tile.work.has-face:hover{transform:translateY(-1px)}
   .tile.work[draggable="true"]{cursor:grab}
   .tile.work.dragging{opacity:.55;transform:scale(.98) rotate(-.6deg);box-shadow:0 22px 50px rgba(40,44,90,.22);cursor:grabbing}
   .tile.work.leaving-done{position:relative;pointer-events:none;animation:doneOut 1.25s var(--ease) forwards}
@@ -1460,7 +1550,7 @@
   .done-badge{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:8px 16px;border-radius:999px;background:var(--teal,#2bb38a);color:#fff;font-weight:700;font-size:14px;box-shadow:0 8px 22px rgba(30,150,110,.35);animation:badgePop .45s var(--ease) both}
   @keyframes doneOut{0%{opacity:1;transform:none}55%{opacity:1;transform:scale(.97)}100%{opacity:0;transform:scale(.9) translateY(-6px)}}
   @keyframes badgePop{from{opacity:0;transform:translate(-50%,-50%) scale(.6)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
-  .tile.work.is-urgent{box-shadow:0 0 0 1.5px rgba(236,96,96,.45),0 10px 26px rgba(236,96,96,.12);animation:urgentGlow 2.8s ease-in-out infinite}
+  .tile.work.is-urgent{box-shadow:0 0 0 1.5px rgba(236,96,96,.35),0 8px 20px rgba(236,96,96,.08);animation:urgentGlow 2.8s ease-in-out infinite}
   @keyframes urgentGlow{0%,100%{box-shadow:0 0 0 1.5px rgba(236,96,96,.4),0 8px 22px rgba(236,96,96,.08)}50%{box-shadow:0 0 0 3px rgba(236,96,96,.22),0 14px 34px rgba(236,96,96,.2)}}
   .offhours{margin:18px 0 6px}
   .off-toggle{display:flex;align-items:center;gap:8px;width:100%;padding:12px 18px;border-radius:16px;border:1px dashed rgba(90,96,160,.28);background:rgba(255,255,255,.55);color:var(--ink-2,#555b75);font-size:13.5px;cursor:pointer;transition:background .2s}
@@ -2783,8 +2873,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const links = deepLinks(card);
     const spark = blockOf(card, 'sparkline');
     const hasSpark = spark && (spark.data || []).some(v => v > 0);
-    const label = isMailGroup(card) ? '邮件分组' : (SRC_ZH[card.source] || (card.source || '动态'));
-    const av = r ? `<img class="av" src="https://github.com/${encodeURIComponent(r.owner)}.png?size=80" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'av av-f',textContent:'${escapeHtml(r.owner.slice(0, 1).toUpperCase())}'}))">` : `<span class="av av-f">${escapeHtml((card.source || '?').slice(0, 1).toUpperCase())}</span>`;
+    const SRC_SHORT = { github: 'GitHub', gmail: 'Gmail', googlecalendar: '日历', slack: 'Slack', manual: '待办' };
+    const label = isMailGroup(card) ? '邮件' : (SRC_SHORT[card.source] || SRC_ZH[card.source] || (card.source || '动态'));
+    const srcClass = 'src-' + String(card.source === 'googlecalendar' ? 'calendar' : (isMailGroup(card) ? 'mail' : (card.source || 'misc'))).replace(/[^a-z]/gi, '');
+    const avLetter = r ? r.owner.slice(0, 1).toUpperCase() : (label.slice(0, 1) || '?');
+    const av = r ? `<img class="av" src="https://github.com/${encodeURIComponent(r.owner)}.png?size=80" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'av av-f ${srcClass}',textContent:'${escapeHtml(avLetter)}'}))">` : `<span class="av av-f ${srcClass}">${escapeHtml(avLetter)}</span>`;
     const review = statOf(card, '待你审') || statOf(card, '审');
     const mine = statOf(card, '你开的') || pr;
     let metrics = '';
@@ -2836,13 +2929,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       <article class="tile work ${big ? 'size-wide' : 'size-normal'}${waitingOnly ? ' waiting-only' : ''}${hasFace ? ' has-face' : ''}" data-idx="${idx}">
         <header class="w-top">
           ${av}
-          <div class="w-src"><span class="w-label">${escapeHtml(label)}</span><span class="w-repo">${escapeHtml(r ? `${r.owner} / ${r.name}` : (card.subtitle || ''))}</span></div>
-          ${waitingOnly ? `<span class="pill pill-gray">等别人 · ${card.waitingCount || ''}</span>` : (big ? '<span class="pill pill-hot">优先</span>' : '')}${isMailGroup(card) ? '' : liveTags}
+          <div class="w-src"><span class="w-label">${escapeHtml(label)}</span><span class="w-repo">${escapeHtml(r ? `${r.owner} / ${r.name}` : (card.subtitle || (card.source === 'slack' ? '频道消息' : '') || ''))}</span></div>
+          ${waitingOnly ? `<span class="pill pill-gray">等别人${card.waitingCount ? ' · ' + card.waitingCount : ''}</span>` : (big ? '<span class="pill pill-hot">优先</span>' : '')}${isMailGroup(card) ? '' : liveTags}
         </header>
         <h3 class="w-head">${escapeHtml(waitingOnly ? (r ? r.name : headline(card)) : headline(card))}</h3>
         ${isMailGroup(card) && tags.length ? `<div class="w-senders">${tags.map(t => `<span title="${escapeHtml(t.text)}">${escapeHtml(t.text)}</span>`).join('')}</div>` : ''}
         ${!waitingOnly && desc && !hasFace ? `<p class="w-desc">${escapeHtml(desc)}</p>` : ''}
-        ${!waitingOnly && desc && hasFace ? `<p class="w-desc short">${escapeHtml(desc)}</p>` : ''}
         ${waitingOnly ? '' : (card.faceView ? renderFace(card.faceView) || (metrics + avRow) : metrics + avRow)}
         ${na ? `<div class="w-next"><span class="w-next-k">下一步</span><span class="w-next-v">${escapeHtml(na)}</span></div>` : ''}
         ${actsHtml}

@@ -1179,10 +1179,10 @@
   .composer-chip .x{border:0;background:transparent;color:var(--ink3);cursor:pointer;font-size:14px;padding:0 2px;line-height:1}
   .composer-chip.err{border-color:#f1b4a2;color:#c2410c;background:#fff5f0}
   .composer-tools{display:flex;gap:4px;align-items:center;flex-shrink:0}
-  /* composer-tools-restore: keep attach/mic discoverable (never hide; glyph fallback if SVG fails) */
+  /* composer-tools-restore: ＋ glyph attach + Lucide SVG mic (cce288f); both always visible */
   .composer-tools button{position:relative;width:36px;height:36px;border-radius:50%;border:0;background:rgba(30,40,80,.04);color:var(--ink2);cursor:pointer;display:grid;place-items:center;flex-shrink:0}
-  .composer-tools button .ct-glyph{font-size:18px;line-height:1;display:block}
-  .composer-tools button svg{display:none}
+  .composer-tools button .ct-glyph{font-size:18px;line-height:1;display:block;font-weight:500}
+  .composer-tools button.composer-mic svg{display:block;width:18px;height:18px}
   .composer-tools button:hover{background:rgba(122,106,216,.12);color:var(--violet)}
   .composer-tools button.rec{background:rgba(138,116,208,.14);color:#6b5bc4;animation:mic-pulse 1.3s ease-in-out infinite}
   #v-today .today-chat-input .composer-tools,
@@ -3826,8 +3826,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         <div class="composer-tip" id="todayComposerTip" hidden></div>
         <div class="input-wrap">
           <div class="composer-tools" role="group" aria-label="附件与语音">
-            <button type="button" id="todayAttachBtn" title="图片或文件" aria-label="添加图片或文件"><span class="ct-glyph" aria-hidden="true">＋</span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg></button>
-            <button type="button" id="todayMicBtn" title="语音输入" aria-label="语音输入"><span class="ct-glyph" aria-hidden="true">🎤</span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v3.5"/></svg></button>
+            <button type="button" id="todayAttachBtn" title="图片或文件" aria-label="添加图片或文件"><span class="ct-glyph" aria-hidden="true">＋</span></button>
+            <button type="button" id="todayMicBtn" class="composer-mic" title="语音输入" aria-label="语音输入"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v3.5"/></svg></button>
           </div>
           <input type="text" id="todayChatInput" placeholder="和豆芽对话… 可粘贴/拖入图片" autocomplete="off" enterkeyhint="send" />
           <button class="send-btn" id="todayChatSend" type="button" aria-label="发送" disabled><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>

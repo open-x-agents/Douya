@@ -14,11 +14,14 @@ test('Today composer exposes attach + mic + file picker', () => {
   assert.match(html, /makeComposer\(\{[\s\S]*?attachBtnId: 'todayAttachBtn'[\s\S]*?micBtnId: 'todayMicBtn'/)
 })
 
-test('attach/mic stay visible (no font-size:0 wipe; restore glyphs)', () => {
+test('attach keeps ＋ glyph; mic is Lucide SVG (no emoji)', () => {
   assert.match(html, /composer-tools-restore/)
-  assert.match(html, /ct-glyph/)
-  assert.match(html, /＞|＋|ct-glyph[\s\S]*?＋/)
-  assert.match(html, /ct-glyph[\s\S]*?🎤/)
+  assert.match(html, /todayAttachBtn[\s\S]*?ct-glyph[\s\S]*?＋/)
+  assert.match(html, /todayMicBtn[\s\S]*?composer-mic[\s\S]*?<svg viewBox="0 0 24 24"/)
+  assert.match(html, /rect x="9" y="2\.5" width="6" height="12" rx="3"/)
+  // mic button must not use emoji
+  const micChunk = html.split('id="todayMicBtn"')[1].slice(0, 500)
+  assert.doesNotMatch(micChunk, /🎤/)
   assert.doesNotMatch(html, /\.composer-tools button\{[^}]*font-size:0/)
   assert.match(html, /#todayAttachBtn,#todayMicBtn\{display:grid!important/)
 })

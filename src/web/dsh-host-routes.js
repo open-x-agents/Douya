@@ -3,7 +3,8 @@
 import { readFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { runMuseChatTurn, chatProgress } from './muse-chat-core.js'
+import { runMuseChatTurn, chatProgress, loadLiveDockHistory } from './muse-chat-core.js'
+import { MIME_OF_EXT } from './chat-display.js'
 import { createChatLane } from './chat-lane.js'
 import { installUiFeed } from './ui-feed.js'
 
@@ -269,7 +270,6 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
       const p = router.chatDisplay().imagePath(ref)
       if (!p) return json({ error: 'not found' }, 404)
       const ext = ref.split('.').pop()
-      const { MIME_OF_EXT } = await import('./chat-display.js')
       return new Response(await readFile(p), { status: 200, headers: { 'content-type': MIME_OF_EXT[ext] || 'application/octet-stream', 'cache-control': 'private, max-age=31536000, immutable' } })
     },
   }, 'opendigitalmate: chat attachment')
@@ -278,7 +278,20 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     path: '/api/chat/history',
     methods: ['GET'],
     requestBody: 'buffered',
-    fetch: async () => json(await router.getChatHistory()),
+    fetch: async () => {
+      // Same session page the stock UI draws. The jsonl fallback misses session.vN logs.
+      try {
+        const live = await loadLiveDockHistory(ctx, { dshHome, display: router.chatDisplay() })
+        if (live) {
+          return json({
+            sessionId: live.sessionId || 'dsbot-chief',
+            messages: router.dockSurfacesFor(live.messages || []),
+            botId: live.botId || null,
+          })
+        }
+      } catch (err) { log(`chat history page failed: ${err?.message || err}`) }
+      return json(await router.getChatHistory())
+    },
   }, 'opendigitalmate: /api/chat/history')
 
   // One lane per Chief: turns never overlap, and quick follow-ups merge into one turn (see chat-lane.js).

@@ -1543,10 +1543,13 @@
     if (botHistoryLoaded) return;
     botHistoryLoaded = true;
     try {
-      const res = await fetch('/api/chat/history');
+      const res = await fetch('/api/chat/history', { cache: 'no-store' });
+      if (!res.ok) { botHistoryLoaded = false; return; }
       const data = await res.json();
       const body = $('dockBody');
-      if (!body || body.querySelector('.bubble')) return;
+      if (!body) { botHistoryLoaded = false; return; }
+      if (data.error && !(data.messages || []).length) { botHistoryLoaded = false; return; }
+      if (body.querySelector('.bubble')) return;
       (data.messages || []).forEach(m => {
         if (m.role === 'user') {
           const b = document.createElement('div');
@@ -1558,7 +1561,7 @@
         }
       });
       body.scrollTop = body.scrollHeight;
-    } catch (e) { console.warn('[bot history]', e); }
+    } catch (e) { botHistoryLoaded = false; console.warn('[bot history]', e); }
   }
 
   // Dock panel
@@ -2470,6 +2473,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (!wrap) return;
     wrap.classList.add('open');
     ensureInlineBotHistory();
+    const body = $('todayChatMsgs');
+    if (body) requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
     setTimeout(() => $('todayChatInput')?.focus(), 50);
   }
 
@@ -2499,32 +2504,42 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   }
 
   let inlineHistoryLoaded = false;
+  // Paint the Chief session into the today-chat sheet. A hard reload drops the DOM;
+  // the bubbles come back from /api/chat/history (the live session page). Called when
+  // the dock is built, not only on focus, so the transcript is in the sheet before it opens.
   async function ensureInlineBotHistory() {
     if (inlineHistoryLoaded) return;
     inlineHistoryLoaded = true;
     try {
-      const res = await fetch('/api/chat/history');
+      const res = await fetch('/api/chat/history', { cache: 'no-store' });
+      if (!res.ok) { inlineHistoryLoaded = false; return; }
       const data = await res.json();
+      const messages = data.messages || [];
       const body = $('todayChatMsgs');
-      if (!body || body.childElementCount) return;
-      (data.messages || []).forEach(m => {
+      if (!body) { inlineHistoryLoaded = false; return; }
+      if (data.error && !messages.length) { inlineHistoryLoaded = false; return; }
+      if (!messages.length || body.dataset.hydrated === '1') return;
+      const frag = document.createDocumentFragment();
+      messages.forEach(m => {
         if (m.role === 'user') {
           const b = document.createElement('div');
           b.className = 'bubble me';
           fillUserBubble(b, m.content, m.attachments, m.at ? new Date(m.at).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}) : '');
-          body.appendChild(b);
+          frag.appendChild(b);
         } else if (m.role === 'assistant') {
           const b = document.createElement('div');
           b.className = 'bubble bot';
           b.innerHTML = `${renderMd(m.content)}<small>${m.at ? chatTime(m.at) : ''}</small>`;
           const ce = citesEl(m.citations);
           if (ce) b.appendChild(ce);
-          body.appendChild(b);
-          (m.surfaces || []).forEach(v => body.appendChild(renderSurface(v, { container: body, sendPrompt: dockPrompt }, 'chat')));
+          frag.appendChild(b);
+          (m.surfaces || []).forEach(v => frag.appendChild(renderSurface(v, { container: body, sendPrompt: dockPrompt }, 'chat')));
         }
       });
+      body.insertBefore(frag, body.firstChild);
+      body.dataset.hydrated = '1';
       body.scrollTop = body.scrollHeight;
-    } catch (e) { console.warn('[bot history]', e); }
+    } catch (e) { inlineHistoryLoaded = false; console.warn('[bot history]', e); }
   }
 
 
@@ -2710,6 +2725,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const todayComposer = makeComposer({ railId: 'todayAttachRail', tipId: 'todayComposerTip', inputId: 'todayChatInput', pickId: 'todayFilePick', attachBtnId: 'todayAttachBtn', micBtnId: 'todayMicBtn' });
     todayComposer.wire();
     window.__odmTodayComposer = todayComposer;
+    ensureInlineBotHistory();
 
     const expand = () => openTodayChat();
     input.addEventListener('focus', expand);

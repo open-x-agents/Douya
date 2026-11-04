@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { buildChatContent, isImageModelError } from './chat-media.js'
+import { stripAttachNote, legacyAttachments } from './chat-display.js'
 import { DEEPSEEK_VISION_MODELS } from './llm-env.js'
 import { STEER_NOTE } from './chat-lane.js'
 
@@ -64,6 +65,13 @@ async function cursorSeq(ctx, sessionId) {
 
 const REPLY_PAGE = 80
 const REPLY_PAGES = 8
+// History walks the tail of the live session. A long tool turn is many events and few bubbles.
+const HISTORY_PAGE = 80
+const HISTORY_PAGES = 8
+// Harness lines that share the user/message type but are not something the person typed.
+const INJECTED_USER = /^(\[Handoff · part \d+\]|Current runtime context\.|<system-reminder>|Current time: \d{4}-)/
+const VIEW_PREFIX = /^【当前(卡片|视图)】/
+const STEER_PREFIX = /^（(补充一条|我连续发了几条消息)[^）]*）\s*/
 
 function eventOf(record) {
   if (record?.event && typeof record.event === 'object') return record.event
@@ -203,6 +211,146 @@ async function pageEvents(ctx, sessionId, afterSeq) {
     beforeSeq = oldest
   }
   return chunks.flat()
+}
+
+function messageAt(ev) {
+  const t = ev?.time
+  if (typeof t === 'number' && t > 1e11) return t
+  if (typeof t === 'string' && !Number.isNaN(Date.parse(t))) return t
+  return null
+}
+
+function withAt(msg, at) {
+  return at == null ? msg : { ...msg, at }
+}
+
+// One person-typed user/message can be several dock bubbles (a merged turn's display record).
+// Clock lines, handoff notes, and other injected user messages are not bubbles.
+function userBubblesFromEvent(ev, display) {
+  const source = messageSource(ev)
+  if (source?.kind && source.kind !== 'user') return []
+  if (source?.handoff === true) return []
+  const data = ev?.data || {}
+  const msg = data.message || data
+  const raw = messageText(ev)
+  const trimmed = String(raw || '').trim()
+  if (!trimmed || INJECTED_USER.test(trimmed)) return []
+  const shown = source?.rpcId ? display?.lookup?.(source.rpcId) : null
+  if (Array.isArray(shown)) {
+    return shown
+      .map(it => ({
+        content: String(it?.text ?? ''),
+        attachments: Array.isArray(it?.attachments) ? it.attachments : [],
+        at: messageAt(ev),
+      }))
+      .filter(it => it.content || it.attachments.length)
+  }
+  const parts = Array.isArray(msg?.content) ? msg.content : []
+  let words = stripAttachNote(trimmed)
+  if (VIEW_PREFIX.test(words)) words = String(words.split(/\n\s*\n/).pop() || '')
+  words = words.replace(STEER_PREFIX, '')
+  const atts = legacyAttachments(parts, raw)
+  let content = cleanBlock(words)
+  if (content === '请看我附上的内容。' && atts.length) content = ''
+  if (!content && !atts.length) return []
+  return [{ content, attachments: atts, at: messageAt(ev) }]
+}
+
+/**
+ * Bubbles for the today-chat dock, oldest first, from session page records or jsonl events.
+ * One user bubble per person-typed message (several, when a merged turn stored one display
+ * record per send). The bot bubble is that turn's last assistant text — a mid-turn
+ * "我先看一下" is replaced when the real reply lands, which is what the dock painted.
+ * `source.kind === 'user'` is the person; a user/message with no source is kept so older
+ * logs that only set `role` still restore. v4 text lives on `data.content` and has no `role`.
+ */
+export function dockMessagesFromRecords(records, { display = null } = {}) {
+  const out = []
+  let users = []
+  let reply = ''
+  let replyAt = null
+  const flush = () => {
+    if (!users.length) { reply = ''; replyAt = null; return }
+    for (const u of users) {
+      const msg = { role: 'user', content: u.content }
+      if (u.attachments?.length) msg.attachments = u.attachments
+      out.push(withAt(msg, u.at))
+    }
+    if (reply) out.push(withAt({ role: 'assistant', content: cleanBlock(reply) }, replyAt))
+    users = []
+    reply = ''
+    replyAt = null
+  }
+  for (const rec of Array.isArray(records) ? records : []) {
+    const ev = eventOf(rec)
+    if (ev.type === 'user/message') {
+      const next = userBubblesFromEvent(ev, display)
+      if (!next.length) continue
+      flush()
+      users = next
+      continue
+    }
+    if (ev.type !== 'assistant/message' || !users.length) continue
+    const text = messageText(ev)
+    if (!text || /^Noted\. I have my handoff note/.test(String(text).trim())) continue
+    reply = text
+    replyAt = messageAt(ev)
+  }
+  flush()
+  return out
+}
+
+// Newest page first, then older pages, until the tail holds `limit` bubbles or the log ends.
+async function pageHistory(ctx, sessionId, limit, display) {
+  const live = Number((await liveAgent(ctx, sessionId))?.session?.seq)
+  const throughSeq = Number.isInteger(live) && live > 0 ? live - 1 : -1
+  const chunks = []
+  let beforeSeq
+  for (let n = 0; n < HISTORY_PAGES; n++) {
+    const page = await ctx.sessionController.page({
+      address: { kind: 'session', sessionId },
+      throughSeq,
+      ...(beforeSeq === undefined ? {} : { beforeSeq }),
+      maxMessages: HISTORY_PAGE,
+    }, AbortSignal.timeout(15_000))
+    const records = page?.records || page?.items || []
+    chunks.unshift(records)
+    if (!page?.hasMore || records.length === 0) break
+    const oldest = eventSeq(records[0])
+    if (oldest == null || oldest === beforeSeq) break
+    if (dockMessagesFromRecords(chunks.flat(), { display }).length >= limit) break
+    beforeSeq = oldest
+  }
+  return chunks.flat()
+}
+
+/**
+ * Transcript the today-chat dock paints after a reload.
+ * Stock UI reads this from the live session page (`/api/bot` chat). The on-disk log is
+ * `session.vN.jsonl` (zstd); a reader that only opens `session.jsonl` misses it and the
+ * dock gets an empty list while the session still has the turns. Returns null when the
+ * live page cannot be read, so the caller can fall back to the log file.
+ */
+export async function loadLiveDockHistory(ctx, { dshHome, botId = null, limit = 40, display = null } = {}) {
+  if (!ctx?.sessionController?.page) return null
+  const chief = await resolveChief(dshHome, botId)
+  const parts = (chief.parts?.length ? chief.parts : []).filter(Boolean).slice(-2)
+  if (!parts.length) return null
+  const records = []
+  let paged = false
+  for (const part of parts) {
+    try {
+      records.push(...await pageHistory(ctx, part, limit, display))
+      paged = true
+    } catch { /* an archived part can fail to page; keep the parts that did */ }
+  }
+  if (!paged) return null
+  const cap = Math.max(1, Number(limit) || 40)
+  return {
+    sessionId: chief.sessionId || parts.at(-1),
+    messages: dockMessagesFromRecords(records, { display }).slice(-cap),
+    botId: chief.botId || null,
+  }
 }
 
 /**

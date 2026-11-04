@@ -1,9 +1,9 @@
 // Muse UI → real ds-bot Chief via DSH `/api/bot` send + session log read.
 // (FlyBot ds-bot has `send` but no `chat` page endpoint.)
 
-import { stripAttachNote, legacyAttachments } from './chat-display.js'
 import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { dockMessagesFromRecords, resolveChief } from './muse-chat-core.js'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
@@ -13,10 +13,6 @@ const QUIET_MS = 2_000
 const STEP_TIMEOUT_MS = 120_000
 
 function clean(v) { return String(v ?? '').replace(/\s+/g, ' ').trim() }
-// Keep line structure (lists, paragraphs) — the client renders Markdown.
-function cleanBlock(v) {
-  return String(v ?? '').replace(/\r\n?/g, '\n').split('\n').map(l => l.replace(/[ \t]+$/g, '')).join('\n').replace(/\n{3,}/g, '\n\n').trim()
-}
 function authPath(home) { return join(home || '.odm-data', 'dsbot-auth.json') }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
@@ -99,9 +95,30 @@ async function waitQuiet(auth) {
   throw new Error('ds-bot 超时：Bot 一直没有安静下来')
 }
 
-import { readdirSync, readFileSync } from 'node:fs'
+// dsh names the current generation `session.vN.jsonl` (often zstd) and leaves older
+// generations beside it. Generation 0 is the legacy `session.jsonl`. Higher wins;
+// zstd is the default write of that generation.
+export function sessionLogRank(name) {
+  const base = String(name).split(/[\\/]/).pop()
+  const m = base.match(/^session(?:\.v(\d+))?\.jsonl(?:\.zstd)?$/)
+  if (!m) return -1
+  const gen = m[1] ? Number(m[1]) : 0
+  return gen * 2 + (base.endsWith('.zstd') ? 1 : 0)
+}
 
-function locateSessionLog(dshHome, botId) {
+function bestSessionLog(dir) {
+  let best = null
+  let rank = -1
+  let names
+  try { names = readdirSync(dir) } catch { return null }
+  for (const name of names) {
+    const r = sessionLogRank(name)
+    if (r > rank) { rank = r; best = join(dir, name) }
+  }
+  return rank >= 0 ? best : null
+}
+
+export function locateSessionLog(dshHome, botId) {
   const root = join(dshHome, 'sessions')
   if (!existsSync(root)) return null
   const stack = [root]
@@ -113,10 +130,8 @@ function locateSessionLog(dshHome, botId) {
       const p = join(dir, ent.name)
       if (ent.isDirectory()) {
         if (ent.name === botId || ent.name.includes(botId)) {
-          for (const name of ['session.jsonl.zstd', 'session.jsonl']) {
-            const c = join(p, name)
-            if (existsSync(c)) return c
-          }
+          const hit = bestSessionLog(p)
+          if (hit) return hit
         }
         stack.push(p)
       }
@@ -125,30 +140,22 @@ function locateSessionLog(dshHome, botId) {
   return null
 }
 
-function readLastAssistant(logPath) {
+function readLog(logPath) {
   if (!logPath) return ''
-  let raw = ''
   if (logPath.endsWith('.zstd')) {
     const r = spawnSync('zstd', ['-dc', logPath], { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 })
     if (r.status !== 0) return ''
-    raw = r.stdout || ''
-  } else {
-    try { raw = readFileSync(logPath, 'utf8') } catch { return '' }
+    return r.stdout || ''
   }
-  let last = ''
-  for (const line of raw.split('\n')) {
-    if (!line.trim()) continue
-    let o
-    try { o = JSON.parse(line) } catch { continue }
-    if (o.type === 'assistant/message') {
-      const content = o.data?.message?.content
-      const text = Array.isArray(content)
-        ? content.map(p => p?.text || '').join('')
-        : (typeof content === 'string' ? content : '')
-      if (clean(text)) last = cleanBlock(text)
-    }
+  try { return readFileSync(logPath, 'utf8') } catch { return '' }
+}
+
+function readLastAssistant(logPath) {
+  const msgs = historyMessages(readLog(logPath))
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i].role === 'assistant' && msgs[i].content) return msgs[i].content
   }
-  return last
+  return ''
 }
 
 /**
@@ -231,40 +238,17 @@ export async function chatWithDsBot({
   }
 }
 
-// Turn a session log into chat messages, skipping what the harness injects (handoff notes, runtime context,
-// skill lists, clock) — those are not the user's words.
-const INJECTED = /^(\[Handoff · part \d+\]|Current runtime context\.|<system-reminder>|Current time: \d{4}-)/
+// Turn a session log into dock bubbles. A user/message has no `role` field: the person
+// is `source.kind === 'user'`, and assistant text may sit on `data.content` (v4) or
+// `data.message.content`. Treating "no role" as assistant emptied the dock's user side
+// and, with the wrong log filename, the whole list.
 export function historyMessages(raw, { display = null } = {}) {
-  const out = []
+  const records = []
   for (const line of String(raw || '').split('\n')) {
     if (!line.trim()) continue
-    let o
-    try { o = JSON.parse(line) } catch { continue }
-    if (o.type !== 'user/message' && o.type !== 'assistant/message') continue
-    const msg = o.data?.message || o.data
-    const role = msg?.role === 'user' ? 'user' : 'assistant'
-    const content = Array.isArray(msg?.content) ? msg.content.map(p => p?.text || '').join('') : (msg?.content || '')
-    if (!clean(content)) continue
-    if (role === 'user' && INJECTED.test(String(content).trim())) continue
-    if (role === 'user') {
-      // Bubbles show what the user typed + attachment chips, never the prompt's model-only context.
-      const rpcId = (o.data?.source || msg?.source)?.rpcId
-      const shown = display?.lookup?.(rpcId)
-      if (shown) { for (const it of shown) out.push({ role, content: it.text, attachments: it.attachments }); continue }
-      const parts = Array.isArray(msg?.content) ? msg.content : []
-      let words = stripAttachNote(String(content).trim())
-      if (/^【当前(卡片|视图)】/.test(words)) words = words.split(/\n\s*\n/).pop()
-      words = words.replace(/^（(补充一条|我连续发了几条消息)[^）]*）\s*/, '')
-      const atts = legacyAttachments(parts, content)
-      const shownText = cleanBlock(words) === '请看我附上的内容。' && atts.length ? '' : cleanBlock(words)
-      if (!shownText && !atts.length) continue
-      out.push({ role, content: shownText, ...(atts.length ? { attachments: atts } : {}) })
-      continue
-    }
-    if (role === 'assistant' && /^Noted\. I have my handoff note/.test(String(content).trim())) continue
-    out.push({ role, content: cleanBlock(content) })
+    try { records.push(JSON.parse(line)) } catch { /* torn line */ }
   }
-  return out
+  return dockMessagesFromRecords(records, { display })
 }
 
 export async function loadDsBotHistory({ display = null, home = '.odm-data', baseUrl = DEFAULT_BASE, token = process.env.DSBOT_TOKEN, dshHome = process.env.DSH_HOME || join(process.cwd(), '.dsh-odm'), limit = 40 } = {}) {
@@ -274,20 +258,12 @@ export async function loadDsBotHistory({ display = null, home = '.odm-data', bas
     const mainId = state.mainBotId || state.mainBotIds?.[0]
     if (!mainId) return { sessionId: BOT_SESSION_ID, messages: [], botId: null }
     // ds-bot moves a long conversation on to fresh "part" Sessions; read the last parts, oldest first.
-    const { resolveChief } = await import('./muse-chat-core.js')
     const { parts } = await resolveChief(dshHome, mainId)
     const messages = []
     for (const part of (parts.length ? parts : [mainId]).slice(-2)) {
       const logPath = locateSessionLog(dshHome, part)
       if (!logPath) continue
-      let raw = ''
-      if (logPath.endsWith('.zstd')) {
-        const r = spawnSync('zstd', ['-dc', logPath], { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 })
-        raw = r.stdout || ''
-      } else {
-        raw = await readFile(logPath, 'utf8')
-      }
-      messages.push(...historyMessages(raw, { display }))
+      messages.push(...historyMessages(readLog(logPath), { display }))
     }
     if (!messages.length) return { sessionId: BOT_SESSION_ID, messages: [], botId: mainId }
     return { sessionId: BOT_SESSION_ID, messages: messages.slice(-limit), botId: mainId }

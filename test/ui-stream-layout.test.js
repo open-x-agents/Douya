@@ -181,7 +181,7 @@ test('routes + page wiring: feed installed, turn ids validated, dock views persi
   const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
   assert.match(html, /new EventSource\(`\/api\/opendigitalmate\/ui-feed\?\$\{q\}`\)/)
   assert.match(html, /feedState\.fails >= 3\) \{ feedState\.mode = 'poll'/)
-  assert.match(html, /\(m\.surfaces \|\| \[\]\)\.forEach\(v => body\.appendChild\(renderSurface/)
+  assert.match(html, /\(m\.surfaces \|\| \[\]\)\.forEach\(v => frag\.appendChild\(renderSurface/)
   const p3 = html.slice(html.indexOf('Intelligent UI (P3)'), html.indexOf('Intelligent UI (P4)'))
   assert.doesNotMatch(p3, /innerHTML/, 'streamed text only ever goes through textContent')
   assert.equal(dockKey('  表格已经\n放到   下方 '), '表格已经 放到 下方')

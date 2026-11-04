@@ -159,7 +159,12 @@ test('chat turn tells the feed which Session to stream (and the new part after a
   const ctx = { sessionController: {
     resolveAgent: async () => ({ agent: { status: 'idle', session: { seq: 3 } } }),
     prompt: async () => { prompted = true },
-    page: async () => ({ records: prompted ? [{ type: 'turn/start', time: Date.now() }, { type: 'assistant/message', data: { message: { role: 'assistant', content: '好的' } } }, { type: 'turn/end', time: Date.now() }] : [] }),
+    page: async () => ({ records: prompted ? [
+      { type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: '你好' }] } },
+      { type: 'turn/start', time: Date.now() },
+      { type: 'assistant/message', data: { message: { role: 'assistant', content: '好的' } } },
+      { type: 'turn/end', time: Date.now() },
+    ] : [] }),
   } }
   const seen = []
   const r = await runMuseChatTurn(ctx, { message: '你好', dshHome: home, onSession: (sid) => seen.push(sid) })

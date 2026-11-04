@@ -25,7 +25,7 @@ export const CATALOG = {
   Table: { desc: '表格，行来自 source；列是字段名；可排序；行按钮', props: { title: 'label', source: 'source', columns: 'columns', sortable: 'bool', rowActions: 'rowActions', annotations: 'annotations' } },
   List: { desc: '列表，每行标题 + 次要字段', props: { title: 'label', source: 'source', fields: 'fields', rowActions: 'rowActions', annotations: 'annotations' } },
   Comparison: { desc: '对比：每个条目一列，每个字段一行', props: { title: 'label', source: 'source', fields: 'fields', annotations: 'annotations' } },
-  KeyValue: { desc: '键值对；值可为文字、{"$count":source}、{"$card":{"card":id,"field":"title|next|priority|source|status"}}、{"$data":key}', props: { title: 'label', pairs: 'pairs' } },
+  KeyValue: { desc: '键值对；值可为文字、{"$count":source}、{"$card":{"card":id,"field":"title|next|priority|source|status"]]、{"$data":key}', props: { title: 'label', pairs: 'pairs' } },
   Timeline: { desc: '按时间排列 source 里的条目', props: { title: 'label', source: 'source' } },
   Chart: { desc: '柱状 / 折线图，数值是 source 按 groupBy 计数（服务端算）', props: { title: 'label', kind: 'enum:bar|line', source: 'source', groupBy: 'groupBy' } },
   Form: { desc: '表单：text / textarea / select / checkbox；提交 = 发一句话给豆芽，或生成待你确认的草稿', props: { title: 'label', fields: 'formFields', submit: 'submit' } },
@@ -42,8 +42,8 @@ ${comps}
 - 数据只能引用，不能自己写：source = {"card":"<卡片id>"} 或 {"cards":"needs-you"|"all"|["id",...]}，加 "rows":"items"（卡片里的条目：PR、邮件、消息）或 "cards"（卡片本身），可选 "where":{"status":"open|done|dismissed|all","type":"pr|issue|email|slack","source":"github|gmail|slack"}、"limit"。
 - 条目字段：${Object.keys(ITEM_FIELDS).join(', ')}；卡片字段：${Object.keys(CARD_FIELDS).join(', ')}。链接自动来自条目，绝不要自己写 URL；数字由服务端计数，绝不要自己写数字。
 - annotations = {"<条目url 或 卡片id>": "一句你的点评"}，显示为「备注」列（只能是 source 里已有的行）。
-- 按钮 do 只能是 {"openLink":"<卡片里已有的链接>"}、{"openCard":"<卡片id>"}、{"uiOp":{...odm_ui_op 参数}}、{"prompt":"一句话"}；rowActions 里可用 "$row.url"、"$row.cardId"，prompt 里可用 {{title}}。按钮不能发送、确认或执行任何东西。
-- Form：fields=[{name, kind:"text|textarea|select|checkbox", label, options:[{label,value}], value}]；submit={label, do:{"prompt":"…{{字段名}}…"}} 或 {label, do:{"draft":{"action":"gmail_reply|gmail_send_email|slack_reply|github_comment|…(需确认的 odm_act_*)","args":{参数: "文字{{字段名}}" | {"$field":"字段名"} | {"$item":{"card":"id","item":"条目url"},"field":"url|from|threadId|title"}}}}}。draft 只会生成「待你确认」卡，用户点确认才执行。
+- 按钮 do 只能是 {"openLink":"<卡片里已有的链接>"}、{"openCard":"<卡片id>"}、{"uiOp":{...odm_ui_op 参数]]、{"prompt":"一句话"}；rowActions 里可用 "$row.url"、"$row.cardId"，prompt 里可用 [[title]]。按钮不能发送、确认或执行任何东西。
+- Form：fields=[{name, kind:"text|textarea|select|checkbox", label, options:[{label,value}], value}]；submit={label, do:{"prompt":"…[[字段名]]…"]] 或 {label, do:{"draft":{"action":"gmail_reply|gmail_send_email|slack_reply|github_comment|…(需确认的 odm_act_*)","args":{参数: "文字[[字段名]]" | {"$field":"字段名"} | {"$item":{"card":"id","item":"条目url"},"field":"url|from|threadId|title"]]]]}。draft 只会生成「待你确认」卡，用户点确认才执行。
 - dataModel：视图里可变的数据（表单默认值、选中项、说明文字），组件里用 {"$data":"key"} 引用；之后用 odm_ui_update 只改 dataModel。
 - 出错时工具会返回 path 和原因，按提示改好再调一次。`
 }

@@ -133,7 +133,7 @@ function validateFormFields(list, path) {
 function validateArgValue(v, path, fieldNames) {
   if (typeof v === 'string') {
     str(v, path, LIMITS.template)
-    for (const m of v.matchAll(/\{\{\s*([\w-]+)\s*\}\}/g)) if (!fieldNames.has(m[1])) fail(path, `{{${m[1]}}} 不是表单字段`)
+    for (const m of v.matchAll(/(?:\{\{|\[\[)\s*([\w-]+)\s*(?:\}\}|\]\])/g)) if (!fieldNames.has(m[1])) fail(path, `{{${m[1]}}} 不是表单字段`)
     return v
   }
   if (isObj(v) && v.$field !== undefined) { onlyKeys(v, ['$field'], path); if (!fieldNames.has(v.$field)) fail(`${path}.$field`, '不是表单字段'); return { $field: v.$field } }

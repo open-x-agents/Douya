@@ -97,7 +97,7 @@ function resolveDo(d, state, links, path, row = null) {
     return { openLink: url }
   }
   if (d.openCard) { const id = d.openCard === '$row.cardId' ? row?.cardId : d.openCard; getCard(state, id, `${path}.openCard`); return { openCard: id } }
-  if (d.prompt) return { prompt: row ? d.prompt.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => row.fields?.[k] ?? '') : d.prompt }
+  if (d.prompt) return { prompt: row ? d.prompt.replace(/(?:\{\{|\[\[)\s*(\w+)\s*(?:\}\}|\]\])/g, (_, k) => row.fields?.[k] ?? '') : d.prompt }
   if (d.uiOp) { const v = validateUiOp(d.uiOp, state); if (!v.ok) fail(`${path}.uiOp`, v.error); return { uiOp: d.uiOp } }
   fail(path, '不支持的按钮动作')
 }
@@ -198,7 +198,7 @@ export function resolveSubmitArgs(args, values, state) {
   const links = storeLinks(state)
   const out = {}
   for (const [k, v] of Object.entries(args || {})) {
-    if (typeof v === 'string') out[k] = v.replace(/\{\{\s*([\w-]+)\s*\}\}/g, (_, f) => String(values[f] ?? ''))
+    if (typeof v === 'string') out[k] = v.replace(/(?:\{\{|\[\[)\s*([\w-]+)\s*(?:\}\}|\]\])/g, (_, f) => String(values[f] ?? ''))
     else if (v && typeof v === 'object' && v.$field) out[k] = values[v.$field] ?? ''
     else if (v && typeof v === 'object' && v.$item) {
       if (!links.has(v.$item.item)) throw new Error('条目已不在卡片里')

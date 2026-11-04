@@ -73,7 +73,7 @@ test('forms: draft only for confirm-risk actions, required args, real fields', (
   bad(spec([{ id: 'f', type: 'Form', fields, submit: { label: '回', do: { draft: { action: 'gmail_reply', args: { thread_id: 'x', recipient_email: 'a@b.c', body: '{{nope}}' } } } } }]), /\{\{nope\}\} 不是表单字段/)
   bad(spec([{ id: 'f', type: 'Form', fields, submit: { label: '回', do: { execute: 'x' } } }]), /prompt 或 draft/)
   bad(spec([{ id: 'f', type: 'Form', fields: [{ name: 'x', kind: 'file', label: 'f' }], submit: { label: 'a', do: { prompt: 'x' } } }]), /text \| textarea/)
-  ok(spec([{ id: 'f', type: 'Form', fields, submit: { label: '生成待确认', do: { draft: { action: 'gmail_reply', args: { thread_id: { $item: { card: 'fledge', item: FLEDGE }, field: 'threadId' }, recipient_email: { $item: { card: 'fledge', item: FLEDGE }, field: 'from' }, body: '选 {{ticket}}。\n{{body}}' } } } } }]))
+  ok(spec([{ id: 'f', type: 'Form', fields, submit: { label: '生成待确认', do: { draft: { action: 'gmail_reply', args: { thread_id: { $item: { card: 'fledge', item: FLEDGE }, field: 'threadId' }, recipient_email: { $item: { card: 'fledge', item: FLEDGE }, field: 'from' }, body: '选 [[ticket]]。\n{{body}}' } } } } }]))
 })
 
 test('hydrate: rows, links and numbers come from the store; fake references are rejected', () => {
@@ -244,6 +244,9 @@ test('catalog prompt is generated from the catalog; routes + tools are wired', (
   const p = catalogPrompt()
   for (const k of Object.keys(CATALOG)) assert.ok(p.includes(`- ${k}：`), k)
   assert.ok(p.length < 3000, 'kept short (sent every turn)')
+  // the dsh host interpolates {{var}} in system-prompt sections even with interpolate:false — an unknown one kills every turn
+  assert.doesNotMatch(p, /\{\{/)
+  assert.match(p, /\[\[字段名\]\]/)
   const routes = readFileSync(new URL('../src/web/dsh-host-routes.js', import.meta.url), 'utf8')
   assert.ok(routes.includes("'/api/opendigitalmate/surface'") && routes.includes("'/api/opendigitalmate/ui-renderer.js'"))
   assert.match(routes, /surfacesSince\(timing\.recvAt\)/)

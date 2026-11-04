@@ -21,7 +21,7 @@ if (step === 'run') {
   const shots = []
   for (let i = 0; i < 120; i++) {
     await p.waitForTimeout(3000)
-    const st = await p.evaluate(() => ({ prog: document.getElementById('digestProgress')?.hidden ? '' : document.getElementById('digestProgress')?.innerText, status: document.getElementById('digestStatus')?.innerText, busy: document.getElementById('generateDigestBtn')?.disabled }))
+    const st = await p.evaluate(() => ({ prog: document.getElementById('digestProgress')?.offsetParent === null ? '' : document.getElementById('digestProgress')?.innerText, status: document.getElementById('digestStatus')?.innerText, busy: document.getElementById('generateDigestBtn')?.disabled }))
     if (st.prog) { shots.push([Math.round((Date.now() - t0) / 1000), st.prog]); if (shots.length === 3) await p.screenshot({ path: '.shots/odm-bot-digest-progress.png' }) }
     if (!st.busy) { out.final = st; break }
   }
@@ -29,6 +29,7 @@ if (step === 'run') {
   out.wallMs = Date.now() - t0
   await p.waitForTimeout(2500)
   await p.evaluate(() => window.scrollTo(0, 0))
+  out.stripVisibleAtEnd = await p.evaluate(() => document.getElementById('digestProgress')?.offsetParent !== null)
   await p.screenshot({ path: '.shots/odm-bot-digest.png' })
   out.after = snapState()
   out.status = await api('/api/opendigitalmate/digest-status')

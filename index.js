@@ -29,7 +29,7 @@ import { registerMuseHostRoutes } from './src/web/dsh-host-routes.js'
 export const name = 'opendigitalmate'
 // The panel and the card callback answer on the channel ds-bot already exposes; nothing
 // else is borrowed from the host.
-export const inject = ['connection', 'tools', 'sessionController', 'systemPrompt']
+export const inject = ['connection', 'tools', 'sessionController', 'systemPrompt', 'webServer']
 
 export const CARD_ROUTE = `${PANEL_ROUTE}/card`
 

@@ -16,6 +16,7 @@ import { createActionService, ACTIONS } from './actions.js';
 import { cardSnapshotText, cardFull } from './card-snapshot.js';
 import { createUiService } from '../ui/service.js';
 import { createChatDisplay, attachmentMeta } from './chat-display.js';
+import { callbackUrlFor, callbackPage } from './composio-callback.js';
 import { findTimetableCard, readPlan, applyPlanEdit, todaysCalendarEvents } from './timetable-plan.js';
 import { uiView } from '../ui/ops.js';
 import { createSurfaceService } from '../ui/surfaces.js';
@@ -717,6 +718,20 @@ export function createApiRouter(ctx) {
     /** Full view for odm_ui_state. */
     uiState() { return uiService.state(); },
     chatDisplay() { return chatDisplay; },
+    /** Composio OAuth popup landing: read the account back (≤4 s), refresh 信源 status, render the page. */
+    async composioCallback({ status = '', connectedAccountId = '', error = '' } = {}) {
+      let accountStatus = null, toolkit = '';
+      const client = getComposioClient();
+      if (client && connectedAccountId && /^[\w-]{3,80}$/.test(connectedAccountId) && client.getConnectedAccount) {
+        try {
+          const acct = await Promise.race([client.getConnectedAccount(connectedAccountId), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))]);
+          accountStatus = acct?.status || null; toolkit = acct?.toolkit?.slug || '';
+        } catch (err) { console.warn('[composio-callback] verify failed:', err.message); }
+      }
+      if (client) refreshAccounts(client);
+      console.log(`[composio-callback] status=${status} account=${connectedAccountId || '-'} toolkit=${toolkit || '-'} verified=${accountStatus || '-'}`);
+      return { html: callbackPage({ status, connectedAccountId, error, toolkit, accountStatus }), accountStatus, toolkit };
+    },
     /** 我的一天: Chief reads / edits the suggested blocks; persisted on the timetable card, pushed live to open tabs. */
     timetableGet() {
       const card = findTimetableCard(store.get().cards || []);
@@ -1632,7 +1647,7 @@ export function createApiRouter(ctx) {
     /**
      * POST /api/composio/connect - Initiate OAuth connection for an app
      */
-    async connectComposioApp(data) {
+    async connectComposioApp(data, { origin = null } = {}) {
       try {
         const client = getComposioClient();
         if (!client) {
@@ -1647,7 +1662,8 @@ export function createApiRouter(ctx) {
         }
 
         // Initiate connection (returns OAuth redirect URL)
-        const callbackUrl = `${config?.baseUrl || 'http://localhost:7777'}/composio-callback`;
+        // Same origin as the page that asked (host + port the user's browser uses), so the popup can talk back.
+        const callbackUrl = callbackUrlFor(origin || config?.baseUrl || null);
         const toolkitSlug = app.toolkitSlug || app.key || appId;
         const result = await client.initiateConnection(toolkitSlug, callbackUrl);
 
@@ -2074,7 +2090,7 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
         req.on('end', async () => {
           try {
             const data = JSON.parse(body);
-            const response = await router.connectComposioApp(data);
+            const response = await router.connectComposioApp(data, { origin: req.headers.origin || (req.headers.host ? `http://${req.headers.host}` : null) });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(response));
           } catch (err) {
@@ -2098,59 +2114,9 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
           }
         });
         return;
-      } else if (url.pathname === '/composio-callback' && req.method === 'GET') {
-        // OAuth callback from Composio
-        const status = url.searchParams.get('status');
-        const connectedAccountId = url.searchParams.get('connected_account_id');
-        const error = url.searchParams.get('error');
-        
-        const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Composio ${status === 'success' ? '连接成功' : '连接失败'}</title>
-  <style>
-    body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
-    .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-align: center; max-width: 400px; }
-    .icon { font-size: 48px; margin-bottom: 1rem; }
-    h1 { margin: 0 0 0.5rem; font-size: 1.5rem; }
-    p { margin: 0 0 1rem; color: #666; }
-    .countdown { font-weight: bold; color: #333; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="icon">${status === 'success' ? '✅' : '❌'}</div>
-    <h1>${status === 'success' ? 'Composio 连接成功！' : 'Composio 连接失败'}</h1>
-    <p>${status === 'success' 
-      ? `账号已连接 (${connectedAccountId || 'unknown'})`
-      : `错误: ${error || '未知错误'}`
-    }</p>
-    <p class="countdown"><span id="countdown">2</span> 秒后自动关闭窗口...</p>
-  </div>
-  <script>
-    let count = 2;
-    const countdownEl = document.getElementById('countdown');
-    const timer = setInterval(() => {
-      count--;
-      countdownEl.textContent = count;
-      if (count <= 0) {
-        clearInterval(timer);
-        window.close();
-        // If window.close() doesn't work (e.g. not opened by script), redirect
-        setTimeout(() => {
-          if (window.opener) {
-            window.opener.location.reload();
-          }
-          window.location.href = '/';
-        }, 500);
-      }
-    }, 1000);
-  </script>
-</body>
-</html>`;
-        
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      } else if ((url.pathname === '/composio-callback' || url.pathname === '/api/opendigitalmate/composio-callback') && req.method === 'GET') {
+        const { html } = await router.composioCallback({ status: url.searchParams.get('status') || '', connectedAccountId: url.searchParams.get('connected_account_id') || '', error: url.searchParams.get('error') || '' });
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
         res.end(html);
       } else if (url.pathname === '/api/llm/config' && req.method === 'GET') {
         const data = await router.getLLMConfig();
@@ -2182,79 +2148,6 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
           'Cache-Control': 'no-store, no-cache, must-revalidate',
           'Pragma': 'no-cache',
           'Expires': '0',
-        });
-        res.end(html);
-      } else if (url.pathname === '/composio-callback' && req.method === 'GET') {
-        // OAuth callback from Composio - show success page and close popup
-        const status = url.searchParams.get('status');
-        const connectedAccountId = url.searchParams.get('connected_account_id');
-        
-        const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>连接${status === 'success' ? '成功' : '失败'}</title>
-  <style>
-    body { 
-      font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
-      display: flex; 
-      align-items: center; 
-      justify-content: center; 
-      height: 100vh; 
-      margin: 0;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    }
-    .card {
-      background: white;
-      padding: 40px;
-      border-radius: 16px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-      text-align: center;
-      max-width: 400px;
-    }
-    .icon { font-size: 64px; margin-bottom: 20px; }
-    .success { color: #10b981; }
-    .error { color: #ef4444; }
-    h1 { margin: 0 0 12px; font-size: 24px; color: #1f2937; }
-    p { margin: 0; color: #6b7280; font-size: 14px; line-height: 1.6; }
-    .countdown { margin-top: 20px; font-size: 12px; color: #9ca3af; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="icon ${status === 'success' ? 'success' : 'error'}">
-      ${status === 'success' ? '✓' : '✕'}
-    </div>
-    <h1>${status === 'success' ? '连接成功！' : '连接失败'}</h1>
-    <p>${status === 'success' 
-      ? '数据源已成功连接，窗口将自动关闭。' 
-      : '连接过程中出现错误，请重试。'}</p>
-    ${connectedAccountId ? `<p style="margin-top:12px;font-family:monospace;font-size:11px;color:#d1d5db;">ID: ${connectedAccountId}</p>` : ''}
-    <div class="countdown">窗口将在 <span id="timer">2</span> 秒后关闭</div>
-  </div>
-  <script>
-    let seconds = 2;
-    const timer = document.getElementById('timer');
-    const interval = setInterval(() => {
-      seconds--;
-      timer.textContent = seconds;
-      if (seconds <= 0) {
-        clearInterval(interval);
-        window.close();
-        // If window.close() is blocked, redirect back
-        setTimeout(() => {
-          if (!window.closed) {
-            window.location.href = '/#/settings';
-          }
-        }, 100);
-      }
-    }, 1000);
-  </script>
-</body>
-</html>`;
-        res.writeHead(200, { 
-          'Content-Type': 'text/html; charset=utf-8',
-          'Cache-Control': 'no-store',
         });
         res.end(html);
       } else {

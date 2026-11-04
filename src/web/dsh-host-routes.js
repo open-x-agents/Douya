@@ -1,5 +1,6 @@
 // Register Muse UI + all /api/* routes on the dsh connection (same process as ds-bot).
 
+import { CALLBACK_PATH, requestOrigin } from './composio-callback.js'
 import { readFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -420,11 +421,38 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     fetch: async () => json(await router.getComposioApps({ fresh: true })),
   }, 'opendigitalmate: composio apps refresh')
 
+  // Composio OAuth popup lands here. It must be a public exact route on the web server, not under /api:
+  // the /api fence wants the SameSite=Strict session cookie, which a cross-site OAuth redirect never carries.
+  // The page only renders status + notifies the opener; nothing secret is returned.
+  if (ctx.webServer?.register) {
+    ctx.effect(() => ctx.webServer.register({
+      kind: 'exact',
+      path: CALLBACK_PATH,
+      handler: async (req, res) => {
+        try {
+          const q = new URL(req.url || '/', 'http://local').searchParams
+          const { html } = await router.composioCallback({
+            status: (q.get('status') || '').slice(0, 40),
+            connectedAccountId: (q.get('connected_account_id') || q.get('connectedAccountId') || '').slice(0, 120),
+            error: (q.get('error') || q.get('message') || '').slice(0, 300),
+          })
+          res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff' })
+          res.end(html)
+        } catch (err) {
+          log(`composio callback failed: ${err.message}`)
+          res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' }); res.end('composio callback error')
+        }
+      },
+    }), 'opendigitalmate: composio callback')
+  } else {
+    log('composio callback: webServer unavailable, /composio-callback not mounted')
+  }
+
   effect({
     path: '/api/composio/connect',
     methods: ['POST'],
     requestBody: 'buffered',
-    fetch: async (request) => json(await router.connectComposioApp(await readJson(request))),
+    fetch: async (request) => json(await router.connectComposioApp(await readJson(request), { origin: requestOrigin(request) })),
   }, 'opendigitalmate: composio connect')
 
   effect({

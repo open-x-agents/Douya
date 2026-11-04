@@ -131,6 +131,11 @@ export function createComposioClient(config) {
       };
     },
 
+    /** One connected account by id: { id, status, toolkit: { slug } }. */
+    async getConnectedAccount(connectionId) {
+      return request(`/connected_accounts/${encodeURIComponent(connectionId)}`);
+    },
+
     /**
      * Delete connection
      */

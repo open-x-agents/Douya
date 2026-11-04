@@ -1,6 +1,6 @@
 // Muse chat multimodal: validate client uploads, admit them through dsh attachments when available,
-// and build sessionController.prompt content. DeepSeek-chat is often text-only — if image input is
-// refused we retry with a text description (and inline extractable file text).
+// and build sessionController.prompt content. DeepSeek-chat is often text-only — if image/file
+// prompt parts are refused we retry with a text description (and inline extractable file text).
 import { Buffer } from 'node:buffer'
 
 export const IMAGE_MAX_BYTES = 10 * 1024 * 1024
@@ -19,6 +19,7 @@ const TEXTISH = new Set([...FILE_EXTS].filter(e => e !== 'pdf'))
 const clip = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n - 1) + '…' : s }
 const baseName = n => String(n || 'file').replace(/[/\\]/g, '').replace(/[^\w.\u4e00-\u9fff()-]+/g, '_').slice(0, 120) || 'file'
 const extOf = n => (String(n || '').split('.').pop() || '').toLowerCase()
+
 /** Canonical base64 only (dsh admission rejects non-canonical / data-URL forms). */
 export function canonicalBase64(data) {
   // Allow a data: URL wrapper from FileReader; still require canonical base64 afterward (dsh rule).
@@ -65,8 +66,11 @@ export function normalizeAttachments(raw) {
   return { ok: true, items }
 }
 
-function attachmentsOf(ctx) {
-  try { return typeof ctx?.get === 'function' ? ctx.get('attachments') : ctx?.attachments } catch { return null }
+function svc(ctx, name) {
+  try {
+    if (typeof ctx?.get === 'function') return ctx.get(name)
+    return ctx?.[name] ?? null
+  } catch { return null }
 }
 
 function extractText(item) {
@@ -78,11 +82,26 @@ function extractText(item) {
   } catch { return null }
 }
 
+/** Stage a file on the Chief session so prompt can use {type:'file', receiptId}. */
+async function stageFileReceipt(ctx, agent, item, log = () => {}) {
+  const uploads = svc(ctx, 'fileUploads')
+  if (!uploads || !agent) return null
+  try {
+    if (typeof uploads.upload === 'function') {
+      const out = await uploads.upload(agent, { data: item.b64, name: item.name }, AbortSignal.timeout(30_000))
+      return out?.receiptId || null
+    }
+  } catch (err) {
+    log(`[chat-media] fileUploads.upload failed: ${err?.message || err}`)
+  }
+  return null
+}
+
 /**
  * Build prompt content for sessionController.prompt.
  * @returns {Promise<{ content: object[], meta: object[], mode: 'native'|'text' }>}
  */
-export async function buildChatContent(ctx, { text, attachments = [] }, { preferNative = true } = {}) {
+export async function buildChatContent(ctx, { text, attachments = [], agent = null, log = () => {} } = {}, { preferNative = true } = {}) {
   const body = String(text || '').trim()
   const norm = normalizeAttachments(attachments)
   if (!norm.ok) throw Object.assign(new Error(norm.error), { code: 'ATTACH_INVALID' })
@@ -90,41 +109,42 @@ export async function buildChatContent(ctx, { text, attachments = [] }, { prefer
   const meta = items.map(it => ({ kind: it.kind, name: it.name, bytes: it.bytes, mediaType: it.mediaType || null }))
   if (!items.length) return { content: [{ type: 'text', text: body || '（空消息）' }], meta, mode: 'text' }
 
-  const store = attachmentsOf(ctx)
   const native = []
   const notes = []
   if (body) native.push({ type: 'text', text: body })
 
   for (const it of items) {
     if (it.kind === 'image') {
+      // Wire shape for sessionController.prompt — Host admitPromptContent persists bytes.
       if (preferNative) native.push({ type: 'image', mediaType: it.mediaType, data: it.b64, name: it.name })
-      notes.push(`图片「${it.name}」（${(it.bytes / 1024).toFixed(0)}KB）`)
+      notes.push(`图片「${it.name}」（${(it.bytes / 1024).toFixed(0)}KB，mediaType=${it.mediaType}）`)
     } else {
-      let ref = null
-      if (typeof store?.admitEncodedFile === 'function') {
-        try { ref = await store.admitEncodedFile({ data: it.b64, name: it.name }) } catch { /* fall through */ }
-      } else if (typeof store?.saveFile === 'function') {
-        try { ref = await store.saveFile({ data: it.buf, name: it.name }) } catch { /* */ }
-      }
-      if (ref && preferNative) native.push({ type: 'file', attachment: ref })
+      // dsh file parts require a staged receiptId (NOT a raw attachment ref).
+      let receiptId = null
+      if (preferNative) receiptId = await stageFileReceipt(ctx, agent, it, log)
+      if (receiptId) native.push({ type: 'file', receiptId })
       const extracted = extractText(it)
       if (extracted) notes.push(`文件「${it.name}」全文：\n\`\`\`\n${extracted}\n\`\`\``)
-      else notes.push(`文件「${it.name}」（${(it.bytes / 1024).toFixed(0)}KB${ref ? '，已存档' : ''}）`)
+      else notes.push(`文件「${it.name}」（${(it.bytes / 1024).toFixed(0)}KB${receiptId ? '，已上传' : '，仅作说明'}）`)
     }
   }
 
+  // Always keep attachment notes in the text part so text-only models (and failed
+  // file staging) still see filenames + extractable file bodies — never drop them.
+  const attachBlock = notes.length ? `【附件】\n${notes.join('\n\n')}` : ''
+  const textPart = [body, attachBlock].filter(Boolean).join('\n\n') || '请查看我附上的内容。'
+
   if (preferNative && items.some(i => i.kind === 'image' || i.kind === 'file')) {
-    // Ensure there is always a text anchor when only attachments were sent.
-    if (!native.some(p => p.type === 'text')) native.unshift({ type: 'text', text: body || `请查看我附上的：${notes.join('；')}` })
-    return { content: native, meta, mode: 'native' }
+    const withoutText = native.filter(p => p.type !== 'text')
+    return { content: [{ type: 'text', text: textPart }, ...withoutText], meta, mode: 'native' }
   }
 
-  const textBlock = [body, notes.length ? `【附件】\n${notes.join('\n\n')}` : ''].filter(Boolean).join('\n\n') || '（附件）'
-  return { content: [{ type: 'text', text: textBlock }], meta, mode: 'text' }
+  return { content: [{ type: 'text', text: textPart }], meta, mode: 'text' }
 }
 
-/** True when dsh rejected the prompt because the model cannot take images. */
+/** True when dsh rejected the prompt because of images/files/staging/model limits. */
 export function isImageModelError(err) {
   const s = String(err?.message || err || '')
-  return /does not support image|MODEL_DOES_NOT_SUPPORT_IMAGES|attachment-invalid|no vision|不能.*图/i.test(s)
+  const code = String(err?.data?.reason || err?.reason || err?.code || '')
+  return /does not support image|MODEL_DOES_NOT_SUPPORT_IMAGES|FILE_NOT_STAGED|File was not uploaded|attachment-invalid|ATTACHMENT_|no vision|不能.*图|UNSUPPORTED_IMAGE/i.test(`${s} ${code}`)
 }

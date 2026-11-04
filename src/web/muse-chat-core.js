@@ -134,14 +134,6 @@ export async function runMuseChatTurn(ctx, {
   T.outboundChars = outbound.length
 
   let built
-  try {
-    built = await buildChatContent(ctx, { text: outbound, attachments: hasAttach ? attachments : [] }, { preferNative: true })
-  } catch (err) {
-    return { ok: false, error: err.message || String(err) }
-  }
-  T.attachCount = built.meta.length
-  T.attachMode = built.mode
-
   const chief = await resolveChief(dshHome, botId)
   const promptTo = chief.botId
   let sessionId = chief.sessionId // where replies land; re-resolved while waiting (a handoff can happen mid-turn)
@@ -149,7 +141,15 @@ export async function runMuseChatTurn(ctx, {
   if (!ctx?.sessionController?.prompt) return { ok: false, error: 'sessionController missing' }
   try { onSession?.(sessionId); if (promptTo !== sessionId) onSession?.(promptTo) } catch {}
 
-  try { ensureSessionCompat((await liveAgent(ctx, sessionId))?.session, log) } catch {}
+  let agent = null
+  try { agent = await liveAgent(ctx, sessionId); ensureSessionCompat(agent?.session, log) } catch {}
+  try {
+    built = await buildChatContent(ctx, { text: outbound, attachments: hasAttach ? attachments : [], agent, log }, { preferNative: true })
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) }
+  }
+  T.attachCount = built.meta.length
+  T.attachMode = built.mode
   // Snapshot previous assistant text if page works.
   let before = ''
   try {
@@ -171,7 +171,7 @@ export async function runMuseChatTurn(ctx, {
   } catch (err) {
     if (built.mode === 'native' && isImageModelError(err) && hasAttach) {
       log(`[muse-chat] native attach refused (${err.message}); retrying as text`)
-      built = await buildChatContent(ctx, { text: outbound, attachments }, { preferNative: false })
+      built = await buildChatContent(ctx, { text: outbound, attachments, agent, log }, { preferNative: false })
       T.attachMode = 'text-fallback'
       await sendPrompt(built.content)
     } else {
@@ -272,6 +272,8 @@ export function summarizeTiming(T) {
     contextChars: T.contextChars ?? null,
     outboundChars: T.outboundChars ?? null,
     viewChars: T.viewChars ?? null,
+    attachCount: T.attachCount ?? 0,
+    attachMode: T.attachMode ?? null,
     beforeReadMs: T.beforeReadMs ?? null,
     promptAckMs: T.promptAckMs ?? null,
     queueToTurnStartMs: ms(T.promptAt, T.turnStartAt),

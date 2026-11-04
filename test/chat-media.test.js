@@ -40,6 +40,15 @@ test('buildChatContent: text-only; native images when preferNative; text fallbac
   assert.match(f.content[0].text, /note\.txt/)
 })
 
+test('native mode still embeds extractable file text (never drop)', async () => {
+  const txt = Buffer.from('ODM-FILE-7731 unique', 'utf8').toString('base64')
+  const f = await buildChatContent({}, { text: '看文件', attachments: [{ kind: 'file', name: 'note.txt', data: txt }] }, { preferNative: true })
+  assert.equal(f.mode, 'native')
+  const textPart = f.content.find(p => p.type === 'text')
+  assert.match(textPart.text, /ODM-FILE-7731/)
+  assert.match(textPart.text, /note\.txt/)
+})
+
 test('isImageModelError detects dsh refusal', () => {
   assert.equal(isImageModelError(new Error('Model "deepseek-chat" does not support image input.')), true)
   assert.equal(isImageModelError(new Error('boom')), false)

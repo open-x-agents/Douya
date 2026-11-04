@@ -29,8 +29,8 @@ export function isAfterHours({ now = Date.now(), hour = null } = {}) {
 export function doneToday({ completions = [], itemStatus = {}, pendingActions = {}, now = Date.now() } = {}) {
   const day = shDay(now)
   const today = at => { const t = Date.parse(at || ''); return Number.isFinite(t) && shDay(t) === day }
-  const cards = (completions || []).filter(c => c && c.action === 'done' && c.kind !== 'item' && today(c.at))
-  const items = Object.entries(itemStatus || {}).filter(([, v]) => v && v.status === 'done' && v.by !== 'system' && today(v.at))
+  const cards = (completions || []).filter(c => c && c.action === 'done' && c.kind !== 'item' && c.by !== 'action' && today(c.at))
+  const items = Object.entries(itemStatus || {}).filter(([, v]) => v && v.status === 'done' && v.by !== 'system' && v.by !== 'action' && today(v.at))
   const acts = Object.values(pendingActions || {}).filter(a => a && a.status === 'executed' && !a.undoneAt && today(a.executedAt))
   const count = cards.length + items.length + acts.length
   if (!count) return null

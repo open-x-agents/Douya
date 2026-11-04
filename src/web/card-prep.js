@@ -41,7 +41,8 @@ export function prepareCardActions(card, { itemStatus = {}, max = 2 } = {}) {
   // Fully processed cards get no CTAs (they should be swept to done); don't offer 明天再看 either.
   if (!open.length && cardLinks(card).length) return []
   const ref = `（卡片「${clip(card.title, 30)}」，id ${card.id}）`
-  if (card.type === 'email-group') {
+  // A single actionable mail (email-action) gets the same help as the 需要你处理 group: a reply draft first.
+  if (card.type === 'email-group' || card.type === 'email-action') {
     const mails = open.filter(l => linkType(l) === 'email')
     // Only the 'action' group (a person asking you something) gets a reply draft; code / security / updates are machine mail.
     const machineGroup = ['code', 'security', 'updates', 'social', 'promo'].includes(card.metadata?.group)
@@ -69,7 +70,7 @@ export function prepareCardActions(card, { itemStatus = {}, max = 2 } = {}) {
     const issue = open.find(l => linkType(l) === 'issue')
     if (review) {
       out.push({ id: 'review-brief', kind: 'ask', label: `帮我看 #${prNum(review.url)} 改了什么`, hint: '豆芽读改动，给要点和评审意见草稿',
-        prompt: `帮我看一下 PR「${clip(review.title, 60)}」${review.url} 改了什么、有没有要我拍板的地方，最后给一段评审意见草稿（先别提交）${ref}。` })
+        prompt: `帮我看一下 PR「${clip(review.title, 60)}」${review.url}：先一句话结论（能不能批 / 要不要改），再说改了什么、有没有要我拍板的地方，最后给一段评审意见草稿（先别提交）${ref}。` })
     }
     if (mine && card.waiting !== 'you') {
       const n = prNum(mine.url)
@@ -202,7 +203,9 @@ export function pickNextThing({ cards = [], itemStatus = {}, doneBlocks = [], no
   const blk = blocks.find(b => b.s <= t) || blocks[0]
   if (blk) {
     const live = blk.s <= t
-    return { kind: 'block', title: clip(blk.title, 60), why: `${live ? '现在' : '接下来'} ${hm(blk.s)}–${hm(blk.e)}`, at: hm(blk.s), endsAt: hm(blk.e), live, blockKey: blockDoneKey(blk, now),
+    // The card this block was planned for (still open) — the hero shows its prepared brief inline.
+    const blockCard = (blk.cardIds || []).map(id => work.find(c => c.id === id)).find(Boolean) || null
+    return { kind: 'block', ...(blockCard ? { cardId: blockCard.id } : {}), title: clip(blk.title, 60), why: `${live ? '现在' : '接下来'} ${hm(blk.s)}–${hm(blk.e)}`, at: hm(blk.s), endsAt: hm(blk.e), live, blockKey: blockDoneKey(blk, now),
       buttons: [{ kind: 'blockdone', label: '完成了', blockKey: blockDoneKey(blk, now), title: clip(blk.title, 60) }, { kind: 'timetable', label: '看安排' }, { kind: 'ask', label: '交给豆芽', prompt: `我${live ? '现在' : '接下来'}要做「${clip(blk.title, 40)}」（${hm(blk.s)}–${hm(blk.e)}），帮我列一个马上能开始的三步清单。` }], upcoming }
   }
   if (remaining.length) {

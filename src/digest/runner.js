@@ -97,7 +97,11 @@ function sourcePrompt(channel, { prefs, memory, now, existing = [] }) {
 2. 需要细节时可以用本渠道只读工具（${c.readTools.join('、')}）；不要做任何写操作、不要发消息。
 3. 调 odm_digest_propose，cards 是 JSON 数组，每张：{"title","category","needsAction":bool,"priority":"high|medium|low","nextStep","summary","items":["${c.letter}1",{"ref":"${c.letter}2","status":"needs-you|waiting|fyi"}]}
    - items 只能填快照里的 ref，不能编链接；同一个 ref 只出现一次；没人需要看的条目可以不放。
-   - title ≤ 30 字，summary 一两句具体说明（谁、什么事、为什么现在），nextStep 是可直接做的下一步。
+   - title ≤ 30 字，summary 一两句：谁、什么事、为什么是现在（截止/有人卡在等你/CI 挂了），以及是等你还是等别人。
+   - nextStep 是一个可直接做的动作：动词 + 具体对象（「回复 张三：确认周五上线」「先审 #123：看 auth 改动」）；禁止「查看详情」「处理一下」「看一眼」「忽略或归档」这类空话。
+   - PR/issue 编号只能抄快照里的 num 字段，绝不凭记忆写编号；快照里没有的数字（条数、分数、日期）不要写。
+   - 已合并 / 已关闭 / 已回复、没有新进展的条目不要放进卡里；纯通知、没人等你的，needsAction=false。
+   - 你的 PR 在等别人 review、你在等对方回复的条目，status 填 "waiting"（卡会归到「等别人」）；要你动手的填 "needs-you"。
    - 每张必须带 "target"：今天页已有同一件事的卡就填 "update:<卡片id>"（在原卡上更新），确实是新的事才填 "new"。不要为已有的仓库/频道/邮件类别再开新卡。
    - 工具返回 errors 时按提示修正后重新调用一次。
    - ${facePrompt().split('\n').join('\n     ')}
@@ -153,7 +157,7 @@ ${chiefMemory ? `\n你的长期记忆（关于用户）：\n${clip(chiefMemory, 
 要做的：
 0. 规则：今天页不能有两张讲同一件事的卡。target=update:<id> 的候选会更新那张原卡；target=new 的才会新建。
 1. 去重 / 跨渠道合并：同一件事在多个渠道（GitHub 通知邮件 + 对应 PR 卡；Slack 里讨论某个 PR）→ merges:[{"into":"github:0","from":["gmail:3"],"reason":"同一 PR"}]。只合并确实是同一件事的；into 填工作本身那张（GitHub/Slack 卡），from 填通知邮件。
-2. 排优先级：cards:[{"id","priority":"urgent|high|medium|low","nextStep"?,"title"?}]，按重要性从高到低列出（不列的保持原样）。促销/社交类保持 low。
+2. 排优先级：cards:[{"id","priority":"urgent|high|medium|low","nextStep"?,"title"?}]，按重要性从高到低列出（不列的保持原样）。先排「有人卡在等你 / 有截止 / CI 挂了」的，再排普通待办；促销/社交类保持 low。改写 nextStep 时只能用候选卡里出现过的编号，必须是动词+具体对象。
 3. 今天的标题 headline（≤20 字）和 narrative（一两句：今天最该先做什么，基于真实候选卡）。
 4. timeline：今天剩余时间的建议安排 3~6 段 [{"start":"HH:MM","end":"HH:MM","title","category":"focus|work|review|meeting|break|admin|personal"}]，从现在之后开始。
 然后调用一次 odm_digest_commit，参数 plan 是上述 JSON 对象（字符串）。返回 errors 时修正后重试一次。最后回复一行：已提交。`

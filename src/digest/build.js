@@ -10,6 +10,25 @@ const PRI = new Set(['urgent', 'high', 'medium', 'low'])
 const RANK = { github: 0, slack: 1, gmail: 2 }
 const parse = v => { if (typeof v !== 'string') return v; try { return JSON.parse(v) } catch { return null } }
 
+// ===== Grounding: every #123 a card mentions must be one of its own items (url number or a number in its title) =====
+const NUM_RE = /#(\d{1,6})\b/g
+export const numsIn = text => [...String(text || '').matchAll(NUM_RE)].map(m => m[1])
+/** Numbers a card may cite: PR/issue numbers from its item urls, plus #N written in item titles / snippets. */
+export function allowedNums(items = []) {
+  const out = new Set()
+  for (const it of items) {
+    if (!it) continue
+    const n = (String(it.url || '').match(/\/(?:pull|issues)\/(\d+)/) || [])[1]; if (n) out.add(n)
+    for (const x of numsIn(`${it.title || ''} ${it.body || ''} ${it.metadata?.snippet?.body || it.metadata?.snippet || ''} ${it.metadata?.text || ''}`)) out.add(x)
+  }
+  return out
+}
+/** #N in `text` that are not in `allowed` (invented / misremembered numbers). */
+export const ungroundedNums = (text, allowed) => [...new Set(numsIn(text))].filter(n => !allowed.has(n))
+// Next steps that tell the user nothing ("查看详情", "处理一下", "忽略或归档" …) — must be verb + concrete object.
+const VAGUE_NEXT = /^(?:请|先|再)?(?:查看(?:详情|一下)?|看(?:一下|一眼|看)|处理(?:一下)?|跟进(?:一下)?|关注(?:一下)?|了解(?:一下)?|忽略(?:或归档)?|归档|知悉|无需处理|待定)[。.！!]?$/
+export const isVagueNext = s => { const t = String(s || '').replace(/\s+/g, ''); return !t || t.length < 5 || VAGUE_NEXT.test(t) }
+
 /**
  * Validate a source bot's proposal against its snapshot. Unknown refs (invented links) and items the user already
  * completed are dropped; candidates left with no real item are rejected.
@@ -38,9 +57,20 @@ export function validateCandidates(channel, raw, snapshot) {
     const mine = new Set(refs.map(r => r.ref))
     const fv = validateFace(x.face, { resolve: r => (mine.has(String(r)) && snapshot.byRef.get(String(r)) ? linkOf(snapshot.byRef.get(String(r))).url : null), by: 'bot' })
     fv.errors.forEach(e => errors.push(`#${i} ${e}`))
+    const allowed = allowedNums(refs.map(r => snapshot.byRef.get(r.ref)))
+    let title = clip(x.title, 60), summary = clip(x.summary, 160), nextStep = clip(x.nextStep, 90)
+    const bad = ungroundedNums(`${title} ${summary} ${nextStep}`, allowed)
+    if (bad.length) {
+      errors.push(`#${i}「${clip(x.title, 30)}」写了 ${bad.map(n => '#' + n).join('/')}，但它的条目里只有 ${[...allowed].map(n => '#' + n).join('/') || '（无编号）'}——编号只能抄快照的 num，不要凭记忆写`)
+      // Never ship a wrong number: drop the text that carries it (the card falls back to text built from real items).
+      if (ungroundedNums(title, allowed).length) title = ''
+      if (ungroundedNums(summary, allowed).length) summary = ''
+      if (ungroundedNums(nextStep, allowed).length) nextStep = ''
+    }
+    if (nextStep && isVagueNext(nextStep)) errors.push(`#${i}「${clip(x.title, 30)}」nextStep「${nextStep}」太空泛，要写动词+具体对象（如「回复 X：确认 Y」「先审 #N：看 Z」）`)
     out.push({
       id: `${channel}:${out.length}`, channel, category,
-      title: clip(x.title, 60), summary: clip(x.summary, 160), nextStep: clip(x.nextStep, 90),
+      title, summary, nextStep, nums: [...allowed],
       needsAction: !!x.needsAction, priority: PRI.has(x.priority) ? x.priority : (x.needsAction ? 'high' : 'low'),
       items: refs,
       target: /^update:\S+$/.test(String(x.target || '')) ? String(x.target) : 'new',
@@ -79,7 +109,17 @@ export function validatePlan(raw, candidates) {
     merges.push({ into: target, from, reason: clip(m.reason, 80) })
   }
   const edits = new Map()
-  for (const e of Array.isArray(p.cards) ? p.cards : []) if (ids.has(String(e?.id))) edits.set(String(e.id), { priority: PRI.has(e.priority) ? e.priority : undefined, nextStep: e.nextStep ? clip(e.nextStep, 90) : undefined, title: e.title ? clip(e.title, 60) : undefined, rank: edits.size })
+  const candOf = new Map(candidates.map(c => [c.id, c]))
+  for (const e of Array.isArray(p.cards) ? p.cards : []) {
+    if (!ids.has(String(e?.id))) continue
+    const allowed = new Set(candOf.get(String(e.id))?.nums || [])
+    let nextStep = e.nextStep ? clip(e.nextStep, 90) : undefined, title = e.title ? clip(e.title, 60) : undefined
+    for (const [k, v] of [['nextStep', nextStep], ['title', title]]) {
+      const bad = v ? ungroundedNums(v, allowed) : []
+      if (bad.length) { errors.push(`cards ${e.id} 的 ${k} 写了 ${bad.map(n => '#' + n).join('/')}，不在该卡条目里，已忽略`); if (k === 'nextStep') nextStep = undefined; else title = undefined }
+    }
+    edits.set(String(e.id), { priority: PRI.has(e.priority) ? e.priority : undefined, nextStep, title, rank: edits.size })
+  }
   const hhmm = s => /^([01]?\d|2[0-3]):[0-5]\d$/.test(String(s || '')) ? String(s).padStart(5, '0') : null
   const timeline = (Array.isArray(p.timeline) ? p.timeline : []).map(b => ({ start: hhmm(b?.start), end: hhmm(b?.end), title: clip(b?.title, 40), category: ['focus', 'work', 'break', 'meeting', 'personal', 'review', 'admin'].includes(b?.category) ? b.category : 'work' }))
     .filter(b => b.start && b.end && b.title && b.start < b.end).slice(0, 8)
@@ -109,7 +149,8 @@ function overlay(card, cand, edit) {
   const next = edit?.nextStep || cand.nextStep
   if (next) card.nextAction = next
   card.priority = edit?.priority || cand.priority || card.priority
-  card.waiting = needs ? 'you' : (card.waiting === 'you' ? 'fyi' : card.waiting || 'fyi')
+  const waitingOthers = !needs && (cand.items || []).some(r => r.status === 'waiting')
+  card.waiting = needs ? 'you' : waitingOthers ? 'others' : (card.waiting === 'you' ? 'fyi' : card.waiting || 'fyi')
   card.metadata = { ...(card.metadata || {}), needsAction: needs, digest: 'bot', candidate: cand.id, rank: edit?.rank, target: cand.target }
   if (card.type !== 'email-group' && (edit?.title || cand.title)) card.title = edit?.title || cand.title
   if (cand.face) card.face = { ...cand.face, at: new Date().toISOString() }

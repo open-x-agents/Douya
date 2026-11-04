@@ -168,7 +168,7 @@ async function runLabels(client, spec) {
 /**
  * @param {{ store, getClient: () => any, log?: Function }} deps
  */
-export function createActionService({ store, getClient, log = () => {} }) {
+export function createActionService({ store, getClient, log = () => {}, onOutcome = null }) {
   const save = async mutate => { const state = store.get(); mutate(state); await store.save(state); return state }
   const pub = a => a && ({ prepId: a.prepId || null, id: a.id, action: a.action, risk: a.risk, status: a.status, summary: a.summary, preview: a.preview || null, cardId: a.cardId || null, createdAt: a.createdAt, executedAt: a.executedAt || null, undoneAt: a.undoneAt || null, error: a.error || null, note: a.note || null, canUndo: !!a.undo && a.status === 'executed' })
   const ledger = (state, a, verb) => {
@@ -215,7 +215,7 @@ export function createActionService({ store, getClient, log = () => {} }) {
       } catch (e) {
         Object.assign(a, { status: 'failed', error: clip(e.message, 300) })
       }
-      await save(s => { s.pendingActions = { ...(s.pendingActions || {}), [a.id]: a }; if (a.status === 'executed') ledger(s, a, 'executed') })
+      await save(s => { s.pendingActions = { ...(s.pendingActions || {}), [a.id]: a }; if (a.status === 'executed') { ledger(s, a, 'executed'); try { onOutcome?.(s, a, { chat: false }) } catch (e) { log(`[actions] outcome ${e.message}`) } } })
       log(`[actions] ${a.status} ${a.id} ${action}`)
       return a.status === 'executed' ? { success: true, executed: true, actionId: a.id, summary, note: a.note || '已执行，用户可在豆芽里撤销' } : { success: false, actionId: a.id, error: a.error }
     },
@@ -245,8 +245,15 @@ export function createActionService({ store, getClient, log = () => {} }) {
           const r = await execute(next)
           Object.assign(next, { status: 'executed', executedAt: new Date().toISOString(), args: r.args, undo: r.undo, result: clip(JSON.stringify(r.res?.data ?? r.res ?? {}), 600) })
         } catch (e) { Object.assign(next, { status: 'failed', error: clip(e.message, 300) }) }
-        await save(s => { s.pendingActions[id] = next; if (next.status === 'executed') ledger(s, next, 'executed') })
-        return { success: next.status === 'executed', action: pub(next), error: next.error || undefined }
+        let outcome = null
+        await save(s => {
+          if (next.status === 'executed') ledger(s, next, 'executed')
+          try { outcome = onOutcome?.(s, next, { chat: true }) || null } catch (e) { log(`[actions] outcome ${e.message}`) }
+          // A failed send stays pending (with its reason) so the user can fix and retry — never silently dropped.
+          s.pendingActions[id] = next.status === 'failed' ? { ...next, status: 'pending', failedAt: new Date().toISOString() } : next
+        })
+        const saved = store.get().pendingActions[id]
+        return { success: next.status === 'executed', action: pub(saved), error: next.error || undefined, outcome: outcome && { text: outcome.text, key: outcome.key, marked: outcome.marked.length, cardDone: outcome.cardDone } }
       }
       if (op === 'undo') {
         if (a.status !== 'executed' || !a.undo) return { success: false, error: '这个操作不能撤销', action: pub(a) }

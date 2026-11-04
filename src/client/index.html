@@ -418,6 +418,8 @@
     transition:.2s;
   }
   .tile-zoom-close:hover{background:var(--line)}
+  .act-sys{margin:6px 0 10px;padding:6px 10px;border-radius:10px;font-size:12.5px;line-height:1.5;color:#2f6b45;background:rgba(80,170,110,.10)}
+  .act-sys.bad{color:#a2412c;background:rgba(220,90,60,.10)}
   
   .tile-zoom-header{
     margin-bottom:24px;
@@ -1643,6 +1645,8 @@
   .qa-bar button:active{transform:scale(.96)}
   .qa-bar button[data-qa="done"]:hover{background:rgba(43,179,138,.14);color:var(--teal)}
   .qa-bar button[data-qa="snooze"]:hover{background:rgba(107,123,184,.14);color:#4e5d96}
+  .qa-bar button[data-qa="useless"]{color:var(--ink3)}
+  .qa-bar button[data-qa="useless"]:hover{background:rgba(0,0,0,.05);color:var(--ink2)}
   @media (hover:hover) and (pointer:fine){
     .tile.work.swipeable:hover .qa-bar,.tile.work.swipeable:focus-within .qa-bar{display:flex;flex-wrap:wrap}
   }
@@ -1804,6 +1808,14 @@
     .today-chat.open:not(.in-zoom) .today-chat-msgs{min-height:min(52vh,calc(var(--dock-fit,100vh) - 64px))}
   }
   @media (max-height:640px){#v-today .today-chat.open:not(.in-zoom){padding-top:12px}}
+  .brief{margin:0 0 16px;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.72);border:1px solid rgba(0,0,0,.06)}
+  .brief.compact{margin:0;padding:10px 12px;background:rgba(255,255,255,.55)}
+  .brief-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:12px;color:var(--ink3);margin-bottom:6px}
+  .brief-h span{font-weight:600;color:var(--ink2)}.brief-h a{color:inherit}
+  .brief dl{margin:0;display:grid;gap:4px}.brief dl>div{display:grid;grid-template-columns:3.2em minmax(0,1fr);gap:8px;font-size:13px;line-height:1.5}
+  .brief dt{color:var(--ink3)}.brief dd{margin:0;color:var(--ink)}
+  .brief-next{margin:8px 0 0;font-size:13px;font-weight:600;color:var(--ink)}
+  .brief-acts{margin-top:8px;display:flex;gap:8px}
   .nx.leaving{opacity:0;transform:translateY(-6px);transition:opacity .22s var(--ease),transform .22s var(--ease)}
 </style>
 </head>
@@ -3164,7 +3176,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const actsHtml = primary
       ? `<div class="w-acts">${stepBtnHtml(primary, 0, 'primary')}${secondary.length ? `<details class="w-more"><summary>更多</summary>${secondary.map((p, i) => stepBtnHtml(p, i + 1, '')).join('')}</details>` : ''}</div>`
       : '';
-    const qa = waitingOnly ? '' : `<div class="qa-bar" aria-label="快捷操作"><button type="button" data-qa="done" title="完成 · C">完成<span class="kbd">C</span></button><button type="button" data-qa="snooze" title="推迟 · S">推迟<span class="kbd">S</span></button><button type="button" data-qa="ask" title="交给豆芽 · E 打开后说">交给豆芽</button></div>`;
+    const qa = waitingOnly ? '' : `<div class="qa-bar" aria-label="快捷操作"><button type="button" data-qa="done" title="完成 · C">完成<span class="kbd">C</span></button><button type="button" data-qa="snooze" title="推迟 · S">推迟<span class="kbd">S</span></button><button type="button" data-qa="ask" title="交给豆芽 · E 打开后说">交给豆芽</button><button type="button" data-qa="useless" class="qa-useless" title="没用：收起这张，以后同类放低">没用</button></div>`;
     const rails = waitingOnly ? '' : `<div class="swipe-rails" role="group" aria-label="滑动快捷操作"><div class="swipe-rail left"><button type="button" data-qa="done" aria-label="完成这张卡">完成</button><button type="button" data-qa="snooze" aria-label="推迟这张卡">推迟</button></div><div class="swipe-rail right"><button type="button" data-qa="ask" aria-label="交给豆芽处理">交给豆芽</button></div></div>`;
     return `
       <article class="tile work swipeable ${big ? 'size-wide' : 'size-normal'}${waitingOnly ? ' waiting-only' : ''}${hasFace ? ' has-face' : ''}" data-idx="${idx}">
@@ -3353,6 +3365,18 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (qa === 'done') return runQuickDone(card);
     if (qa === 'snooze') return openSnoozeSheet(card);
     if (qa === 'ask') return runQuickAsk(card);
+    if (qa === 'useless') return runQuickUseless(card);
+  }
+  /** 「没用」: hide the card and teach the next digest to rank this kind of thing low (undo removes the preference). */
+  async function runQuickUseless(card) {
+    if (!card || !card.id) return;
+    const post = body => fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(x => x.json()).catch(() => ({}));
+    const r = await post({ id: card.id, action: 'not-useful' });
+    if (!r.success) { showUiToast(r.error || '没标上'); return; }
+    const tile = document.querySelector(`.tile.work[data-id="${CSS.escape(card.id)}"]`);
+    if (tile) { tile.classList.add('leaving'); await sleep(280); }
+    showUiToast('收起了，以后同类会放低', null, { label: '撤销', onClick: async () => { await post({ id: card.id, action: 'undo-not-useful', itemTitle: r.prefId || '' }); loadToday({ force: true }); } });
+    loadToday({ force: true }).catch(() => {});
   }
   function resetSwipe(tile) {
     if (!tile) return;
@@ -3695,6 +3719,34 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       slot.appendChild(el);
     }
   }
+  // ===== Prepared brief (real GitHub data: size, areas, CI, review, risk) on the hero and in the card =====
+  const briefMemo = new Map(); // cardId -> { at, r }
+  function briefAskPrompt(card, b) {
+    const facts = b.lines.map(l => `${l.k}：${l.v}`).join('；');
+    return b.mine
+      ? `我的 PR #${b.number}「${b.title}」${b.url}。已知：${facts}。先一句话告诉我结论（能不能合 / 卡在哪），再给我下一步；需要催人或回复就起草好给我确认，别直接发（卡片 id ${card.id}）。`
+      : `帮我审 PR #${b.number}「${b.title}」${b.url}。已知：${facts}。先一句话结论（能不能批、要不要改），再列 2–3 个最该看的点，最后给一段评审意见草稿，等我确认再提交（卡片 id ${card.id}）。`;
+  }
+  async function mountBrief(slot, card, { compact = false, live = () => true } = {}) {
+    if (!slot || !card || !card.id || card.source !== 'github') return;
+    let m = briefMemo.get(card.id);
+    if (!m || Date.now() - m.at > 5 * 60e3) {
+      const r = await fetch('/api/opendigitalmate/card-brief', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardId: card.id }) }).then(x => x.json()).catch(() => null);
+      m = { at: Date.now(), r }; briefMemo.set(card.id, m);
+    }
+    const b = m.r && m.r.success && m.r.brief;
+    if (!b || !live() || !slot.isConnected) return;
+    const rows = (compact ? b.lines.filter(l => l.k !== '作者说').slice(0, 2) : b.lines);
+    const label = b.mine ? '让豆芽推进' : '起草评审意见';
+    slot.innerHTML = `<div class="brief${compact ? ' compact' : ''}"><div class="brief-h"><span>豆芽已备好 · <a href="${escapeHtml(b.url || '')}" target="_blank" rel="noopener">#${escapeHtml(String(b.number))}</a></span><small>来自 GitHub · ${escapeHtml(chatTime(b.at))}</small></div>`
+      + `<dl>${rows.map(l => `<div><dt>${escapeHtml(l.k)}</dt><dd>${escapeHtml(l.v)}</dd></div>`).join('')}</dl>`
+      + `<p class="brief-next">→ ${escapeHtml(b.next)}</p>`
+      + (b.resolved ? '' : `<div class="brief-acts"><button type="button" class="step k-ask" data-brief-ask><i class="st-ic">✦</i>${label}</button></div>`) + '</div>';
+    const ask = slot.querySelector('[data-brief-ask]');
+    if (ask) ask.addEventListener('click', e => { e.stopPropagation(); runStep({ kind: 'ask', label, prompt: briefAskPrompt(card, b), cardId: card.id }, { card }); });
+    if (b.resolved && m.r.autoResolved) loadToday({ force: true }).catch(() => {});
+  }
+
   /** Hero 「完成了」: record the block done, slide the hero out, re-render with the next block. Undo puts it back. */
   async function markBlockDone(step, btn) {
     const post = done => fetch('/api/opendigitalmate/timetable-block', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockKey: step.blockKey, done }) }).then(x => x.json()).catch(e => ({ success: false, error: e.message }));
@@ -4019,6 +4071,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     }
     const nxEl = container.querySelector('.nx');
     if (nxEl && nx) bindSteps(nxEl, nx.buttons || [], nx.cardId ? cards.find(c => c.id === nx.cardId) : null);
+    if (nxEl && nx && (nx.kind === 'card' || nx.kind === 'block') && nx.cardId) mountBrief(nxEl.querySelector('.nx-slot'), cards.find(c => c.id === nx.cardId), { compact: true });
     const mt = $('dayMoreToggle');
     if (mt) mt.addEventListener('click', () => {
       const open = !$('dayMore').classList.contains('open');
@@ -4944,6 +4997,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   // ---- Composio action cards: pending → 确认执行 / 取消 (only a click executes); executed → 撤销.
   const actionsApi = body => fetch('/api/opendigitalmate/actions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()).catch(e => ({ success: false, error: e.message }));
   const ACT_STATUS = { pending: '待你确认', running: '执行中…', executed: '已执行', failed: '执行失败', cancelled: '已取消', undone: '已撤销' };
+  function actSysLine(text, ok) {
+    const d = document.createElement('div');
+    d.className = `act-sys ${ok ? 'ok' : 'bad'}`;
+    d.textContent = text;
+    return d;
+  }
   function actionCardEl(a) {
     const el = document.createElement('div');
     el.className = `act-card act-${a.status}`;
@@ -4953,7 +5012,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const btns = a.status === 'pending'
       ? '<div class="act-btns"><button class="act-go" data-op="confirm">确认执行</button><button class="act-no" data-op="cancel">取消</button></div>'
       : a.canUndo ? '<div class="act-btns"><button class="act-no" data-op="undo">撤销</button></div>' : '';
-    el.innerHTML = `<div class="act-h"><span class="act-st">${ACT_STATUS[a.status] || a.status}</span><b>${escMd(a.summary || a.action)}</b></div>${prev}${a.error ? `<div class="act-err">${escMd(a.error)}</div>` : ''}${a.note && a.status === 'executed' ? `<div class="act-note">${escMd(a.note)}</div>` : ''}${btns}`;
+    el.innerHTML = `<div class="act-h"><span class="act-st">${a.status === 'pending' && a.error ? (/reply|send/.test(a.action || '') ? '发送失败' : '执行失败') : (ACT_STATUS[a.status] || a.status)}</span><b>${escMd(a.summary || a.action)}</b></div>${prev}${a.error ? `<div class="act-err">${escMd(a.error)}</div>` : ''}${a.note && a.status === 'executed' ? `<div class="act-note">${escMd(a.note)}</div>` : ''}${btns}`;
     el.querySelectorAll('button[data-op]').forEach(b => {
       b.onclick = async () => {
         el.querySelectorAll('button').forEach(x => { x.disabled = true; });
@@ -4961,7 +5020,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         const r = await actionsApi({ op: b.dataset.op, id: a.id });
         const next = r.action || { ...a, error: r.error || '操作失败' };
         if (!r.success && r.error) next.error = r.error;
-        el.replaceWith(actionCardEl(next));
+        const fresh = actionCardEl(next);
+        el.replaceWith(fresh);
+        // The rest of 豆芽 learns the outcome at once: a 「已发送 · HH:MM」 line in this chat (the
+        // server also saved it into the card's transcript and marked the item handled).
+        if (r.outcome && r.outcome.text) fresh.after(actSysLine(r.outcome.text, r.success));
         loadToday().catch(() => {});
       };
     });
@@ -5612,6 +5675,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     setChatContext(card);
     borrowChat($('zChatHost'));
     if (!isTT && (card.prepared || []).length) bindSteps($('zLeft'), card.prepared, card);
+    if (!isTT) { const zn = $('zLeft').querySelector('.z-next'); if (zn) { const slot = document.createElement('div'); slot.className = 'z-brief-slot'; zn.after(slot); mountBrief(slot, card, { live }); } }
     actionsApi({ op: 'list' }).then(r2 => { if (!live()) return; const slot = $('zLeft') && $('zLeft').querySelector('.z-slot'); (r2.actions || []).filter(a => a.status === 'pending' && a.cardId === card.id).reverse().forEach(a => { const el = actionCardEl(a); el.classList.add('on-card'); (slot || $('zLeft')).appendChild(el); }); });
     cardChatApi(chatCtx.key, { op: 'get' }).then(d => {
       if (!live() || !Array.isArray(d.messages) || !d.messages.length) return;

@@ -74,7 +74,7 @@ export function cardSnapshotText(card, itemStatus = {}, { maxItems = 12, textCha
   const acts = relatedActions(card, actions)
   if (acts.length) {
     lines.push('与这张卡相关的操作（以此为准）：')
-    for (const a of acts) lines.push(`- ${cut(a.summary || a.action, 90)} — ${ACTION_ZH[a.status] || a.status}${a.executedAt ? `（${fmtSh(a.executedAt)}）` : ''}`)
+    for (const a of acts) lines.push(`- ${cut(a.summary || a.action, 90)} — ${ACTION_ZH[a.status] || a.status}${a.executedAt ? `（${fmtSh(a.executedAt)}）` : ''}${a.status === 'executed' && !a.undoneAt ? '——用户已确认、已经发出/做完；别再说它还没发或待确认' : a.status === 'pending' && a.error ? `——上次执行失败：${cut(a.error, 80)}，仍待用户重新确认` : ''}`)
   }
   lines.push('（这是此刻卡片的完整快照；条目详情直接引用这里，需要全文用 odm_current_card。）')
   let text = lines.join('\n')

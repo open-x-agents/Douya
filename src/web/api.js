@@ -17,6 +17,8 @@ import { cardSnapshotText, cardFull } from './card-snapshot.js';
 import { createUiService } from '../ui/service.js';
 import { createChatDisplay, attachmentMeta } from './chat-display.js';
 import { callbackUrlFor, callbackPage } from './composio-callback.js';
+import { applyActionOutcome } from './action-effects.js';
+import { briefTarget, fetchPrBrief } from './card-brief.js';
 import { prepareCardActions, pickNextThing, daySummaryLine, tomorrowMorning, snoozeUntilFor } from './card-prep.js';
 import { hydrateFace, autoFace } from '../ui/face.js';
 import { isAfterHours, isWorkish, doneToday, greetingLine, shHour } from './day-pulse.js';
@@ -577,6 +579,20 @@ function parseResponseToCards(text) {
   };
 }
 
+/** Digest preference written when the user marks a card 「没用」: names the kind of thing, not the one item. */
+export function notUsefulPref(card = {}) {
+  const channel = ['gmail', 'github', 'slack'].includes(card.source) ? card.source : null
+  const t = String(card.title || '').replace(/\s+/g, ' ').trim().slice(0, 30)
+  const group = card.metadata?.group
+  const GROUP = { updates: '服务与通知类邮件', social: '社交通知邮件', promo: '促销与订阅邮件', code: 'CI 与代码通知邮件', security: '账号与安全通知邮件', action: '需要处理类邮件' }
+  let what
+  if (card.type === 'email-group' && GROUP[group]) what = GROUP[group]
+  else if (card.source === 'github') what = `「${(card.metadata?.repository || t)}」这类仓库动态`
+  else if (card.source === 'slack') what = `「${t}」这类 Slack 频道消息`
+  else what = `「${t}」这类内容`
+  return { channel, text: `用户把「${t}」标成没用：${what}以后 priority 放 low、不单独出卡，除非有人点名等用户处理` }
+}
+
 export function createApiRouter(ctx) {
   const { store, config, configStore } = ctx;
   const llmCtx = ctx.llmCtx || ctx.ctx;
@@ -682,7 +698,7 @@ export function createApiRouter(ctx) {
 
 
   // Composio write actions: reversible run now, outgoing ones wait for the user's 确认执行.
-  const actionService = createActionService({ store, getClient: () => getComposioClient(), log: m => console.log(m) });
+  const actionService = createActionService({ store, getClient: () => getComposioClient(), log: m => console.log(m), onOutcome: (st, a, o) => applyActionOutcome(st, a, o) });
 
   // 豆芽 Intelligent UI P1: declarative view ops (open / highlight / filter / arrange / navigate) + 当前视图.
   const uiService = createUiService({ store, log: m => console.log(m) });
@@ -774,6 +790,39 @@ export function createApiRouter(ctx) {
      * (the client only names it), so targets can't be forged. act → a PENDING action held for 确认执行;
      * snooze → hidden until tomorrow 09:00. 'ask' steps go through the chat, not here.
      */
+    /**
+     * Prepared help for one card (real source data, no model): today a PR brief — size, areas, CI, review, risk,
+     * one concrete next move. Cached per PR for 20 minutes; a resolved (merged/closed) PR is reported so the UI can move it out.
+     */
+    async cardBrief({ cardId, refresh = false } = {}) {
+      const state = store.get();
+      const card = (state.cards || []).find(c => c.id === cardId);
+      if (!card) return { success: false, error: '这张卡已经不在了' };
+      const target = briefTarget(card, state.itemStatus || {});
+      if (!target) return { success: true, brief: null };
+      const cache = state.cardBriefs || {};
+      const hit = cache[target.url];
+      if (!refresh && hit && Date.now() - Date.parse(hit.at || 0) < 20 * 60e3) return { success: true, brief: hit, cached: true };
+      const client = getComposioClient();
+      if (!client) return { success: false, error: 'GitHub 还没连上' };
+      const brief = await fetchPrBrief(client, target);
+      if (!brief || brief.error) return { success: false, error: brief?.error || '拿不到这个 PR' };
+      // Source says merged / closed → that item is finished; tick it (by system) so the card clears like any done item.
+      let autoResolved = false;
+      const st = store.get(); // re-read: the fetch took a while
+      const live = (st.cards || []).find(c => c.id === cardId);
+      if (brief.resolved && live && !(st.itemStatus || {})[target.url]) {
+        setItemStatus(st, { card: live, url: target.url, title: brief.title, action: 'done', by: 'system' });
+        const clr = cardClearance(live, st.itemStatus || {});
+        if (clr.kind === 'cleared') completeClearedCard(st, live, { by: 'system' });
+        await store.save(st);
+        autoResolved = true;
+      }
+      const next = Object.fromEntries(Object.entries({ ...(store.get().cardBriefs || {}), [target.url]: brief }).sort((a, b) => String(b[1].at).localeCompare(String(a[1].at))).slice(0, 60));
+      await store.save({ cardBriefs: next });
+      return { success: true, brief, autoResolved };
+    },
+
     /** Owner marks (or un-marks) a timetable block done from the hero; the hero advances to the next block. */
     async timetableBlockDone({ blockKey, done = true } = {}) {
       const key = String(blockKey || '').slice(0, 200);
@@ -1350,6 +1399,28 @@ export function createApiRouter(ctx) {
           return { success: true, item: state.itemStatus[itemUrl] || null, itemStatus: annotated.itemStatus || {}, cardDone, cardId: card.id };
         }
         
+        // 「没用」: hide the card AND teach the next digest (a digest preference every source bot + Chief must follow).
+        if (action === 'not-useful') {
+          card.status = 'dismissed';
+          card.dismissedAt = new Date().toISOString();
+          card.dismissedBy = 'user';
+          card.updatedAt = card.dismissedAt;
+          card.feedback = 'not-useful';
+          state.completions = recordCompletion(state.completions, card, { action: 'dismissed', by: 'user' });
+          await store.save(state);
+          const fb = notUsefulPref(card);
+          const pref = botDigest?.store?.addPref ? botDigest.store.addPref(fb.text, { channel: fb.channel, by: 'user' }) : null;
+          console.log('[trackInteraction] not-useful', card.sourceId, pref ? pref.id : '(no digest store)');
+          return { success: true, prefId: pref?.id || null, pref: pref?.text || fb.text };
+        }
+        if (action === 'undo-not-useful') {
+          // prefId rides in itemTitle (itemUrl is reserved for per-item status)
+          if (itemTitle && botDigest?.store?.removePref) botDigest.store.removePref(String(itemTitle));
+          card.status = 'active'; card.feedback = null; card.dismissedAt = null; card.updatedAt = new Date().toISOString();
+          await store.save(state);
+          return { success: true };
+        }
+
         // Track in profile
         await profileManager.trackInteraction(card.sourceId, action);
         

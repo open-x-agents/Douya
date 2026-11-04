@@ -65,13 +65,23 @@ export function normalizeState(raw) {
     cards: Array.isArray(raw.cards) ? cleanupCards(raw.cards.map(fixRepoCard), raw) : [],
     completions: Array.isArray(raw.completions) ? dedupeItemCompletions(raw.completions) : [],
     itemStatus: isRecord(raw.itemStatus) ? raw.itemStatus : {},
-    cardChats: isRecord(raw.cardChats) ? raw.cardChats : {},
+    cardChats: isRecord(raw.cardChats) ? stableChatKeys(raw.cardChats) : {},
     pendingActions: isRecord(raw.pendingActions) ? raw.pendingActions : {},
     ui: isRecord(raw.ui) ? raw.ui : base.ui,
     uiLog: Array.isArray(raw.uiLog) ? raw.uiLog.slice(-200) : [],
     surfaces: isRecord(raw.surfaces) ? raw.surfaces : {},
     lastDigest: raw.lastDigest ?? null,
   }
+}
+
+/** Chat keys follow the card's stable key (no day): 'slack:cluster:C1:2026-11-03' -> 'slack:cluster:C1'. */
+function stableChatKeys(chats) {
+  const out = {}
+  for (const [k, v] of Object.entries(chats)) {
+    const nk = k.replace(/:\d{4}-\d{2}-\d{2}$/, '')
+    out[nk] = out[nk] ? [...out[nk], ...(v || [])].sort((a, b) => String(a.at).localeCompare(String(b.at))).slice(-40) : v
+  }
+  return out
 }
 
 /** Load-time cleanup: one card per entity (duplicates folded, chats moved). In place on the copies. */

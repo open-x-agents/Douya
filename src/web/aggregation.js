@@ -757,7 +757,7 @@ export function clusterByProjectTheme(items, opts = {}) {
       body: `目前有 ${prCount} 个 PR、${issueCount} 个 issue 待跟进。`,
       url: `https://github.com/${repo}`,
       priority,
-      status: reviewCount > 0 ? 'needs-review' : 'active',
+      status: 'active', // review-needed shows via priority + waiting; a special status hid the card from 今天
       clusterSize: repoItems.length,
       items: repoItems,
       topItems,
@@ -860,7 +860,7 @@ export function clusterByProjectTheme(items, opts = {}) {
       body: `目前有 ${prCount} 个 PR、${issueCount} 个 issue 待跟进${emailCount > 0 ? `，另有 ${emailCount} 封相关通知邮件` : ''}。`,
       url: `https://github.com/${repo}`,
       priority,
-      status: reviewCount > 0 ? 'needs-review' : 'active',
+      status: 'active', // review-needed shows via priority + waiting; a special status hid the card from 今天
       clusterSize: repoItems.length,
       items: repoItems,
       topItems,

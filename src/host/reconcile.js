@@ -8,6 +8,9 @@ const SINGLETON = { hero: 'hero', timetable: 'timetable', 'achievements-tile': '
 const HIDDEN = new Set(['merged'])
 const TERMINAL = new Set(['done', 'dismissed', 'archived'])
 const MAX_LINKS = 80
+// Statuses 今天 shows; anything unknown from a builder (e.g. an old 'needs-review') is treated as active.
+const KNOWN = new Set(['active', 'snoozed', 'waiting', 'done', 'dismissed', 'archived', 'merged'])
+const liveStatus = s => (!s || !KNOWN.has(s) ? 'active' : s)
 
 const dayOf = c => (String(c?.sourceId || '').match(DATED) || [])[1] || ''
 export const stripDay = s => String(s || '').replace(DATED, '')
@@ -44,7 +47,7 @@ export function titleSim(a, b) {
   return (2 * n) / (A.size + B.size)
 }
 const familyOf = c => c?.source || (String(c?.sourceId || '').split(':')[0]) || c?.type
-const rank = c => (c.status === 'active' || !c.status ? 3 : c.status === 'snoozed' || c.status === 'waiting' ? 2 : TERMINAL.has(c.status) ? 1 : 0)
+const rank = c => (liveStatus(c.status) === 'active' ? 3 : c.status === 'snoozed' || c.status === 'waiting' ? 2 : TERMINAL.has(c.status) ? 1 : 0)
 
 /**
  * Find the existing card for an incoming one: id, then stable key, then the bot's update:<id> hint, then fuzzy
@@ -129,6 +132,7 @@ export function reconcileCards(existing = [], incoming = [], opts = {}) {
     return { byId, byKey }
   }
   // Clean up first, so incoming cards land on the one canonical card.
+  for (const c of cards) if (!KNOWN.has(c.status || 'active')) c.status = 'active'
   stats.merged += dedupe(cards, { itemStatus, cardChats, now })
   let idx = index()
   const touched = new Set()
@@ -143,7 +147,7 @@ export function reconcileCards(existing = [], incoming = [], opts = {}) {
     }
     if (!m) {
       const id = inc.id && !idx.byId.has(inc.id) ? inc.id : `card_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
-      const c = { ...inc, id, status: inc.status || 'active', createdAt: inc.createdAt || now, updatedAt: now }
+      const c = { ...inc, id, status: liveStatus(inc.status), createdAt: inc.createdAt || now, updatedAt: now }
       cards.push(c); touched.add(id); stats.created++; stats.createdKeys.push(key || c.title)
       idx = index(); continue
     }
@@ -160,6 +164,7 @@ export function reconcileCards(existing = [], incoming = [], opts = {}) {
       for (const u of oldUrls) if (!itemStatus[u]) itemStatus[u] = { status: 'done', at: now, by: 'system', cardId: old.id, reason: 'card-was-done' }
       stats.reopened++
     }
+    inc.status = inc.status && KNOWN.has(inc.status) ? inc.status : 'active'
     const next = { ...old, ...inc, id: old.id, sourceId: key || old.sourceId, createdAt: old.createdAt || now, updatedAt: now,
       status: TERMINAL.has(old.status) ? 'active' : (inc.status && inc.status !== 'active' ? inc.status : old.status === 'snoozed' ? 'snoozed' : 'active') }
     for (const f of ['pinned', 'completedAt', 'completedBy', 'dismissedAt', 'snoozedUntil', 'userTitle']) if (old[f] !== undefined && inc[f] === undefined) next[f] = old[f]
@@ -221,7 +226,7 @@ export function dedupe(cards, { itemStatus = {}, cardChats = null, now = new Dat
     const k = stableKey(canon); if (k && canon.sourceId && canon.sourceId !== k) canon.sourceId = k
   }
   // URL-overlap duplicates across different keys (e.g. a legacy per-repo copy under another id scheme)
-  const live = cards.filter(c => (c.status === 'active' || !c.status) && !SINGLETON[c.type])
+  const live = cards.filter(c => liveStatus(c.status) === 'active' && !SINGLETON[c.type])
   for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) {
     const a = live[i], b = live[j]
     if (a.status === 'merged' || b.status === 'merged' || a.type !== b.type) continue
@@ -240,6 +245,6 @@ export function dedupe(cards, { itemStatus = {}, cardChats = null, now = new Dat
 /** Active cards that still share a stable key (should be 0). */
 export function duplicateCount(cards = []) {
   const seen = new Map(); let d = 0
-  for (const c of cards) { if (!(c.status === 'active' || !c.status)) continue; const k = stableKey(c) || `t:${c.type}:${normTitle(c.title)}`; if (seen.has(k)) d++; else seen.set(k, 1) }
+  for (const c of cards) { if (liveStatus(c.status) !== 'active') continue; const k = stableKey(c) || `t:${c.type}:${normTitle(c.title)}`; if (seen.has(k)) d++; else seen.set(k, 1) }
   return d
 }

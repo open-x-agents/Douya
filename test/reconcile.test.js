@@ -107,3 +107,13 @@ test('bot digest: a "new" candidate that matches an existing key becomes an upda
   assert.equal(r.cards.find(c => c.id === 'old-legacy').blocks[0].links.length, 2)
   assert.equal(duplicateCount(r.cards), 0)
 })
+
+test('an unknown builder status (old needs-review) never hides a card from 今天', () => {
+  const r = reconcileCards([gh('o/a', '2026-11-04', [1], { status: 'needs-review' })], [{ ...gh('o/a', '2026-11-05', [1, 2]), status: 'needs-review' }])
+  assert.equal(r.cards.length, 1); assert.equal(r.cards[0].status, 'active')
+})
+
+test('dated chat keys load under the stable key', () => {
+  const st = normalizeState({ cards: [], cardChats: { 'slack:cluster:C1:2026-11-03': [{ role: 'user', text: 'a', at: '1' }], 'slack:cluster:C1': [{ role: 'user', text: 'b', at: '2' }] } })
+  assert.deepEqual(st.cardChats['slack:cluster:C1'].map(m => m.text), ['a', 'b'])
+})

@@ -1719,6 +1719,59 @@
     .chat-chips.is-typing,.composer-tip.is-typing{transition:none!important}
   }
 
+  /* ===== UX desktop pack: hover QA, kb focus, two-col zoom, toast, larger dock ===== */
+  @media (hover:hover) and (pointer:fine){
+    .tile.work.swipeable{cursor:grab}
+    .tile.work.swipeable.swiping{cursor:grabbing}
+    .tile.work.swipeable:hover .qa-bar,.tile.work.swipeable:focus-within .qa-bar,.tile.work.swipeable.is-kb-focus .qa-bar{display:flex;flex-wrap:wrap;opacity:1}
+    .qa-bar{gap:8px;margin-top:10px;padding-top:4px}
+    .qa-bar button{padding:6px 12px;font-size:12.5px;background:rgba(30,40,80,.04);border:1px solid rgba(30,40,80,.06)}
+    .qa-bar button .kbd{margin-left:6px;font-size:10.5px;font-weight:650;opacity:.55;letter-spacing:.02em}
+    .grid2 .tile.work.swipeable:hover{transform:translateY(-3px);box-shadow:0 16px 36px rgba(40,44,90,.14),0 2px 8px rgba(40,44,90,.06)}
+    .tile.work .w-acts .step.primary{box-shadow:0 10px 22px -12px rgba(111,141,245,.85)}
+    .tile.work .w-acts .step.primary:hover{filter:brightness(1.03);transform:translateY(-1px)}
+    .today-chat-head .x:hover{background:rgba(30,40,80,.09);color:var(--ink)}
+  }
+  .tile.work.is-kb-focus{outline:2px solid rgba(122,106,216,.55);outline-offset:2px;box-shadow:0 0 0 4px rgba(122,106,216,.12),0 14px 32px rgba(40,44,90,.12)}
+  .tile.work.is-kb-focus .swipe-face{background:#fff}
+  @media (hover:none), (pointer:coarse){.qa-bar button .kbd{display:none}}
+  @media (min-width:901px){
+    .today-chat{margin:0 -28px;padding:0 28px 22px}
+    .today-chat-sheet{max-width:880px}
+    .today-chat.open .today-chat-sheet{max-height:min(720px,78vh)}
+    .today-chat-msgs{min-height:280px;padding:16px 22px;gap:12px}
+    .today-chat-head{padding:16px 20px 12px}
+    #v-today .today-chat-input .input-wrap{max-width:760px}
+    .chat-chips,.chat-ctx,.composer-tip{max-width:760px}
+    .ui-toast{left:auto;right:28px;bottom:108px;transform:translate(0,16px);max-width:min(420px,42vw)}
+    .ui-toast.show{transform:none}
+    .z-split{grid-template-columns:minmax(0,1.2fr) minmax(400px,480px);gap:0}
+    .z-left{padding:28px 28px 32px 32px}
+    .z-chat{min-height:0}
+    .z-chat-host,.today-chat.in-zoom{min-height:0;height:100%}
+    .today-chat.in-zoom .today-chat-input{position:sticky;bottom:0;z-index:2;background:rgba(255,255,255,.88)!important;backdrop-filter:blur(14px)}
+    .tile-zoom-modal{height:90vh!important;max-height:90vh!important;width:min(1280px,96vw)!important}
+    .nx{padding:24px 26px 22px}
+    .nx-title{font-size:26px}
+  }
+  @media (min-width:1280px) and (max-width:1500px){
+    .z-split{grid-template-columns:minmax(0,1.25fr) minmax(420px,500px)}
+    .tile-zoom-modal{width:min(1320px,95vw)!important}
+  }
+  .kb-help{position:fixed;inset:0;z-index:10060;display:flex;align-items:center;justify-content:center;background:rgba(20,22,40,.34);opacity:0;pointer-events:none;transition:opacity .2s var(--ease)}
+  .kb-help.open{opacity:1;pointer-events:auto}
+  .kb-help .kh-panel{width:min(520px,92vw);background:#fff;border-radius:18px;padding:18px 20px 16px;box-shadow:0 24px 60px rgba(20,22,40,.28);transform:translateY(8px);transition:transform .22s var(--ease-sheet)}
+  .kb-help.open .kh-panel{transform:none}
+  .kb-help h4{margin:0 0 12px;font-size:16px}
+  .kb-help dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:8px 14px;font-size:13.5px}
+  .kb-help dt{font-weight:700;color:var(--violet);font-variant-numeric:tabular-nums;min-width:4.5em}
+  .kb-help dd{margin:0;color:var(--ink2)}
+  .kb-help .kh-note{margin:14px 0 0;font-size:12px;color:var(--ink3);line-height:1.5}
+  .kb-help .kh-close{margin-top:12px;width:100%;border:0;background:rgba(30,40,80,.05);border-radius:10px;padding:10px;font:650 13.5px inherit;cursor:pointer;color:var(--ink2)}
+  @media (prefers-reduced-motion:reduce){
+    .kb-help,.kb-help .kh-panel,.tile.work.is-kb-focus{transition:none!important;animation:none!important}
+  }
+
   /* Logo: lighter think on small screens */
   @media (max-width:620px){
     .douya-think .dy-all{animation-duration:1.45s}
@@ -3093,7 +3146,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const actsHtml = primary
       ? `<div class="w-acts">${stepBtnHtml(primary, 0, 'primary')}${secondary.length ? `<details class="w-more"><summary>更多</summary>${secondary.map((p, i) => stepBtnHtml(p, i + 1, '')).join('')}</details>` : ''}</div>`
       : '';
-    const qa = waitingOnly ? '' : `<div class="qa-bar" aria-label="快捷操作"><button type="button" data-qa="done">完成</button><button type="button" data-qa="snooze">推迟</button><button type="button" data-qa="ask">交给豆芽</button></div>`;
+    const qa = waitingOnly ? '' : `<div class="qa-bar" aria-label="快捷操作"><button type="button" data-qa="done" title="完成 · C">完成<span class="kbd">C</span></button><button type="button" data-qa="snooze" title="推迟 · S">推迟<span class="kbd">S</span></button><button type="button" data-qa="ask" title="交给豆芽 · E 打开后说">交给豆芽</button></div>`;
     const rails = waitingOnly ? '' : `<div class="swipe-rails" role="group" aria-label="滑动快捷操作"><div class="swipe-rail left"><button type="button" data-qa="done" aria-label="完成这张卡">完成</button><button type="button" data-qa="snooze" aria-label="推迟这张卡">推迟</button></div><div class="swipe-rail right"><button type="button" data-qa="ask" aria-label="交给豆芽处理">交给豆芽</button></div></div>`;
     return `
       <article class="tile work swipeable ${big ? 'size-wide' : 'size-normal'}${waitingOnly ? ' waiting-only' : ''}${hasFace ? ' has-face' : ''}" data-idx="${idx}">
@@ -3375,6 +3428,30 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     tile.addEventListener('touchmove', e => { if (e.touches.length !== 1) return; onMove(e.touches[0].clientX, e.touches[0].clientY, e); }, { passive: false });
     tile.addEventListener('touchend', onEnd);
     tile.addEventListener('touchcancel', () => { active = false; resetSwipe(tile); });
+    // Desktop pointer drag (same thresholds as touch). Skip interactive children; don't fight HTML5 reorder (drag starts only on bare tile).
+    if (window.matchMedia('(pointer: fine)').matches) {
+      let ptrId = null;
+      const ignoreSel = 'a,button,input,textarea,select,summary,.f-box,.w-acts,.w-more,.qa-bar,.swipe-rail,[data-qa],.step';
+      face.addEventListener('pointerdown', e => {
+        if (e.button !== 0 || e.pointerType === 'touch') return;
+        if (e.target && e.target.closest && e.target.closest(ignoreSel)) return;
+        ptrId = e.pointerId;
+        try { face.setPointerCapture(ptrId); } catch (_) {}
+        onStart(e.clientX, e.clientY);
+      });
+      face.addEventListener('pointermove', e => {
+        if (ptrId == null || e.pointerId !== ptrId) return;
+        onMove(e.clientX, e.clientY, e);
+      });
+      const ptrUp = e => {
+        if (ptrId == null || e.pointerId !== ptrId) return;
+        ptrId = null;
+        try { face.releasePointerCapture(e.pointerId); } catch (_) {}
+        onEnd();
+      };
+      face.addEventListener('pointerup', ptrUp);
+      face.addEventListener('pointercancel', e => { if (ptrId == null || e.pointerId !== ptrId) return; ptrId = null; active = false; resetSwipe(tile); });
+    }
   }
   function syncComposerTyping() {
     const input = $('todayChatInput');
@@ -4297,7 +4374,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const syncSend = () => { sendBtn.disabled = !input.value.trim() && !todayComposer.items.length; };
     input.addEventListener('input', syncSend); setInterval(syncSend, 600); syncSend();
     input.onkeydown = (e) => {
-      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         send();
       }
@@ -5525,25 +5603,138 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (e.target.closest && e.target.closest('#tileZoomClose')) { e.preventDefault(); closeTileZoom(); return; }
     if (e.target && e.target.id === 'tileZoomOverlay') closeTileZoom();
   });
+  // ===== Desktop keyboard (Linear-style, IME-safe) =====
+  let kbFocusIdx = -1;
+  function deskTypingTarget(el) {
+    if (!el) return false;
+    const tag = el.tagName || '';
+    return /^(INPUT|TEXTAREA|SELECT)$/.test(tag) || !!el.isContentEditable;
+  }
+  function workTilesKb() {
+    return [...document.querySelectorAll('#v-today .grid-main > .tile.work.swipeable:not(.waiting-only)')];
+  }
+  function clearKbFocus() {
+    document.querySelectorAll('.tile.work.is-kb-focus').forEach(t => t.classList.remove('is-kb-focus'));
+  }
+  function setKbFocus(i) {
+    const tiles = workTilesKb();
+    clearKbFocus();
+    if (!tiles.length) { kbFocusIdx = -1; return null; }
+    kbFocusIdx = ((i % tiles.length) + tiles.length) % tiles.length;
+    const t = tiles[kbFocusIdx];
+    t.classList.add('is-kb-focus');
+    try { t.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' }); } catch (_) {}
+    return t;
+  }
+  function cardFromTile(tile) {
+    if (!tile) return null;
+    const id = tile.getAttribute('data-id');
+    if (id && Array.isArray(lastCards)) {
+      const byId = lastCards.find(c => c && c.id === id);
+      if (byId) return byId;
+    }
+    const idx = Number(tile.getAttribute('data-idx'));
+    return Number.isFinite(idx) && lastCards ? lastCards[idx] : null;
+  }
+  function focusedWorkCard() {
+    return cardFromTile(document.querySelector('#v-today .tile.work.is-kb-focus'));
+  }
+  function closeKbHelp() {
+    const el = document.querySelector('.kb-help');
+    if (!el) return;
+    el.classList.remove('open');
+    setTimeout(() => el.remove(), 200);
+  }
+  function openKbHelp() {
+    closeKbHelp();
+    const el = document.createElement('div');
+    el.className = 'kb-help'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', '键盘快捷键');
+    el.innerHTML = `<div class="kh-panel"><h4>键盘快捷键</h4><dl>
+      <dt>J / K</dt><dd>在工作卡之间移动焦点</dd>
+      <dt>E</dt><dd>打开当前卡（详情 + 对话）</dd>
+      <dt>C</dt><dd>完成当前卡（可撤销）</dd>
+      <dt>S</dt><dd>推迟当前卡</dd>
+      <dt>Enter</dt><dd>打开已收起的对话栏</dd>
+      <dt>⌘/Ctrl+Enter</dt><dd>发送消息（输入框内）</dd>
+      <dt>Esc</dt><dd>关闭浮层 / 收起建议 / 收起对话</dd>
+      <dt>?</dt><dd>打开本说明</dd>
+    </dl><p class="kh-note">在输入框、IME 组字中，或对话栏打开时，单键快捷键不会触发，避免打断中文输入。</p>
+    <button type="button" class="kh-close">知道了</button></div>`;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('open'));
+    el.addEventListener('click', ev => { if (ev.target === el || ev.target.classList.contains('kh-close')) closeKbHelp(); });
+  }
+  function dismissChatChips() {
+    const chips = $('chatChips');
+    if (!chips || chips.hidden) return false;
+    chips.hidden = true;
+    chips.classList.add('is-typing');
+    return true;
+  }
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      if (document.querySelector('.kb-help.open')) { closeKbHelp(); return; }
       if (document.querySelector('.snooze-sheet.open')) { closeSnoozeSheet(); return; }
       if (currentZoomCard) { closeTileZoom(); return; }
+      if (dismissChatChips()) return;
       const chat = $('todayChat');
       if (chat && chat.classList.contains('open') && !chatInZoom()) { closeTodayChat(); return; }
+      clearKbFocus(); kbFocusIdx = -1;
       return;
     }
-    // Enter focuses the closed dock — skip when typing / composing / IME composing.
+    if (e.isComposing || e.keyCode === 229) return;
+    if (deskTypingTarget(e.target)) return;
+
+    // Enter focuses the closed dock — skip modifiers (⌘/Ctrl+Enter is for send inside input).
     if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && !e.altKey) {
-      if (e.isComposing || e.keyCode === 229) return;
-      const tag = (e.target && e.target.tagName) || '';
-      if (/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(tag) || (e.target && e.target.isContentEditable)) return;
-      if (currentZoomCard || document.querySelector('.snooze-sheet.open')) return;
+      if (currentZoomCard || document.querySelector('.snooze-sheet.open') || document.querySelector('.kb-help.open')) return;
       const chat = $('todayChat');
       if (chat && !chat.classList.contains('open')) {
         e.preventDefault();
         openTodayChat({ byUser: true, contextual: true });
       }
+      return;
+    }
+
+    // Single-letter shortcuts: only when dock closed, not in zoom/sheet/help, Today view.
+    const chat = $('todayChat');
+    const dockOpen = !!(chat && chat.classList.contains('open') && !chatInZoom());
+    if (dockOpen || currentZoomCard || document.querySelector('.snooze-sheet.open') || document.querySelector('.kb-help.open')) return;
+    if (currentView && currentView() !== 'today') return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    const key = e.key;
+    if (key === '?' || (key === '/' && e.shiftKey)) {
+      e.preventDefault();
+      openKbHelp();
+      return;
+    }
+    if (key === 'j' || key === 'J') {
+      e.preventDefault();
+      setKbFocus(kbFocusIdx < 0 ? 0 : kbFocusIdx + 1);
+      return;
+    }
+    if (key === 'k' || key === 'K') {
+      e.preventDefault();
+      setKbFocus(kbFocusIdx < 0 ? 0 : kbFocusIdx - 1);
+      return;
+    }
+    const card = focusedWorkCard();
+    if (!card) return;
+    if (key === 'e' || key === 'E') {
+      e.preventDefault();
+      openTileZoom(card);
+      return;
+    }
+    if (key === 'c' || key === 'C') {
+      e.preventDefault();
+      runQuickDone(card);
+      return;
+    }
+    if (key === 's' || key === 'S') {
+      e.preventDefault();
+      openSnoozeSheet(card);
+      return;
     }
   });
 

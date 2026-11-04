@@ -84,6 +84,24 @@ test('build: legacy shapes + sourceIds, bot categories honored, cross-channel me
   assert.equal(m.invalidLinks, 0); assert.equal(m.dupSourceIds, 0); assert.equal(m.crossChannelMerged, 1); assert.equal(m.singles, 1)
 })
 
+test('build: a merge into a mail card from a GitHub card is turned around; a merge with no target card is undone', () => {
+  const gsnap = buildSnapshot('gmail', gmailItems(), {})
+  const hsnap = buildSnapshot('github', [pr(733, 'Birfy/agentdescent', 'Speed up search')], {})
+  const gm = validateCandidates('gmail', [{ title: 'PR #733 review requested', category: 'code', items: [gsnap.rows.find(r => r.subject.includes('FlyBot')).ref] }], gsnap).candidates
+  const gh = validateCandidates('github', [{ title: 'agentdescent #733', category: 'Birfy/agentdescent', needsAction: true, items: ['g1'] }], hsnap).candidates
+  const plan = validatePlan({ merges: [{ into: 'gmail:0', from: ['github:0'], reason: '同一 PR #733' }] }, [...gm, ...gh])
+  assert.deepEqual(plan.merges[0], { into: 'github:0', from: ['gmail:0'], reason: '同一 PR #733' })
+  const { cards } = buildCards({ gmail: gsnap, github: hsnap }, { gmail: gm, github: gh }, plan, { today: DAY })
+  const ad = cards.find(c => c.sourceId === `github:cluster:Birfy/agentdescent:${DAY}`)
+  assert.ok(ad && ad.blocks.find(b => b.type === 'link-list').links.some(l => l.mergedFrom === 'gmail'))
+  // target candidate whose items were all invalid -> no card -> merge undone, nothing lost
+  const gh2 = [{ ...gh[0], id: 'github:0' }]
+  const plan2 = { merges: [{ into: 'github:0', from: ['gmail:0'] }], edits: new Map() }
+  const res = buildCards({ gmail: gsnap }, { gmail: validateCandidates('gmail', [{ title: 'x', category: 'code', items: [gsnap.rows.find(r => r.subject.includes('FlyBot')).ref] }], gsnap).candidates, github: gh2 }, plan2, { today: DAY })
+  assert.ok(res.cards.find(c => c.sourceId === `gmail:group:code:${DAY}`), 'the mail stays in its group')
+  assert.equal(res.stats.undoneMerges, 1)
+})
+
 test('usage: sums token usage of the turn from assistant/message records', () => {
   const u = usageOf([{ type: 'assistant/message', time: 1010, data: { usage: { inputTokens: 100, outputTokens: 20, cachedInputTokens: 50 } } }, { type: 'assistant/message', time: 1, data: { usage: { inputTokens: 999 } } }], 1000)
   assert.deepEqual(u, { input: 100, output: 20, cached: 50, steps: 1 })

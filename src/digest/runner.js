@@ -109,7 +109,7 @@ ${prefs.length ? `\n用户的汇聚偏好（必须遵守）：\n${prefs.map(p =>
 ${chiefMemory ? `\n你的长期记忆（关于用户）：\n${clip(chiefMemory, 3000)}` : ''}
 
 要做的：
-1. 去重 / 跨渠道合并：同一件事在多个渠道（GitHub 通知邮件 + 对应 PR 卡；Slack 里讨论某个 PR）→ merges:[{"into":"github:0","from":["gmail:3"],"reason":"同一 PR"}]。只合并确实是同一件事的。
+1. 去重 / 跨渠道合并：同一件事在多个渠道（GitHub 通知邮件 + 对应 PR 卡；Slack 里讨论某个 PR）→ merges:[{"into":"github:0","from":["gmail:3"],"reason":"同一 PR"}]。只合并确实是同一件事的；into 填工作本身那张（GitHub/Slack 卡），from 填通知邮件。
 2. 排优先级：cards:[{"id","priority":"urgent|high|medium|low","nextStep"?,"title"?}]，按重要性从高到低列出（不列的保持原样）。促销/社交类保持 low。
 3. 今天的标题 headline（≤20 字）和 narrative（一两句：今天最该先做什么，基于真实候选卡）。
 4. timeline：今天剩余时间的建议安排 3~6 段 [{"start":"HH:MM","end":"HH:MM","title","category":"focus|work|review|meeting|break|admin|personal"}]，从现在之后开始。
@@ -302,7 +302,8 @@ export function createBotDigest(deps) {
 
   function summarize(r) {
     return { id: r.id, startedAt: r.startedAt, status: r.status, error: r.error || null, ms: r.ms, tokens: r.tokens, result: r.result || null,
-      channels: Object.fromEntries(Object.entries(r.channels).map(([k, v]) => [k, { status: v.status, error: v.error || null, cards: v.cards ?? null, items: v.snapshot?.rows.length ?? null, skippedDone: v.snapshot?.skipped ?? null, droppedRefs: v.droppedRefs || 0, proposeErrors: (v.proposeErrors || []).slice(0, 5), fetchMs: v.fetchMs ?? null, ms: v.ms ?? null, usage: v.usage || null }])),
+      channels: Object.fromEntries(Object.entries(r.channels).map(([k, v]) => [k, { status: v.status, error: v.error || null, cards: v.cards ?? null, items: v.snapshot?.rows.length ?? null, truncated: v.snapshot?.truncated ?? null, skippedDone: v.snapshot?.skipped ?? null, droppedRefs: v.droppedRefs || 0, proposeErrors: (v.proposeErrors || []).slice(0, 5), fetchMs: v.fetchMs ?? null, ms: v.ms ?? null, usage: v.usage || null }])),
+      candidates: (r.allCandidates || []).map(c => ({ id: c.id, cat: c.category, title: c.title, needs: c.needsAction, pri: c.priority, n: c.items.length, mergedInto: c.mergedInto || undefined })),
       chief: { status: r.chief.status, error: r.chief.error || null, ms: r.chief.ms ?? null, usage: r.chief.usage || null, merges: r.plan?.merges || [], planErrors: r.plan?.errors || [] } }
   }
 

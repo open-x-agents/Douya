@@ -14,6 +14,8 @@ export function digestMetrics(cards, validUrls) {
     singles: content.filter(c => c.type === 'email-action').length,
     links: links.length,
     invalidLinks: links.filter(l => !validUrls.has(l.url)).length,
+    invalidSample: links.filter(l => !validUrls.has(l.url)).slice(0, 6),
+    contentTypes: [...new Set(cards.map(c => c.type))],
     dupUrlsAcrossCards: dupUrls,
     dupSourceIds: [...ids.values()].filter(n => n > 1).length,
     crossChannelMerged: content.filter(c => (c.metadata?.mergedFrom || []).length).length,

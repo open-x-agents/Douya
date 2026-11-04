@@ -6,6 +6,7 @@ import { clusterByProjectTheme, classifyClusters, groupAndRank, generateClusterC
 
 const clip = (s, n) => { s = String(s ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s }
 const PRI = new Set(['urgent', 'high', 'medium', 'low'])
+const RANK = { github: 0, slack: 1, gmail: 2 }
 const parse = v => { if (typeof v !== 'string') return v; try { return JSON.parse(v) } catch { return null } }
 
 /**
@@ -59,10 +60,16 @@ export function validatePlan(raw, candidates) {
   for (const m of Array.isArray(p.merges) ? p.merges : []) {
     const into = String(m?.into || '')
     if (!ids.has(into)) { errors.push(`merge.into ${into} 不存在`); continue }
-    const from = (Array.isArray(m.from) ? m.from : [m.from]).map(String).filter(f => ids.has(f) && f !== into && !taken.has(f) && f !== 'undefined')
+    let from = (Array.isArray(m.from) ? m.from : [m.from]).map(String).filter(f => ids.has(f) && f !== into && !taken.has(f) && f !== 'undefined')
     if (!from.length) continue
+    // The work card absorbs the notification: GitHub > Slack > Gmail. A merge "into" a mail card from a
+    // GitHub/Slack card is turned around, so the PR card keeps its items and gains the mail links.
+    let target = into
+    const best = [into, ...from].sort((a, b) => (RANK[a.split(':')[0]] ?? 9) - (RANK[b.split(':')[0]] ?? 9))[0]
+    if (best !== into) { target = best; from = [into, ...from.filter(f => f !== best)]; errors.push(`merge 方向已调整：${best} 吸收 ${from.join(',')}`) }
+    if (taken.has(target)) continue
     from.forEach(f => taken.add(f))
-    merges.push({ into, from, reason: clip(m.reason, 80) })
+    merges.push({ into: target, from, reason: clip(m.reason, 80) })
   }
   const edits = new Map()
   for (const e of Array.isArray(p.cards) ? p.cards : []) if (ids.has(String(e?.id))) edits.set(String(e.id), { priority: PRI.has(e.priority) ? e.priority : undefined, nextStep: e.nextStep ? clip(e.nextStep, 90) : undefined, title: e.title ? clip(e.title, 60) : undefined, rank: edits.size })
@@ -95,7 +102,19 @@ function overlay(card, cand, edit) {
  * @param {object} plan validatePlan() result
  * @returns {{cards: object[], stats: object}}
  */
-export function buildCards(snaps, candidatesBy, plan, { today, now = Date.now() } = {}) {
+export function buildCards(snaps, candidatesBy, plan, opts = {}) {
+  let res = buildOnce(snaps, candidatesBy, plan, opts)
+  // A merge whose target produced no card would lose the merged items: undo those merges and rebuild.
+  if (res.missingInto.length) {
+    const keep = (plan.merges || []).filter(m => !res.missingInto.includes(m.into))
+    for (const c of Object.values(candidatesBy).flat()) delete c.mergedInto
+    res = buildOnce(snaps, candidatesBy, { ...plan, merges: keep }, opts)
+    res.stats.undoneMerges = (plan.merges || []).length - keep.length
+  }
+  return { cards: res.cards, stats: res.stats }
+}
+
+function buildOnce(snaps, candidatesBy, plan, { today, now = Date.now() } = {}) {
   const all = Object.values(candidatesBy).flat()
   const byId = new Map(all.map(c => [c.id, c]))
   const itemOf = (cand, r) => snaps[cand.channel]?.byRef.get(r.ref)
@@ -118,7 +137,7 @@ export function buildCards(snaps, candidatesBy, plan, { today, now = Date.now() 
       const mail = snap.items.filter(it => !away.has(it.sourceId))
       for (const card of buildEmailClusters(mail, { today, now, assign })) {
         const sid = card.items?.[0]?.sourceId
-        const cand = card.type === 'email-action' ? refCand.get(sid) : cands.find(c => c.category === card.metadata?.group) || null
+        const cand = card.type === 'email-action' ? refCand.get(sid) : cands.filter(c => c.category === card.metadata?.group).sort((a, b) => b.items.length - a.items.length)[0] || null
         cards.push(overlay(card, cand, cand && plan.edits?.get(cand.id))); if (cand) candCard.set(cand.id, card)
       }
     } else {
@@ -134,6 +153,8 @@ export function buildCards(snaps, candidatesBy, plan, { today, now = Date.now() 
       }
     }
   }
+  const missingInto = [...extra.keys()].filter(into => !candCard.has(into))
+  if (missingInto.length) return { cards, stats: {}, missingInto }
   for (const [into, list] of extra) {
     const card = candCard.get(into); if (!card) continue
     let ll = (card.blocks || []).find(b => b.type === 'link-list')
@@ -142,7 +163,7 @@ export function buildCards(snaps, candidatesBy, plan, { today, now = Date.now() 
     for (const { it } of list) if (!seen.has(it.url)) { seen.add(it.url); ll.links.push({ ...linkOf(it), mergedFrom: it.source }) }
     card.metadata = { ...(card.metadata || {}), mergedFrom: [...new Set(list.map(x => x.it.source))], mergeReason: list[0]?.reason || '' }
   }
-  return { cards, stats: { candidates: all.length, merged: [...byId.values()].filter(c => c.mergedInto).length, mergedItems: away.size } }
+  return { cards, missingInto, stats: { candidates: all.length, merged: [...byId.values()].filter(c => c.mergedInto).length, mergedItems: away.size } }
 }
 
 /** Every link on the given cards must be one of the snapshot URLs (or a known card/app URL). */

@@ -15,6 +15,7 @@ function resolveDefineTool() {
   const candidates = [
     '/Users/danyangchen/.dsh/profiles/package.json',
     '/opt/homebrew/lib/node_modules/@deepseek-ai/dsh/package.json',
+    '/workspace/dsh-rc5/prefix/lib/node_modules/@deepseek-ai/dsh/package.json',
   ]
   let last
   for (const anchor of candidates) {
@@ -122,7 +123,9 @@ export async function registerBotTools(ctx, opts = {}) {
     defineTool = resolveDefineTool()
   } catch (err) {
     try {
-      const mod = await import('/opt/homebrew/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-tools/lib/index.js')
+      let mod
+      try { mod = await import('/workspace/dsh-rc5/prefix/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-tools/lib/index.js') }
+      catch { mod = await import('/opt/homebrew/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-tools/lib/index.js') }
       defineTool = mod.defineTool
     } catch {
       log(`dsbot-tools: defineTool unavailable (${err.message})`)

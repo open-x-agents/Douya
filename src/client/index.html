@@ -1119,6 +1119,27 @@
   .digest-progress .dp-chip{display:inline-flex;gap:4px;align-items:center;padding:2px 9px;border-radius:999px;background:#fff;border:1px solid var(--line)}
   .digest-progress .dp-done{color:#0a8f5a;border-color:#bfe8d4}.digest-progress .dp-bad{color:#c2410c;border-color:#fbd5bf}.digest-progress .dp-run{color:var(--blue)}
   .digest-run-box{margin:0 0 14px}.digest-run-box table{border-collapse:collapse;font-size:12.5px;width:100%}.digest-run-box td,.digest-run-box th{padding:5px 8px;border-bottom:1px solid var(--line);text-align:left}
+
+  /* Multimodal composer: attachments preview + mic */
+  .composer-attach{display:flex;flex-wrap:wrap;gap:6px;padding:0 4px 8px;max-width:640px;margin:0 auto}
+  .composer-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px 4px 4px;border-radius:12px;background:#fff;border:1px solid var(--line);font-size:12px;color:var(--ink2);max-width:100%}
+  .composer-chip img{width:36px;height:36px;object-fit:cover;border-radius:8px;background:#eee}
+  .composer-chip .fn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px}
+  .composer-chip .x{border:0;background:transparent;color:var(--ink3);cursor:pointer;font-size:14px;padding:0 2px;line-height:1}
+  .composer-chip.err{border-color:#f1b4a2;color:#c2410c;background:#fff5f0}
+  .composer-tools{display:flex;gap:4px;align-items:center;flex-shrink:0}
+  .composer-tools button{width:36px;height:36px;border-radius:50%;border:0;background:transparent;color:var(--ink2);cursor:pointer;font-size:18px;display:grid;place-items:center}
+  .composer-tools button:hover{background:rgba(0,0,0,.05);color:var(--ink)}
+  .composer-tools button.rec{background:#fee2e2;color:#b91c1c;animation:pulse-rec 1.2s infinite}
+  @keyframes pulse-rec{50%{opacity:.7}}
+  .composer-tip{font-size:11.5px;color:var(--ink3);padding:0 8px 6px;max-width:640px;margin:0 auto}
+  .bubble.me .att-row,.z-msg.me .att-row{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px}
+  .bubble.me .att-row img,.z-msg.me .att-row img{max-width:min(220px,70vw);max-height:160px;border-radius:10px;display:block}
+  .bubble.me .att-file,.z-msg.me .att-file{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:8px;background:rgba(255,255,255,.25);font-size:12px}
+  #v-today .today-chat-input .input-wrap{padding-left:8px}
+  .z-input{display:flex;gap:6px;align-items:center}
+  .z-input .composer-tools{margin-right:2px}
+  .z-compose .composer-attach{max-width:none;padding:0 0 8px}
 </style>
 </head>
 <body>
@@ -2101,7 +2122,19 @@
         <div class="today-chat-head"><b>豆芽</b><small>数字同事 · 有长期记忆</small><button class="x" id="todayChatClose" type="button" aria-label="收起对话">✕</button></div>
         <div class="today-chat-msgs" id="todayChatMsgs"></div>
       </div>
-      <div class="today-chat-input"><div class="input-wrap"><input type="text" id="todayChatInput" placeholder="和豆芽对话…" autocomplete="off" /><button class="send-btn" id="todayChatSend" type="button">↑</button></div></div>
+      <div class="today-chat-input">
+        <div class="composer-attach" id="todayAttachRail" hidden></div>
+        <div class="composer-tip" id="todayComposerTip" hidden></div>
+        <div class="input-wrap">
+          <div class="composer-tools">
+            <button type="button" id="todayAttachBtn" title="图片或文件" aria-label="添加图片或文件">＋</button>
+            <button type="button" id="todayMicBtn" title="语音输入" aria-label="语音输入">🎤</button>
+          </div>
+          <input type="text" id="todayChatInput" placeholder="和豆芽对话… 可粘贴/拖入图片" autocomplete="off" enterkeyhint="send" />
+          <button class="send-btn" id="todayChatSend" type="button">↑</button>
+        </div>
+        <input type="file" id="todayFilePick" hidden multiple accept="image/*,.pdf,.txt,.md,.csv,.json,.js,.ts,.py,.yaml,.yml,.html,.css,.sh,.log" />
+      </div>
     </div>`;
     // Keep the live chat dock (open state, transcript, in-flight reply) across refreshes:
     // detach it, rebuild the grid, then put the same node back in place of the fresh one.
@@ -2213,10 +2246,141 @@
     } catch (e) { console.warn('[bot history]', e); }
   }
 
+
+  // ===== Multimodal composer (images / files / voice) =====
+  const CHAT_IMAGE_MAX = 10 * 1024 * 1024, CHAT_FILE_MAX = 20 * 1024 * 1024, CHAT_MAX_IMG = 5, CHAT_MAX_FILE = 5;
+  const CHAT_IMG_OK = new Set(['image/png','image/jpeg','image/webp','image/gif']);
+  const CHAT_EXT_OK = new Set(['pdf','txt','md','markdown','csv','json','js','mjs','cjs','ts','tsx','jsx','py','go','rs','java','html','css','xml','yaml','yml','toml','sh','bash','sql','log','text']);
+  function fileToB64(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => {
+        const s = String(r.result || '');
+        const i = s.indexOf(',');
+        resolve(i >= 0 ? s.slice(i + 1) : s);
+      };
+      r.onerror = () => reject(new Error('读取失败'));
+      r.readAsDataURL(file);
+    });
+  }
+  function makeComposer({ railId, tipId, inputId, pickId, attachBtnId, micBtnId }) {
+    const state = { items: [], rec: null };
+    const rail = () => $(railId), tip = () => $(tipId), input = () => $(inputId);
+    const showTip = (t) => { const el = tip(); if (!el) return; el.hidden = !t; el.textContent = t || ''; };
+    const render = () => {
+      const el = rail(); if (!el) return;
+      el.hidden = !state.items.length;
+      el.replaceChildren();
+      state.items.forEach((it, idx) => {
+        const chip = document.createElement('div');
+        chip.className = 'composer-chip' + (it.error ? ' err' : '');
+        if (it.kind === 'image' && it.preview) {
+          const img = document.createElement('img'); img.src = it.preview; img.alt = it.name; chip.appendChild(img);
+        } else {
+          const ic = document.createElement('span'); ic.textContent = '📄'; chip.appendChild(ic);
+        }
+        const fn = document.createElement('span'); fn.className = 'fn'; fn.textContent = it.error || it.name; chip.appendChild(fn);
+        const x = document.createElement('button'); x.type = 'button'; x.className = 'x'; x.textContent = '×'; x.onclick = () => { state.items.splice(idx, 1); render(); };
+        chip.appendChild(x); el.appendChild(chip);
+      });
+    };
+    async function addFiles(list) {
+      showTip('');
+      for (const file of [...list]) {
+        const isImg = (file.type || '').startsWith('image/');
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        if (isImg) {
+          if (!CHAT_IMG_OK.has(file.type)) { showTip(`不支持 ${file.type || '该图片类型'}（用 PNG/JPEG/WebP/GIF）`); continue; }
+          if (file.size > CHAT_IMAGE_MAX) { showTip(`${file.name} 超过 10MB`); continue; }
+          if (state.items.filter(x => x.kind === 'image').length >= CHAT_MAX_IMG) { showTip(`一次最多 ${CHAT_MAX_IMG} 张图`); break; }
+        } else {
+          if (!CHAT_EXT_OK.has(ext)) { showTip(`不支持 .${ext || '?'} 文件`); continue; }
+          if (file.size > CHAT_FILE_MAX) { showTip(`${file.name} 超过 20MB`); continue; }
+          if (state.items.filter(x => x.kind === 'file').length >= CHAT_MAX_FILE) { showTip(`一次最多 ${CHAT_MAX_FILE} 个文件`); break; }
+        }
+        try {
+          const data = await fileToB64(file);
+          const preview = isImg ? URL.createObjectURL(file) : null;
+          state.items.push({ kind: isImg ? 'image' : 'file', name: file.name, mediaType: file.type || (isImg ? 'image/png' : 'application/octet-stream'), data, preview, bytes: file.size });
+        } catch (e) { showTip(`${file.name}: ${e.message}`); }
+      }
+      render();
+    }
+    function payload() {
+      return state.items.filter(x => !x.error).map(({ kind, name, mediaType, data }) => ({ kind, name, mediaType, data }));
+    }
+    function clear() {
+      state.items.forEach(it => { if (it.preview) try { URL.revokeObjectURL(it.preview); } catch (_) {} });
+      state.items = []; render(); showTip('');
+    }
+    function wire() {
+      $(attachBtnId)?.addEventListener('click', () => $(pickId)?.click());
+      $(pickId)?.addEventListener('change', ev => { addFiles(ev.target.files || []); ev.target.value = ''; });
+      const box = input()?.closest('.today-chat-input, .z-compose, .z-input') || input()?.parentElement;
+      const dropTarget = $(railId)?.parentElement || box;
+      if (dropTarget) {
+        ['dragenter','dragover'].forEach(ev => dropTarget.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); }));
+        dropTarget.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer?.files?.length) addFiles(e.dataTransfer.files); });
+      }
+      input()?.addEventListener('paste', e => {
+        const items = [...(e.clipboardData?.items || [])].filter(i => i.kind === 'file');
+        if (!items.length) return;
+        e.preventDefault();
+        addFiles(items.map(i => i.getAsFile()).filter(Boolean));
+      });
+      const mic = $(micBtnId);
+      if (mic) {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        mic.onclick = () => {
+          if (!SR) { showTip('当前浏览器不支持语音输入（iPhone 请用 Safari；桌面可用 Chrome）。可改用键盘或系统听写。'); return; }
+          if (state.rec) { try { state.rec.stop(); } catch (_) {} state.rec = null; mic.classList.remove('rec'); return; }
+          const rec = new SR();
+          rec.lang = 'zh-CN'; rec.interimResults = true; rec.continuous = false;
+          let finalText = '';
+          rec.onresult = (ev) => {
+            let interim = '';
+            for (let i = ev.resultIndex; i < ev.results.length; i++) {
+              const t = ev.results[i][0].transcript;
+              if (ev.results[i].isFinal) finalText += t; else interim += t;
+            }
+            const base = (input().dataset.voiceBase != null ? input().dataset.voiceBase : input().value);
+            input().value = (base + finalText + interim).trimStart();
+          };
+          rec.onerror = (ev) => {
+            mic.classList.remove('rec'); state.rec = null;
+            const map = { 'not-allowed': '没有麦克风权限，请在系统设置里允许。', 'no-speech': '没有听清，再试一次。', 'network': '语音识别需要网络。', 'service-not-allowed': '系统拒绝了语音识别。' };
+            showTip(map[ev.error] || `语音输入失败：${ev.error || 'unknown'}`);
+          };
+          rec.onend = () => { mic.classList.remove('rec'); state.rec = null; delete input().dataset.voiceBase; };
+          input().dataset.voiceBase = input().value;
+          try { rec.start(); state.rec = rec; mic.classList.add('rec'); showTip('正在听… 说完会自动填入输入框，确认后再发送'); }
+          catch (e) { showTip(`无法启动语音：${e.message}`); }
+        };
+      }
+    }
+    return { addFiles, payload, clear, render, showTip, wire, get items() { return state.items; } };
+  }
+  function userBubbleWithAttach(text, attachments) {
+    const wrap = document.createElement('div');
+    if (attachments?.length) {
+      const row = document.createElement('div'); row.className = 'att-row';
+      for (const a of attachments) {
+        if (a.kind === 'image' && a.preview) { const img = document.createElement('img'); img.src = a.preview; img.alt = a.name || ''; row.appendChild(img); }
+        else { const f = document.createElement('span'); f.className = 'att-file'; f.textContent = `📎 ${a.name || '文件'}`; row.appendChild(f); }
+      }
+      wrap.appendChild(row);
+    }
+    if (text) { const t = document.createElement('div'); t.textContent = text; wrap.appendChild(t); }
+    return wrap;
+  }
+
   function setupTodayChatInput() {
     const input = $('todayChatInput');
     const sendBtn = $('todayChatSend');
     if (!input || !sendBtn) return;
+    const todayComposer = makeComposer({ railId: 'todayAttachRail', tipId: 'todayComposerTip', inputId: 'todayChatInput', pickId: 'todayFilePick', attachBtnId: 'todayAttachBtn', micBtnId: 'todayMicBtn' });
+    todayComposer.wire();
+    window.__odmTodayComposer = todayComposer;
 
     const expand = () => openTodayChat();
     input.addEventListener('focus', expand);
@@ -2224,10 +2388,24 @@
 
     const send = async () => {
       const msg = input.value.trim();
-      if (!msg) return;
+      const atts = todayComposer.payload();
+      if (!msg && !atts.length) return;
       input.value = '';
+      const pending = todayComposer.items.splice(0); // keep blob URLs for the bubble
+      todayComposer.render(); todayComposer.showTip('');
       openTodayChat();
-      appendInlineBubble('me', msg);
+      const me = appendInlineBubble('me', msg || (atts.length ? '（附件）' : ''));
+      if (pending.length && me) {
+        const row = document.createElement('div'); row.className = 'att-row';
+        for (const a of pending) {
+          if (a.kind === 'image') {
+            const img = document.createElement('img');
+            img.src = a.preview || ('data:' + (a.mediaType || 'image/png') + ';base64,' + a.data);
+            img.alt = a.name || ''; row.appendChild(img);
+          } else { const f = document.createElement('span'); f.className = 'att-file'; f.textContent = '📎 ' + (a.name || '文件'); row.appendChild(f); }
+        }
+        me.prepend(row);
+      }
       const typing = document.createElement('div');
       typing.className = 'bubble';
       typing.innerHTML = '<span class="typing">⋯</span>';
@@ -2237,7 +2415,7 @@
       const setLabel = t => { if (!live.firstTextAt) typing.innerHTML = `<span class="typing-note">${escMd(t)}</span>`; };
       const live = newLiveTurn({ container: $('todayChatMsgs'), typingEl: typing, setLabel, bubbleClass: 'bubble bot', ctx: { container: $('todayChatMsgs'), sendPrompt: dockPrompt } });
       try {
-        const data = await sendChatResilient({ message: msg, sessionId: BOT_SESSION, viewContext: viewContext('dock'), turn: live.id }, setLabel, { streaming: () => feedState.mode === 'sse' });
+        const data = await sendChatResilient({ message: msg, attachments: atts, sessionId: BOT_SESSION, viewContext: viewContext('dock'), turn: live.id }, setLabel, { streaming: () => feedState.mode === 'sse' });
         live.finish();
         if (data.status === 'error' || data.error) { typing.remove(); appendInlineBubble('bot', data.text || data.error); return; }
         const b = appendInlineBubble('bot', data.text || '……', data.citations);
@@ -3395,7 +3573,17 @@
           <div class="z-msgs" id="zoomMsgs"><div class="z-empty-chat" id="zoomEmpty">问我这张卡的进展，或者直接让我去做：标完成、改下一步、起草回复…</div></div>
           <div class="z-compose">
             <div class="z-sugg">${sugg.map(s => `<button class="z-chip">${escapeHtml(s)}</button>`).join('')}</div>
-            <div class="z-input"><input type="text" id="zoomChatInput" placeholder="关于「${escapeHtml(name)}」，问我或让我去做…" /><button id="zoomChatSend">发送</button></div>
+            <div class="composer-attach" id="zoomAttachRail" hidden></div>
+            <div class="composer-tip" id="zoomComposerTip" hidden></div>
+            <div class="z-input">
+              <div class="composer-tools">
+                <button type="button" id="zoomAttachBtn" title="图片或文件" aria-label="添加图片或文件">＋</button>
+                <button type="button" id="zoomMicBtn" title="语音输入" aria-label="语音输入">🎤</button>
+              </div>
+              <input type="text" id="zoomChatInput" placeholder="关于「${escapeHtml(name)}」，问我或让我去做…" enterkeyhint="send" />
+              <button id="zoomChatSend">发送</button>
+              <input type="file" id="zoomFilePick" hidden multiple accept="image/*,.pdf,.txt,.md,.csv,.json,.js,.ts,.py,.yaml,.yml,.html,.css,.sh,.log" />
+            </div>
           </div>
         </aside>
       </div>`;
@@ -3432,11 +3620,27 @@
       clearBtn.hidden = true;
     };
     let lastZoomCards = [];
+    const zoomComposer = makeComposer({ railId: 'zoomAttachRail', tipId: 'zoomComposerTip', inputId: 'zoomChatInput', pickId: 'zoomFilePick', attachBtnId: 'zoomAttachBtn', micBtnId: 'zoomMicBtn' });
+    zoomComposer.wire();
     const sendZoomChat = async (preset) => {
       const msg = (preset || chatInput.value).trim();
-      if (!msg) return;
+      const atts = preset ? [] : zoomComposer.payload();
+      if (!msg && !atts.length) return;
       chatInput.value = '';
-      push('me', msg);
+      const pending = preset ? [] : zoomComposer.items.splice(0);
+      if (!preset) { zoomComposer.render(); zoomComposer.showTip(''); }
+      const me = push('me', msg || (atts.length ? '（附件）' : ''));
+      if (pending.length && me) {
+        const row = document.createElement('div'); row.className = 'att-row';
+        for (const a of pending) {
+          if (a.kind === 'image') {
+            const img = document.createElement('img');
+            img.src = a.preview || ('data:' + (a.mediaType || 'image/png') + ';base64,' + a.data);
+            img.alt = a.name || ''; row.appendChild(img);
+          } else { const f = document.createElement('span'); f.className = 'att-file'; f.textContent = '📎 ' + (a.name || '文件'); row.appendChild(f); }
+        }
+        me.prepend(row);
+      }
       const typing = push('bot typing', '豆芽正在想…');
       const sentAt = new Date(Date.now() - 5000).toISOString();
       let reply = '';
@@ -3445,7 +3649,7 @@
         const clientSentAt = Date.now();
         const zLabel = t => { if (live() && !zTurn.firstTextAt) typing.textContent = t; };
         var zTurn = newLiveTurn({ container: msgs, typingEl: typing, setLabel: zLabel, bubbleClass: 'z-msg bot', ctx: { container: msgs, sendPrompt: t => sendZoomChat(t) } });
-        const data = await sendChatResilient({ message: msg, cardId: isTT ? null : card.id, cardContext, sessionId: BOT_SESSION, viewContext: viewContext('card'), turn: zTurn.id }, zLabel, { streaming: () => feedState.mode === 'sse' });
+        const data = await sendChatResilient({ message: msg, attachments: atts, cardId: isTT ? null : card.id, cardContext, sessionId: BOT_SESSION, viewContext: viewContext('card'), turn: zTurn.id }, zLabel, { streaming: () => feedState.mode === 'sse' });
         zTurn.finish();
         lastZoomCards = data.cards || [];
         const clientRecvAt = Date.now();

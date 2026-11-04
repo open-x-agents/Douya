@@ -3,6 +3,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { buildChatContent, isImageModelError } from './chat-media.js'
 
 function clean(v) { return String(v ?? '').replace(/\s+/g, ' ').trim() }
 // Keep line structure (lists, paragraphs) — the client renders Markdown.
@@ -107,6 +108,7 @@ export async function runMuseChatTurn(ctx, {
   cardId = null,
   cardContext = null,
   viewContext = '',
+  attachments = null, // [{kind:'image'|'file', mediaType?, name, data: base64}]
   dshHome,
   botId = null,
   log = () => {},
@@ -114,21 +116,31 @@ export async function runMuseChatTurn(ctx, {
   onSession = null, // (sessionId) → the UI feed streams this turn's text / tool progress
 } = {}) {
   const text = clean(message)
-  if (!text) return { ok: true, text: '想问哪一类？可以说邮件、PR、或改一张 Today 卡片。', status: 'answered', botId: null }
+  const hasAttach = Array.isArray(attachments) && attachments.length > 0
+  if (!text && !hasAttach) return { ok: true, text: '想问哪一类？可以说邮件、PR、或改一张 Today 卡片；也可以贴图 / 传文件 / 按住麦克风说话。', status: 'answered', botId: null }
 
   const T = timing || {}
   T.turnCallAt = Date.now()
-  let outbound = text
+  let outbound = text || (hasAttach ? '请看我附上的内容。' : '')
   // Server-built snapshots already start with 【当前卡片】 and keep their line structure.
   const ctxText = cardContext ? cleanBlock(cardContext).slice(0, 3200) : ''
-  if (ctxText) outbound = `${ctxText.startsWith('【当前卡片】') ? ctxText : `【当前卡片】${ctxText}`}\n\n${text}`
-  else if (cardId) outbound = `【cardId=${cardId}】\n${text}`
+  if (ctxText) outbound = `${ctxText.startsWith('【当前卡片】') ? ctxText : `【当前卡片】${ctxText}`}\n\n${outbound}`
+  else if (cardId) outbound = `【cardId=${cardId}】\n${outbound}`
   // 【当前视图】 goes first (page / filter / open card / visible cards), then 【当前卡片】, then the user's words.
   const viewText = viewContext ? cleanBlock(viewContext).slice(0, 900) : ''
   if (viewText) outbound = `${viewText.startsWith('【当前视图】') ? viewText : `【当前视图】${viewText}`}\n\n${outbound}`
   T.viewChars = viewText.length
   T.contextChars = ctxText.length
   T.outboundChars = outbound.length
+
+  let built
+  try {
+    built = await buildChatContent(ctx, { text: outbound, attachments: hasAttach ? attachments : [] }, { preferNative: true })
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) }
+  }
+  T.attachCount = built.meta.length
+  T.attachMode = built.mode
 
   const chief = await resolveChief(dshHome, botId)
   const promptTo = chief.botId
@@ -145,14 +157,27 @@ export async function runMuseChatTurn(ctx, {
   } catch (err) { log(`[muse-chat] page(before) failed: ${err?.message || err}`) }
 
   T.beforeReadMs = Date.now() - T.turnCallAt
-  log(`[muse-chat] prompt → ${sessionId}: ${outbound.slice(0, 80)}`)
+  const preview = built.content.find(p => p.type === 'text')?.text || ''
+  log(`[muse-chat] prompt → ${sessionId}: ${preview.slice(0, 80)} attach=${built.meta.length}/${built.mode}`)
   T.promptAt = Date.now()
-  await ctx.sessionController.prompt({
+  const sendPrompt = async (content) => ctx.sessionController.prompt({
     requestId: randomUUID(),
     sessionId: promptTo,
     mode: 'queue',
-    content: [{ type: 'text', text: outbound }],
+    content,
   }, AbortSignal.timeout(30_000))
+  try {
+    await sendPrompt(built.content)
+  } catch (err) {
+    if (built.mode === 'native' && isImageModelError(err) && hasAttach) {
+      log(`[muse-chat] native attach refused (${err.message}); retrying as text`)
+      built = await buildChatContent(ctx, { text: outbound, attachments }, { preferNative: false })
+      T.attachMode = 'text-fallback'
+      await sendPrompt(built.content)
+    } else {
+      return { ok: false, error: err.message || String(err) }
+    }
+  }
 
   T.promptAckMs = Date.now() - T.promptAt
   const deadline = Date.now() + 180_000
@@ -193,6 +218,7 @@ export async function runMuseChatTurn(ctx, {
     sessionId,
     citations: [],
     cards: [],
+    attachments: built?.meta || [],
     timing: summarizeTiming(T),
   }
 }

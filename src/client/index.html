@@ -688,6 +688,32 @@
   .tt-tick:first-child{transform:none}
   .tt-tick:last-child{transform:translateX(-100%)}
   .tt-tick i{font-style:normal;font-size:10.5px;color:var(--ink3);font-variant-numeric:tabular-nums}
+  .tt-bar{cursor:default;user-select:none;gap:2px}
+  .tt-bar .tt-ic{font-size:11px;line-height:1;opacity:.9;margin-right:3px}
+  .tt-bar.locked{cursor:default;background-image:repeating-linear-gradient(135deg,transparent,transparent 5px,rgba(255,255,255,.18) 5px,rgba(255,255,255,.18) 6px)}
+  .tt-bar.locked::after{content:"锁";position:absolute;top:3px;right:5px;font-size:9px;font-weight:700;opacity:.55;letter-spacing:.04em}
+  .tt-bar.soft{cursor:grab}
+  .tt-bar.soft:active,.tt-bar.dragging{cursor:grabbing;z-index:5;opacity:.92;box-shadow:inset 3px 0 0 currentColor,0 4px 14px rgba(30,40,80,.18)}
+  .tt-bar .tt-rz{position:absolute;top:0;bottom:0;width:8px;cursor:ew-resize;z-index:2}
+  .tt-bar .tt-rz.l{left:0} .tt-bar .tt-rz.r{right:0}
+  .tt-bar.past{opacity:.38;filter:saturate(.45)}
+  .tt-bar.live{outline:2px solid rgba(34,168,152,.45);outline-offset:1px;box-shadow:inset 3px 0 0 currentColor,0 0 0 1px rgba(34,168,152,.2);z-index:2;font-weight:700}
+  .tt-bar.selected{outline:2px solid rgba(138,116,208,.55);outline-offset:1px;z-index:3}
+  .tt-empty{flex-direction:column;gap:6px;padding:18px 16px;text-align:center;background:linear-gradient(180deg,rgba(34,168,152,.06),transparent);border-radius:12px}
+  .tt-empty b{font-size:13.5px;color:var(--ink2);font-weight:650}
+  .tt-empty span{font-size:12px;color:var(--ink3);max-width:28em;line-height:1.45}
+  .tt-tz{margin-top:8px;font-size:11.5px;color:var(--ink3);background:rgba(30,40,80,.04);display:inline-flex;gap:6px;align-items:center;padding:4px 10px;border-radius:999px}
+  .tt-acts{display:none;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .tt-acts.show{display:flex}
+  .tt-acts button{appearance:none;border:1px solid rgba(30,40,80,.1);background:#fff;border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;color:var(--ink2);cursor:pointer;transition:.15s}
+  .tt-acts button:hover{border-color:rgba(34,168,152,.45);color:var(--teal);background:var(--teal-soft)}
+  .tt-acts button.primary{background:var(--teal);border-color:var(--teal);color:#fff}
+  .tt-acts button.primary:hover{filter:brightness(1.05)}
+  .tt-buf{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
+  .tt-buf button{appearance:none;border:1px dashed rgba(138,116,208,.45);background:rgba(138,116,208,.08);color:#6450a8;border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:600;cursor:pointer}
+  .tt-buf button:hover{background:rgba(138,116,208,.16)}
+  .myday-note .tt-nowlbl{color:var(--teal);font-weight:700}
+
 
   /* Grid */
   .grid2{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-flow:row dense;gap:16px;padding-bottom:120px}
@@ -1367,9 +1393,21 @@
   @keyframes tickOut{to{opacity:.35;transform:translateX(6px)}}
   .f-more{font-size:11.5px;color:var(--ink3);padding-left:34px}
   .f-alldone{font-size:13px;color:var(--teal);font-weight:600;display:flex;gap:6px;align-items:center}
-  .f-quote{margin:0;padding:10px 12px 9px 14px;border-left:3px solid var(--violet);background:var(--violet-soft);border-radius:4px 12px 12px 4px}
+  .f-quote{margin:0;padding:10px 12px 10px 13px;border-left:2px solid rgba(138,116,208,.55);background:rgba(138,116,208,.07);border-radius:0 12px 12px 0}
+  .f-quote-hd{display:flex;align-items:center;gap:8px;margin-bottom:6px;min-width:0}
+  .f-quote-hd .f-av{width:22px;height:22px;font-size:10.5px;margin-left:0;border-width:1.5px;box-shadow:none;flex-shrink:0}
+  .f-quote-who{font-size:12.5px;font-weight:650;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .f-quote-when{font-size:11px;color:var(--ink3);flex-shrink:0;font-variant-numeric:tabular-nums}
   .f-quote p{margin:0;font-size:13.5px;line-height:1.55;color:var(--ink);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-  .f-quote cite{display:block;margin-top:4px;font-style:normal;font-size:11.5px;color:var(--ink3)}
+  .f-quote .f-linkchip{display:inline-flex;align-items:center;gap:8px;max-width:100%;margin-top:2px;padding:6px 10px 6px 8px;border-radius:10px;background:rgba(255,255,255,.72);border:1px solid rgba(30,40,80,.08);text-decoration:none;color:var(--ink);transition:background .15s}
+  .f-quote .f-linkchip:hover{background:#fff;border-color:rgba(138,116,208,.35)}
+  .f-quote .f-linkchip .f-lc-ic{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;background:rgba(30,40,80,.06);font-size:11px;flex-shrink:0}
+  .f-quote .f-linkchip .f-lc-b{display:flex;flex-direction:column;min-width:0;line-height:1.25}
+  .f-quote .f-linkchip b{font-size:12.5px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .f-quote .f-linkchip em{font-style:normal;font-size:11px;color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .face.f-quote + .w-next,.tile.work:has(.face.f-quote) .w-next{background:rgba(30,40,80,.035);border:1px solid rgba(30,40,80,.05)}
+  .face.f-quote + .w-next .w-next-k,.tile.work:has(.face.f-quote) .w-next-k{color:var(--ink3);font-weight:600}
+  .face.f-quote + .w-next .w-next-v,.tile.work:has(.face.f-quote) .w-next-v{color:var(--ink2)}
   .f-tl{list-style:none;margin:0;padding:0 0 0 6px;border-left:2px solid rgba(30,40,80,.08);display:flex;flex-direction:column;gap:6px}
   .f-tl li{position:relative;display:grid;grid-template-columns:44px minmax(0,1fr);gap:6px;align-items:baseline;font-size:12.5px;padding-left:10px}
   .f-dot{position:absolute;left:-12px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--sky);border:2px solid #fff}
@@ -2401,11 +2439,19 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function linkRow(l) {
     return `<a class="lk lk-${l.kind.k}" href="${escapeHtml(l.url)}" target="_blank" rel="noopener" title="${escapeHtml(l.title)}"><span class="lk-ic">${ICON[l.kind.k] || ICON.link}</span><span class="lk-t">${escapeHtml(l.title)}</span><span class="lk-arrow">↗</span></a>`;
   }
+  function shanghaiParts(d = new Date()) {
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(d);
+    const h = Number(parts.find(p => p.type === 'hour').value);
+    const m = Number(parts.find(p => p.type === 'minute').value);
+    return { h, m, min: h * 60 + m };
+  }
   function toMin(t) {
     if (typeof t === 'string' && /^\d{1,2}:\d{2}$/.test(t)) { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
-    const d = new Date(t); return isNaN(d) ? null : d.getHours() * 60 + d.getMinutes();
+    const d = new Date(t); return isNaN(d) ? null : shanghaiParts(d).min;
   }
   function fmtMin(m) { return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
+  function snapMin(m, step = 15) { return Math.max(0, Math.min(24 * 60, Math.round(m / step) * step)); }
+  const CAT_IC = { meal: '🍜', focus: '◎', work: '✎', break: '☕', exercise: '🏃', meeting: '📅', review: '👁', admin: '📬', learning: '📘', personal: '❀', winddown: '🌙' };
   function greetingWord() {
     const h = new Date().getHours();
     return h < 5 ? '夜深了' : h < 11 ? '早上好' : h < 13 ? '中午好' : h < 18 ? '下午好' : '晚上好';
@@ -2422,50 +2468,255 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function localDayStr(d = new Date()) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
   function renderTimetable(card) {
     const tt = blockOf(card, 'timetable') || {};
-    const blocks = [...(tt.fixedBlocks || []).map(b => ({ ...b, fixed: true })), ...(tt.suggestedBlocks || [])]
-      .map(b => ({ ...b, s: toMin(b.start), e: toMin(b.end) }))
+    const blocks = [...(tt.fixedBlocks || []).map(b => ({ ...b, fixed: true, locked: true, category: b.category || 'meeting' })), ...(tt.suggestedBlocks || []).map(b => ({ ...b, fixed: false }))]
+      .map(b => {
+        const s = toMin(b.start), e = toMin(b.end);
+        const startHm = (typeof b.start === 'string' && /^\d{1,2}:\d{2}$/.test(b.start)) ? b.start : (s != null ? fmtMin(s) : '');
+        const endHm = (typeof b.end === 'string' && /^\d{1,2}:\d{2}$/.test(b.end)) ? b.end : (e != null ? fmtMin(e) : '');
+        return { ...b, s, e, start: startHm, end: endHm };
+      })
       .filter(b => b.s != null && b.e != null && b.e > b.s)
       .sort((a, b) => a.s - b.s);
-    const now = new Date(); const nowM = now.getHours() * 60 + now.getMinutes();
+    const nowM = shanghaiParts().min;
     let lo = 8 * 60, hi = 22 * 60;
-    for (const b of blocks) { lo = Math.min(lo, Math.floor(b.s / 60) * 60); hi = Math.max(hi, Math.ceil(b.e / 60) * 60); }
-    lo = Math.min(lo, Math.floor(nowM / 60) * 60); hi = Math.max(hi, Math.ceil((nowM + 1) / 60) * 60);
+    if (!blocks.length) { lo = 8 * 60; hi = 20 * 60; }
+    else {
+      for (const b of blocks) { lo = Math.min(lo, Math.floor(b.s / 60) * 60); hi = Math.max(hi, Math.ceil(b.e / 60) * 60); }
+      lo = Math.min(lo, Math.floor(nowM / 60) * 60); hi = Math.max(hi, Math.ceil((nowM + 1) / 60) * 60);
+    }
     hi = Math.min(hi, 24 * 60);
-    const pct = m => ((m - lo) / (hi - lo)) * 100;
+    const span = Math.max(hi - lo, 60);
+    const pct = m => ((m - lo) / span) * 100;
     let ticks = '';
     for (let h = lo / 60; h <= hi / 60; h += 2) ticks += `<span class="tt-tick" style="left:${pct(h * 60)}%"><i>${String(h).padStart(2, '0')}:00</i></span>`;
     const lanesEnd = [];
-    const minSpan = 0.04 * (hi - lo); // short blocks get a readable minimum width; lanes use the visual end
+    const minSpan = 0.04 * span;
     for (const b of blocks) { b.ve = Math.max(b.e, b.s + minSpan); }
     for (const b of blocks) { let l = lanesEnd.findIndex(e => e <= b.s); if (l < 0) { l = lanesEnd.length; lanesEnd.push(0); } lanesEnd[l] = b.ve; b.lane = l; }
-    const nLanes = Math.max(1, lanesEnd.length), laneH = 40;
-    const bars = blocks.map(b => {
+    const nLanes = Math.max(1, lanesEnd.length), laneH = 42;
+    const bars = blocks.map((b, i) => {
       const state = b.e <= nowM ? 'past' : b.s <= nowM ? 'live' : 'next';
-      const cat = CAT_ZH[b.category] || (b.fixed ? '日程' : '建议');
-      return `<div class="tt-bar c-${escapeHtml(b.category || (b.fixed ? 'meeting' : 'focus'))} ${state}" style="left:${pct(b.s)}%;width:calc(${pct(b.ve) - pct(b.s)}% - 2px);top:${5 + b.lane * laneH}px;height:${laneH - 6}px" title="${escapeHtml(b.start + '–' + b.end + ' ' + ttTitle(b.title))}"><b>${escapeHtml(cat)}</b><span>${escapeHtml(b.start)}–${escapeHtml(b.end)} · ${escapeHtml(ttTitle(b.title))}</span></div>`;
+      const catKey = b.category || (b.fixed ? 'meeting' : 'focus');
+      const cat = CAT_ZH[catKey] || (b.fixed ? '会议' : '建议');
+      const ic = CAT_IC[catKey] || '·';
+      const soft = !b.fixed;
+      const lock = b.fixed || b.locked;
+      const resize = soft ? '<i class="tt-rz l" data-rz="l"></i><i class="tt-rz r" data-rz="r"></i>' : '';
+      return `<div class="tt-bar c-${escapeHtml(catKey)} ${state}${lock ? ' locked' : ''}${soft ? ' soft' : ''}" data-i="${i}" data-start="${escapeHtml(b.start)}" data-end="${escapeHtml(b.end)}" data-title="${escapeHtml(ttTitle(b.title))}" data-fixed="${lock ? '1' : '0'}" style="left:${pct(b.s)}%;width:calc(${pct(b.ve) - pct(b.s)}% - 2px);top:${5 + b.lane * laneH}px;height:${laneH - 6}px;position:absolute" title="${escapeHtml(b.start + '–' + b.end + ' ' + ttTitle(b.title))}${lock ? ' · 日历锁定' : ''}"><b><span class="tt-ic">${ic}</span>${escapeHtml(cat)}${lock ? '' : ''}</b><span>${escapeHtml(b.start)}–${escapeHtml(b.end)} · ${escapeHtml(ttTitle(b.title))}</span>${resize}</div>`;
     }).join('');
     const upcoming = blocks.find(b => b.e > nowM);
     const fixedN = blocks.filter(b => b.fixed).length;
     const freeMin = Math.max(0, (Math.min(hi, 23 * 60) - nowM) - blocks.filter(b => b.e > nowM).reduce((s, b) => s + (b.e - Math.max(b.s, nowM)), 0));
-    const note = upcoming
-      ? `${upcoming.s <= nowM ? `现在 ${escapeHtml(upcoming.start)}–${escapeHtml(upcoming.end)}` : `接下来 ${escapeHtml(upcoming.start)}`} ${(() => { const t = ttTitle(upcoming.title), c = CAT_ZH[upcoming.category] || ''; return escapeHtml(c && !t.startsWith(c) ? c + '：' + t : t); })()}`
-      : `今天的安排都已过去，剩余约 ${(freeMin / 60).toFixed(1)} 小时空闲，适合收尾或复盘。`;
+    let note;
+    if (!blocks.length) {
+      note = '今天还没有安排 · 豆芽会按精力曲线帮你填上专注与缓冲';
+    } else if (upcoming) {
+      const t = ttTitle(upcoming.title), c = CAT_ZH[upcoming.category] || '';
+      const label = escapeHtml(c && !t.startsWith(c) ? c + '：' + t : t);
+      note = upcoming.s <= nowM
+        ? `<span class="tt-nowlbl">现在</span> ${escapeHtml(upcoming.start)}–${escapeHtml(upcoming.end)} ${label}`
+        : `<span class="tt-nowlbl">接下来</span> ${escapeHtml(upcoming.start)} ${label}`;
+    } else {
+      note = `今天的安排都已过去，剩余约 ${(freeMin / 60).toFixed(1)} 小时空闲，适合收尾或复盘。`;
+    }
+    // Buffer suggestions after meetings when the next 15 min are free
+    const bufChips = [];
+    for (const f of blocks.filter(b => b.fixed)) {
+      const gapEnd = f.e + 15;
+      const taken = blocks.some(b => b.s < gapEnd && b.e > f.e && b !== f);
+      if (!taken && f.e < 23 * 60) bufChips.push({ start: fmtMin(f.e), end: fmtMin(Math.min(gapEnd, 24 * 60 - 1)), after: ttTitle(f.title) });
+    }
+    const emptyHtml = `<div class="tt-empty"><b>今天还很轻 🌱</b><span>连接 Google 日历后，会议会锁在轴上；空档会按上午专注、下午杂务排进来。</span></div>`;
+    const tzNote = tt.tzNote ? `<div class="tt-tz">⏱ ${escapeHtml(tt.tzNote)}</div>` : '';
+    // Detect client-side mismatch if server didn't stamp tzNote
+    const tzClient = !tt.tzNote && (tt.fixedBlocks || []).some(b => {
+      const raw = String(b.start || '');
+      if (/Z$/i.test(raw)) return true;
+      const m = raw.match(/([+-]\d{2}):?(\d{2})$/);
+      if (!m) return false;
+      const sign = m[1].startsWith('-') ? -1 : 1;
+      const absH = Math.abs(Number(m[1]));
+      return sign * (absH * 60 + Number(m[2] || 0)) !== 8 * 60;
+    }) ? `<div class="tt-tz">⏱ 日历原时区不是北京时间，已按 Asia/Shanghai 显示</div>` : '';
     return `
-      <section class="myday" data-sys="timetable">
+      <section class="myday" data-sys="timetable" data-card-id="${escapeHtml(card.id || '')}">
         <div class="myday-head">
           <div>
             <div class="eyebrow c-teal">我的一天 · MY DAY${tt.userPlan && tt.userPlan.date === localDayStr() ? '<span class="myday-edited">豆芽已调整</span>' : ''}</div>
-            <div class="myday-note">${note}</div>
+            <div class="myday-note" data-tt-note>${note}</div>
+            ${tzNote || tzClient}
           </div>
-          <div class="myday-meta"><span><b>${fixedN}</b> 个固定日程</span><span><b>${blocks.length - fixedN}</b> 个建议时段</span><span>现在 <b>${fmtMin(nowM)}</b></span></div>
+          <div class="myday-meta"><span><b>${fixedN}</b> 个固定日程</span><span><b>${Math.max(0, blocks.length - fixedN)}</b> 个建议时段</span><span>现在 <b data-tt-now>${fmtMin(nowM)}</b></span></div>
         </div>
-        <div class="tt">
-          <div class="tt-track" style="height:${nLanes * laneH + 6}px">${bars || '<div class="tt-empty">今天日历空着 🌱 · 连接日历后会自动排进来</div>'}
-            ${nowM >= lo && nowM <= hi ? `<div class="tt-now" style="left:${pct(nowM)}%"><em>${fmtMin(nowM)}</em></div>` : ''}
+        <div class="tt" data-lo="${lo}" data-hi="${hi}">
+          <div class="tt-track" style="height:${blocks.length ? (nLanes * laneH + 6) : 72}px">${bars || emptyHtml}
+            ${nowM >= lo && nowM <= hi ? `<div class="tt-now" data-tt-needle style="left:${pct(nowM)}%"><em>${fmtMin(nowM)}</em></div>` : ''}
           </div>
           <div class="tt-axis">${ticks}</div>
         </div>
+        <div class="tt-acts" data-tt-acts>
+          <button type="button" data-tt-act="start" class="primary">开始</button>
+          <button type="button" data-tt-act="delay">延后 30 分</button>
+          <button type="button" data-tt-act="shorten">缩短</button>
+          <button type="button" data-tt-act="ask">交给豆芽</button>
+        </div>
+        ${bufChips.length ? `<div class="tt-buf">${bufChips.map(c => `<button type="button" data-tt-buf="${escapeHtml(c.start)}" data-tt-buf-end="${escapeHtml(c.end)}" title="在 ${escapeHtml(c.after)} 后">＋ 会后缓冲 ${escapeHtml(c.start)}–${escapeHtml(c.end)}</button>`).join('')}</div>` : ''}
       </section>`;
+  }
+
+  async function timetablePatch(ops, toastOk) {
+    const r = await fetch('/api/opendigitalmate/timetable', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'patch', ops }) }).then(x => x.json()).catch(e => ({ success: false, error: e.message }));
+    if (!r.success) { showUiToast((r.errors && r.errors[0]) || r.error || '没改成'); return null; }
+    if (r.warnings && r.warnings[0]) showUiToast(r.warnings[0]);
+    else if (toastOk) showUiToast(toastOk);
+    await loadToday({ force: true }).catch(() => {});
+    return r;
+  }
+
+  function bindTimetable(root, card) {
+    const el = root.querySelector('.myday');
+    if (!el || !card) return;
+    const tt = blockOf(card, 'timetable') || {};
+    const soft = [...(tt.suggestedBlocks || [])];
+    let selected = null;
+    const acts = el.querySelector('[data-tt-acts]');
+    const selectBar = (bar) => {
+      el.querySelectorAll('.tt-bar.selected').forEach(b => b.classList.remove('selected'));
+      selected = bar;
+      if (bar && bar.dataset.fixed !== '1') { bar.classList.add('selected'); acts?.classList.add('show'); }
+      else acts?.classList.remove('show');
+    };
+    el.querySelectorAll('.tt-bar').forEach(bar => {
+      bar.addEventListener('click', e => {
+        e.stopPropagation();
+        if (bar.dataset.fixed === '1') { showUiToast('日历会议已锁定，不能拖动'); selectBar(null); return; }
+        selectBar(bar);
+      });
+    });
+    acts?.querySelectorAll('[data-tt-act]').forEach(btn => btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      if (!selected) return;
+      const start = selected.dataset.start, end = selected.dataset.end, title = selected.dataset.title;
+      const act = btn.getAttribute('data-tt-act');
+      if (act === 'start') {
+        selectBar(null);
+        const ttCard = card;
+        setChatContext(ttCard);
+        openTodayChat({ byUser: true });
+        dockPrompt(`我现在开始做「${title}」（${start}–${end}），帮我列一个马上能开始的三步清单。`);
+        return;
+      }
+      if (act === 'ask') {
+        setChatContext(card);
+        openTodayChat({ byUser: true });
+        dockPrompt(`关于时段「${title}」（${start}–${end}），帮我看看怎么安排更合适。`);
+        return;
+      }
+      if (act === 'delay') {
+        const s = toMin(start), e = toMin(end); if (s == null) return;
+        const ns = snapMin(s + 30), ne = snapMin(e + 30);
+        await timetablePatch([{ match: start, start: fmtMin(ns), end: fmtMin(ne) }], `已延后「${title}」30 分`);
+        return;
+      }
+      if (act === 'shorten') {
+        const s = toMin(start), e = toMin(end); if (s == null || e == null) return;
+        const dur = e - s;
+        if (dur <= 20) { showUiToast('已经够短了'); return; }
+        const ne = snapMin(s + Math.max(15, dur - 30));
+        await timetablePatch([{ match: start, end: fmtMin(Math.max(s + 15, ne)) }], `已缩短「${title}」`);
+      }
+    }));
+    el.querySelectorAll('[data-tt-buf]').forEach(btn => btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const start = btn.getAttribute('data-tt-buf'), end = btn.getAttribute('data-tt-buf-end');
+      await timetablePatch([{ start, end, title: '会后缓冲', kind: 'break' }], '已加入会后缓冲');
+    }));
+
+    // Drag move / resize soft blocks (15-min snap); calendar collisions handled server-side (split/reject).
+    const track = el.querySelector('.tt-track');
+    const lo = Number(el.querySelector('.tt')?.getAttribute('data-lo') || 8 * 60);
+    const hi = Number(el.querySelector('.tt')?.getAttribute('data-hi') || 22 * 60);
+    const span = Math.max(hi - lo, 60);
+    const minOfX = (clientX) => {
+      const r = track.getBoundingClientRect();
+      const x = Math.min(Math.max(clientX - r.left, 0), r.width);
+      return lo + (x / r.width) * span;
+    };
+    el.querySelectorAll('.tt-bar.soft').forEach(bar => {
+      let mode = null, origin = null;
+      const onDown = (e, m) => {
+        if (e.button != null && e.button !== 0) return;
+        e.preventDefault(); e.stopPropagation();
+        selectBar(bar);
+        mode = m;
+        origin = { x: e.clientX, start: toMin(bar.dataset.start), end: toMin(bar.dataset.end) };
+        bar.classList.add('dragging');
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp, { once: true });
+      };
+      const onMove = (e) => {
+        if (!origin) return;
+        const dxMin = minOfX(e.clientX) - minOfX(origin.x);
+        let ns = origin.start, ne = origin.end;
+        if (mode === 'move') { const dur = origin.end - origin.start; ns = snapMin(origin.start + dxMin); ne = ns + dur; }
+        else if (mode === 'l') { ns = snapMin(Math.min(origin.end - 15, origin.start + dxMin)); ne = origin.end; }
+        else if (mode === 'r') { ne = snapMin(Math.max(origin.start + 15, origin.end + dxMin)); ns = origin.start; }
+        const pct = m => ((m - lo) / span) * 100;
+        bar.style.left = pct(ns) + '%';
+        bar.style.width = `calc(${pct(ne) - pct(ns)}% - 2px)`;
+        bar.dataset._ns = fmtMin(ns); bar.dataset._ne = fmtMin(ne);
+      };
+      const onUp = async () => {
+        window.removeEventListener('pointermove', onMove);
+        bar.classList.remove('dragging');
+        const ns = bar.dataset._ns, ne = bar.dataset._ne;
+        mode = origin = null;
+        delete bar.dataset._ns; delete bar.dataset._ne;
+        if (!ns || !ne || (ns === bar.dataset.start && ne === bar.dataset.end)) return;
+        await timetablePatch([{ match: bar.dataset.start, start: ns, end: ne }], `已调整「${bar.dataset.title}」`);
+      };
+      bar.addEventListener('pointerdown', e => {
+        if (e.target.closest('.tt-rz')) return;
+        onDown(e, 'move');
+      });
+      bar.querySelectorAll('.tt-rz').forEach(rz => rz.addEventListener('pointerdown', e => onDown(e, rz.getAttribute('data-rz') === 'l' ? 'l' : 'r')));
+    });
+
+    // Advance 「接下来」 / now-line every 30s without waiting for digest.
+    if (!window.__ttTick) {
+      window.__ttTick = setInterval(() => {
+        const day = document.querySelector('.myday');
+        if (!day) return;
+        const nowM = shanghaiParts().min;
+        const needle = day.querySelector('[data-tt-needle]');
+        const nowLbl = day.querySelector('[data-tt-now]');
+        const noteEl = day.querySelector('[data-tt-note]');
+        const wrap = day.querySelector('.tt');
+        if (nowLbl) nowLbl.textContent = fmtMin(nowM);
+        if (needle && wrap) {
+          const lo2 = Number(wrap.getAttribute('data-lo') || 0), hi2 = Number(wrap.getAttribute('data-hi') || 1440);
+          const sp = Math.max(hi2 - lo2, 60);
+          needle.style.left = ((nowM - lo2) / sp) * 100 + '%';
+          const em = needle.querySelector('em'); if (em) em.textContent = fmtMin(nowM);
+        }
+        const bars = [...day.querySelectorAll('.tt-bar')];
+        let next = null;
+        bars.forEach(b => {
+          const s = toMin(b.dataset.start), e = toMin(b.dataset.end);
+          b.classList.remove('past', 'live', 'next');
+          if (e <= nowM) b.classList.add('past');
+          else if (s <= nowM) { b.classList.add('live'); if (!next) next = b; }
+          else { b.classList.add('next'); if (!next) next = b; }
+        });
+        if (noteEl && next) {
+          const s = next.dataset.start, e = next.dataset.end, t = next.dataset.title;
+          const live = toMin(s) <= nowM;
+          noteEl.innerHTML = live
+            ? `<span class="tt-nowlbl">现在</span> ${escapeHtml(s)}–${escapeHtml(e)} ${escapeHtml(t)}`
+            : `<span class="tt-nowlbl">接下来</span> ${escapeHtml(s)} ${escapeHtml(t)}`;
+        }
+      }, 30000);
+    }
   }
 
   function ringSvg(value, max, color, size = 64, stroke = 7) {
@@ -2620,7 +2871,21 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         if (p.done && !(p.items || []).length) out.push('<div class="f-alldone"><span class="f-sprout">🌱</span>都处理完了</div>');
         else out.push(`<ul class="f-check">${(p.items || []).map(it => `<li class="${it.done ? 'done' : ''}${it.needsYou ? ' need' : ''}"><button type="button" class="f-box" aria-label="在豆芽里标完成" title="只在豆芽里记下，不会改 Gmail / GitHub" data-item-url="${escapeHtml(it.url)}" data-item-title="${escapeHtml(it.title)}"></button><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</a><span class="f-meta">${escapeHtml(it.from || it.kindZh || '')}</span></li>`).join('')}</ul>${p.more ? `<div class="f-more">还有 ${p.more} 条</div>` : ''}`);
       }
-      else if (p.type === 'quote') out.push(`<blockquote class="f-quote"><p>${escapeHtml(p.text)}</p><cite>${escapeHtml([p.from, faceRelTime(p.at)].filter(Boolean).join(' · '))}</cite></blockquote>`);
+      else if (p.type === 'quote') {
+        const who = p.from ? `<span class="f-av" style="--h:${avHue(p.from)}">${escapeHtml(initial(p.from))}</span><span class="f-quote-who">${escapeHtml(p.from)}</span>` : '';
+        const when = faceRelTime(p.at);
+        const hd = (who || when) ? `<div class="f-quote-hd">${who}${when ? `<span class="f-quote-when">${escapeHtml(when)}</span>` : ''}</div>` : '';
+        let body = '';
+        if (p.link && p.link.href) {
+          const host = escapeHtml(p.link.host || '');
+          const label = escapeHtml(p.link.label || p.link.host || '链接');
+          body = `<a class="f-linkchip" href="${escapeHtml(p.link.href)}" target="_blank" rel="noopener" title="${escapeHtml(p.link.href)}"><span class="f-lc-ic">↗</span><span class="f-lc-b"><b>${label}</b><em>${host}</em></span></a>`;
+          if (p.text) body = `<p>${escapeHtml(p.text)}</p>` + body;
+        } else if (p.text) {
+          body = `<p>${escapeHtml(p.text)}</p>`;
+        }
+        if (hd || body) out.push(`<blockquote class="f-quote">${hd}${body}</blockquote>`);
+      }
       else if (p.type === 'timeline' && p.items && p.items.length) out.push(`<ol class="f-tl">${p.items.map(it => `<li><i class="f-dot k-${escapeHtml(it.kind)}"></i><time>${escapeHtml(it.time || it.kindZh)}</time><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</a></li>`).join('')}</ol>`);
       else if (p.type === 'compare' && p.items) out.push(`<div class="f-cmp">${p.items.map(it => `<a class="f-cmp-i" href="${escapeHtml(it.url)}" target="_blank" rel="noopener"><span>${escapeHtml(it.kindZh)}</span><b>${escapeHtml(it.title)}</b><em>${escapeHtml(it.from || '')}</em></a>`).join('<i class="f-vs">vs</i>')}</div>`);
       else if (p.type === 'countdown' && p.at) out.push(`<div class="f-count" data-at="${p.at}"><b>${escapeHtml(countdownText(p.at))}</b><span>${escapeHtml(p.label)}</span></div>`);
@@ -3128,7 +3393,13 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       });
     });
     const myday = container.querySelector('.myday');
-    if (myday && tt) myday.addEventListener('click', () => openTileZoom(tt));
+    if (myday && tt) {
+      bindTimetable(container, tt);
+      myday.addEventListener('click', e => {
+        if (e.target.closest('.tt-bar, .tt-acts, .tt-buf, .tt-rz')) return;
+        openTileZoom(tt);
+      });
+    }
     if (fresh) setupTodayChatInput();
     if (chatDockWanted) liveChat.classList.add('open');
     else liveChat.classList.remove('open');

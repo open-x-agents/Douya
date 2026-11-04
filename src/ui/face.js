@@ -22,7 +22,7 @@ export const FACE_LAYOUTS = {
   inbox: { desc: '一组邮件 / 通知：数量 + 要处理的清单', parts: ['stats', 'checklist', 'cta'] },
   progress: { desc: '一批条目推进到哪了：进度条 + 剩下的清单', parts: ['stage', 'checklist', 'cta'] },
   checklist: { desc: '几件具体要做的事：可勾选清单', parts: ['checklist', 'cta'] },
-  quote: { desc: '一条关键消息：原话 + 谁说的', parts: ['quote', 'people', 'cta'] },
+  quote: { desc: '一条关键消息：作者行 + 原话/链接卡片', parts: ['quote', 'cta'] },
   timeline: { desc: '一件事在多个渠道的来龙去脉：时间线', parts: ['timeline', 'cta'] },
   compare: { desc: '两个选项 / 两个 PR 对比', parts: ['compare', 'cta'] },
   meeting: { desc: '会议：倒计时 + 会前清单', parts: ['countdown', 'checklist', 'cta'] },
@@ -31,6 +31,35 @@ const LAYOUT_IDS = Object.keys(FACE_LAYOUTS)
 const one = v => String(v ?? '').replace(/\s+/g, ' ').trim()
 const cut = (v, n) => { const s = one(v); return s.length > n ? `${s.slice(0, n - 1)}…` : s }
 const BAD = /<\s*\/?\s*(script|iframe|img|svg|style|object|embed|link|meta)\b|javascript\s*:|\bon[a-z]+\s*=/i
+
+/** Prefer readable message text; bare URLs become a neat link chip (host + short path), never mid-word cut. */
+function quoteBody(raw) {
+  let text = String(raw ?? '').replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '$1').replace(/\s+/g, ' ').trim()
+  if (!text) return { text: '', link: null }
+  const stripped = text.replace(/[.,;:!?)\]]+$/, '')
+  const onlyUrl = /^https?:\/\/\S+$/.test(stripped)
+  if (onlyUrl) {
+    try {
+      const u = new URL(stripped)
+      const segs = u.pathname.split('/').filter(Boolean)
+      const host = u.host.replace(/^www\./, '')
+      let label
+      if (/github\.com$/i.test(host) && segs.length >= 2) label = segs.slice(0, 2).join('/')
+      else if (segs.length) {
+        const path = '/' + segs.join('/')
+        label = path.length > 32 ? `${segs[0]}/…/${segs[segs.length - 1]}` : path
+      } else label = host
+      return { text: '', link: { href: u.href, host, label } }
+    } catch { /* fall through */ }
+  }
+  const withUrl = text.match(/^(.*?)(https?:\/\/\S+)\s*$/)
+  if (withUrl && withUrl[1].trim().length >= 4) {
+    const rest = quoteBody(withUrl[2])
+    return { text: cut(withUrl[1].trim(), 140), link: rest.link }
+  }
+  return { text: cut(text, 160), link: null }
+}
+
 
 /** Prompt text for bots, generated from the tables above. */
 export function facePrompt() {
@@ -130,8 +159,11 @@ export function hydrateFace(card, spec, { itemStatus = {}, now = Date.now(), eve
       if (rows.length) parts.push({ type: 'checklist', items: rows.map(item), more: Math.max(0, open.length - rows.length) })
       else if (all.length) parts.push({ type: 'checklist', items: [], done: true, more: 0 })
     } else if (p === 'quote') {
-      const q = (f.quote && all.find(l => l.url === f.quote)) || pick(open.filter(l => l.text && kindOf(l) === 'slack'), 1)[0] || open.find(l => l.text)
-      if (q && q.text) parts.push({ type: 'quote', text: cut(String(q.text).replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '$1'), 160), from: fromOf(q) || null, at: tsOf(q), url: q.url })
+      const q = (f.quote && all.find(l => l.url === f.quote)) || pick(open.filter(l => (l.text || l.title) && kindOf(l) === 'slack'), 1)[0] || open.find(l => l.text || (kindOf(l) === 'slack' && l.title)) || open.find(l => l.text)
+      if (q) {
+        const body = quoteBody(q.text || q.title || '')
+        if (body.text || body.link) parts.push({ type: 'quote', text: body.text || '', link: body.link, from: fromOf(q) || null, at: tsOf(q), url: q.url })
+      }
     } else if (p === 'timeline') {
       const rows = all.map(item).filter(x => x.at).sort((a, b) => a.at - b.at)
       const list = rows.length >= 2 ? rows.slice(-5) : pick(all, 4).map(item)

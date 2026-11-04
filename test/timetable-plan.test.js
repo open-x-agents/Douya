@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { applyPlanEdit, readPlan, mergeDigestTimetable, findTimetableCard, hhmm, localDay } from '../src/web/timetable-plan.js'
+import { applyPlanEdit, readPlan, mergeDigestTimetable, findTimetableCard, hhmm, localDay, snapMin, suggestMeetingBuffers } from '../src/web/timetable-plan.js'
 import { reconcileCards } from '../src/host/reconcile.js'
 
 const NOW = new Date(2026, 10, 4, 14, 55)
@@ -97,4 +97,24 @@ test('todaysCalendarEvents counts only today\'s fixed blocks', async () => {
   const { todaysCalendarEvents } = await import('../src/web/timetable-plan.js')
   const c = card(); c.blocks[0].fixedBlocks.push({ start: '2026-11-05T09:00:00+08:00', end: '2026-11-05T10:00:00+08:00', title: '明天' }, { start: '2026-11-04', end: '2026-11-05', title: '全天' })
   assert.deepEqual(todaysCalendarEvents(c, { now: NOW }).map(b => b.title), ['站会', '全天'])
+})
+
+test('snapMin rounds to 15', () => {
+  assert.equal(snapMin(37), 30)
+  assert.equal(snapMin(38), 45)
+  assert.equal(snapMin(0), 0)
+})
+
+test('suggestMeetingBuffers: free gap after meeting → 会后缓冲', () => {
+  const bufs = suggestMeetingBuffers(card())
+  assert.equal(bufs.length, 1)
+  assert.equal(bufs[0].start, '16:30')
+  assert.equal(bufs[0].end, '16:45')
+  assert.equal(bufs[0].kind, 'break')
+})
+
+test('suggestMeetingBuffers: existing block after meeting → none', () => {
+  const c = card()
+  c.blocks[0].suggestedBlocks.push({ start: '16:30', end: '16:45', title: '已有缓冲', category: 'break' })
+  assert.deepEqual(suggestMeetingBuffers(c), [])
 })

@@ -1900,20 +1900,33 @@ export async function generateTimetable(grouped, sourceData, llmClient, profileC
   const now = new Date();
   const events = sourceData.googlecalendar?.today || [];
   
-  // Build fixed blocks from real calendar events
+  // Build fixed blocks from real calendar events (locked meetings).
   const fixedBlocks = events.map(event => {
     const start = event.start?.dateTime || event.start?.date;
     const end = event.end?.dateTime || event.end?.date;
     return {
       type: 'fixed',
+      category: 'meeting',
       start,
       end,
-      title: event.summary || 'Event',
+      title: event.summary || '日程',
       color: 'blue',
+      locked: true,
       // Only real links from the event itself (meeting link first, else the calendar entry).
       ...(/^https:\/\//.test(event.hangoutLink || event.htmlLink || '') ? { url: event.hangoutLink || event.htmlLink } : {}),
       ...(Array.isArray(event.attendees) ? { attendees: event.attendees.filter(a => a && !a.self).slice(0, 8).map(a => ({ name: a.displayName || String(a.email || '').split('@')[0], status: a.responseStatus || null })) } : {}),
     };
+  });
+  // Calendar may store America/New_York (or other) offsets; UI always shows Asia/Shanghai.
+  const tzMismatch = fixedBlocks.some(b => {
+    const raw = String(b.start || '');
+    if (/Z$/i.test(raw)) return true;
+    const m = raw.match(/([+-]\d{2}):?(\d{2})$/);
+    if (!m) return false;
+    const sign = m[1].startsWith('-') ? -1 : 1;
+    const absH = Math.abs(Number(m[1]));
+    const mins = sign * (absH * 60 + Number(m[2] || 0));
+    return mins !== 8 * 60;
   });
   
   // Get top-priority cards for focus blocks
@@ -1929,7 +1942,6 @@ ${topCards.map((c, i) => `${i + 1}. ${c.title} (${c.classification.reasoning})`)
 
 **User Habits**:
 - Typical active hours: ${profileContext?.typicalActiveHours?.join(', ') || 'unknown'}
-- Name: ${profileContext?.name || '你'}
 
 **Generate suggested blocks** (JSON array):
 - Focus blocks for top tasks (1-2h each, during active hours, avoid fixed events)
@@ -1938,14 +1950,21 @@ ${topCards.map((c, i) => `${i + 1}. ${c.title} (${c.classification.reasoning})`)
 - Exercise: 30-60min if afternoon/evening gap
 - Wind-down: 30min before typical sleep time
 
+ENERGY-AWARE ORDER (Motion / Reclaim style — no personal names hardcoded):
+- Morning free slots (before 12:00): prefer deep focus for top-priority cards
+- Midday: meals in natural gaps; keep focus if a long free stretch remains
+- Later afternoon (after 15:30): prefer admin / email / light review / winddown
+- After every fixed meeting: if the next 15 minutes are free, insert a short 「会后缓冲」 (category break, 10–15 min) unless a break/buffer already follows
+- Never invent a person's name; titles come from Top Priority Tasks or generic labels (午餐 / 会后缓冲 / 清邮件)
+
 RULES:
 - Start/end times in HH:MM format (24h, Asia/Shanghai timezone)
 - Never overlap with fixed events
 - Mark all as type: "suggested"
-- Titles MUST be short Simplified Chinese (<=14 chars), e.g. "专注：<真实任务名>", "午餐", "散步休息"
-- Realistic durations (focus 1-2h, meals 30-60min, breaks 15-30min)
+- Titles MUST be short Simplified Chinese (<=14 chars), e.g. "专注：<真实任务名>", "午餐", "会后缓冲", "清邮件"
+- Realistic durations (focus 1-2h, meals 30-60min, breaks 10–30min, admin 30–60min)
 - Respect user's active hours
-- If no calendar: still build reasonable schedule from tasks
+- If no calendar: still build reasonable schedule from tasks (morning focus, afternoon admin)
 
 JSON: {
   "suggestedBlocks": [
@@ -1986,7 +2005,8 @@ JSON: {
       type: 'timetable',
       fixedBlocks,
       suggestedBlocks,
-      nowTime: now.toTimeString().substring(0, 5),
+      nowTime: now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false }),
+      ...(tzMismatch ? { tzNote: '日历原时区不是北京时间，已按 Asia/Shanghai 显示' } : {}),
     }],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

@@ -86,3 +86,35 @@ test('liveCard: saved views follow merges and re-created daily ids', () => {
   assert.equal(liveCard(state, 'gh_2026-11-03').id, 'gh_2026-11-04')
   assert.equal(liveCard(state, 'missing'), null)
 })
+
+test('quote face: author in quote part, link chip for bare URL, no 谁说的 people row', () => {
+  const card = {
+    id: 'c2', type: 'slack-cluster', source: 'slack', status: 'active',
+    blocks: [{ type: 'link-list', links: [{
+      url: U(9), title: 'repo', from: 'bkp.yuan',
+      text: 'https://github.com/D4Vinci/Scrapling', at: '2026-11-04T01:51:00.000Z',
+    }] }],
+  }
+  const v = hydrateFace(card, { layout: 'quote', by: 'auto' }, { now: NOW })
+  assert.equal(v.layout, 'quote')
+  assert.equal(v.parts.some(p => p.type === 'people'), false)
+  const q = v.parts.find(p => p.type === 'quote')
+  assert.equal(q.from, 'bkp.yuan')
+  assert.equal(q.text, '')
+  assert.equal(q.link.host, 'github.com')
+  assert.equal(q.link.label, 'D4Vinci/Scrapling')
+  assert.ok(v.parts.some(p => p.type === 'cta'))
+})
+
+test('quote face: prose kept, trailing URL becomes chip', () => {
+  const card = {
+    id: 'c3', type: 'slack-cluster', source: 'slack', status: 'active',
+    blocks: [{ type: 'link-list', links: [{
+      url: U(8), title: 't', from: '王小明',
+      text: '合同看一下 https://github.com/acme/repo/pull/12', at: '2026-11-04T02:00:00.000Z',
+    }] }],
+  }
+  const q = hydrateFace(card, { layout: 'quote' }, { now: NOW }).parts.find(p => p.type === 'quote')
+  assert.match(q.text, /合同看一下/)
+  assert.equal(q.link.label, 'acme/repo')
+})

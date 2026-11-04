@@ -198,3 +198,30 @@ export function todaysCalendarEvents(card, { now = new Date() } = {}) {
     return !isNaN(d) && localDay(d) === day
   })
 }
+
+/** Snap minutes-from-midnight to a grid (default 15). */
+export function snapMin(m, step = 15) {
+  if (m == null || !Number.isFinite(m)) return m
+  return Math.max(0, Math.min(24 * 60, Math.round(m / step) * step))
+}
+
+/**
+ * After each fixed meeting, if the next 15 min are free of any block, suggest a short buffer.
+ * Returns soft suggested blocks (not applied) the UI can one-tap accept.
+ */
+export function suggestMeetingBuffers(card, { minutes = 15 } = {}) {
+  const tt = timetableBlock(card) || {}
+  const fixed = (tt.fixedBlocks || []).map(b => ({ start: hhmm(b.start), end: hhmm(b.end), title: b.title })).filter(b => b.start && b.end)
+  const soft = (tt.suggestedBlocks || []).map(b => ({ start: hhmm(b.start), end: hhmm(b.end) })).filter(b => b.start && b.end)
+  const all = [...fixed, ...soft]
+  const out = []
+  for (const f of sortBlocks([...fixed])) {
+    const fe = toMin(f.end)
+    if (fe == null) continue
+    const gapEnd = fe + minutes
+    const taken = all.some(b => toMin(b.start) < gapEnd && toMin(b.end) > fe)
+    if (taken) continue
+    out.push({ start: fmt(fe), end: fmt(Math.min(gapEnd, 24 * 60 - 1)), title: '会后缓冲', kind: 'break', category: 'break', after: f.title })
+  }
+  return out
+}

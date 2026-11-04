@@ -2036,6 +2036,24 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
           }
         });
         return;
+      } else if (url.pathname === '/api/opendigitalmate/timetable' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(router.timetableGet()));
+        return;
+      } else if (url.pathname === '/api/opendigitalmate/timetable' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const response = await router.timetableApply(JSON.parse(body || '{}'), { by: 'user' });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+          }
+        });
+        return;
       } else if (url.pathname === '/api/opendigitalmate/card-interact' && req.method === 'POST') {
         let body = '';
         req.on('data', chunk => { body += chunk.toString(); });

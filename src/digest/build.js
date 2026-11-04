@@ -38,6 +38,7 @@ export function validateCandidates(channel, raw, snapshot) {
       title: clip(x.title, 60), summary: clip(x.summary, 160), nextStep: clip(x.nextStep, 90),
       needsAction: !!x.needsAction, priority: PRI.has(x.priority) ? x.priority : (x.needsAction ? 'high' : 'low'),
       items: refs,
+      target: /^update:\S+$/.test(String(x.target || '')) ? String(x.target) : 'new',
     })
   }
   if (channel === 'gmail') { // at most 4 single mail tiles; extra singles fall back into 需要你处理
@@ -90,7 +91,7 @@ function overlay(card, cand, edit) {
   if (next) card.nextAction = next
   card.priority = edit?.priority || cand.priority || card.priority
   card.waiting = needs ? 'you' : (card.waiting === 'you' ? 'fyi' : card.waiting || 'fyi')
-  card.metadata = { ...(card.metadata || {}), needsAction: needs, digest: 'bot', candidate: cand.id, rank: edit?.rank }
+  card.metadata = { ...(card.metadata || {}), needsAction: needs, digest: 'bot', candidate: cand.id, rank: edit?.rank, target: cand.target }
   if (card.type !== 'email-group' && (edit?.title || cand.title)) card.title = edit?.title || cand.title
   return card
 }
@@ -172,4 +173,16 @@ export function invalidLinks(cards, validUrls) {
   const bad = []
   for (const c of cards) for (const b of c.blocks || []) for (const l of b.links || []) if (l?.url && !validUrls.has(l.url)) bad.push({ card: c.sourceId, url: l.url })
   return bad
+}
+
+/** Entities (stable key -> item URLs) a source bot saw this run: lets the store archive stale cards it skipped. */
+export function seenEntities(channel, snap) {
+  const out = new Map()
+  for (const it of snap.all || snap.items) {
+    const k = channel === 'github' ? `github:cluster:${keyOf('github', it)}` : channel === 'slack' ? `slack:cluster:${keyOf('slack', it)}` : null
+    if (!k) continue
+    if (!out.has(k)) out.set(k, new Set())
+    out.get(k).add(it.url)
+  }
+  return out
 }

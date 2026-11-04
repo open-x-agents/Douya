@@ -5,6 +5,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { fixRepoCard } from '../web/repo-copy.js'
+import { reconcileCards, dedupe } from './reconcile.js'
 
 /** Statuses a digest must not overwrite with a fresh "active" copy. */
 export const TERMINAL_CARD_STATUSES = new Set(['done', 'dismissed'])
@@ -61,7 +62,7 @@ export function normalizeState(raw) {
     sources: isRecord(raw.sources) ? raw.sources : {},
     week: Array.isArray(raw.week) ? raw.week : [],
     prefs: isRecord(raw.prefs) ? raw.prefs : {},
-    cards: Array.isArray(raw.cards) ? supersedeOlderDays(raw.cards.map(fixRepoCard)) : [],
+    cards: Array.isArray(raw.cards) ? cleanupCards(raw.cards.map(fixRepoCard), raw) : [],
     completions: Array.isArray(raw.completions) ? dedupeItemCompletions(raw.completions) : [],
     itemStatus: isRecord(raw.itemStatus) ? raw.itemStatus : {},
     cardChats: isRecord(raw.cardChats) ? raw.cardChats : {},
@@ -71,6 +72,14 @@ export function normalizeState(raw) {
     surfaces: isRecord(raw.surfaces) ? raw.surfaces : {},
     lastDigest: raw.lastDigest ?? null,
   }
+}
+
+/** Load-time cleanup: one card per entity (duplicates folded, chats moved). In place on the copies. */
+function cleanupCards(cards, raw) {
+  const list = cards.map(c => (c && typeof c === 'object' ? { ...c } : c)).filter(Boolean)
+  if (isRecord(raw.cardChats)) dedupe(list, { itemStatus: raw.itemStatus || {}, cardChats: raw.cardChats })
+  else dedupe(list, {})
+  return list
 }
 
 function cardKey(card) {
@@ -225,9 +234,14 @@ export function createStore(path) {
       let cards
       if (replaceCards && Array.isArray(next.cards)) {
         cards = next.cards
+      } else if (Array.isArray(next.cards) && digest) {
+        // Digest: reconcile against the stored cards — update the card for the same entity in place, create only
+        // when nothing matches, fold duplicates. Never deletes; done cards reopen only for genuinely new items.
+        const r = reconcileCards(existing.cards || [], next.cards, { itemStatus: next.itemStatus ?? existing.itemStatus, cardChats: { ...(next.cardChats ?? existing.cardChats ?? {}) }, seen: opts.seen, channels: opts.channels })
+        cards = r.cards
+        next = { ...next, itemStatus: r.itemStatus, cardChats: r.cardChats, lastReconcile: { at: new Date().toISOString(), ...r.stats } }
       } else if (Array.isArray(next.cards)) {
         cards = mergeCards(existing.cards || [], next.cards, { digest })
-        if (digest) cards = supersedeOlderDays(cards)
       } else {
         cards = existing.cards || []
       }

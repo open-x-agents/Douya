@@ -125,7 +125,7 @@ test('runner: parallel source bots + Chief commit; a failing channel keeps its o
   // existing cards: yesterday-style Slack card (its channel will fail) and a done email single
   await store.save({ cards: [
     { id: 'old-slack', type: 'slack-cluster', source: 'slack', sourceId: `slack:cluster:C1:${DAY}`, title: 'old slack', status: 'active', blocks: [] },
-    { id: 'done-bob', type: 'email-action', source: 'gmail', sourceId: 'gmail:action:gmail:a1', title: 'Bob', status: 'done', blocks: [] },
+    { id: 'done-bob', type: 'email-action', source: 'gmail', sourceId: 'gmail:action:gmail:a1', title: 'Bob', status: 'done', blocks: [{ type: 'link-list', links: [{ url: 'https://mail.google.com/mail/u/0/#inbox/a1' }] }] },
   ], itemStatus: { 'https://mail.google.com/mail/u/0/#inbox/a5': { status: 'done' } } })
   let runner
   const { ctx, sessions } = fakeDsh(async (sid, text) => {
@@ -164,11 +164,16 @@ test('runner: parallel source bots + Chief commit; a failing channel keeps its o
   assert.equal(cards.find(c => c.id === 'old-slack').title, 'old slack', 'failed channel: old card untouched')
   assert.equal(cards.find(c => c.sourceId === 'gmail:action:gmail:a1').status, 'done', 'completion survives')
   assert.equal(store.get().itemStatus['https://mail.google.com/mail/u/0/#inbox/a5'].status, 'done')
-  assert.ok(cards.some(c => c.sourceId === `github:cluster:ThinkFlowLab/FlyBot:${DAY}`))
+  assert.ok(cards.some(c => c.sourceId === 'github:cluster:ThinkFlowLab/FlyBot'))
   assert.ok(committed[0].cards.some(c => c.type === 'hero') && committed[0].cards.some(c => c.type === 'timetable' && c.blocks[0].suggestedBlocks.length === 1))
   assert.equal(r.tokens.input, 3000)
   const ds = runner.store.get()
   assert.ok(ds.memory.gmail.length && ds.runs[0].status === 'done' && ds.sessions.chief)
+  // a second run over the same data: nothing new, no duplicates
+  const n1 = store.get().cards.length
+  const r2 = await runner.run(); assert.equal(r2.status, 'done', r2.error)
+  assert.equal(store.get().lastReconcile.created, 0); assert.equal(store.get().cards.length, n1)
+  const { duplicateCount } = await import('../src/host/reconcile.js'); assert.equal(duplicateCount(store.get().cards), 0)
   // tools refuse callers that are not digest sessions
   assert.ok((await runner.toolSnapshot('random')).error); assert.ok(runner.toolCommit('random', '{}').error)
 })

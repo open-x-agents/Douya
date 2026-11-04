@@ -6,7 +6,8 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from '
 import { join } from 'node:path'
 import { CHANNELS, channelOfToolkit } from './channels.js'
 import { buildSnapshot } from './snapshot.js'
-import { validateCandidates, validatePlan, buildCards, invalidLinks } from './build.js'
+import { validateCandidates, validatePlan, buildCards, invalidLinks, seenEntities } from './build.js'
+import { stableKey, linkUrls } from '../host/reconcile.js'
 
 const clip = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n - 1) + '…' : s }
 const shNow = (t = Date.now()) => new Date(t + 8 * 3600e3).toISOString().slice(0, 16).replace('T', ' ')
@@ -81,7 +82,13 @@ export async function runTurn(ctx, sessionId, text, { timeoutMs = 150_000, signa
   return { ok: false, timeout: true, ms: Date.now() - startedAt, usage: usageOf(await records(ctx, sessionId).catch(() => []), startedAt) }
 }
 
-function sourcePrompt(channel, { prefs, memory, now }) {
+/** Existing cards the bots must reconcile with (one card per thing: update it, or say new). */
+export function existingCardsFor(cards, channel = null) {
+  return (cards || []).filter(c => ['active', 'done', 'snoozed', 'waiting', 'archived', undefined].includes(c.status) && c.source !== 'system' && (!channel || c.source === channel))
+    .slice(0, 40).map(c => ({ id: c.id, key: stableKey(c), title: clip(c.title, 40), status: c.status || 'active', items: linkUrls(c).length }))
+}
+
+function sourcePrompt(channel, { prefs, memory, now, existing = [] }) {
   const c = CHANNELS[channel]
   return `【汇聚 · ${c.label} 信源 Bot】现在 ${shNow(now)}（Asia/Shanghai）。你只负责 ${c.label} 这一个渠道，为「今天」页准备候选卡。
 步骤：
@@ -90,16 +97,18 @@ function sourcePrompt(channel, { prefs, memory, now }) {
 3. 调 odm_digest_propose，cards 是 JSON 数组，每张：{"title","category","needsAction":bool,"priority":"high|medium|low","nextStep","summary","items":["${c.letter}1",{"ref":"${c.letter}2","status":"needs-you|waiting|fyi"}]}
    - items 只能填快照里的 ref，不能编链接；同一个 ref 只出现一次；没人需要看的条目可以不放。
    - title ≤ 30 字，summary 一两句具体说明（谁、什么事、为什么现在），nextStep 是可直接做的下一步。
+   - 每张必须带 "target"：今天页已有同一件事的卡就填 "update:<卡片id>"（在原卡上更新），确实是新的事才填 "new"。不要为已有的仓库/频道/邮件类别再开新卡。
    - 工具返回 errors 时按提示修正后重新调用一次。
 4. 发现用户处理这个渠道的稳定习惯时（如「某类通知总是直接忽略」），调 odm_digest_note 记一句。
 5. 最后只回复一行：完成 N 张。
 ${c.guide}
+${existing.length ? `\n今天页已有的 ${c.label} 卡（id / key / 标题 / 状态 / 条目数）：\n${existing.map(e => `- ${e.id} | ${e.key || '-'} | ${e.title} | ${e.status} | ${e.items}`).join('\n')}` : ''}
 ${prefs.length ? `\n用户的汇聚偏好（必须遵守）：\n${prefs.map(p => `- ${p.text}`).join('\n')}` : ''}
 ${memory.length ? `\n你记得的该渠道习惯：\n${memory.map(m => `- ${m}`).join('\n')}` : ''}`
 }
 
 function chiefPrompt({ candidates, statuses, prefs, chiefMemory, now, existing }) {
-  const rows = candidates.map(c => ({ id: c.id, ch: c.channel, cat: c.category, title: c.title, needs: c.needsAction, pri: c.priority, next: c.nextStep, summary: c.summary, n: c.items.length, items: c.itemTitles }))
+  const rows = candidates.map(c => ({ id: c.id, target: c.target, ch: c.channel, cat: c.category, title: c.title, needs: c.needsAction, pri: c.priority, next: c.nextStep, summary: c.summary, n: c.items.length, items: c.itemTitles }))
   return `【汇聚 · Chief】现在 ${shNow(now)}（Asia/Shanghai）。各渠道信源 Bot 已给出候选卡，你来合并成今天页。
 渠道状态：${statuses}
 候选卡（JSON）：
@@ -109,6 +118,7 @@ ${prefs.length ? `\n用户的汇聚偏好（必须遵守）：\n${prefs.map(p =>
 ${chiefMemory ? `\n你的长期记忆（关于用户）：\n${clip(chiefMemory, 3000)}` : ''}
 
 要做的：
+0. 规则：今天页不能有两张讲同一件事的卡。target=update:<id> 的候选会更新那张原卡；target=new 的才会新建。
 1. 去重 / 跨渠道合并：同一件事在多个渠道（GitHub 通知邮件 + 对应 PR 卡；Slack 里讨论某个 PR）→ merges:[{"into":"github:0","from":["gmail:3"],"reason":"同一 PR"}]。只合并确实是同一件事的；into 填工作本身那张（GitHub/Slack 卡），from 填通知邮件。
 2. 排优先级：cards:[{"id","priority":"urgent|high|medium|low","nextStep"?,"title"?}]，按重要性从高到低列出（不列的保持原样）。促销/社交类保持 low。
 3. 今天的标题 headline（≤20 字）和 narrative（一两句：今天最该先做什么，基于真实候选卡）。
@@ -220,7 +230,7 @@ export function createBotDigest(deps) {
       bySession.set(sid, { role: channel, run }); ch.sessionId = sid
       const s = digestStore.get()
       const prefs = s.prefs.filter(p => !p.channel || p.channel === channel)
-      const turn = await runTurn(ctx, sid, sourcePrompt(channel, { prefs, memory: s.memory[channel] || [], now: Date.now() }), { timeoutMs: deps.sourceTimeoutMs || 150_000 })
+      const turn = await runTurn(ctx, sid, sourcePrompt(channel, { prefs, memory: s.memory[channel] || [], now: Date.now(), existing: existingCardsFor(store.get()?.cards, channel) }), { timeoutMs: deps.sourceTimeoutMs || 150_000 })
       ch.usage = turn.usage; ch.turnMs = turn.ms
       if (!ch.candidates) { ch.status = turn.timeout ? 'timeout' : 'failed'; ch.error = turn.timeout ? '超时，没有提交候选卡' : '没有提交候选卡' }
       else { ch.status = 'done'; ch.cards = ch.candidates.length }
@@ -282,7 +292,9 @@ export function createBotDigest(deps) {
         const ach = A.generateAchievementsTile(sourceData, items)
         const cards = [hero, timetable, ...built.cards, ...(ach ? [ach] : [])]
         lastRun = { sourceData, validUrls: new Set([...valid, ...A.normalizeItems(sourceData).map(i => i.url).filter(Boolean)]), cards: built.cards.map(c => JSON.parse(JSON.stringify(c))).concat([hero, timetable]), at: Date.now() }
-        const saved = await commit(cards, { summary: runRec.plan.headline || runRec.plan.narrative || '', sources: ok.map(([k]) => k), mode: 'bot' })
+        const seen = new Map(); for (const [k, v] of ok) for (const [key, urls] of seenEntities(k, v.snapshot)) seen.set(key, urls)
+        const saved = await commit(cards, { summary: runRec.plan.headline || runRec.plan.narrative || '', sources: ok.map(([k]) => k), mode: 'bot', seen, channels: new Set(ok.map(([k]) => k)) })
+        runRec.reconcile = saved?.reconcile || null
         runRec.status = 'done'
         runRec.result = { cards: built.cards.length, total: cards.length, stats: built.stats, invalidLinks: bad.length, needsAction: built.cards.filter(c => c.waiting === 'you').length, saved }
       } catch (err) {
@@ -301,9 +313,9 @@ export function createBotDigest(deps) {
   }
 
   function summarize(r) {
-    return { id: r.id, startedAt: r.startedAt, status: r.status, error: r.error || null, ms: r.ms, tokens: r.tokens, result: r.result || null,
+    return { id: r.id, startedAt: r.startedAt, status: r.status, error: r.error || null, ms: r.ms, tokens: r.tokens, result: r.result || null, reconcile: r.reconcile || null,
       channels: Object.fromEntries(Object.entries(r.channels).map(([k, v]) => [k, { status: v.status, error: v.error || null, cards: v.cards ?? null, items: v.snapshot?.rows.length ?? null, truncated: v.snapshot?.truncated ?? null, skippedDone: v.snapshot?.skipped ?? null, droppedRefs: v.droppedRefs || 0, proposeErrors: (v.proposeErrors || []).slice(0, 5), fetchMs: v.fetchMs ?? null, ms: v.ms ?? null, usage: v.usage || null }])),
-      candidates: (r.allCandidates || []).map(c => ({ id: c.id, cat: c.category, title: c.title, needs: c.needsAction, pri: c.priority, n: c.items.length, mergedInto: c.mergedInto || undefined })),
+      candidates: (r.allCandidates || []).map(c => ({ id: c.id, target: c.target, cat: c.category, title: c.title, needs: c.needsAction, pri: c.priority, n: c.items.length, mergedInto: c.mergedInto || undefined })),
       chief: { status: r.chief.status, error: r.chief.error || null, ms: r.chief.ms ?? null, usage: r.chief.usage || null, merges: r.plan?.merges || [], planErrors: r.plan?.errors || [] } }
   }
 

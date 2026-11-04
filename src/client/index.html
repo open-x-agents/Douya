@@ -3373,7 +3373,7 @@
     };
     const sugg = isTT ? ['帮我把今晚剩下的时间排一下', '明天上午留两小时专注，放哪里？'] :
       (Array.isArray(card.suggestedQuestions) && card.suggestedQuestions.length ? card.suggestedQuestions : (FALLBACK_SUGG[card.source] || ['帮我总结一下这张卡片', '下一步我该做什么？', '这件事有多紧急？']));
-    const chatKey = isTT ? 'timetable' : r ? `repo:${r.owner}/${r.name}` : isMailGroup(card) ? `mail:${(card.metadata && card.metadata.group) || card.title}` : (card.sourceId || card.id);
+    const chatKey = isTT ? 'timetable' : r ? `repo:${r.owner}/${r.name}` : isMailGroup(card) ? `mail:${(card.metadata && card.metadata.group) || card.title}` : ((card.sourceId || '').replace(/:\d{4}-\d{2}-\d{2}$/, '') || card.id);
     const modal = overlay.querySelector('.tile-zoom-modal');
     const hdr = modal.querySelector('.tile-zoom-header');
     if (hdr) hdr.remove(); // keep the node; re-attached into the left column below

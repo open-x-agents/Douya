@@ -906,7 +906,7 @@ export function createApiRouter(ctx) {
      * The one save path for any digest (legacy or bot): learn, refresh identity, fold legacy email tiles,
      * store.save({digest:true}) = update-or-add by sourceId, done/dismissed never overwritten, itemStatus kept.
      */
-    async commitDigestCards(cards, { summary = '', sources = [], mode = 'legacy' } = {}) {
+    async commitDigestCards(cards, { summary = '', sources = [], mode = 'legacy', seen = null, channels = null } = {}) {
       const client = getComposioClient();
       const state = store.get();
       await profileManager.learnFromCards(cards);
@@ -921,9 +921,14 @@ export function createApiRouter(ctx) {
       const { migrateEmailCards } = await import('./email-groups.js');
       const mig = migrateEmailCards(state.cards || [], cards, state.itemStatus || {});
       if (mig.merged) console.log(`[generateDigest] merged ${mig.merged} legacy email tiles into category groups`);
-      await store.save({ ...state, itemStatus: mig.itemStatus, cards: mig.cards }, { digest: true });
+      await store.save({ ...state, itemStatus: mig.itemStatus, cards: mig.cards }, { digest: true, seen, channels });
       const finalState = store.get();
-      return { success: true, summary, totalCardCount: finalState.cards.length, timestamp: state.lastDigest.generatedAt, mode };
+      const { duplicateCount } = await import('../host/reconcile.js');
+      const active = finalState.cards.filter(c => c.status === 'active' || !c.status);
+      const rec = finalState.lastReconcile || {};
+      const reconcile = { created: rec.created, updated: rec.updated, reopened: rec.reopened, keptDone: rec.keptDone, archived: rec.archived, merged: rec.merged, fuzzy: rec.fuzzy, hintUsed: rec.hintUsed, newBecameUpdate: rec.newBecameUpdate, createdKeys: (rec.createdKeys || []).slice(0, 20), active: active.length, duplicates: duplicateCount(finalState.cards) };
+      console.log(`[generateDigest] reconcile ${JSON.stringify(reconcile)}`);
+      return { success: true, summary, totalCardCount: finalState.cards.length, timestamp: state.lastDigest.generatedAt, mode, reconcile };
     },
 
     async generateDigestNow({ mode = null } = {}) {

@@ -143,12 +143,30 @@ export function cardUrgency(card, { itemStatus = {} } = {}) {
   return s
 }
 
+const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+/** Stable per-day key for a timetable block the user marked done (title survives re-planning; times may shift). */
+export function blockDoneKey(block, now = new Date()) {
+  return `${ymd(now)}|${String(block?.title || '').replace(/\s+/g, ' ').trim()}`
+}
+/**
+ * A suggested block is finished when the user marked it done, or every card it was planned for is no longer open
+ * work on Today (done / dismissed / snoozed / merged away, or every linked item handled).
+ */
+export function blockResolved(block, { cards = [], itemStatus = {}, doneBlocks = [], now = new Date() } = {}) {
+  if (!block) return true
+  if ((doneBlocks || []).includes(blockDoneKey(block, now))) return true
+  const ids = Array.isArray(block.cardIds) ? block.cardIds.filter(Boolean) : []
+  if (!ids.length) return false
+  const openWork = c => c && isWorkCard(c) && (!c.status || c.status === 'active') && (!cardLinks(c).length || openLinks(c, itemStatus).length > 0)
+  return !ids.some(id => openWork(cards.find(c => c && c.id === id)))
+}
+
 /**
  * The one thing to do now.
  * { kind:'meeting'|'card'|'block'|'none', title, why, at?, endsAt?, startsInMin?, cardId?, url?, buttons:[…] }
  * Order: a calendar event live now or within 15 min → the top needs-you card → the current timetable block.
  */
-export function pickNextThing({ cards = [], itemStatus = {}, now = new Date() } = {}) {
+export function pickNextThing({ cards = [], itemStatus = {}, doneBlocks = [], now = new Date() } = {}) {
   const t = now.getTime()
   const tt = cards.find(c => c && c.type === 'timetable')
   const ttb = (tt?.blocks || []).find(b => b.type === 'timetable') || {}
@@ -178,11 +196,17 @@ export function pickNextThing({ cards = [], itemStatus = {}, now = new Date() } 
     const why = [top.waiting === 'you' ? '在等你' : '', PRI[top.priority] >= 3 ? '优先' : '', shortWhy && shortWhy.length <= 36 && /[\u4e00-\u9fa5]/.test(shortWhy) ? shortWhy : ''].filter(Boolean).join(' · ')
     return { kind: 'card', title: clip(top.title, 60), next: clip(top.nextAction || '', 70), why, cardId: top.id, source: top.source || null, buttons, upcoming }
   }
-  const blocks = (ttb.suggestedBlocks || []).map(b => ({ ...b, s: toMs(b.start, now), e: toMs(b.end, now) })).filter(b => b.s != null && b.e > t).sort((a, b) => a.s - b.s)
+  const remaining = (ttb.suggestedBlocks || []).map(b => ({ ...b, s: toMs(b.start, now), e: toMs(b.end, now) })).filter(b => b.s != null && b.e > t).sort((a, b) => a.s - b.s)
+  // Skip blocks that are already finished (marked done, or their cards are done / merged / snoozed) — advance to the next.
+  const blocks = remaining.filter(b => !blockResolved(b, { cards, itemStatus, doneBlocks, now }))
   const blk = blocks.find(b => b.s <= t) || blocks[0]
   if (blk) {
-    return { kind: 'block', title: clip(blk.title, 60), why: `${blk.s <= t ? '现在' : '接下来'} ${hm(blk.s)}–${hm(blk.e)}`, at: hm(blk.s), endsAt: hm(blk.e),
-      buttons: [{ kind: 'timetable', label: '看安排' }, { kind: 'ask', label: '交给豆芽', prompt: `我${blk.s <= t ? '现在' : '接下来'}要做「${clip(blk.title, 40)}」（${hm(blk.s)}–${hm(blk.e)}），帮我列一个马上能开始的三步清单。` }], upcoming }
+    const live = blk.s <= t
+    return { kind: 'block', title: clip(blk.title, 60), why: `${live ? '现在' : '接下来'} ${hm(blk.s)}–${hm(blk.e)}`, at: hm(blk.s), endsAt: hm(blk.e), live, blockKey: blockDoneKey(blk, now),
+      buttons: [{ kind: 'blockdone', label: '完成了', blockKey: blockDoneKey(blk, now), title: clip(blk.title, 60) }, { kind: 'timetable', label: '看安排' }, { kind: 'ask', label: '交给豆芽', prompt: `我${live ? '现在' : '接下来'}要做「${clip(blk.title, 40)}」（${hm(blk.s)}–${hm(blk.e)}），帮我列一个马上能开始的三步清单。` }], upcoming }
+  }
+  if (remaining.length) {
+    return { kind: 'none', title: '今天的安排都做完了', why: work.length ? `还有 ${work.length} 张卡，不急的话可以休息了` : '可以休息了', buttons: [{ kind: 'timetable', label: '看安排' }], upcoming }
   }
   return { kind: 'none', title: work.length ? '眼下没有特别急的事' : '今天还没有待办', why: work.length ? `${work.length} 张卡都不算急，挑一张顺手的处理就好` : '点「立即汇聚」拉取已连接信源的最新动态', buttons: [], upcoming }
 }

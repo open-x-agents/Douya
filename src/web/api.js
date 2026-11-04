@@ -774,6 +774,19 @@ export function createApiRouter(ctx) {
      * (the client only names it), so targets can't be forged. act → a PENDING action held for 确认执行;
      * snooze → hidden until tomorrow 09:00. 'ask' steps go through the chat, not here.
      */
+    /** Owner marks (or un-marks) a timetable block done from the hero; the hero advances to the next block. */
+    async timetableBlockDone({ blockKey, done = true } = {}) {
+      const key = String(blockKey || '').slice(0, 200);
+      if (!/^\d{4}-\d{2}-\d{2}\|.+/.test(key)) return { success: false, error: '这段安排找不到了，刷新一下' };
+      const state = store.get();
+      const today = key.slice(0, 10);
+      // keep the last few days only
+      const keep = (state.timetableDone || []).filter(k => typeof k === 'string' && k.slice(0, 10) >= new Date(Date.parse(today) - 3 * 864e5).toISOString().slice(0, 10) && k !== key);
+      const next = done === false ? keep : [...keep, key];
+      await store.save({ timetableDone: next.slice(-200) });
+      return { success: true, blockKey: key, done: done !== false };
+    },
+
     async cardPrepRun({ cardId, prepId } = {}) {
       const state = store.get();
       const card = (state.cards || []).find(c => c.id === cardId);
@@ -899,7 +912,7 @@ export function createApiRouter(ctx) {
         // Day pulse (Phase C): time-aware, all from live data.
         const hourNow = Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : shHour();
         const afterHours = isAfterHours({ hour: Number.isInteger(hour) ? hourNow : null });
-        const nextThing = pickNextThing({ cards: activeCards, itemStatus: state.itemStatus || {} });
+        const nextThing = pickNextThing({ cards: activeCards, itemStatus: state.itemStatus || {}, doneBlocks: state.timetableDone || [] });
         const doneNow = doneToday({ completions: state.completions || [], itemStatus: state.itemStatus || {}, pendingActions: state.pendingActions || {} });
         const meetingsLeft = calToday.filter(b => Date.parse(b.end) > Date.now()).length;
         return {

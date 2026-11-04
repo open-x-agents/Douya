@@ -1793,6 +1793,18 @@
     .today-chat.open .today-chat-sheet{transform:none}
     .tile-zoom-overlay{transition:none!important}
   }
+  /* dock fit: header + message list + composer always inside the viewport; only the message list scrolls.
+     --dock-fit is measured by fitTodayChat() (space left above the composer); fallbacks keep the old caps. */
+  .today-chat-sheet{min-height:0}
+  .today-chat-msgs{flex:1 1 auto;overscroll-behavior:contain}
+  .today-chat.open:not(.in-zoom) .today-chat-sheet{max-height:min(720px,78vh,var(--dock-fit,78vh))}
+  .today-chat.open:not(.in-zoom) .today-chat-msgs{min-height:min(280px,calc(var(--dock-fit,100vh) - 76px))}
+  @media (max-width:620px){
+    .today-chat.open:not(.in-zoom) .today-chat-sheet{max-height:min(86vh,820px,var(--dock-fit,86vh))}
+    .today-chat.open:not(.in-zoom) .today-chat-msgs{min-height:min(52vh,calc(var(--dock-fit,100vh) - 64px))}
+  }
+  @media (max-height:640px){#v-today .today-chat.open:not(.in-zoom){padding-top:12px}}
+  .nx.leaving{opacity:0;transform:translateY(-6px);transition:opacity .22s var(--ease),transform .22s var(--ease)}
 </style>
 </head>
 <body>
@@ -3625,7 +3637,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function renderNextHero(nx) {
     if (!nx) return '';
     const btns = (nx.buttons || []).map((b, i) => stepBtnHtml(b, i, i === 0 ? 'primary' : '')).join('');
-    const eyebrow = nx.kind === 'meeting' ? (nx.live ? '正在开会' : '马上开会') : nx.kind === 'block' ? '按安排，现在' : nx.kind === 'none' ? '现在' : '现在最该做的一件事';
+    const eyebrow = nx.kind === 'meeting' ? (nx.live ? '正在开会' : '马上开会') : nx.kind === 'block' ? (nx.live === false ? '按安排，接下来' : '按安排，现在') : nx.kind === 'none' ? '现在' : '现在最该做的一件事';
     const side = nx.kind === 'meeting' && nx.startsAtMs
       ? `<div class="nx-count" data-at="${nx.startsAtMs}"><b>${escapeHtml(countdownText(nx.startsAtMs))}</b><span>${escapeHtml(nx.at || '')}–${escapeHtml(nx.endsAt || '')}</span></div>`
       : nx.upcoming ? `<div class="nx-up"><span>接下来</span><b>${escapeHtml(nx.upcoming.at)} ${escapeHtml(nx.upcoming.title)}</b><em>${nx.upcoming.startsInMin < 60 ? nx.upcoming.startsInMin + ' 分钟后' : '还早'}</em></div>` : '';
@@ -3656,6 +3668,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const theCard = card || (cardId ? lastCards.find(c => c.id === cardId) : null);
     if (step.kind === 'open') { if (theCard) openTileZoom(theCard); return; }
     if (step.kind === 'timetable') { const tt = lastCards.find(c => c.type === 'timetable'); if (tt) openTileZoom(tt); return; }
+    if (step.kind === 'blockdone') { await markBlockDone(step, btn); return; }
     if (step.kind === 'link') { if (/^https?:\/\//.test(step.url || '')) window.open(step.url, '_blank', 'noopener'); return; }
     if (step.kind === 'ask') {
       if (theCard) setChatContext(theCard);
@@ -3681,6 +3694,18 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       el.classList.add('on-card');
       slot.appendChild(el);
     }
+  }
+  /** Hero 「完成了」: record the block done, slide the hero out, re-render with the next block. Undo puts it back. */
+  async function markBlockDone(step, btn) {
+    const post = done => fetch('/api/opendigitalmate/timetable-block', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockKey: step.blockKey, done }) }).then(x => x.json()).catch(e => ({ success: false, error: e.message }));
+    if (btn) { btn.disabled = true; btn.classList.add('busy'); }
+    const r = await post(true);
+    if (btn) { btn.disabled = false; btn.classList.remove('busy'); }
+    if (!r || !r.success) { showUiToast((r && r.error) || '没成功，稍后再试'); return; }
+    const hero = document.querySelector('.nx[data-sys="next"]');
+    if (hero) { hero.classList.add('leaving'); await sleep(240); }
+    showUiToast(`「${clip(step.title || '这段安排', 16)}」完成了`, null, { label: '撤销', onClick: async () => { await post(false); loadToday({ force: true }); } });
+    loadToday({ force: true }).catch(() => {});
   }
   function bindSteps(root, steps, card) {
     root.querySelectorAll('[data-step]').forEach(el => {
@@ -3835,7 +3860,51 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         <input type="file" id="todayFilePick" hidden multiple accept="image/*,.pdf,.txt,.md,.csv,.json,.js,.ts,.py,.yaml,.yml,.html,.css,.sh,.log" />
       </div>`;
     wrap.querySelector('#chatCtxClear').addEventListener('click', e => { e.preventDefault(); setChatContext(null); });
+    bindDockFit(wrap);
     return wrap;
+  }
+  // ===== Dock fit + stick-to-bottom =====
+  // The sticky dock cannot rise above its container (the card list), so a tall sheet pushed the composer below the
+  // fold on short windows. fitTodayChat() measures the room left and caps the sheet; only #todayChatMsgs scrolls.
+  let todayChatPinned = true; // user is at (or near) the newest message
+  const DOCK_STICK_PX = 80;
+  function todayChatNearBottom(el) { return el.scrollHeight - el.scrollTop - el.clientHeight <= DOCK_STICK_PX; }
+  /** Scroll the dock to the newest message. force = open / user sent; otherwise only if the user hasn't scrolled up. */
+  function stickTodayChat(force) {
+    const m = $('todayChatMsgs'); if (!m) return;
+    if (!force && !todayChatPinned) return;
+    m.scrollTop = m.scrollHeight;
+    todayChatPinned = true;
+  }
+  function fitTodayChat() {
+    const chat = $('todayChat'), sheet = $('todayChatSheet'), view = views.today;
+    if (!chat || !sheet || !view) return;
+    if (chat.classList.contains('in-zoom')) { chat.style.removeProperty('--dock-fit'); return; }
+    if (!chat.classList.contains('open')) return;
+    let host = chat.parentElement;
+    while (host && host !== view && getComputedStyle(host).display === 'contents') host = host.parentElement;
+    const vr = view.getBoundingClientRect();
+    const top = Math.max(vr.top, host ? host.getBoundingClientRect().top : vr.top);
+    const chrome = chat.getBoundingClientRect().height - sheet.getBoundingClientRect().height; // padding + sheet margin + composer
+    const fit = Math.max(160, Math.floor(vr.bottom - top - chrome - 8));
+    if (chat.style.getPropertyValue('--dock-fit') !== fit + 'px') chat.style.setProperty('--dock-fit', fit + 'px');
+  }
+  let dockFitRaf = 0, dockWinBound = false;
+  function queueDockFit() {
+    if (dockFitRaf) return;
+    dockFitRaf = requestAnimationFrame(() => { dockFitRaf = 0; fitTodayChat(); stickTodayChat(false); });
+  }
+  function bindDockFit(wrap) {
+    const m = wrap.querySelector('#todayChatMsgs');
+    m.addEventListener('scroll', () => { todayChatPinned = todayChatNearBottom(m); }, { passive: true });
+    // Streaming text, new bubbles, surfaces, images loading: follow only while pinned.
+    try { new MutationObserver(() => stickTodayChat(false)).observe(m, { childList: true, subtree: true, characterData: true }); } catch (_) {}
+    try { const ro = new ResizeObserver(queueDockFit); ro.observe(m); ro.observe(wrap.querySelector('.today-chat-input')); } catch (_) {}
+    if (!dockWinBound) {
+      dockWinBound = true;
+      window.addEventListener('resize', queueDockFit, { passive: true });
+      if (views.today) views.today.addEventListener('scroll', queueDockFit, { passive: true });
+    }
   }
   /** Lead line big, details folded, drafts and 【选项】 chips always visible. */
   function shapeReply(bubble) {
@@ -3880,7 +3949,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     // in-zoom needs the sheet visible beside the card; do NOT flip the dock preference.
     chat.classList.add('in-zoom', 'open');
     ensureInlineBotHistory();
-    const m = $('todayChatMsgs'); if (m) m.scrollTop = m.scrollHeight;
+    fitTodayChat(); stickTodayChat(true);
   }
   function returnChat() {
     const chat = $('todayChat'), slot = $('todayChatSlot');
@@ -3942,7 +4011,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (!liveChat) liveChat = chatTemplate();
     if (!borrowed) {
       $('todayChatSlot').appendChild(liveChat);
-      if ($('todayChatMsgs')) $('todayChatMsgs').scrollTop = msgsScroll;
+      if ($('todayChatMsgs')) { if (todayChatPinned) stickTodayChat(true); else $('todayChatMsgs').scrollTop = msgsScroll; }
+      queueDockFit();
       // Never programmatically re-expand a closed dock via focus→expand.
       if (hadFocus && chatDockWanted) $('todayChatInput').focus({ preventScroll: true });
       else if (!chatDockWanted) liveChat.classList.remove('open');
@@ -4052,6 +4122,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (!wrap) return;
     wrap.classList.add('open');
     ensureInlineBotHistory();
+    const settle = () => { fitTodayChat(); stickTodayChat(true); };
+    requestAnimationFrame(settle); setTimeout(settle, 420);
     if (opts.byUser) paintDockCue();
     if (opts.focus !== false && opts.byUser) setTimeout(() => $('todayChatInput')?.focus(), 50);
   }
@@ -4071,7 +4143,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       b.className = 'bubble me';
       b.innerHTML = `${escapeHtml(text)}<small>${new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}</small>`;
       body.appendChild(b);
-      body.scrollTop = body.scrollHeight;
+      stickTodayChat(true); // the user just sent: always show it
       return b;
     }
     const b = document.createElement('div');
@@ -4081,7 +4153,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const ce = citesEl(citations);
     if (ce) b.appendChild(ce);
     body.appendChild(b);
-    body.scrollTop = body.scrollHeight;
+    stickTodayChat(false);
     return b;
   }
 
@@ -4111,7 +4183,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
           (m.surfaces || []).forEach(v => body.appendChild(renderSurface(v, { container: body, sendPrompt: dockPrompt }, 'chat')));
         }
       });
-      body.scrollTop = body.scrollHeight;
+      stickTodayChat(true);
     } catch (e) { console.warn('[bot history]', e); }
   }
 
@@ -4334,7 +4406,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       typing.className = 'bubble thinking';
       typing.innerHTML = thinkingHtml();
       $('todayChatMsgs').appendChild(typing);
-      $('todayChatMsgs').scrollTop = $('todayChatMsgs').scrollHeight;
+      stickTodayChat(true);
       const sentAt = new Date(Date.now() - 5000).toISOString();
       const setLabel = t => { if (!live.firstTextAt) setThinking(typing, t); };
       const live = newLiveTurn({ container: $('todayChatMsgs'), typingEl: typing, setLabel, bubbleClass: 'bubble bot', ctx: { container: $('todayChatMsgs'), sendPrompt: dockPrompt } });
@@ -4357,7 +4429,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         // The dock lives on 今天; if 豆芽 (or the user) switched pages meanwhile, say the reply arrived.
         if (currentView() !== 'today') showUiToast(`豆芽回复了：${String(data.text || '').replace(/\s+/g, ' ').slice(0, 48)}`, null, { label: '查看', onClick: () => { showView('today'); openTodayChat({ byUser: true }); } });
         else if (!chatDockWanted) showUiToast('豆芽回复了，点输入框查看', null, { label: '打开', onClick: () => openTodayChat({ byUser: true }) });
-        if (chatDockWanted) $('todayChatMsgs').scrollTop = $('todayChatMsgs').scrollHeight;
+        if (chatDockWanted) stickTodayChat(false); // don't yank a user reading history
         showActionsSince($('todayChatMsgs'), sentAt).catch(() => {});
         loadToday().catch(() => {}); // bot may have edited cards; dock stays however the user left it
         // Keep the legacy dock transcript in sync if it was opened elsewhere
@@ -4372,7 +4444,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         d.innerHTML = failBubbleHtml(err instanceof ChatFail ? err.message : '发送失败了。');
         d.querySelector('.chat-retry').onclick = () => { d.remove(); const box = $('todayChatMsgs'); const mine = [...box.querySelectorAll('.bubble.me')].pop(); if (mine && mine.textContent.includes(msg)) mine.remove(); input.value = msg; send(); };
         $('todayChatMsgs').appendChild(d);
-        $('todayChatMsgs').scrollTop = $('todayChatMsgs').scrollHeight;
+        stickTodayChat(false);
       }
     };
 

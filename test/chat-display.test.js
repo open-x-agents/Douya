@@ -65,6 +65,32 @@ test('legacy history (no record): note stripped, chips from structured parts', (
   assert.equal(JSON.stringify(h).includes('【附件】'), false)
 })
 
+test('history: an assistant reply stored only as text-chunks still shows, and a non-empty content join is left alone', () => {
+  const essay = '《我不喜欢猫》\n\n猫总是自己走来走去。'
+  const chunks = line({
+    type: 'assistant/message',
+    data: {
+      message: { role: 'assistant', content: [] },
+      stream: [
+        { type: 'reasoning-chunks', texts: ['先想一下'] },
+        { type: 'text-chunks', texts: ['《我不喜欢猫》\n\n', '猫总是自己走来走去。'] },
+      ],
+    },
+  })
+  const h = historyMessages(chunks)
+  assert.equal(h.length, 1)
+  assert.equal(h[0].role, 'assistant')
+  assert.equal(h[0].content, essay)
+  const kept = line({
+    type: 'assistant/message',
+    data: {
+      message: { role: 'assistant', content: [{ type: 'reasoning', text: '想' }, { type: 'text', text: '正文' }] },
+      stream: [{ type: 'text-chunks', texts: ['别的'] }],
+    },
+  })
+  assert.equal(historyMessages(kept)[0].content, '想正文')
+})
+
 test('stripAttachNote / legacyAttachments edge cases', () => {
   assert.equal(stripAttachNote('hi'), 'hi')
   assert.equal(stripAttachNote('【附件】\n图片「x.png」'), '')

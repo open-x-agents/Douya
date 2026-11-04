@@ -15,8 +15,39 @@ function cleanBlock(v) {
 
 function flattenContent(content) {
   if (typeof content === 'string') return cleanBlock(content)
-  if (!Array.isArray(content)) return ''
-  return cleanBlock(content.map(p => (typeof p === 'string' ? p : (p?.type && p.type !== 'text') ? '' : p?.text || '')).join(''))
+  if (Array.isArray(content)) {
+    return cleanBlock(content.map(p => (typeof p === 'string' ? p : (p?.type && p.type !== 'text') ? '' : p?.text || '')).join(''))
+  }
+  if (content && typeof content === 'object' && (!content.type || content.type === 'text') && typeof content.text === 'string') {
+    return cleanBlock(content.text)
+  }
+  return ''
+}
+
+// Reasoning models often leave message.content empty and put the visible reply in stream text-chunks.
+// reasoning-chunks are thinking, never the bubble.
+function textFromChunks(stream) {
+  if (!Array.isArray(stream)) return ''
+  let out = ''
+  for (const rec of stream) {
+    if (!rec || rec.type !== 'text-chunks' || !Array.isArray(rec.texts)) continue
+    for (const piece of rec.texts) if (typeof piece === 'string') out += piece
+  }
+  return cleanBlock(out)
+}
+
+/**
+ * Visible assistant words. Existing content text wins; an empty content array is not the reply
+ * (it used to hide text-chunks). Reasoning chunks are never included.
+ */
+export function assistantVisibleText(ev) {
+  const data = ev?.data && typeof ev.data === 'object' ? ev.data : (ev && typeof ev === 'object' ? ev : {})
+  const msg = data.message && typeof data.message === 'object' ? data.message : null
+  const primary = msg ? flattenContent(msg.content ?? msg.parts ?? msg.text) : ''
+  if (primary) return primary
+  const side = flattenContent(data.content ?? data.parts ?? data.text)
+  if (side) return side
+  return textFromChunks(data.stream || msg?.stream)
 }
 
 /**
@@ -81,9 +112,7 @@ function messageSource(ev) {
 }
 
 function messageText(ev) {
-  const data = ev?.data || {}
-  const msg = data.message || data
-  return flattenContent(msg?.content ?? msg?.parts ?? data.content ?? msg?.text)
+  return assistantVisibleText(ev)
 }
 
 // afterSeq < 0 keeps every record (a fresh part after a handoff). A known seq excludes the log from before this prompt.
@@ -177,6 +206,26 @@ export function ownReplyFromRecords(records, { afterSeq = -1, requestId = '', ou
     }
   }
   return { settled: false }
+}
+
+/**
+ * What the dock does with one finished /api/chat body and any text already painted on the typing bubble.
+ * `merged` still paints nothing (that send rode along in the next turn).
+ * A real server reply wins. The "no new reply" error must not wipe a bubble that already has the essay.
+ */
+export function chooseLiveBubble(data, streamed) {
+  if (data?.status === 'merged') return { action: 'drop' }
+  const server = typeof data?.text === 'string' ? data.text : ''
+  const errText = typeof data?.error === 'string' ? data.error : ''
+  const live = typeof streamed === 'string' ? streamed : ''
+  const failed = data?.status === 'error' || !!data?.error
+  const noReply = failed && /没有产生新回复/.test(`${server}\n${errText}`)
+  if (noReply && live.trim()) return { action: 'show', text: live }
+  if (noReply) return { action: 'error', text: server || errText || '没法完成对话' }
+  if (server.trim()) return { action: 'show', text: server }
+  if (live.trim()) return { action: 'show', text: live }
+  if (failed) return { action: 'error', text: errText || '没法完成对话' }
+  return { action: 'show', text: '……' }
 }
 
 // Newest page first, then older pages until this prompt's cursor is on the page. One huge tool turn
@@ -353,6 +402,11 @@ export async function runMuseChatTurn(ctx, {
   const budget = Number.isFinite(waitMs) && waitMs > 0 ? waitMs : 180_000
   const deadline = Date.now() + budget
   let reply = ''
+  // Text from a finished turn, remembered only when this loop exits without breaking (a steer
+  // was still being admitted on every poll). A poll that does break keeps that poll's text,
+  // including an empty one. The break condition itself is unchanged.
+  let held = ''
+  let broke = false
   let pageErrLogged = false
   while (Date.now() < deadline) {
     const checkAt = Date.now()
@@ -370,8 +424,10 @@ export async function runMuseChatTurn(ctx, {
       // Read this prompt's turn even while a later queued turn is still running.
       // whenIdle stays pending until that later turn finishes, so it is only a wake-up.
       const found = ownReplyFromRecords(records, { afterSeq, requestId, outbound, handoff: T.handoff === true, ownIds: steerIds })
+      if (found.settled && found.text) held = found.text
       if (found.settled && pendingSteers === 0 && (!steeredAt || checkAt > steeredAt)) {
         reply = found.text
+        broke = true
         lane?.closeSteer?.()
         break
       }
@@ -387,6 +443,7 @@ export async function runMuseChatTurn(ctx, {
   }
 
   lane?.closeSteer?.()
+  if (!broke && !reply) reply = held
   if (!reply) {
     return { ok: false, error: 'Bot 没有产生新回复', botId: sessionId, sessionId }
   }

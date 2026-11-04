@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { periodOf, dayStartHour, affinityOf, computeAutoLayout, scoreCards, baselineOrder } from '../src/ui/layout.js'
 import { createUiService } from '../src/ui/service.js'
 import { installUiFeed, streamEvent, sessionEvent, createTurnWatch } from '../src/web/ui-feed.js'
-import { runMuseChatTurn } from '../src/web/muse-chat-core.js'
+import { chooseLiveBubble, runMuseChatTurn } from '../src/web/muse-chat-core.js'
 import { dockKey } from '../src/web/api.js'
 
 const at = (hourSh, day = '2026-11-04') => Date.parse(`${day}T${String(hourSh).padStart(2, '0')}:30:00+08:00`)
@@ -112,6 +112,19 @@ test('feed mapping: text deltas, tool progress, and a sanitized skeleton the mom
   assert.equal(ev[0].label, '正在生成视图…'); assert.equal(ev[1].kind, 'skeleton'); assert.equal(ev[1].placement, 'chat')
   assert.doesNotMatch(ev[1].title, /[<>]/)
   assert.equal(sessionEvent('t_1', { type: 'tool/call', data: { name: 'odm_github_list_prs' } })[0].label, '正在查 GitHub…')
+  const essay = sessionEvent('t_1', {
+    type: 'assistant/message', seq: 12,
+    data: {
+      turn: 8, step: 1, message: { content: [] },
+      stream: [{ type: 'reasoning-chunks', texts: ['HIDDEN'] }, { type: 'text-chunks', texts: ['《我不喜欢猫》'] }],
+    },
+  })
+  assert.equal(essay.length, 1)
+  assert.equal(essay[0].replace, true)
+  assert.equal(essay[0].text, '《我不喜欢猫》')
+  assert.equal(essay[0].attemptId, 'm8.1.12')
+  assert.equal(sessionEvent('t_1', { type: 'assistant/message', data: { message: { content: [] }, stream: [{ type: 'reasoning-chunks', texts: ['HIDDEN'] }] } }).length, 0)
+  assert.equal(sessionEvent('t_1', { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '正文' }] }, stream: [{ type: 'text-chunks', texts: ['别的'] }] } })[0].text, '正文')
   const w = createTurnWatch(); w.watch('s1', 't_1'); w.watch('s2', 't_1'); assert.equal(w.turnOf('s2'), 't_1'); w.unwatch('t_1'); assert.equal(w.size, 0)
 })
 
@@ -142,6 +155,22 @@ test('SSE feed: hello + replay after ?since, live durable + ephemeral events; de
   handlers['session/event']({ id: 'sess-chief' }, { type: 'assistant/chunk', data: { turn: 4, step: 1, chunk: { type: 'reasoning-delta', index: 0, text: 'HIDDEN' } } })
   await readUntil(/"text":"第二步"/)
   assert.match(buf, /"attemptId":"s4\.1","text":"第二步"/)
+  assert.doesNotMatch(buf, /HIDDEN/, 'reasoning is never streamed')
+  // A pending text-delta must be flushed before the settled message, not concatenated onto it.
+  handlers['session/event']({ id: 'sess-chief' }, { type: 'assistant/chunk', data: { turn: 4, step: 2, chunk: { type: 'text-delta', index: 0, text: '前缀' } } })
+  handlers['session/event']({ id: 'sess-chief' }, {
+    type: 'assistant/message', seq: 20,
+    data: { turn: 4, step: 2, message: { content: [] }, stream: [{ type: 'reasoning-chunks', texts: ['HIDDEN'] }, { type: 'text-chunks', texts: ['《我不喜欢猫》'] }] },
+  })
+  handlers['session/event']({ id: 'sess-chief' }, {
+    type: 'assistant/message', seq: 21,
+    data: { message: { content: [] }, stream: [{ type: 'reasoning-chunks', texts: ['HIDDEN-ONLY'] }] },
+  })
+  await readUntil(/我不喜欢猫/)
+  assert.match(buf, /"text":"前缀"/)
+  assert.match(buf, /"replace":true/)
+  assert.doesNotMatch(buf, /前缀《我不喜欢猫》/)
+  assert.doesNotMatch(buf, /HIDDEN-ONLY/)
   assert.doesNotMatch(buf, /HIDDEN/, 'reasoning is never streamed')
   assert.match(buf, /"kind":"skeleton","turn":"t_abc1","title":"表格"/)
   assert.match(buf, /"text":"表格已经好了"/, 'three deltas coalesced into one event')
@@ -184,6 +213,26 @@ test('routes + page wiring: feed installed, turn ids validated, dock views persi
   assert.match(html, /\(m\.surfaces \|\| \[\]\)\.forEach\(v => body\.appendChild\(renderSurface/)
   const p3 = html.slice(html.indexOf('Intelligent UI (P3)'), html.indexOf('Intelligent UI (P4)'))
   assert.doesNotMatch(p3, /innerHTML/, 'streamed text only ever goes through textContent')
+  assert.match(html, /function liveBubbleChoice/)
+  assert.match(html, /没有产生新回复/)
+  assert.match(html, /if \(typing\.isConnected\) typing\.replaceWith\(b\)/)
+  assert.match(html, /e\.replace === true/)
+  assert.match(html, /t\.hold = true/)
+  const start = html.indexOf('function liveBubbleChoice')
+  const end = html.indexOf('function setupTodayChatInput')
+  const liveBubbleChoice = new Function(`${html.slice(start, end)}; return liveBubbleChoice`)()
+  const samples = [
+    [{ status: 'merged', text: '' }, '《我不喜欢猫》'],
+    [{ status: 'error', text: '没法完成对话：Bot 没有产生新回复', error: 'Bot 没有产生新回复' }, '《我不喜欢猫》'],
+    [{ status: 'error', text: '没法完成对话：Bot 没有产生新回复', error: 'Bot 没有产生新回复' }, ''],
+    [{ status: 'answered', text: '《我不喜欢猫》' }, '半截'],
+    [{ status: 'error', text: '还没有可用的模型。', error: 'No model is available' }, '《我不喜欢猫》'],
+    [{ status: 'answered', text: '' }, ''],
+    [{ status: 'error', text: '', error: '超时' }, '《我不喜欢猫》'],
+  ]
+  for (const [data, streamed] of samples) {
+    assert.deepEqual(liveBubbleChoice(data, streamed), chooseLiveBubble(data, streamed))
+  }
   assert.equal(dockKey('  表格已经\n放到   下方 '), '表格已经 放到 下方')
 })
 

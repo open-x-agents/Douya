@@ -2709,6 +2709,22 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     return out;
   }
 
+  // Same decision as chooseLiveBubble in src/web/muse-chat-core.js (the page is not a module).
+  function liveBubbleChoice(data, streamed) {
+    if (data && data.status === 'merged') return { action: 'drop' };
+    const server = data && typeof data.text === 'string' ? data.text : '';
+    const errText = data && typeof data.error === 'string' ? data.error : '';
+    const live = typeof streamed === 'string' ? streamed : '';
+    const failed = !!(data && (data.status === 'error' || data.error));
+    const noReply = failed && /没有产生新回复/.test(server + '\n' + errText);
+    if (noReply && live.trim()) return { action: 'show', text: live };
+    if (noReply) return { action: 'error', text: server || errText || '没法完成对话' };
+    if (server.trim()) return { action: 'show', text: server };
+    if (live.trim()) return { action: 'show', text: live };
+    if (failed) return { action: 'error', text: errText || '没法完成对话' };
+    return { action: 'show', text: '……' };
+  }
+
   function setupTodayChatInput() {
     const input = $('todayChatInput');
     const sendBtn = $('todayChatSend');
@@ -2742,24 +2758,25 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       try {
         const data = await sendChatResilient({ message: msg, attachments: atts, sessionId: BOT_SESSION, viewContext: viewContext('dock'), turn: live.id }, setLabel, { streaming: () => feedState.mode === 'sse' });
         live.finish();
+        const choice = liveBubbleChoice(data, live.text);
         // Merged: this message rode along in the next message's turn — that one bubble carries the single reply.
-        if (data.status === 'merged') { typing.remove(); return; }
-        if (data.status === 'error' || data.error) { typing.remove(); appendInlineBubble('bot', data.text || data.error); return; }
-        const b = appendInlineBubble('bot', data.text || '……', data.citations);
-        typing.replaceWith(b); // the final Markdown reply takes the streaming bubble's place (views stay below it)
+        if (choice.action === 'drop') { if (typing.isConnected) typing.remove(); return; }
+        if (choice.action === 'error') { if (typing.isConnected) typing.remove(); appendInlineBubble('bot', choice.text); return; }
+        const b = appendInlineBubble('bot', choice.text, data.citations);
+        if (typing.isConnected) typing.replaceWith(b); // the final Markdown reply takes the streaming bubble's place (views stay below it)
         (data.cards || []).filter(c => c.type === 'group').slice(0, 3).forEach(c => {
           $('todayChatMsgs').appendChild(renderGroupCard(c));
         });
         mountSurfaces($('todayChatMsgs'), data.cards, { container: $('todayChatMsgs'), sendPrompt: dockPrompt, skip: live.mounted });
         (window.__odmSurfaceTimings = window.__odmSurfaceTimings || []).push({ at: Date.now(), n: (data.cards || []).filter(c => c.type === 'surface').length, timing: data.timing || null });
         // The dock lives on 今天; if 豆芽 (or the user) switched pages meanwhile, say the reply arrived.
-        if (currentView() !== 'today') showUiToast(`豆芽回复了：${String(data.text || '').replace(/\s+/g, ' ').slice(0, 48)}`, null, { label: '查看', onClick: () => { showView('today'); openTodayChat(); } });
+        if (currentView() !== 'today') showUiToast(`豆芽回复了：${String(choice.text || '').replace(/\s+/g, ' ').slice(0, 48)}`, null, { label: '查看', onClick: () => { showView('today'); openTodayChat(); } });
         $('todayChatMsgs').scrollTop = $('todayChatMsgs').scrollHeight;
         showActionsSince($('todayChatMsgs'), sentAt).catch(() => {});
         loadToday().catch(() => {}); // bot may have edited cards; dock stays open
         // Keep the legacy dock transcript in sync if it was opened elsewhere
         if ($('dockBody')) {
-          try { addBotMessage(data.text, data.time, data.cards, data.citations); } catch (_) {}
+          try { addBotMessage(choice.text, data.time, data.cards, data.citations); } catch (_) {}
         }
       } catch (err) {
         live.finish();
@@ -3722,7 +3739,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   // ===== 豆芽 Intelligent UI (P3): live feed — streamed reply text, tool progress, view skeletons =====
   // One SSE connection (/api/opendigitalmate/ui-feed). Durable events carry a seq and are replayed after a
   // reconnect (?since=seq); ephemeral ones (text deltas, progress, skeletons) only matter while a turn is open.
-  // The final reply still comes from /api/chat (the session record), so a missed delta never loses text.
+  // The final Markdown reply still comes from /api/chat (the session record), so a missed delta never loses text.
+  // A settled assistant/message also paints the open bubble, so a reply that never streamed as text-delta shows before that returns.
   // Without the feed (standard server, or 3 failed connects) the page falls back to the long-poll.
   const liveTurns = new Map(); // turn id → handler
   let feedState = { mode: 'connecting', fails: 0, es: null };
@@ -3774,7 +3792,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (!t) return;
     if (e.kind === 'progress') t.progress(e.label);
     else if (e.kind === 'skeleton') t.skeleton(e.title);
-    else if (e.kind === 'stream' && e.text) t.delta(e.text, e.attemptId);
+    else if (e.kind === 'stream' && e.text) t.delta(e.text, e.attemptId, e.replace === true);
     else if (e.kind === 'stream' && e.phase === 'start') t.start(e.attemptId);
   }
   /**
@@ -3787,11 +3805,20 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const scroll = () => { container.scrollTop = container.scrollHeight; };
     t.progress = (label) => { t.labels.push(label); if (!t.firstTextAt && label) setLabel(label); };
     t.start = (attemptId) => { t.nextAttempt = attemptId; };
-    t.delta = (text, attemptId) => {
+    t.delta = (text, attemptId, replace) => {
       if (!t.firstTextAt) { t.firstTextAt = Date.now(); typingEl.className = `${bubbleClass} streaming`; typingEl.textContent = ''; }
-      if (attemptId && t.attempt && attemptId !== t.attempt) t.text = ''; // a new model step rewrites the bubble
-      t.attempt = attemptId || t.attempt;
-      t.text += text;
+      if (replace) {
+        // Settled assistant/message already holds the full reply. Replace; don't append it onto deltas.
+        t.attempt = attemptId || t.attempt;
+        t.hold = true;
+        t.text = String(text || '');
+      } else if (t.hold) {
+        return; // a late text-delta must not wipe the reply we already painted
+      } else {
+        if (attemptId && t.attempt && attemptId !== t.attempt) t.text = ''; // a new model step rewrites the bubble
+        t.attempt = attemptId || t.attempt;
+        t.text += text;
+      }
       typingEl.textContent = t.text;
       scroll();
     };
@@ -4004,21 +4031,27 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         var zTurn = newLiveTurn({ container: msgs, typingEl: typing, setLabel: zLabel, bubbleClass: 'z-msg bot', ctx: { container: msgs, sendPrompt: t => sendZoomChat(t) } });
         const data = await sendChatResilient({ message: msg, attachments: atts, cardId: isTT ? null : card.id, cardContext, sessionId: BOT_SESSION, viewContext: viewContext('card'), turn: zTurn.id }, zLabel, { streaming: () => feedState.mode === 'sse' });
         zTurn.finish();
-        if (data.status === 'merged') { // answered together with the next message (one reply, below it)
-          if (live()) typing.remove();
+        const choice = liveBubbleChoice(data, zTurn.text);
+        if (choice.action === 'drop') { // answered together with the next message (one reply, below it)
+          if (live() && typing.isConnected) typing.remove();
           attHist.then(ah => chatApi({ op: 'append', messages: [{ role: 'user', text: msg, ...(ah ? { attachments: ah } : {}) }] }));
           return;
         }
         lastZoomCards = data.cards || [];
         const clientRecvAt = Date.now();
-        reply = data.text || data.error || '收到了，但模型没有返回内容。';
+        reply = choice.text;
         if (live()) {
-          const b = push('bot', reply);
-          typing.replaceWith(b); // final Markdown reply in the streaming bubble's place
-          const ce = citesEl(data.citations);
-          if (ce) b.appendChild(ce);
-          (data.cards || []).filter(c => c.type === 'group').slice(0, 3).forEach(c => { msgs.appendChild(renderGroupCard(c)); });
-          mountSurfaces(msgs, data.cards, { container: msgs, sendPrompt: t => sendZoomChat(t), skip: zTurn.mounted });
+          if (choice.action === 'error') {
+            if (typing.isConnected) typing.remove();
+            push('bot', reply);
+          } else {
+            const b = push('bot', reply);
+            if (typing.isConnected) typing.replaceWith(b); // final Markdown reply in the streaming bubble's place
+            const ce = citesEl(data.citations);
+            if (ce) b.appendChild(ce);
+            (data.cards || []).filter(c => c.type === 'group').slice(0, 3).forEach(c => { msgs.appendChild(renderGroupCard(c)); });
+            mountSurfaces(msgs, data.cards, { container: msgs, sendPrompt: t => sendZoomChat(t), skip: zTurn.mounted });
+          }
           msgs.scrollTop = msgs.scrollHeight;
           showActionsSince(msgs, sentAt).catch(() => {});
           const renderedAt = Date.now();

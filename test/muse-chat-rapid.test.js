@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { ownReplyFromRecords, runMuseChatTurn } from '../src/web/muse-chat-core.js'
+import { chooseLiveBubble, ownReplyFromRecords, runMuseChatTurn } from '../src/web/muse-chat-core.js'
 
 // 2026-11-04 09:31 Asia/Shanghai, Chief private session session-a70c2ab4:
 // 「你是谁」 then 「在干嘛」 while turn 30 was still running. The session log kept
@@ -216,6 +216,60 @@ test('two queued prompts each return their own reply while the later turn is sti
   assert.equal(b.text, STANDBY)
 })
 
+const chunksReply = (seq, texts, extra = {}) => ({
+  event: {
+    seq, time: seq, type: 'assistant/message',
+    data: {
+      turn: 8, step: 1,
+      message: { role: 'assistant', content: [] },
+      stream: [
+        { type: 'reasoning-chunks', texts: ['先想一下，这段不要进气泡'] },
+        { type: 'text-chunks', texts },
+      ],
+      ...extra,
+    },
+  },
+})
+
+test('a settled reply whose words live in text-chunks is that turn\'s text', () => {
+  const essay = '《我不喜欢猫》\n猫总是自己走来走去。'
+  const records = [
+    user(1, '重新生成一篇作文', 'f9b31a44'),
+    chunksReply(2, ['《我不喜欢猫》\n', '猫总是自己走来走去。']),
+    turnEnd(3, 'completed'),
+  ]
+  assert.deepEqual(
+    ownReplyFromRecords(records, { afterSeq: 0, requestId: 'f9b31a44', outbound: '重新生成一篇作文' }),
+    { settled: true, text: essay },
+  )
+})
+
+test('reasoning chunks alone do not become the reply, and content text still wins over chunks', () => {
+  const reasoningOnly = [
+    user(1, '重新生成一篇作文', 'req'),
+    { event: { seq: 2, time: 2, type: 'assistant/message', data: { message: { content: [] }, stream: [{ type: 'reasoning-chunks', texts: ['只是在想'] }] } } },
+    turnEnd(3, 'completed'),
+  ]
+  assert.deepEqual(ownReplyFromRecords(reasoningOnly, { afterSeq: 0, requestId: 'req', outbound: '重新生成一篇作文' }), { settled: true, text: '' })
+  const both = [
+    user(1, 'hi', 'req'),
+    { event: { seq: 2, time: 2, type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '正文' }] }, stream: [{ type: 'text-chunks', texts: ['别的'] }] } } },
+    turnEnd(3, 'completed'),
+  ]
+  assert.equal(ownReplyFromRecords(both, { afterSeq: 0, requestId: 'req', outbound: 'hi' }).text, '正文')
+})
+
+test('the dock keeps a painted essay when the waiter only reports no reply', () => {
+  const essay = '《我不喜欢猫》'
+  const err = { status: 'error', text: '没法完成对话：Bot 没有产生新回复', error: 'Bot 没有产生新回复' }
+  assert.deepEqual(chooseLiveBubble(err, essay), { action: 'show', text: essay })
+  assert.deepEqual(chooseLiveBubble(err, ''), { action: 'error', text: err.text })
+  assert.deepEqual(chooseLiveBubble({ status: 'merged', text: '' }, essay), { action: 'drop' })
+  assert.deepEqual(chooseLiveBubble({ status: 'answered', text: essay }, '半截'), { action: 'show', text: essay })
+  assert.deepEqual(chooseLiveBubble({ status: 'error', text: '还没有可用的模型。', error: 'No model is available' }, essay), { action: 'show', text: '还没有可用的模型。' })
+  assert.deepEqual(chooseLiveBubble({ status: 'answered', text: '' }, ''), { action: 'show', text: '……' })
+})
+
 test('a completed turn with no assistant text does not take the next turn\'s reply', async () => {
   const session = queuedSession()
   const result = await chiefCall(session.controller({
@@ -230,6 +284,27 @@ test('a completed turn with no assistant text does not take the next turn\'s rep
   }), '你是谁')
   assert.equal(result.ok, false)
   assert.equal(result.error, 'Bot 没有产生新回复')
+})
+
+test('a completed turn whose essay is only in text-chunks is returned as the reply', async () => {
+  const session = queuedSession()
+  const essay = '《我不喜欢猫》'
+  const result = await chiefCall(session.controller({
+    stampId: true,
+    onPrompt() {
+      session.append('assistant/message', {
+        turn: 4, step: 1,
+        message: { role: 'assistant', content: [] },
+        stream: [
+          { type: 'reasoning-chunks', texts: ['想'] },
+          { type: 'text-chunks', texts: [essay] },
+        ],
+      })
+      session.finish('')
+    },
+  }), '重新生成一篇作文', { viewContext: '' })
+  assert.equal(result.ok, true)
+  assert.equal(result.text, essay)
 })
 
 test('a long tool turn is still attributed when the user message is off the newest page', async () => {

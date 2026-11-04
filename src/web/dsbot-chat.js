@@ -2,6 +2,7 @@
 // (FlyBot ds-bot has `send` but no `chat` page endpoint.)
 
 import { stripAttachNote, legacyAttachments } from './chat-display.js'
+import { assistantVisibleText } from './muse-chat-core.js'
 import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -243,7 +244,13 @@ export function historyMessages(raw, { display = null } = {}) {
     if (o.type !== 'user/message' && o.type !== 'assistant/message') continue
     const msg = o.data?.message || o.data
     const role = msg?.role === 'user' ? 'user' : 'assistant'
-    const content = Array.isArray(msg?.content) ? msg.content.map(p => p?.text || '').join('') : (msg?.content || '')
+    // Same join as before. Only an assistant row whose content is empty falls through to text-chunks,
+    // so a reply that already rendered (including a reasoning part's .text) stays as it was.
+    let content = Array.isArray(msg?.content) ? msg.content.map(p => p?.text || '').join('') : (msg?.content || '')
+    if (o.type === 'assistant/message' && !clean(content)) {
+      const alt = assistantVisibleText(o)
+      if (clean(alt)) content = alt
+    }
     if (!clean(content)) continue
     if (role === 'user' && INJECTED.test(String(content).trim())) continue
     if (role === 'user') {

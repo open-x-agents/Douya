@@ -8,7 +8,7 @@
 //             comes from the session record (/api/chat), so a dropped delta never loses text.
 // In standard-server mode there is no feed; the page keeps the long-poll on /api/opendigitalmate/ui-events.
 
-import { progressLabel } from './muse-chat-core.js'
+import { assistantVisibleText, progressLabel } from './muse-chat-core.js'
 
 export const UI_FEED_ROUTE = '/api/opendigitalmate/ui-feed'
 const KEEPALIVE_MS = 20_000
@@ -44,6 +44,14 @@ export function sessionEvent(turn, event) {
     const c = event.data?.chunk
     return c?.type === 'text-delta' && c.text ? [{ kind: 'stream', turn, attemptId: `s${event.data?.turn ?? ''}.${event.data?.step ?? ''}`, text: String(c.text) }] : []
   }
+  // A reasoning turn often never emits text-delta. The finished assistant/message still holds the
+  // reply (content, or text-chunks). Paint that onto the open bubble; do not append it onto deltas.
+  if (event.type === 'assistant/message') {
+    const text = assistantVisibleText(event)
+    if (!text) return []
+    const d = event.data || {}
+    return [{ kind: 'stream', turn, attemptId: `m${d.turn ?? ''}.${d.step ?? ''}.${event.seq ?? ''}`, text, replace: true }]
+  }
   if (event.type === 'tool/call') {
     const name = event.data?.name
     const out = [{ kind: 'progress', turn, label: name === 'odm_ui_render' ? '正在生成视图…' : progressLabel(name) }]
@@ -68,15 +76,16 @@ export function installUiFeed(ctx, { uiService, effect, log = () => {} }) {
   const pending = new Map() // attemptId → { ev, timer }
   const flush = (id) => { const p = pending.get(id); if (!p) return; pending.delete(id); clearTimeout(p.timer); uiService.pulse(p.ev) }
   const push = (ev) => {
-    if (ev.kind === 'stream' && ev.text) {
+    if (ev.kind === 'stream' && ev.text && ev.replace !== true) {
       stats.deltas++
       const p = pending.get(ev.attemptId)
       if (p) { p.ev.text += ev.text; return }
       pending.set(ev.attemptId, { ev: { ...ev }, timer: setTimeout(() => flush(ev.attemptId), DELTA_FLUSH_MS) })
       return
     }
-    for (const id of [...pending.keys()]) flush(id) // progress / skeleton after text: keep the order
+    for (const id of [...pending.keys()]) flush(id) // progress / skeleton / settled text after deltas: keep the order
     if (ev.kind === 'progress') stats.tools++
+    if (ev.kind === 'stream' && ev.text) stats.deltas++
     uiService.pulse(ev)
   }
   const onStream = ({ agent, frame } = {}) => {

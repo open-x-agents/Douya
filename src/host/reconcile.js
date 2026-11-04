@@ -3,6 +3,8 @@
 // or, only if nothing matches, becomes a new card. A cleanup pass folds any duplicates into one canonical card.
 // Nothing is hard-deleted: duplicates get status 'merged' (+ mergedInto), stale noise gets status 'archived'.
 
+import { mergeDigestTimetable } from '../web/timetable-plan.js'
+
 const DATED = /:(\d{4}-\d{2}-\d{2})$/
 const SINGLETON = { hero: 'hero', timetable: 'timetable', 'achievements-tile': 'achievements', achievements: 'achievements' }
 const HIDDEN = new Set(['merged'])
@@ -152,6 +154,8 @@ export function reconcileCards(existing = [], incoming = [], opts = {}) {
       idx = index(); continue
     }
     const old = m.card
+    // 我的一天 edited in chat today: keep that plan, take fresh calendar events.
+    if (old.type === 'timetable' && inc.type === 'timetable') Object.assign(inc, mergeDigestTimetable(old, inc, { now: opts.clock ? opts.clock() : new Date() }))
     if (m.how === 'hint') stats.hintUsed++
     if (m.how === 'urls' || m.how === 'title') stats.fuzzy++
     if (String(raw.metadata?.target || '') === 'new') stats.newBecameUpdate++

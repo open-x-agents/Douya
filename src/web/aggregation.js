@@ -161,19 +161,20 @@ export async function fetchFromSources(composioClient, activeSources) {
         const endOfTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2).toISOString();
         const next2h = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
         
+        const pin = source.id ? { connectedAccountId: source.id } : {};
         const [todayAndTomorrow, upcoming] = await Promise.all([
           composioClient.executeAction('GOOGLECALENDAR_EVENTS_LIST', {
             calendarId: 'primary', singleEvents: true, orderBy: 'startTime',
             timeMin: startOfToday,
             timeMax: endOfTomorrow,
             maxResults: 100,
-          }),
+          }, pin),
           composioClient.executeAction('GOOGLECALENDAR_EVENTS_LIST', {
             calendarId: 'primary', singleEvents: true, orderBy: 'startTime',
             timeMin: new Date().toISOString(),
             timeMax: next2h,
             maxResults: 50,
-          }),
+          }, pin),
         ]);
         
         for (const r of [todayAndTomorrow, upcoming]) {
@@ -198,6 +199,9 @@ export async function fetchFromSources(composioClient, activeSources) {
       }
     } catch (err) {
       console.warn(`[fetchFromSources] Failed to fetch ${slug}:`, err.message);
+      // Non-enumerable: callers that report per-source status read it; the data shape stays the same.
+      if (!Object.prototype.hasOwnProperty.call(sourceData, 'errors')) Object.defineProperty(sourceData, 'errors', { value: {}, enumerable: false });
+      sourceData.errors[slug] = err.message;
     }
   }
   

@@ -107,6 +107,37 @@ ${prefs.length ? `\n用户的汇聚偏好（必须遵守）：\n${prefs.map(p =>
 ${memory.length ? `\n你记得的该渠道习惯：\n${memory.map(m => `- ${m}`).join('\n')}` : ''}`
 }
 
+const AUX = { googlecalendar: '日历' }
+const KNOWN_SOURCES = { gmail: 'Gmail', github: 'GitHub', slack: 'Slack', googlecalendar: '日历' }
+
+/** Calendar-like sources for one run: the ACTIVE account to read, or why a connected source is not read. */
+export function auxSources(items = [], { only = null } = {}) {
+  const out = {}
+  for (const [slug, label] of Object.entries(AUX)) {
+    if (only && !only.includes(slug) && !only.includes('calendar')) continue
+    const mine = items.filter(a => a?.toolkit?.slug === slug)
+    if (!mine.length) continue
+    const active = mine.filter(a => a.status === 'ACTIVE').sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')))
+    out[slug] = active.length
+      ? { label, status: 'queued', account: active[0] }
+      : { label, status: 'failed', error: `连接状态 ${mine.map(a => a.status).filter(Boolean).join('/') || '未知'}，需要在信源状态里重新连接` }
+  }
+  // A known channel whose only accounts are expired / pending would otherwise vanish from the strip.
+  for (const [slug, label] of Object.entries(KNOWN_SOURCES)) {
+    if (AUX[slug] || (only && !only.includes(slug))) continue
+    const mine = items.filter(a => a?.toolkit?.slug === slug)
+    if (mine.length && !mine.some(a => a.status === 'ACTIVE')) out[slug] = { label, status: 'failed', error: `连接状态 ${mine.map(a => a.status).filter(Boolean).join('/')}，需要重新连接` }
+  }
+  return out
+}
+
+function calendarLines(data) {
+  const ev = data?.googlecalendar?.today
+  if (!Array.isArray(ev) || !ev.length) return ''
+  const t = v => { const d = new Date(v); return isNaN(d) ? '全天' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
+  return `\n今天日历里的真实日程（timeline 不能和它们重叠）：${ev.slice(0, 12).map(e => `${t(e.start?.dateTime || e.start?.date)}–${t(e.end?.dateTime || e.end?.date)} ${clip(e.summary || '日程', 24)}`).join('；')}`
+}
+
 function chiefPrompt({ candidates, statuses, prefs, chiefMemory, now, existing }) {
   const rows = candidates.map(c => ({ id: c.id, target: c.target, ch: c.channel, cat: c.category, title: c.title, needs: c.needsAction, pri: c.priority, next: c.nextStep, summary: c.summary, n: c.items.length, items: c.itemTitles }))
   return `【汇聚 · Chief】现在 ${shNow(now)}（Asia/Shanghai）。各渠道信源 Bot 已给出候选卡，你来合并成今天页。
@@ -171,7 +202,11 @@ export function createBotDigest(deps) {
   }
 
   function progress(run) {
-    const p = { runId: run.id, mode: 'bot', status: run.status, startedAt: run.startedAt, channels: Object.fromEntries(Object.entries(run.channels).map(([k, v]) => [k, { label: CHANNELS[k].label, status: v.status, cards: v.cards ?? null, error: v.error || null, ms: v.ms ?? null }])), chief: { status: run.chief.status, error: run.chief.error || null } }
+    const p = { runId: run.id, mode: 'bot', status: run.status, startedAt: run.startedAt, channels: Object.fromEntries([
+      ...Object.entries(run.channels).map(([k, v]) => [k, { label: CHANNELS[k].label, status: v.status, cards: v.cards ?? null, error: v.error || null, ms: v.ms ?? null }]),
+      // Calendar and other connected sources without a source bot: fetched directly, still shown (with failures).
+      ...Object.entries(run.aux || {}).map(([k, v]) => [k, { label: v.label, status: v.status, cards: null, note: v.note || null, error: v.error || null, ms: v.ms ?? null }]),
+    ]), chief: { status: run.chief.status, error: run.chief.error || null } }
     run.progress = p
     try { emit(p) } catch {}
     return p
@@ -239,6 +274,31 @@ export function createBotDigest(deps) {
     progress(run)
   }
 
+  // ---- calendar (and any other connected source without a source bot) ----
+  async function fetchAux(runRec, accounts) {
+    if (!accounts.length) return {}
+    const t0 = Date.now()
+    for (const v of Object.values(runRec.aux)) if (v.account) v.status = 'fetching'
+    progress(runRec)
+    let data = {}
+    try { data = await A.fetchFromSources(deps.client(), accounts) }
+    catch (err) { data = {}; for (const v of Object.values(runRec.aux)) if (v.account) v.error = err.message }
+    for (const [slug, v] of Object.entries(runRec.aux)) {
+      if (!v.account) continue
+      v.ms = Date.now() - t0
+      const err = data.errors?.[slug] || v.error
+      if (slug === 'googlecalendar' && data.googlecalendar && !err) {
+        const today = data.googlecalendar.today || []
+        v.status = 'done'; v.events = today.length
+        const tomorrow = data.googlecalendar.tomorrow || []
+        v.note = today.length ? `今天 ${today.length} 个日程` : `今天没有日程${tomorrow.length ? `（明天 ${tomorrow.length} 个）` : ''}`
+      } else if (err) { v.status = 'failed'; v.error = String(err).slice(0, 120) }
+      else { v.status = 'failed'; v.error = '没有读到数据' }
+    }
+    progress(runRec)
+    return data
+  }
+
   async function run({ only = null } = {}) {
     if (running) return running
     running = (async () => {
@@ -250,12 +310,14 @@ export function createBotDigest(deps) {
         const accounts = (res?.items || []).filter(a => a.status === 'ACTIVE' && a.toolkit?.slug)
         const chans = []
         for (const a of accounts) { const ch = channelOfToolkit(a.toolkit.slug); if (ch && (!only || only.includes(ch)) && !chans.find(x => x.ch === ch)) chans.push({ ch, a }) }
-        const extra = accounts.filter(a => !channelOfToolkit(a.toolkit.slug)) // e.g. calendar: fetched for the timeline only
+        // Connected sources without a source bot (calendar): fetched directly for the timeline / hero, shown in the strip.
+        runRec.aux = auxSources(res?.items || [], { only })
+        const extra = Object.values(runRec.aux).filter(v => v.account).map(v => v.account)
         if (!chans.length) throw new Error('没有可用的信源渠道')
         for (const { ch } of chans) runRec.channels[ch] = { status: 'queued' }
         progress(runRec)
         const itemStatus = store.get()?.itemStatus || {}
-        const extraData = extra.length ? A.fetchFromSources(deps.client(), extra).catch(() => ({})) : Promise.resolve({})
+        const extraData = fetchAux(runRec, extra)
         await Promise.all(chans.map(({ ch, a }) => runSource(runRec, ch, a, itemStatus)))
         const ok = Object.entries(runRec.channels).filter(([, v]) => v.status === 'done')
         if (!ok.length) throw new Error(`所有信源都失败：${Object.entries(runRec.channels).map(([k, v]) => `${k} ${v.error || v.status}`).join('；')}`)
@@ -265,7 +327,11 @@ export function createBotDigest(deps) {
         const all = ok.flatMap(([, v]) => v.candidates)
         for (const c of all) c.itemTitles = c.items.slice(0, 5).map(r => clip(runRec.channels[c.channel].snapshot.byRef.get(r.ref)?.title, 50))
         runRec.allCandidates = all
-        const statuses = Object.entries(runRec.channels).map(([k, v]) => `${CHANNELS[k].label} ${v.status === 'done' ? `完成 ${v.cards} 张` : `失败（${v.error || v.status}，这个渠道的旧卡保持不变）`}`).join('；')
+        const auxData = await extraData
+        const statuses = [
+          ...Object.entries(runRec.channels).map(([k, v]) => `${CHANNELS[k].label} ${v.status === 'done' ? `完成 ${v.cards} 张` : `失败（${v.error || v.status}，这个渠道的旧卡保持不变）`}`),
+          ...Object.values(runRec.aux).map(v => `${v.label} ${v.status === 'done' ? `完成 · ${v.note}` : `${v.status === 'skipped' ? '跳过' : '失败'}（${v.error || v.status}）`}`),
+        ].join('；') + calendarLines(auxData)
         const chiefSid = await ensureSession('chief', CHIEF_TOOLS)
         bySession.set(chiefSid, { role: 'chief', run: runRec }); runRec.chief.sessionId = chiefSid
         const s = digestStore.get()
@@ -283,7 +349,7 @@ export function createBotDigest(deps) {
         const valid = new Set(Object.values(snaps).flatMap(s => [...s.byUrl.keys()]))
         const bad = invalidLinks(built.cards, valid)
         for (const c of built.cards) for (const b of c.blocks || []) if (b.links) b.links = b.links.filter(l => !l?.url || valid.has(l.url))
-        const sourceData = Object.assign({}, await extraData, ...ok.map(([, v]) => v.sourceData))
+        const sourceData = Object.assign({}, auxData, ...ok.map(([, v]) => v.sourceData))
         const items = A.dedupeItems(A.normalizeItems(sourceData))
         const fake = obj => ({ async *stream() { yield { type: 'text', text: JSON.stringify(obj) } } })
         const grouped = { urgent: [], action: [], fyi: [] }
@@ -315,6 +381,7 @@ export function createBotDigest(deps) {
   function summarize(r) {
     return { id: r.id, startedAt: r.startedAt, status: r.status, error: r.error || null, ms: r.ms, tokens: r.tokens, result: r.result || null, reconcile: r.reconcile || null,
       channels: Object.fromEntries(Object.entries(r.channels).map(([k, v]) => [k, { status: v.status, error: v.error || null, cards: v.cards ?? null, items: v.snapshot?.rows.length ?? null, truncated: v.snapshot?.truncated ?? null, skippedDone: v.snapshot?.skipped ?? null, droppedRefs: v.droppedRefs || 0, proposeErrors: (v.proposeErrors || []).slice(0, 5), fetchMs: v.fetchMs ?? null, ms: v.ms ?? null, usage: v.usage || null }])),
+      aux: Object.fromEntries(Object.entries(r.aux || {}).map(([k, v]) => [k, { status: v.status, note: v.note || null, error: v.error || null, events: v.events ?? null, ms: v.ms ?? null }])),
       candidates: (r.allCandidates || []).map(c => ({ id: c.id, target: c.target, cat: c.category, title: c.title, needs: c.needsAction, pri: c.priority, n: c.items.length, mergedInto: c.mergedInto || undefined })),
       chief: { status: r.chief.status, error: r.chief.error || null, ms: r.chief.ms ?? null, usage: r.chief.usage || null, merges: r.plan?.merges || [], planErrors: r.plan?.errors || [] } }
   }

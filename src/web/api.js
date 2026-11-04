@@ -15,6 +15,7 @@ export const dockKey = (t) => String(t ?? '').replace(/\s+/g, ' ').trim().slice(
 import { createActionService, ACTIONS } from './actions.js';
 import { cardSnapshotText, cardFull } from './card-snapshot.js';
 import { createUiService } from '../ui/service.js';
+import { findTimetableCard, readPlan, applyPlanEdit, todaysCalendarEvents } from './timetable-plan.js';
 import { uiView } from '../ui/ops.js';
 import { createSurfaceService } from '../ui/surfaces.js';
 import { resolveDisplayName, lastGithubIdentity } from './aggregation.js';
@@ -713,6 +714,24 @@ export function createApiRouter(ctx) {
     viewSnapshot(view) { return uiService.viewText(view); },
     /** Full view for odm_ui_state. */
     uiState() { return uiService.state(); },
+    /** 我的一天: Chief reads / edits the suggested blocks; persisted on the timetable card, pushed live to open tabs. */
+    timetableGet() {
+      const card = findTimetableCard(store.get().cards || []);
+      return card ? { success: true, ...readPlan(card) } : { success: false, error: '没有「我的一天」卡片（先刷新今日生成一次）' };
+    },
+    async timetableApply(edit = {}, { by = 'chief' } = {}) {
+      const state = store.get();
+      const cards = state.cards || [];
+      const card = findTimetableCard(cards);
+      const res = applyPlanEdit(card, edit, { by });
+      if (!res.ok) return { success: false, errors: res.errors, ...(card ? { current: readPlan(card) } : {}) };
+      const saved = { ...res.card, updatedAt: new Date().toISOString() };
+      await store.save({ cards: [saved] });
+      const message = res.reset ? '豆芽：今天的时间表会在下次汇聚时重新生成' : '豆芽更新了「我的一天」';
+      uiService.emit({ kind: 'cards', reason: 'timetable', cardId: card.id, message });
+      console.log(`[timetable] ${by} ${edit.mode || (edit.ops ? 'patch' : 'replace')} → ${res.plan.blocks.length} blocks, next=${res.plan.next ? res.plan.next.start + ' ' + res.plan.next.title : '-'}`);
+      return { success: true, changed: res.changed, reset: !!res.reset, warnings: res.warnings, plan: res.plan, message };
+    },
     uiBootId() { return uiService.bootId; },
     /** Bot: generate a temporary view (validated + hydrated from the store). */
     async uiRender(input = {}, opts = {}) { return surfaceService.render(input, opts); },
@@ -772,12 +791,17 @@ export function createApiRouter(ctx) {
         const activeCards = cards.filter(c => c.status === 'active' || !c.status);
         
         // Count meetings (event-type cards)
-        const meetings = activeCards.filter(c => c.type === 'event');
-        const meetingHours = meetings.reduce((sum, m) => {
-          // Extract duration if available in body or default to 1h
-          const match = m.body?.match(/(\d+(\.\d+)?)\s*(h|小时|hour)/i);
-          return sum + (match ? parseFloat(match[1]) : 1);
-        }, 0);
+        // Meetings = today's real calendar events (the timetable's fixed blocks), else legacy event cards.
+        const calToday = todaysCalendarEvents(findTimetableCard(state.cards || []));
+        const eventCards = activeCards.filter(c => c.type === 'event');
+        const meetings = calToday.length ? calToday : eventCards;
+        const meetingHours = calToday.length
+          ? calToday.reduce((sum, b) => sum + Math.max(0, (new Date(b.end) - new Date(b.start)) / 3600000 || 0), 0)
+          : eventCards.reduce((sum, m) => {
+            // Extract duration if available in body or default to 1h
+            const match = m.body?.match(/(\d+(\.\d+)?)\s*(h|小时|hour)/i);
+            return sum + (match ? parseFloat(match[1]) : 1);
+          }, 0);
         
         // Work items = everything except system tiles (hero / timetable), so the
         // header count always matches the cards rendered in the grid.

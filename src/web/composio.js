@@ -147,14 +147,16 @@ export function createComposioClient(config) {
      * @param {string} toolSlug - Tool slug in UPPERCASE_SNAKE_CASE (e.g., "GITHUB_LIST_REPOS")
      * @param {object} args - Tool arguments
      */
-    async executeAction(toolSlug, args = {}) {
-      console.log(`[Composio] Executing tool: ${toolSlug}`);
+    async executeAction(toolSlug, args = {}, { connectedAccountId = null } = {}) {
+      console.log(`[Composio] Executing tool: ${toolSlug}${connectedAccountId ? ` (account ${connectedAccountId})` : ''}`);
       
+      // With several connected accounts for one toolkit, pin the one the caller listed as ACTIVE.
       const result = await request(`/tools/execute/${toolSlug}`, {
         method: 'POST',
         body: JSON.stringify({
           user_id: entityId,
           arguments: args,
+          ...(connectedAccountId ? { connected_account_id: connectedAccountId } : {}),
         }),
       });
 

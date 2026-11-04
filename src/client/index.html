@@ -671,6 +671,11 @@
   .tt-bar.c-meal{background:var(--peach-soft);color:#b8692a;box-shadow:inset 3px 0 0 var(--peach)}
   .tt-bar.c-focus{background:var(--teal-soft);color:#16786d;box-shadow:inset 3px 0 0 var(--teal)}
   .tt-bar.c-meeting{background:var(--sky-soft);color:#2d6cb0;box-shadow:inset 3px 0 0 var(--sky)}
+  .tt-bar.c-work,.tt-bar.c-review,.tt-bar.c-learning{background:var(--sky-soft);color:#2d6cb0;box-shadow:inset 3px 0 0 var(--sky)}
+  .tt-bar.c-admin,.tt-bar.c-winddown{background:#f1f2f6;color:#5b6275;box-shadow:inset 3px 0 0 #b9bfcc}
+  .myday-edited{display:inline-block;margin-left:8px;font-size:11px;font-weight:600;color:var(--teal);background:var(--teal-soft);border-radius:999px;padding:1px 8px;vertical-align:2px}
+  .myday.flash{animation:mydayFlash 1.4s var(--ease)}
+  @keyframes mydayFlash{0%{box-shadow:0 0 0 0 rgba(34,168,152,.45)}100%{box-shadow:0 0 0 14px rgba(34,168,152,0)}}
   .tt-bar.c-break,.tt-bar.c-exercise,.tt-bar.c-personal{background:var(--violet-soft);color:#6450a8;box-shadow:inset 3px 0 0 var(--violet)}
   .tt-bar.past{opacity:.45;filter:saturate(.6)}
   .tt-bar.live{box-shadow:inset 3px 0 0 currentColor,0 0 0 2px rgba(34,168,152,.25)}
@@ -1986,7 +1991,7 @@
   const SYS_TYPES = new Set(['hero', 'timetable']);
   let lastCards = [];
   let lastToday = {};
-  const CAT_ZH = { meal: '用餐', focus: '专注', break: '休息', exercise: '运动', meeting: '会议', review: '复盘', admin: '杂务', learning: '学习', personal: '个人' };
+  const CAT_ZH = { meal: '用餐', focus: '专注', work: '工作', break: '休息', exercise: '运动', meeting: '会议', review: '评审', admin: '杂务', learning: '学习', personal: '个人', winddown: '收尾' };
   const TAG_ZH = { 'In Progress': '进行中', Active: '活跃', 'Needs Review': '待你审', Waiting: '等待中', Done: '已完成' };
   const TITLE_ZH = { 'Lunch break': '午餐休息', 'Focus time': '专注时段', Breakfast: '早餐', Dinner: '晚餐', 'Evening walk': '晚间散步' };
   const SRC_ZH = { github: 'GitHub · 代码协作', gmail: 'Gmail · 邮件', googlecalendar: '日历 · 日程', slack: 'Slack · 消息', manual: '手动 · 待办' };
@@ -2202,6 +2207,7 @@
     return t.replace(/\s*&\s*/g, '与').replace(/[:：]\s*$/, '');
   }
 
+  function localDayStr(d = new Date()) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
   function renderTimetable(card) {
     const tt = blockOf(card, 'timetable') || {};
     const blocks = [...(tt.fixedBlocks || []).map(b => ({ ...b, fixed: true })), ...(tt.suggestedBlocks || [])]
@@ -2230,13 +2236,13 @@
     const fixedN = blocks.filter(b => b.fixed).length;
     const freeMin = Math.max(0, (Math.min(hi, 23 * 60) - nowM) - blocks.filter(b => b.e > nowM).reduce((s, b) => s + (b.e - Math.max(b.s, nowM)), 0));
     const note = upcoming
-      ? `接下来 ${escapeHtml(upcoming.start)} ${(() => { const t = ttTitle(upcoming.title), c = CAT_ZH[upcoming.category] || ''; return escapeHtml(c && !t.startsWith(c) ? c + '：' + t : t); })()}`
+      ? `${upcoming.s <= nowM ? `现在 ${escapeHtml(upcoming.start)}–${escapeHtml(upcoming.end)}` : `接下来 ${escapeHtml(upcoming.start)}`} ${(() => { const t = ttTitle(upcoming.title), c = CAT_ZH[upcoming.category] || ''; return escapeHtml(c && !t.startsWith(c) ? c + '：' + t : t); })()}`
       : `今天的安排都已过去，剩余约 ${(freeMin / 60).toFixed(1)} 小时空闲，适合收尾或复盘。`;
     return `
       <section class="myday" data-sys="timetable">
         <div class="myday-head">
           <div>
-            <div class="eyebrow c-teal">我的一天 · MY DAY</div>
+            <div class="eyebrow c-teal">我的一天 · MY DAY${tt.userPlan && tt.userPlan.date === localDayStr() ? '<span class="myday-edited">豆芽已调整</span>' : ''}</div>
             <div class="myday-note">${note}</div>
           </div>
           <div class="myday-meta"><span><b>${fixedN}</b> 个固定日程</span><span><b>${blocks.length - fixedN}</b> 个建议时段</span><span>现在 <b>${fmtMin(nowM)}</b></span></div>
@@ -2851,7 +2857,7 @@
       if (!r) { box.innerHTML = st.botAvailable ? '<p class="src-note">还没有运行过 Bot 汇聚。</p>' : ''; return; }
       const zh = { done: '✓ 完成', failed: '✗ 失败', timeout: '✗ 超时', fetching: '获取中', thinking: '整理中', queued: '排队' };
       const t = new Date(r.startedAt).toLocaleString('zh-CN', { hour12: false });
-      const rows = Object.entries(r.channels || {}).map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${zh[v.status] || v.status}</td><td>${v.cards ?? '–'}</td><td>${v.items ?? '–'}</td><td>${v.ms != null ? (v.ms / 1000).toFixed(1) + 's' : '–'}</td><td>${escapeHtml(v.error || (v.status === 'done' ? '' : '旧卡保持不变'))}</td></tr>`).join('');
+      const rows = [...Object.entries(r.channels || {}), ...Object.entries(r.aux || {}).map(([k, v]) => [k, { ...v, cards: v.note || null }])].map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${zh[v.status] || v.status}</td><td>${v.cards ?? '–'}</td><td>${v.items ?? '–'}</td><td>${v.ms != null ? (v.ms / 1000).toFixed(1) + 's' : '–'}</td><td>${escapeHtml(v.error || (v.status === 'done' ? '' : '旧卡保持不变'))}</td></tr>`).join('');
       box.innerHTML = `<h4 style="margin:0 0 6px">上次汇聚（${st.mode === 'bot' ? '信源 Bot' : '旧流水线'} · ${escapeHtml(t)} · ${r.status === 'done' ? '成功' : '失败：' + escapeHtml(r.error || '')} · ${(r.ms / 1000).toFixed(0)}s）</h4>
         <table><tr><th>信源 Bot</th><th>状态</th><th>候选卡</th><th>条目</th><th>用时</th><th>说明</th></tr>${rows}
         <tr><td>Chief 合并</td><td>${zh[r.chief?.status] || r.chief?.status || '–'}</td><td>${(r.chief?.merges || []).length} 次合并</td><td></td><td>${r.chief?.ms != null ? (r.chief.ms / 1000).toFixed(1) + 's' : '–'}</td><td>${escapeHtml(r.chief?.error || '')}</td></tr></table>
@@ -3447,7 +3453,7 @@
     uiSeq = e.seq;
     if (e.kind === 'surface') { onSurfaceEvent(e); return; }
     if (e.kind === 'suggest') { showSuggest(e); return; }
-    if (e.kind === 'cards') { await loadToday(); if (e.message) showUiToast(e.message); return; }
+    if (e.kind === 'cards') { await loadToday(); if (e.reason === 'timetable') { const el = document.querySelector('.myday'); if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } } if (e.message) showUiToast(e.message); return; }
     if (e.by === 'bot' && HOLDABLE.has((e.op || {}).op) && userTyping()) { holdEvent(e); return; }
     return applyOpEvent(e, false);
   }
@@ -3663,7 +3669,7 @@
     };
   }
   // Bot digest progress on 今天: 'Gmail 整理中… · GitHub 完成 · Chief 合并中…'
-  const DP_ZH = { queued: '排队', fetching: '获取中…', thinking: '整理中…', done: '完成', failed: '失败', timeout: '超时' };
+  const DP_ZH = { queued: '排队', fetching: '获取中…', thinking: '整理中…', done: '完成', failed: '失败', timeout: '超时', skipped: '跳过' };
   const finishedDigests = new Set(); let dpHideTimer = null;
   function renderDigestProgress(p) {
     const el = $('digestProgress'); if (!el || !p) return;
@@ -3673,7 +3679,8 @@
     if (p.chief?.status === 'done') dpHideTimer = setTimeout(() => { el.hidden = true; }, 3000);
     const chip = (label, st, extra) => { const c = document.createElement('span'); c.className = 'dp-chip ' + (st === 'done' ? 'dp-done' : st === 'failed' || st === 'timeout' ? 'dp-bad' : 'dp-run'); c.textContent = `${label} ${DP_ZH[st] || st}${extra ? ' · ' + extra : ''}`; return c; };
     const head = document.createElement('b'); head.style.marginRight = '4px'; head.textContent = '汇聚中';
-    el.replaceChildren(head, ...Object.values(p.channels || {}).map(c => chip(c.label, c.status, c.status === 'done' && c.cards != null ? `${c.cards} 张` : '')), chip('Chief 合并', p.chief?.status || 'queued'));
+    const extraOf = c => c.status === 'done' ? (c.note || (c.cards != null ? `${c.cards} 张` : '')) : (c.status === 'failed' || c.status === 'timeout' || c.status === 'skipped') && c.error ? String(c.error).slice(0, 40) : '';
+    el.replaceChildren(head, ...Object.values(p.channels || {}).map(c => { const n = chip(c.label, c.status, extraOf(c)); if (c.error) n.title = c.error; return n; }), chip('Chief 合并', p.chief?.status || 'queued'));
     el.hidden = false;
   }
   window.__odmDigestProgress = renderDigestProgress;

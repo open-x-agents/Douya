@@ -68,12 +68,21 @@ export const CARD_WORK_PROMPT = `你是「豆芽」背后的 Main Bot（Chief）
 - 【当前视图】是此刻的真实状态，以它为准（之前的置顶 / 筛选可能已被用户撤销）。回答时说卡片标题，不要把卡片 id、撤销 id 这类内部编号念给用户。
 - 做完用一句话说明改了什么（工具返回的 message），布局改动提醒用户面板上可以点「撤销」。odm_ui_op 只改视图，不发送任何东西；发邮件 / 评论等仍然只能走 odm_act_* 生成待确认卡。
 
+## 「我的一天」时间表（今天页最上方，用户一直看得到）
+- 用户要「排一下 / 重新安排 / 挪到 / 改时间表 / 下午怎么排」时，**必须**调 odm_timetable_update 把新安排写进去，不能只在回复里列一份文字时间表；没写进去就等于没改。
+- 先调 odm_timetable_get 看现有时段和固定日历事件（fixedEvents：真实日程，不能挪、不能覆盖）。
+- 整段重排（如「下午重新排」）→ mode=replace，blocks 给从改动起点开始的完整新安排（更早的时段自动保留）；只挪一两段 → mode=patch，ops 里 match 填原时段开始时间 HH:MM。
+- 每段：start/end（HH:MM，24 小时，北京时间）、title（≤14 字中文）、kind（focus 专注 / work / review / meeting / break 休息缓冲 / meal 用餐 / admin 杂务 / exercise / personal / winddown 收尾）、cardIds（对应今天卡片的 id，有就填）。
+- 写完按工具返回的 plan 说一句改了什么、接下来是哪段；有 warnings（和日历冲突）要照实说。用户说「重新生成时间表」→ mode=reset 再 odm_digest_refresh。
+- 你的编辑当天有效，重新汇聚不会冲掉（日历里新加的真实日程仍会排进来）。
+
 ## 什么时候必须动工具
 - 「标完成 / 做完了 / 勾掉」→ odm_card_complete（先 odm_card_list 或 odm_card_find 找到 id）
 - 「删掉 / 不要了 / 去掉促销」→ odm_card_dismiss 或 odm_card_delete（噪音用 dismiss；明确永久删除才 delete）
 - 「推迟 / 明天再看」→ odm_card_snooze
 - 卡片里的单个条目（某个 PR / issue / 邮件）「这个做完了 / 这条不用管」→ odm_card_item（action=done|dismiss|undo，url 用 odm_card_list 返回的 items[].url）；不要因此把整张卡标完成
 - 「改标题 / 改成… / 下一步改成…」→ odm_card_update
+- 「排一下 / 挪一下 / 改时间表」→ odm_timetable_get + odm_timetable_update
 - 「加一张 / 记一下 / 待办」→ odm_card_create
 - 「刷新今日 / 重新汇聚」→ odm_digest_refresh
 - 问邮件/PR/Slack/日历 → odm_github_* / odm_gmail_* / odm_slack_* / odm_calendar_*（只读）
@@ -312,6 +321,39 @@ export async function registerBotTools(ctx, opts = {}) {
       }
     },
   }))
+
+  if (router?.timetableApply) {
+    register(() => defineTool({
+      name: 'odm_timetable_get',
+      description: '读「我的一天」时间表：now、fixedEvents（真实日历事件，不能改）、blocks（建议时段 start/end/title/kind/cardIds）、next（「接下来」那段）。',
+      parameters: {},
+      output,
+      async execute() {
+        try { return JSON.stringify(router.timetableGet()) }
+        catch (err) { return JSON.stringify({ success: false, error: err.message }) }
+      },
+    }))
+    register(() => defineTool({
+      name: 'odm_timetable_update',
+      description: '改「我的一天」时间表并立即显示在今天页。mode=replace：blocks 为从某时刻起的完整新安排（JSON 数组 [{start,end,title,kind,cardIds}]，更早的时段保留；keepBefore=HH:MM 可指定保留到哪）。mode=patch：ops 为 JSON 数组 [{match:"原开始 HH:MM 或标题", start?, end?, title?, kind?, cardIds?, remove?:true}]，不带 match 的是新增。mode=reset：撤掉聊天里的改动，下次汇聚重新生成。真实日历事件不会被改或覆盖。',
+      parameters: {
+        mode: { type: 'string', required: true, description: 'replace | patch | reset' },
+        blocks: { type: 'string', description: 'replace 用：JSON 数组' },
+        ops: { type: 'string', description: 'patch 用：JSON 数组' },
+        keepBefore: { type: 'string', description: 'replace 可选：HH:MM，之前的旧时段保留' },
+      },
+      output,
+      async execute(args) {
+        try {
+          const parse = (v) => { if (v == null || v === '') return undefined; if (typeof v !== 'string') return v; return JSON.parse(v) }
+          let blocks, ops
+          try { blocks = parse(args?.blocks); ops = parse(args?.ops) }
+          catch (e) { return JSON.stringify({ success: false, error: `blocks/ops 不是合法 JSON：${e.message}` }) }
+          return JSON.stringify(await router.timetableApply({ mode: args?.mode, blocks, ops, keepBefore: args?.keepBefore || undefined }, { by: 'chief' }))
+        } catch (err) { return JSON.stringify({ success: false, error: err.message }) }
+      },
+    }))
+  }
 
   register(() => defineTool({
     name: 'odm_card_create',

@@ -27,6 +27,9 @@ test('needs-you mail: a reply draft request naming the real mail; no archive off
 test('my PR waiting on others: nudge comment prepared; waiting on me: ask where it is stuck', () => {
   const a = prepareCardActions(gh())
   assert.equal(a[0].action, 'github_comment'); assert.equal(a[0].input.url, 'https://github.com/o/r/pull/17')
+  assert.match(a[0].label, /催一下 #17/)
+  assert.match(a[0].input.body, /叮一下：#17/)
+  assert.match(a[0].input.body, /[一-龥]/) // Chinese, not the old English template
   const b = prepareCardActions(gh({ waiting: 'you' }))
   assert.equal(b[0].kind, 'ask'); assert.match(b[0].label, /#17/)
 })

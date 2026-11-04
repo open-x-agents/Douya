@@ -72,8 +72,12 @@ export function prepareCardActions(card, { itemStatus = {}, max = 2 } = {}) {
         prompt: `帮我看一下 PR「${clip(review.title, 60)}」${review.url} 改了什么、有没有要我拍板的地方，最后给一段评审意见草稿（先别提交）${ref}。` })
     }
     if (mine && card.waiting !== 'you') {
-      out.push({ id: `nudge-${prNum(mine.url)}`, kind: 'act', label: `催 review #${prNum(mine.url)}`, hint: '已写好评论，确认后才发到 GitHub',
-        action: 'github_comment', input: { url: mine.url, body: 'Friendly ping — this PR is ready for review. Could someone take a look when you have a moment? Thanks!' } })
+      const n = prNum(mine.url)
+      const title = clip(mine.title, 40)
+      out.push({ id: `nudge-${n}`, kind: 'act', label: n ? `催一下 #${n}` : '催一下 review', hint: '中文短评已备好，确认后才发到 GitHub',
+        action: 'github_comment', input: { url: mine.url, body: n
+          ? `叮一下：#${n}${title ? `「${title}」` : ''} 还等 review，有空帮忙看一眼吗？谢谢！`
+          : `叮一下：这个 PR 还等 review，有空帮忙看一眼吗？谢谢！` } })
     }
     if (mine && card.waiting === 'you') {
       out.push({ id: `push-${prNum(mine.url)}`, kind: 'ask', label: `看 #${prNum(mine.url)} 卡在哪`, hint: '豆芽查 CI / review，需要催就备好评论',
@@ -120,8 +124,10 @@ export function cardUrgency(card, { itemStatus = {} } = {}) {
   if (card.pinned) s += 6
   if (card.type === 'task' || card.source === 'bot' || card.source === 'manual') s += 4
   if (card.waiting === 'fyi') s -= 8
+  if (card.waiting === 'others') s -= 14 // quiet strip territory — not the hero
   const open = openLinks(card, itemStatus).length
   if (card.type === 'email-group' && !open) s -= 30
+  if (!open && cardLinks(card).length) s -= 40 // fully handled items — about to leave Today
   return s
 }
 

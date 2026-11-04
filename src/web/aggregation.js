@@ -1299,6 +1299,8 @@ export function generateClusterCards(grouped) {
 
       const statusText = reviewCount > 0 ? '待你审' :
                         myPRCount > 0 ? '你开的' : '进行中';
+      // Drive clearance / prepared-actions: only 'others' when nothing waits on you.
+      card.waiting = waitingOnYou > 0 ? 'you' : waitingOnOthers > 0 ? 'others' : 'fyi';
       card.blocks.push({
         type: 'tags',
         tags: [
@@ -1353,25 +1355,25 @@ export function generateClusterCards(grouped) {
         label: '最近 7 天活动',
       });
       
-      // Add contributor avatars (first 5 unique)
+      // Contributor avatars: real avatar_url, else GitHub identicon from login (never blank stubs).
       const contributors = [...new Set(
-        cluster.items
-          .filter(i => i.metadata?.user?.avatar_url)
-          .map(i => i.metadata.user.avatar_url)
+        cluster.items.flatMap(i => {
+          if (i.metadata?.user?.avatar_url) return [i.metadata.user.avatar_url];
+          const login = i.metadata?.author || i.metadata?.user?.login;
+          return login ? [`https://github.com/${encodeURIComponent(login)}.png?size=80`] : [];
+        })
       )].slice(0, 5);
-      
       if (contributors.length > 0) {
-        card.blocks.push({
-          type: 'avatars',
-          urls: contributors,
-        });
+        card.blocks.push({ type: 'avatars', urls: contributors });
       }
       
-      // Deep links: up to 5 real items (tile shows 1–3; zoom shows all)
+      // Deep links: up to 5 real items (tile shows 1–3; zoom shows all). Carry author for face「谁在等」.
       const topLinks = (cluster.topItems || cluster.items || []).slice(0, 5).map(item => ({
         title: item.title,
         url: item.url,
         type: item.type,
+        from: item.metadata?.author || item.metadata?.user?.login || null,
+        at: item.updatedAt || item.createdAt || null,
       })).filter(l => l.url);
       if (topLinks.length > 0) {
         card.blocks.push({ type: 'link-list', links: topLinks });

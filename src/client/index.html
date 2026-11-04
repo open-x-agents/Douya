@@ -1387,11 +1387,28 @@
   .sprout-pop{position:fixed;z-index:999;font-size:20px;pointer-events:none;transform:translate(-50%,0);animation:sproutUp 1s var(--ease) forwards}
   @keyframes sproutUp{0%{opacity:0;transform:translate(-50%,6px) scale(.4)}30%{opacity:1;transform:translate(-50%,-14px) scale(1.15)}100%{opacity:0;transform:translate(-50%,-34px) scale(.9)}}
   @media (prefers-reduced-motion:reduce){.f-check li.ticking,.sprout-pop,.f-bar i{animation:none!important;transition:none!important}}
+  /* Polish: denser cards, intentional wait strip, soft refresh */
+  #cardList{transition:opacity .18s ease}
+  #cardList.is-refreshing{opacity:.88}
+  .tile.work .w-desc.short{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:8px}
+  .tile.work.has-face .w-links{display:none}
+  .tile.work .w-acts{margin-top:2px}
+  .tile.work .w-acts-k{display:none}
+  .tile.work .w-more{position:relative;margin:0 0 8px}
+  .tile.work .w-more > summary{list-style:none;cursor:pointer;font-size:12px;color:var(--ink3);padding:4px 0;user-select:none}
+  .tile.work .w-more > summary::-webkit-details-marker{display:none}
+  .tile.work .w-more > summary:hover{color:var(--violet)}
+  .tile.work .w-more .step{margin-top:4px}
+  .tile.empty{text-align:center;padding:28px 22px}
+  .tile.empty .eyebrow{font-size:15px;margin-top:4px}
+  .tile.empty .w-desc{max-width:28em;margin:8px auto 0;line-height:1.6}
+  .f-check .f-meta.local{opacity:.55;font-size:10.5px}
   /* Cleared / waiting-only (done-dismiss) */
-  .wait-strip{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px;align-items:center}
+  .wait-strip{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 16px;align-items:center;padding:10px 12px;border-radius:16px;background:linear-gradient(135deg,rgba(250,249,255,.9),rgba(245,247,252,.85));border:1px dashed rgba(122,106,216,.22)}
   .wait-strip:empty{display:none}
-  .wait-chip{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.75);border:1px solid rgba(30,40,80,.08);font-size:12.5px;color:var(--ink2);cursor:pointer;transition:.2s}
-  .wait-chip:hover{background:#fff;box-shadow:0 4px 14px rgba(40,44,90,.08);color:var(--ink)}
+  .wait-strip::before{content:"等别人回音";font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--violet);margin-right:4px;opacity:.85}
+  .wait-chip{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.92);border:1px solid rgba(30,40,80,.06);font-size:12.5px;color:var(--ink2);cursor:pointer;transition:.2s;box-shadow:0 1px 2px rgba(40,44,90,.04)}
+  .wait-chip:hover{background:#fff;box-shadow:0 4px 14px rgba(40,44,90,.1);color:var(--ink);transform:translateY(-1px)}
   .wait-chip b{font-weight:700;color:var(--ink)}
   .wait-chip .wc-n{font-size:11px;font-weight:700;color:var(--violet);background:var(--violet-soft,#efeafc);padding:2px 8px;border-radius:999px}
   .tile.work.is-cleared .w-next,.tile.work.is-cleared .w-acts,.tile.work.waiting-only .w-next,.tile.work.waiting-only .w-acts{display:none}
@@ -2156,6 +2173,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       if (!opts.force && sig === lastTodaySig) return;
       lastTodaySig = sig;
       lastToday = data;
+      const listEl = $('cardList');
+      if (listEl && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        listEl.classList.add('is-refreshing');
+        requestAnimationFrame(() => setTimeout(() => listEl.classList.remove('is-refreshing'), 180));
+      }
       takeAutoLayout(data.autoLayout);
       if (data.ui) { uiLayout = data.ui; if (!uiBoot) { uiBoot = data.ui.bootId || null; uiSeq = Math.max(uiSeq, data.ui.seq || 0); } }
       const name = data.userName || '';
@@ -2438,7 +2460,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
           <div class="myday-meta"><span><b>${fixedN}</b> 个固定日程</span><span><b>${blocks.length - fixedN}</b> 个建议时段</span><span>现在 <b>${fmtMin(nowM)}</b></span></div>
         </div>
         <div class="tt">
-          <div class="tt-track" style="height:${nLanes * laneH + 6}px">${bars || '<div class="tt-empty">今天还没有日程，连接日历后会自动排进来</div>'}
+          <div class="tt-track" style="height:${nLanes * laneH + 6}px">${bars || '<div class="tt-empty">今天日历空着 🌱 · 连接日历后会自动排进来</div>'}
             ${nowM >= lo && nowM <= hi ? `<div class="tt-now" style="left:${pct(nowM)}%"><em>${fmtMin(nowM)}</em></div>` : ''}
           </div>
           <div class="tt-axis">${ticks}</div>
@@ -2547,10 +2569,20 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     }
     const waitingOnly = !!card.waitingOnly || card.clearance === 'waiting';
     const na = waitingOnly ? '' : nextAction(card);
-    // Stale digest badges (进行中 / 你开的) hide once we're only waiting on others / cleared.
-    const liveTags = waitingOnly ? '' : tagHtml;
+    const hasFace = !!(card.faceView && !waitingOnly);
+    // With a live face, drop redundant status pills (进行中/你开的); keep 等你 / 优先 only.
+    const slimTags = (tags || []).filter(t => /等你|待你审|优先/.test(String(t.text || '')) || TAG_ZH[t.text] === '待你审');
+    const liveTags = waitingOnly || hasFace
+      ? (slimTags.length ? `<div class="w-tags">${slimTags.map(t => { const tx = TAG_ZH[t.text] || t.text; return `<span class="pill pill-${escapeHtml(t.color || 'gray')}">${escapeHtml(tx)}</span>`; }).join('')}</div>` : '')
+      : tagHtml;
+    const prep = waitingOnly ? [] : (card.prepared || []);
+    const primary = prep.find(p => p.kind !== 'snooze') || null;
+    const secondary = prep.filter(p => p !== primary);
+    const actsHtml = primary
+      ? `<div class="w-acts">${stepBtnHtml(primary, 0, 'primary')}${secondary.length ? `<details class="w-more"><summary>更多</summary>${secondary.map((p, i) => stepBtnHtml(p, i + 1, '')).join('')}</details>` : ''}</div>`
+      : '';
     return `
-      <article class="tile work ${big ? 'size-wide' : 'size-normal'}${waitingOnly ? ' waiting-only' : ''}" data-idx="${idx}">
+      <article class="tile work ${big ? 'size-wide' : 'size-normal'}${waitingOnly ? ' waiting-only' : ''}${hasFace ? ' has-face' : ''}" data-idx="${idx}">
         <header class="w-top">
           ${av}
           <div class="w-src"><span class="w-label">${escapeHtml(label)}</span><span class="w-repo">${escapeHtml(r ? `${r.owner} / ${r.name}` : (card.subtitle || ''))}</span></div>
@@ -2558,12 +2590,13 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         </header>
         <h3 class="w-head">${escapeHtml(waitingOnly ? (r ? r.name : headline(card)) : headline(card))}</h3>
         ${isMailGroup(card) && tags.length ? `<div class="w-senders">${tags.map(t => `<span title="${escapeHtml(t.text)}">${escapeHtml(t.text)}</span>`).join('')}</div>` : ''}
-        ${!waitingOnly && desc ? `<p class="w-desc${card.faceView ? ' short' : ''}">${escapeHtml(desc)}</p>` : ''}
+        ${!waitingOnly && desc && !hasFace ? `<p class="w-desc">${escapeHtml(desc)}</p>` : ''}
+        ${!waitingOnly && desc && hasFace ? `<p class="w-desc short">${escapeHtml(desc)}</p>` : ''}
         ${waitingOnly ? '' : (card.faceView ? renderFace(card.faceView) || (metrics + avRow) : metrics + avRow)}
         ${na ? `<div class="w-next"><span class="w-next-k">下一步</span><span class="w-next-v">${escapeHtml(na)}</span></div>` : ''}
-        ${!waitingOnly && (card.prepared || []).length ? `<div class="w-acts"><span class="w-acts-k">豆芽备好了</span>${card.prepared.map((p, i) => stepBtnHtml(p, i, i === 0 && p.kind !== 'snooze' ? 'primary' : '')).join('')}</div>` : ''}
+        ${actsHtml}
         <div class="w-slot"></div>
-        ${waitingOnly ? '' : `<div class="w-links">${links.slice(0, 2).map(linkRow).join('')}</div>`}
+        ${waitingOnly || hasFace ? '' : `<div class="w-links">${links.slice(0, 2).map(linkRow).join('')}</div>`}
       </article>`;
   }
 
@@ -2585,7 +2618,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       else if (p.type === 'stage') out.push(`<div class="f-stage"><div class="f-bar"><i style="width:${p.total ? Math.round((p.done / p.total) * 100) : 0}%"></i></div><span>${escapeHtml(p.label)}</span></div>`);
       else if (p.type === 'checklist') {
         if (p.done && !(p.items || []).length) out.push('<div class="f-alldone"><span class="f-sprout">🌱</span>都处理完了</div>');
-        else out.push(`<ul class="f-check">${(p.items || []).map(it => `<li class="${it.done ? 'done' : ''}${it.needsYou ? ' need' : ''}"><button type="button" class="f-box" aria-label="标完成" data-item-url="${escapeHtml(it.url)}" data-item-title="${escapeHtml(it.title)}"></button><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</a><span class="f-meta">${escapeHtml(it.from || it.kindZh || '')}</span></li>`).join('')}</ul>${p.more ? `<div class="f-more">还有 ${p.more} 条</div>` : ''}`);
+        else out.push(`<ul class="f-check">${(p.items || []).map(it => `<li class="${it.done ? 'done' : ''}${it.needsYou ? ' need' : ''}"><button type="button" class="f-box" aria-label="在豆芽里标完成" title="只在豆芽里记下，不会改 Gmail / GitHub" data-item-url="${escapeHtml(it.url)}" data-item-title="${escapeHtml(it.title)}"></button><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</a><span class="f-meta">${escapeHtml(it.from || it.kindZh || '')}</span></li>`).join('')}</ul>${p.more ? `<div class="f-more">还有 ${p.more} 条</div>` : ''}`);
       }
       else if (p.type === 'quote') out.push(`<blockquote class="f-quote"><p>${escapeHtml(p.text)}</p><cite>${escapeHtml([p.from, faceRelTime(p.at)].filter(Boolean).join(' · '))}</cite></blockquote>`);
       else if (p.type === 'timeline' && p.items && p.items.length) out.push(`<ol class="f-tl">${p.items.map(it => `<li><i class="f-dot k-${escapeHtml(it.kind)}"></i><time>${escapeHtml(it.time || it.kindZh)}</time><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</a></li>`).join('')}</ol>`);
@@ -2617,7 +2650,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         setTimeout(() => loadToday({ force: true }).catch(() => {}), reducedMotion() ? 400 : 1100);
         return;
       }
-      showUiToast(`已完成「${clip(itemTitle, 18)}」`, null, { label: '撤销', onClick: async () => { await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'undo', itemUrl, itemTitle }) }); loadToday(); } });
+      showUiToast(`豆芽记下了「${clip(itemTitle, 16)}」（源站未改）`, null, { label: '撤销', onClick: async () => { await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'undo', itemUrl, itemTitle }) }); loadToday(); } });
       setTimeout(() => loadToday().catch(() => {}), 650);
     }));
   }
@@ -2684,7 +2717,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const r = repoOf(c);
       const name = r ? r.name : clip(c.title, 18);
       const n = c.waitingCount || 0;
-      return `<button type="button" class="wait-chip" data-wait-id="${escapeHtml(c.id)}"><span class="wc-n">等别人${n ? ' · ' + n : ''}</span><b>${escapeHtml(name)}</b></button>`;
+      return `<button type="button" class="wait-chip" data-wait-id="${escapeHtml(c.id)}" title="打开看看，需要的话可以催一下"><span class="wc-n">${n ? n + ' 件' : '等候'}</span><b>${escapeHtml(name)}</b></button>`;
     }).join('');
     return `<div class="wait-strip" id="waitStrip">${chips}</div>`;
   }
@@ -2830,15 +2863,18 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function cardStamp(c) { return `${c.updatedAt || ''}|${c.planEditedAt || ''}|${c.status || ''}|${Object.keys(c.itemStatus || {}).length}`; }
   function flashChanged(container, cards) {
     const now = new Map(cards.map(c => [c.id, cardStamp(c)]));
-    if (prevStamp) {
-      for (const c of cards) {
-        const before = prevStamp.get(c.id);
-        if (before === now.get(c.id)) continue;
-        const el = c.type === 'timetable' ? container.querySelector('.myday') : container.querySelector(`.tile.work[data-id="${CSS.escape(c.id)}"]`);
-        if (!el) continue;
-        el.classList.remove(before === undefined ? 'is-new' : 'just-changed'); void el.offsetWidth;
-        el.classList.add(before === undefined ? 'is-new' : 'just-changed');
-        if (c.type === 'timetable') { const nx = container.querySelector('.nx'); if (nx) { nx.classList.remove('just-changed'); void nx.offsetWidth; nx.classList.add('just-changed'); } }
+    if (prevStamp && !reducedMotion()) {
+      const changed = cards.filter(c => prevStamp.get(c.id) !== now.get(c.id));
+      // Background refresh often rewrites many stamps at once — don't flash the whole grid.
+      if (changed.length && changed.length <= 3) {
+        for (const c of changed) {
+          const before = prevStamp.get(c.id);
+          const el = c.type === 'timetable' ? container.querySelector('.myday') : container.querySelector(`.tile.work[data-id="${CSS.escape(c.id)}"]`);
+          if (!el) continue;
+          el.classList.remove(before === undefined ? 'is-new' : 'just-changed'); void el.offsetWidth;
+          el.classList.add(before === undefined ? 'is-new' : 'just-changed');
+          if (c.type === 'timetable') { const nx = container.querySelector('.nx'); if (nx) { nx.classList.remove('just-changed'); void nx.offsetWidth; nx.classList.add('just-changed'); } }
+        }
       }
     }
     prevStamp = now;
@@ -3017,8 +3053,13 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     html += '<div class="grid2 grid-main">';
     html += renderDoneToday(lastToday && lastToday.doneToday);
     html += order.map(c => (c.type === 'view' ? `<article class="tile work size-wide view-tile" data-idx="${cards.indexOf(c)}"></article>` : renderWorkTile(c, cards.indexOf(c)))).join('');
-    if (work.length && !ordered.length) html += `<div class="tile empty size-wide"><div class="eyebrow">筛选后没有卡片</div><p class="w-desc">点上方「显示全部」恢复。</p></div>`;
-    if (!work.length) html += `<div class="tile empty size-wide">${douyaSvg({ size: 56, state: 'idle', id: 'te' })}<div class="eyebrow">还没有卡片</div><p class="w-desc">点击右上角「立即汇聚」，豆芽会从已连接的数据源拉取最新动态。</p></div>`;
+    if (work.length && !ordered.length) html += `<div class="tile empty size-wide">${douyaSvg({ size: 48, state: 'idle', id: 'tf' })}<div class="eyebrow">筛选后空了</div><p class="w-desc">点上方「显示全部」，把收起来的卡放回来。</p></div>`;
+    if (!work.length) {
+      const doneN = lastToday && lastToday.doneToday && lastToday.doneToday.count;
+      html += doneN
+        ? `<div class="tile empty size-wide">${douyaSvg({ size: 56, state: 'idle', id: 'te' })}<div class="eyebrow">今天的事都收好了 🌱</div><p class="w-desc">搞定了 ${doneN} 件。新的动态来了会再出现在这里；也可以点右上角「立即汇聚」再扫一遍。</p></div>`
+        : `<div class="tile empty size-wide">${douyaSvg({ size: 56, state: 'idle', id: 'te' })}<div class="eyebrow">今天还很清静 🌱</div><p class="w-desc">点右上角「立即汇聚」，豆芽会从邮箱、GitHub、日历里把今天的事拣出来。</p></div>`;
+    }
     html += '</div>';
     html += renderOffHours(offCards, cards);
     html += '<div id="todayChatSlot"></div>';
@@ -3073,7 +3114,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       if (card && card.faceView) bindFace(tile, card);
       tile.addEventListener('click', e => {
         if (card && card.type === 'view') return; // a saved view is used in place
-        if (e.target.closest('.w-acts, .w-slot, .act-card, .f-box')) return;
+        if (e.target.closest('.w-acts, .w-more, .w-slot, .act-card, .f-box, .wait-chip')) return;
         if (e.target.closest('a')) { track(card, 'open'); return; }
         track(card, 'open');
         openTileZoom(card);

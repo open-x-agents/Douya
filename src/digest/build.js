@@ -86,7 +86,20 @@ export function validatePlan(raw, candidates) {
   return { headline: clip(p.headline, 60), narrative: clip(p.narrative, 220), merges, edits, timeline, errors }
 }
 
-const linkOf = it => it.source === 'gmail' ? emailLink(it) : { title: clip(it.title, 90), url: it.url, type: it.source === 'slack' ? 'slack' : 'pr-activity', at: it.timestamp || it.createdAt || null }
+const linkOf = it => {
+  if (it.source === 'gmail') return emailLink(it)
+  const md = it.metadata || {}
+  const from = it.source === 'slack'
+    ? (md.user || md.from || null)
+    : (md.author || md.user?.login || md.user || null)
+  return {
+    title: clip(it.title, 90), url: it.url,
+    type: it.source === 'slack' ? 'slack' : (/issue/i.test(it.type || '') ? 'issue' : /pr|pull/i.test(it.type || '') ? 'pr-activity' : 'pr-activity'),
+    at: it.timestamp || it.updatedAt || it.createdAt || null,
+    ...(from ? { from: clip(from, 40) } : {}),
+    ...(it.type ? { itemType: it.type } : {}),
+  }
+}
 const keyOf = (channel, it) => channel === 'github' ? (it.metadata?.repository || (String(it.url).match(/github\.com\/([^/]+\/[^/]+)/) || [])[1] || 'other') : channel === 'slack' ? (it.metadata?.channelId || 'unknown') : it.sourceId
 
 function overlay(card, cand, edit) {

@@ -27,7 +27,7 @@ test('clearance: all items done → cleared; open waiting-on-others → waiting;
   assert.equal(cardClearance({ id: 't', type: 'task', source: 'bot', status: 'active' }, {}).kind, 'empty')
 })
 
-test('applyClearance strips 下一步 / prepared on cleared and waiting-only cards', () => {
+test('applyClearance strips 下一步 on cleared and waiting-only cards', () => {
   const c = applyClearance(card(), allDone)
   assert.equal(c.clearance, 'cleared')
   assert.equal(c.nextAction, '')
@@ -35,8 +35,9 @@ test('applyClearance strips 下一步 / prepared on cleared and waiting-only car
   const w = applyClearance(card({ waiting: 'others' }), {})
   assert.equal(w.waitingOnly, true)
   assert.equal(w.waitingCount, 3)
-  assert.deepEqual(w.prepared, [])
   assert.equal(w.nextAction, '')
+  // prepared kept for zoom; the tile hides CTAs via waitingOnly
+  assert.equal(w.prepared, undefined)
 })
 
 test('prepareCardActions returns [] when every link is already done', () => {
@@ -86,6 +87,10 @@ test('client: dock stays closed unless byUser; cardDone leave path present', () 
   assert.match(html, /odm\.chatDock\.open/)
   // programmatic loadToday re-focus must not expand a closed dock
   assert.match(html, /hadFocus && chatDockWanted/)
+  assert.match(html, /w-more/) // secondary CTAs collapsed
+  assert.match(html, /在豆芽里标完成/)
+  assert.match(html, /今天还很清静|今天的事都收好了/)
+  assert.match(html, /等别人回音/)
   // zoom close restores snapshot — never openTodayChat from teardown
   const close = html.slice(html.indexOf('function closeTileZoom'), html.indexOf('function closeTileZoom') + 600)
   assert.match(close, /setChatDockWanted\(dockWantedBeforeZoom\)/)

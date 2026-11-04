@@ -72,7 +72,7 @@ const linksOf = c => {
 const kindOf = l => { const t = String(l.type || ''), u = l.url; if (t === 'slack' || /\.slack\.com\//.test(u)) return 'slack'; if (t.startsWith('email') || /mail\.google\.com/.test(u)) return 'email'; if (/\/pull\/\d+/.test(u)) return 'pr'; if (/\/issues\/\d+/.test(u)) return 'issue'; return 'link' }
 const KIND_ZH = { slack: '消息', email: '邮件', pr: 'PR', issue: 'Issue', link: '链接' }
 const tsOf = l => { const t = Date.parse(l.at || l.updatedAt || l.createdAt || ''); return Number.isFinite(t) && t > Date.UTC(2000, 0, 1) ? t : null }
-const fromOf = l => cut(String(l.from || l.author || '').replace(/<[^>]*>/g, '').replace(/\s*[（(][^）)]*[）)]\s*$/, ''), 24)
+const fromOf = l => cut(String(l.from || l.author || l.user || '').replace(/<[^>]*>/g, '').replace(/\s*[（(][^）)]*[）)]\s*$/, ''), 24)
 const ago = (ms, now) => { const d = Math.max(0, now - ms); const h = d / 3600e3; return h < 1 ? `${Math.max(1, Math.round(d / 60e3))} 分钟` : h < 48 ? `${Math.round(h)} 小时` : `${Math.round(h / 24)} 天` }
 const shTime = ms => { const d = new Date(ms + 8 * 3600e3); return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}` }
 

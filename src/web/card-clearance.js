@@ -25,9 +25,12 @@ export function cardClearance(card, itemStatus = {}) {
   const open = links.filter(l => statusOf(l.url, itemStatus, card) === 'open')
   const done = links.length - open.length
   const needYou = open.filter(l => l.needsYou || (card.waiting === 'you' && (linkType(l) === 'email' || linkType(l) === 'slack')))
-  // Only an explicit "等别人" card (usually a repo cluster) collapses to the quiet strip.
-  // FYI mail / slack / promo stay as full cards so archive / read CTAs remain.
-  const waitingOthers = (!needYou.length && card.waiting === 'others') ? open.length : 0
+  // Quiet strip only when nothing needs you: waiting==='others', or a github cluster tagged 「N 件等别人」
+  // without also being tagged 「等你/待你审」. FYI mail / slack / promo stay as full cards.
+  const tagText = (card.blocks || []).flatMap(b => b?.type === 'tags' ? (b.tags || []).map(t => String(t?.text || '')) : [])
+  const tagYou = tagText.some(t => /等你|待你审/.test(t))
+  const tagOthers = tagText.some(t => /等别人/.test(t))
+  const waitingOthers = (!needYou.length && !tagYou && (card.waiting === 'others' || (card.source === 'github' && tagOthers))) ? open.length : 0
   if (!open.length) return { kind: 'cleared', total: links.length, open, done, needYou, waitingOthers: 0 }
   if (waitingOthers) return { kind: 'waiting', total: links.length, open, done, needYou, waitingOthers }
   return { kind: 'active', total: links.length, open, done, needYou, waitingOthers: 0 }
@@ -77,7 +80,7 @@ export function applyClearance(card, itemStatus = {}) {
       waitingCount: clr.open.length,
       waitingLabel: first ? (first.title || first.url) : '',
       nextAction: '',
-      prepared: [], // no 「下一步」CTAs while only waiting on others
+      // Keep prepared for zoom; the tile hides CTAs via waitingOnly.
     }
   }
   return { ...card, clearance: clr.kind === 'empty' ? 'active' : clr.kind }

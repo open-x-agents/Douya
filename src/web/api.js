@@ -18,6 +18,7 @@ import { createUiService } from '../ui/service.js';
 import { createChatDisplay, attachmentMeta } from './chat-display.js';
 import { callbackUrlFor, callbackPage } from './composio-callback.js';
 import { prepareCardActions, pickNextThing, daySummaryLine, tomorrowMorning } from './card-prep.js';
+import { hydrateFace, autoFace } from '../ui/face.js';
 import { findTimetableCard, readPlan, applyPlanEdit, todaysCalendarEvents } from './timetable-plan.js';
 import { uiView } from '../ui/ops.js';
 import { createSurfaceService } from '../ui/surfaces.js';
@@ -895,7 +896,7 @@ export function createApiRouter(ctx) {
           meetingHours: Math.round(meetingHours * 10) / 10,
           waitingCount: activeCards.filter(c => c.status === 'waiting').length,
           lastDigestAt: state.lastDigest?.generatedAt || null,
-          cards: annotateCards(activeCards, state.itemStatus).map(c => (c.type === 'view' ? { ...c, view: surfaceService.cardView(c) } : { ...c, prepared: prepareCardActions(c, { itemStatus: state.itemStatus || {} }) })),
+          cards: annotateCards(activeCards, state.itemStatus).map(c => (c.type === 'view' ? { ...c, view: surfaceService.cardView(c) } : { ...c, prepared: prepareCardActions(c, { itemStatus: state.itemStatus || {} }), faceView: hydrateFace(c, c.face || autoFace(c), { itemStatus: state.itemStatus || {}, events: calToday }) || (c.face ? hydrateFace(c, autoFace(c), { itemStatus: state.itemStatus || {}, events: calToday }) : null) })),
           next: pickNextThing({ cards: activeCards, itemStatus: state.itemStatus || {} }),
           summaryLine: daySummaryLine({ cards: activeCards, itemStatus: state.itemStatus || {}, meetings: meetings.length }),
           ui: { ...uiView(state), bootId: uiService.bootId, seq: uiService.seq },

@@ -171,7 +171,7 @@ export function reconcileCards(existing = [], incoming = [], opts = {}) {
     inc.status = inc.status && KNOWN.has(inc.status) ? inc.status : 'active'
     const next = { ...old, ...inc, id: old.id, sourceId: key || old.sourceId, createdAt: old.createdAt || now, updatedAt: now,
       status: TERMINAL.has(old.status) ? 'active' : (inc.status && inc.status !== 'active' ? inc.status : old.status === 'snoozed' ? 'snoozed' : 'active') }
-    for (const f of ['pinned', 'completedAt', 'completedBy', 'dismissedAt', 'snoozedUntil', 'userTitle']) if (old[f] !== undefined && inc[f] === undefined) next[f] = old[f]
+    for (const f of ['pinned', 'completedAt', 'completedBy', 'dismissedAt', 'snoozedUntil', 'snoozeUntil', 'userTitle', 'face']) if (old[f] !== undefined && inc[f] === undefined) next[f] = old[f]
     if (TERMINAL.has(old.status)) { next.reopenedAt = now; next.previousStatus = old.status; delete next.archivedAt; delete next.archivedReason }
     unionLinks(next, old)
     if (cardChats && m.how !== 'id') moveChats(cardChats, old, next)

@@ -1,6 +1,7 @@
 // Register Composio / identity / CARD MUTATION tools onto dsh ctx.tools.
 // Card writes go through Muse HTTP (same process under dsh). Composio stays read-only.
 
+import { validateFace } from '../ui/face.js'
 import { createRequire } from 'node:module'
 import { createComposioTools } from './agent-tools.js'
 import { fetchIdentityFromSources } from './identity.js'
@@ -82,6 +83,7 @@ export const CARD_WORK_PROMPT = `你是「豆芽」背后的 Main Bot（Chief）
 - 「推迟 / 明天再看」→ odm_card_snooze
 - 卡片里的单个条目（某个 PR / issue / 邮件）「这个做完了 / 这条不用管」→ odm_card_item（action=done|dismiss|undo，url 用 odm_card_list 返回的 items[].url）；不要因此把整张卡标完成
 - 「改标题 / 改成… / 下一步改成…」→ odm_card_update
+- 「这张卡换个样子 / 做成清单 / 突出谁在等 / 按时间排」→ odm_card_face（只选布局和要突出的条目，数据豆芽自己填）
 - 「排一下 / 挪一下 / 改时间表」→ odm_timetable_get + odm_timetable_update
 - 「加一张 / 记一下 / 待办」→ odm_card_create
 - 「刷新今日 / 重新汇聚」→ odm_digest_refresh
@@ -399,6 +401,33 @@ export async function registerBotTools(ctx, opts = {}) {
           try { updates.links = JSON.parse(links) } catch { /* ignore */ }
         }
         return JSON.stringify(await cards.update(id, updates))
+      } catch (err) {
+        return JSON.stringify({ success: false, error: err.message })
+      }
+    },
+  }))
+
+  register(() => defineTool({
+    name: 'odm_card_face',
+    description: 'Change how a Today card looks (its face layout). layout: waiting|inbox|progress|checklist|quote|timeline|compare|meeting; focus = item urls of THIS card to feature; note ≤24 字. Data/links are filled from the card, never from you. layout=auto resets.',
+    parameters: {
+      id: { type: 'string', required: true },
+      layout: { type: 'string', required: true },
+      focus: { type: 'string', description: 'JSON array of item urls from odm_card_list items[].url' },
+      quote: { type: 'string', description: 'item url whose text to quote' },
+      note: { type: 'string' },
+    },
+    output,
+    async execute(args) {
+      try {
+        const { id, layout, note, quote } = args || {}
+        if (layout === 'auto') return JSON.stringify(await cards.update(id, { face: null }))
+        let focus = []
+        if (typeof args.focus === 'string' && args.focus.trim()) { try { focus = JSON.parse(args.focus) } catch { focus = args.focus.split(/[\s,]+/) } }
+        const v = validateFace({ layout, focus, quote, note }, { by: 'chief' })
+        if (!v.face) return JSON.stringify({ success: false, error: v.errors.join('；') })
+        const r = await cards.update(id, { face: { ...v.face, at: new Date().toISOString() } })
+        return JSON.stringify({ ...r, warnings: v.errors, message: `卡面已换成 ${layout}` })
       } catch (err) {
         return JSON.stringify({ success: false, error: err.message })
       }

@@ -1,6 +1,7 @@
 // Bot digest: validate source-bot candidates, apply Chief's merge plan, and build cards in the legacy shapes
 // (same sourceIds as the legacy pipeline, so existing cards are updated in place, never duplicated).
 import { CHANNELS } from './channels.js'
+import { validateFace } from '../ui/face.js'
 import { buildEmailClusters, emailLink } from '../web/email-groups.js'
 import { clusterByProjectTheme, classifyClusters, groupAndRank, generateClusterCards } from '../web/aggregation.js'
 
@@ -33,12 +34,17 @@ export function validateCandidates(channel, raw, snapshot) {
       used.add(ref); refs.push({ ref, status: ['needs-you', 'waiting', 'fyi'].includes(r?.status) ? r.status : undefined })
     }
     if (!refs.length) { errors.push(`#${i}「${clip(x.title, 30)}」没有有效条目（只能引用快照里的 ref）`); continue }
+    // Card face (layout picked by the bot): refs → this card's own item urls; anything else is dropped.
+    const mine = new Set(refs.map(r => r.ref))
+    const fv = validateFace(x.face, { resolve: r => (mine.has(String(r)) && snapshot.byRef.get(String(r)) ? linkOf(snapshot.byRef.get(String(r))).url : null), by: 'bot' })
+    fv.errors.forEach(e => errors.push(`#${i} ${e}`))
     out.push({
       id: `${channel}:${out.length}`, channel, category,
       title: clip(x.title, 60), summary: clip(x.summary, 160), nextStep: clip(x.nextStep, 90),
       needsAction: !!x.needsAction, priority: PRI.has(x.priority) ? x.priority : (x.needsAction ? 'high' : 'low'),
       items: refs,
       target: /^update:\S+$/.test(String(x.target || '')) ? String(x.target) : 'new',
+      ...(fv.face ? { face: fv.face } : {}),
     })
   }
   if (channel === 'gmail') { // at most 4 single mail tiles; extra singles fall back into 需要你处理
@@ -93,6 +99,7 @@ function overlay(card, cand, edit) {
   card.waiting = needs ? 'you' : (card.waiting === 'you' ? 'fyi' : card.waiting || 'fyi')
   card.metadata = { ...(card.metadata || {}), needsAction: needs, digest: 'bot', candidate: cand.id, rank: edit?.rank, target: cand.target }
   if (card.type !== 'email-group' && (edit?.title || cand.title)) card.title = edit?.title || cand.title
+  if (cand.face) card.face = { ...cand.face, at: new Date().toISOString() }
   return card
 }
 

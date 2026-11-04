@@ -4,6 +4,7 @@
 import { randomUUID } from 'node:crypto'
 import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
+import { facePrompt } from '../ui/face.js'
 import { CHANNELS, channelOfToolkit } from './channels.js'
 import { buildSnapshot } from './snapshot.js'
 import { validateCandidates, validatePlan, buildCards, invalidLinks, seenEntities } from './build.js'
@@ -99,6 +100,7 @@ function sourcePrompt(channel, { prefs, memory, now, existing = [] }) {
    - title ≤ 30 字，summary 一两句具体说明（谁、什么事、为什么现在），nextStep 是可直接做的下一步。
    - 每张必须带 "target"：今天页已有同一件事的卡就填 "update:<卡片id>"（在原卡上更新），确实是新的事才填 "new"。不要为已有的仓库/频道/邮件类别再开新卡。
    - 工具返回 errors 时按提示修正后重新调用一次。
+   - ${facePrompt().split('\n').join('\n     ')}
 4. 发现用户处理这个渠道的稳定习惯时（如「某类通知总是直接忽略」），调 odm_digest_note 记一句。
 5. 最后只回复一行：完成 N 张。
 ${c.guide}

@@ -93,7 +93,7 @@ export function createCardOps({ baseUrl = DEFAULT_MUSE, router = null } = {}) {
     },
     async update(id, updates) {
       const allowed = { id }
-      for (const key of ['title', 'body', 'priority', 'status', 'url', 'type', 'nextAction', 'links', 'snoozeUntil', 'completedBy', 'dismissedBy']) {
+      for (const key of ['title', 'body', 'priority', 'status', 'url', 'type', 'nextAction', 'links', 'snoozeUntil', 'completedBy', 'dismissedBy', 'face']) {
         if (updates[key] !== undefined) allowed[key] = updates[key]
       }
       const data = await call('/api/opendigitalmate/card-update', { method: 'POST', body: allowed })

@@ -4,7 +4,7 @@
 // The output is plain data the client renders with textContent; nothing in it is HTML.
 
 import { cardItems } from '../web/card-snapshot.js'
-import { needsYou, isActive, isWork, validateUiOp } from './ops.js'
+import { needsYou, isActive, isWork, validateUiOp, cardKey } from './ops.js'
 import { LIMITS } from './catalog.js'
 
 const STATUS_ZH = { open: '待处理', done: '已完成', dismissed: '已忽略' }
@@ -38,8 +38,22 @@ export function storeLinks(state) {
   }
   return set
 }
+/** A saved view keeps pointing at "the same thing" after a digest replaces / merges its card: follow mergedInto,
+ * then the stable key (sourceId without its day), so saved views re-render from the live card. */
+export function liveCard(state, id) {
+  const cards = state?.cards || []
+  let c = cards.find(x => x.id === id)
+  let hops = 0
+  while (c && !isActive(c) && c.mergedInto && hops++ < 5) c = cards.find(x => x.id === c.mergedInto) || c
+  if (c && isActive(c)) return c
+  const key = c ? cardKey(c) : String(id || '').replace(/_\d{4}-\d{2}-\d{2}$/, '').replace(/_\d{13}$/, '')
+  if (!key) return c || null
+  const same = cards.filter(x => isActive(x) && (cardKey(x) === key || String(x.id).replace(/_\d{4}-\d{2}-\d{2}$/, '').replace(/_\d{13}$/, '') === key))
+  same.sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
+  return same[0] || c || null
+}
 function getCard(state, id, path) {
-  const c = (state?.cards || []).find(x => x.id === id)
+  const c = liveCard(state, id)
   if (!c) {
     const q = one(id).toLowerCase()
     const cands = (state?.cards || []).filter(isActive).filter(x => `${x.title} ${x.sourceId}`.toLowerCase().includes(q)).slice(0, 4).map(x => `${x.id}（${cut(x.title, 24)}）`)

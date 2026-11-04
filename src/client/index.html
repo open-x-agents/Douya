@@ -1332,6 +1332,61 @@
   .z-hist-b .bubble{max-width:92%}
   .z-acts-row{margin:12px 0 10px}
   @media (prefers-reduced-motion:reduce){.nx,.step,.daymore,.tile.work,.just-changed,.is-new{animation:none!important;transition:none!important}}
+  /* ===== Phase B: card faces ===== */
+  .w-desc.short{-webkit-line-clamp:2}
+  .face{display:flex;flex-direction:column;gap:10px;margin:2px 0 12px}
+  .f-note{font-size:12.5px;color:var(--violet);font-weight:600;display:flex;gap:6px;align-items:baseline}
+  .f-note i{font-style:normal;font-size:11px}
+  .f-stats{display:flex;gap:18px;align-items:flex-end}
+  .f-stat b{display:block;font-size:26px;line-height:1;font-weight:760;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .f-stat span{font-size:11.5px;color:var(--ink3)}
+  .f-stat.t-hot b{color:var(--rose)} .f-stat.t-warm b{color:var(--peach)} .f-stat.t-cool b{color:var(--teal)} .f-stat.t-done b{color:var(--ink3)}
+  .f-people{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink3)}
+  .f-pl{font-weight:700;color:var(--rose);font-size:11px;letter-spacing:.04em}
+  .f-avs{display:flex}
+  .f-av{width:26px;height:26px;border-radius:50%;display:inline-grid;place-items:center;font-size:11.5px;font-weight:700;color:#fff;background:hsl(var(--h,220) 55% 60%);border:2px solid #fff;margin-left:-6px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .f-avs .f-av:first-child{margin-left:0}
+  .f-av.more{background:#c9ccd6;font-size:10.5px}
+  .f-people em{font-style:normal;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .f-stage{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--ink3)}
+  .f-bar{flex:1;height:8px;border-radius:99px;background:rgba(30,40,80,.07);overflow:hidden}
+  .f-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#22a898,#6fd3a8);transition:width .6s var(--ease)}
+  .f-check{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+  .f-check li{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:8px;align-items:center;padding:5px 6px;border-radius:9px;font-size:13px;transition:background .15s,opacity .4s}
+  .f-check li:hover{background:rgba(30,40,80,.04)}
+  .f-check li.need a{font-weight:620}
+  .f-check a{color:var(--ink);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .f-check a:hover{text-decoration:underline}
+  .f-meta{font-size:11px;color:var(--ink3);max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .f-box{width:18px;height:18px;border-radius:6px;border:1.5px solid rgba(30,40,80,.25);background:#fff;cursor:pointer;padding:0;position:relative;transition:all .2s var(--ease)}
+  .f-box:hover{border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-soft)}
+  .f-check li.done .f-box{background:var(--teal);border-color:var(--teal)}
+  .f-check li.done .f-box::after{content:"";position:absolute;left:5px;top:1.5px;width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+  .f-check li.done a{color:var(--ink3);text-decoration:line-through}
+  .f-check li.ticking{animation:tickOut .6s var(--ease) .25s forwards}
+  @keyframes tickOut{to{opacity:.35;transform:translateX(6px)}}
+  .f-more{font-size:11.5px;color:var(--ink3);padding-left:34px}
+  .f-alldone{font-size:13px;color:var(--teal);font-weight:600;display:flex;gap:6px;align-items:center}
+  .f-quote{margin:0;padding:10px 12px 9px 14px;border-left:3px solid var(--violet);background:var(--violet-soft);border-radius:4px 12px 12px 4px}
+  .f-quote p{margin:0;font-size:13.5px;line-height:1.55;color:var(--ink);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .f-quote cite{display:block;margin-top:4px;font-style:normal;font-size:11.5px;color:var(--ink3)}
+  .f-tl{list-style:none;margin:0;padding:0 0 0 6px;border-left:2px solid rgba(30,40,80,.08);display:flex;flex-direction:column;gap:6px}
+  .f-tl li{position:relative;display:grid;grid-template-columns:44px minmax(0,1fr);gap:6px;align-items:baseline;font-size:12.5px;padding-left:10px}
+  .f-dot{position:absolute;left:-12px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--sky);border:2px solid #fff}
+  .f-dot.k-slack{background:var(--violet)} .f-dot.k-email{background:var(--peach)} .f-dot.k-pr{background:var(--teal)} .f-dot.k-issue{background:var(--rose)}
+  .f-tl time{font-size:11px;color:var(--ink3);font-variant-numeric:tabular-nums}
+  .f-tl a{color:var(--ink);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .f-cmp{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:stretch}
+  .f-cmp-i{display:flex;flex-direction:column;gap:2px;padding:9px 10px;border-radius:12px;background:rgba(30,40,80,.04);text-decoration:none;color:var(--ink);min-width:0}
+  .f-cmp-i span{font-size:10.5px;color:var(--ink3);font-weight:700}
+  .f-cmp-i b{font-size:12.5px;font-weight:600;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .f-cmp-i em{font-size:11px;color:var(--ink3);font-style:normal}
+  .f-vs{align-self:center;font-style:normal;font-size:11px;color:var(--ink3);font-weight:700}
+  .f-count b{font-size:24px;color:var(--rose);font-weight:760;font-variant-numeric:tabular-nums}
+  .f-count span{display:block;font-size:12px;color:var(--ink3)}
+  .sprout-pop{position:fixed;z-index:999;font-size:20px;pointer-events:none;transform:translate(-50%,0);animation:sproutUp 1s var(--ease) forwards}
+  @keyframes sproutUp{0%{opacity:0;transform:translate(-50%,6px) scale(.4)}30%{opacity:1;transform:translate(-50%,-14px) scale(1.15)}100%{opacity:0;transform:translate(-50%,-34px) scale(.9)}}
+  @media (prefers-reduced-motion:reduce){.f-check li.ticking,.sprout-pop,.f-bar i{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
@@ -2458,14 +2513,68 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         </header>
         <h3 class="w-head">${escapeHtml(headline(card))}</h3>
         ${isMailGroup(card) && tags.length ? `<div class="w-senders">${tags.map(t => `<span title="${escapeHtml(t.text)}">${escapeHtml(t.text)}</span>`).join('')}</div>` : ''}
-        ${desc ? `<p class="w-desc">${escapeHtml(desc)}</p>` : ''}
-        ${metrics}${avRow}
+        ${desc ? `<p class="w-desc${card.faceView ? ' short' : ''}">${escapeHtml(desc)}</p>` : ''}
+        ${card.faceView ? renderFace(card.faceView) || (metrics + avRow) : metrics + avRow}
         <div class="w-next"><span class="w-next-k">下一步</span><span class="w-next-v">${escapeHtml(nextAction(card))}</span></div>
         ${(card.prepared || []).length ? `<div class="w-acts"><span class="w-acts-k">豆芽备好了</span>${card.prepared.map((p, i) => stepBtnHtml(p, i, i === 0 && p.kind !== 'snooze' ? 'primary' : '')).join('')}</div>` : ''}
         <div class="w-slot"></div>
         <div class="w-links">${links.slice(0, 2).map(linkRow).join('')}</div>
       </article>`;
   }
+
+  // ===== Card faces (Phase B): bot-picked layout, server-filled from live data =====
+  const avHue = s => { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) % 360; return h; };
+  const initial = s => { const t = String(s || '?').trim(); const m = t.match(/[\u4e00-\u9fa5]/); return (m ? m[0] : t[0] || '?').toUpperCase(); };
+  function faceRelTime(ms) {
+    if (!ms) return '';
+    const d = Date.now() - ms, h = d / 3600e3;
+    if (d < 0) return '';
+    return h < 1 ? `${Math.max(1, Math.round(d / 60e3))} 分钟前` : h < 24 ? `${Math.round(h)} 小时前` : `${Math.round(h / 24)} 天前`;
+  }
+  function renderFace(fv) {
+    if (!fv || !Array.isArray(fv.parts)) return '';
+    const out = [];
+    for (const p of fv.parts) {
+      if (p.type === 'stats' && p.pairs && p.pairs.length) out.push(`<div class="f-stats">${p.pairs.map(x => `<div class="f-stat t-${escapeHtml(x.tone || 'cool')}"><b>${escapeHtml(x.value)}</b><span>${escapeHtml(x.label)}</span></div>`).join('')}</div>`);
+      else if (p.type === 'people' && p.people && p.people.length) out.push(`<div class="f-people"><span class="f-pl">${escapeHtml(p.label)}</span><span class="f-avs">${p.people.map(x => `<span class="f-av" style="--h:${avHue(x.name)}" title="${escapeHtml(x.name)}">${escapeHtml(initial(x.name))}</span>`).join('')}${p.more ? `<span class="f-av more">+${p.more}</span>` : ''}</span><em>${escapeHtml(p.people.slice(0, 2).map(x => x.name).join('、'))}${p.people.length > 2 ? ' 等' : ''}</em></div>`);
+      else if (p.type === 'stage') out.push(`<div class="f-stage"><div class="f-bar"><i style="width:${p.total ? Math.round((p.done / p.total) * 100) : 0}%"></i></div><span>${escapeHtml(p.label)}</span></div>`);
+      else if (p.type === 'checklist') {
+        if (p.done && !(p.items || []).length) out.push('<div class="f-alldone"><span class="f-sprout">🌱</span>都处理完了</div>');
+        else out.push(`<ul class="f-check">${(p.items || []).map(it => `<li class="${it.done ? 'done' : ''}${it.needsYou ? ' need' : ''}"><button type="button" class="f-box" aria-label="标完成" data-item-url="${escapeHtml(it.url)}" data-item-title="${escapeHtml(it.title)}"></button><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</a><span class="f-meta">${escapeHtml(it.from || it.kindZh || '')}</span></li>`).join('')}</ul>${p.more ? `<div class="f-more">还有 ${p.more} 条</div>` : ''}`);
+      }
+      else if (p.type === 'quote') out.push(`<blockquote class="f-quote"><p>${escapeHtml(p.text)}</p><cite>${escapeHtml([p.from, faceRelTime(p.at)].filter(Boolean).join(' · '))}</cite></blockquote>`);
+      else if (p.type === 'timeline' && p.items && p.items.length) out.push(`<ol class="f-tl">${p.items.map(it => `<li><i class="f-dot k-${escapeHtml(it.kind)}"></i><time>${escapeHtml(it.time || it.kindZh)}</time><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</a></li>`).join('')}</ol>`);
+      else if (p.type === 'compare' && p.items) out.push(`<div class="f-cmp">${p.items.map(it => `<a class="f-cmp-i" href="${escapeHtml(it.url)}" target="_blank" rel="noopener"><span>${escapeHtml(it.kindZh)}</span><b>${escapeHtml(it.title)}</b><em>${escapeHtml(it.from || '')}</em></a>`).join('<i class="f-vs">vs</i>')}</div>`);
+      else if (p.type === 'countdown' && p.at) out.push(`<div class="f-count" data-at="${p.at}"><b>${escapeHtml(countdownText(p.at))}</b><span>${escapeHtml(p.label)}</span></div>`);
+    }
+    if (!out.length) return '';
+    const note = fv.note ? `<div class="f-note"><i>✦</i>${escapeHtml(fv.note)}</div>` : '';
+    return `<div class="face f-${escapeHtml(fv.layout)}" data-layout="${escapeHtml(fv.layout)}" data-by="${escapeHtml(fv.by || '')}">${note}${out.join('')}</div>`;
+  }
+  /** Checklist boxes on a card face: tick = mark that item done (same path as the zoom's 完成; undo from the toast). */
+  function bindFace(tile, card) {
+    tile.querySelectorAll('.f-box').forEach(box => box.addEventListener('click', async e => {
+      e.preventDefault(); e.stopPropagation();
+      const li = box.closest('li'); if (!li || li.classList.contains('done')) return;
+      li.classList.add('done', 'ticking');
+      const itemUrl = box.getAttribute('data-item-url'), itemTitle = box.getAttribute('data-item-title');
+      const r = await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'done', itemUrl, itemTitle }) }).then(x => x.json()).catch(() => ({}));
+      if (!r.success) { li.classList.remove('done', 'ticking'); showUiToast('没标上，稍后再试'); return; }
+      sprout(box);
+      showUiToast(`已完成「${clip(itemTitle, 18)}」`, null, { label: '撤销', onClick: async () => { await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'undo', itemUrl, itemTitle }) }); loadToday(); } });
+      setTimeout(() => loadToday().catch(() => {}), 650);
+    }));
+  }
+  /** Completion sprout: a tiny 豆芽 leaf pops out of what was just finished. */
+  function sprout(el) {
+    if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const r = el.getBoundingClientRect();
+    const s = document.createElement('div'); s.className = 'sprout-pop'; s.textContent = '🌱';
+    s.style.left = `${r.left + r.width / 2}px`; s.style.top = `${r.top}px`;
+    document.body.appendChild(s); setTimeout(() => s.remove(), 1000);
+  }
+  // Countdowns on the page tick in place.
+  setInterval(() => document.querySelectorAll('[data-at]').forEach(el => { const b = el.querySelector('b'); if (b) b.textContent = countdownText(Number(el.getAttribute('data-at'))); }), 30000);
 
   // ===== Focus & actions (Phase A): one "next thing" hero, prepared steps on every card, one chat =====
   const MORE_KEY = 'odm.dayMore.v1';
@@ -2784,9 +2893,10 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     container.querySelectorAll('.tile.work').forEach(tile => {
       const card = cards[Number(tile.getAttribute('data-idx'))];
       if (card && Array.isArray(card.prepared)) bindSteps(tile, card.prepared, card);
+      if (card && card.faceView) bindFace(tile, card);
       tile.addEventListener('click', e => {
         if (card && card.type === 'view') return; // a saved view is used in place
-        if (e.target.closest('.w-acts, .w-slot, .act-card')) return;
+        if (e.target.closest('.w-acts, .w-slot, .act-card, .f-box')) return;
         if (e.target.closest('a')) { track(card, 'open'); return; }
         track(card, 'open');
         openTileZoom(card);

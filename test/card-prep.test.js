@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { prepareCardActions, pickNextThing, daySummaryLine, tomorrowMorning } from '../src/web/card-prep.js'
+import { prepareCardActions, pickNextThing, daySummaryLine, tomorrowMorning, snoozeUntilFor } from '../src/web/card-prep.js'
 import { createActionService, ACTIONS } from '../src/web/actions.js'
 
 const mail = (over = {}) => ({ id: 'm1', type: 'email-group', source: 'gmail', title: '服务与通知', waiting: 'fyi', priority: 'low', status: 'active',
@@ -90,4 +90,19 @@ test('automated mail that "needs you": check it, never draft a reply to a robot'
 test('machine mail groups (code / security) never get a reply draft', () => {
   const c = mail({ waiting: 'you', metadata: { group: 'security' }, blocks: [{ type: 'link-list', links: [{ title: '安全提醒', url: 'https://mail.google.com/mail/u/0/#inbox/s1', type: 'email', from: 'Google' }] }] })
   assert.equal(prepareCardActions(c)[0].id, 'check-first')
+})
+
+test('snoozeUntilFor: 1h / tomorrow / week presets', () => {
+  const now = new Date('2026-11-04T10:00:00+08:00')
+  const h1 = new Date(snoozeUntilFor('snooze:1h', now)).getTime()
+  assert.equal(h1 - now.getTime(), 3600e3)
+  const tm = snoozeUntilFor('snooze:tomorrow', now)
+  assert.equal(tm, tomorrowMorning(now))
+  assert.equal(snoozeUntilFor('snooze', now), tomorrowMorning(now))
+  const wk = new Date(snoozeUntilFor('snooze:week', now))
+  // +7 days at 09:00 Shanghai
+  assert.equal(wk.toISOString(), snoozeUntilFor('snooze:week', now))
+  const local = new Date(now.getTime() + 8 * 3600e3)
+  assert.equal(wk.getUTCHours() + 8 === 9 || ((wk.getUTCHours() + 8) % 24) === 9, true)
+  assert.ok(wk.getTime() > now.getTime() + 6 * 86400e3)
 })

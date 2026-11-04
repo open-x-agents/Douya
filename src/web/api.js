@@ -17,7 +17,7 @@ import { cardSnapshotText, cardFull } from './card-snapshot.js';
 import { createUiService } from '../ui/service.js';
 import { createChatDisplay, attachmentMeta } from './chat-display.js';
 import { callbackUrlFor, callbackPage } from './composio-callback.js';
-import { prepareCardActions, pickNextThing, daySummaryLine, tomorrowMorning } from './card-prep.js';
+import { prepareCardActions, pickNextThing, daySummaryLine, tomorrowMorning, snoozeUntilFor } from './card-prep.js';
 import { hydrateFace, autoFace } from '../ui/face.js';
 import { isAfterHours, isWorkish, doneToday, greetingLine, shHour } from './day-pulse.js';
 import { sweepClearedCards, applyClearance, cardClearance, completeClearedCard } from './card-clearance.js';
@@ -779,10 +779,16 @@ export function createApiRouter(ctx) {
       const card = (state.cards || []).find(c => c.id === cardId);
       if (!card) return { success: false, error: '这张卡已经不在了' };
       if (prepId === 'unsnooze') { await router.updateCard(card.id, { status: 'active', snoozeUntil: null }); return { success: true, kind: 'unsnooze' }; }
+      // Named snooze presets from swipe / sheet (no forged step needed).
+      if (prepId === 'snooze' || String(prepId || '').startsWith('snooze:')) {
+        const until = snoozeUntilFor(prepId);
+        await router.updateCard(card.id, { status: 'snoozed', snoozeUntil: until });
+        return { success: true, kind: 'snooze', until, prepId };
+      }
       const step = prepareCardActions(card, { itemStatus: state.itemStatus || {}, max: 4 }).find(p => p.id === prepId);
       if (!step) return { success: false, error: '这一步已经过时了，刷新一下' };
       if (step.kind === 'snooze') {
-        const until = tomorrowMorning();
+        const until = snoozeUntilFor('snooze');
         await router.updateCard(card.id, { status: 'snoozed', snoozeUntil: until });
         return { success: true, kind: 'snooze', until };
       }

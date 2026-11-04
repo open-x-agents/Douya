@@ -108,6 +108,18 @@ export function tomorrowMorning(now = new Date(), offsetH = 8) {
   return new Date(d).toISOString()
 }
 
+/** Resolve snooze presets used by swipe / sheet: `snooze`|`snooze:1h`|`snooze:tomorrow`|`snooze:week`. */
+export function snoozeUntilFor(prepId = 'snooze', now = new Date(), offsetH = 8) {
+  const id = String(prepId || 'snooze')
+  if (id === 'snooze:1h' || id === '1h') return new Date(now.getTime() + 3600e3).toISOString()
+  if (id === 'snooze:week' || id === 'week' || id === 'next-week') {
+    const local = new Date(now.getTime() + offsetH * 3600e3)
+    const d = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() + 7, 9, 0, 0) - offsetH * 3600e3
+    return new Date(d).toISOString()
+  }
+  return tomorrowMorning(now, offsetH)
+}
+
 const PRI = { urgent: 4, high: 3, medium: 2, low: 1 }
 const toMs = (v, now) => {
   if (v == null) return null

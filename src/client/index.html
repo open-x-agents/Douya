@@ -1617,6 +1617,54 @@
   .step{transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease),background var(--dur) var(--ease)}
   .chip,.z-chip{transition:transform var(--dur) var(--ease-out),background var(--dur) var(--ease),border-color var(--dur) var(--ease),opacity var(--dur) var(--ease)}
 
+
+  /* ===== UX interact: swipe / hover quick actions / snooze sheet / empty CTAs ===== */
+  .tile.work.swipeable{position:relative;overflow:hidden;touch-action:pan-y;isolation:isolate;padding:0!important}
+  .tile.work.swipeable .swipe-face{padding:16px 16px 14px;gap:0;display:flex;flex-direction:column;flex:1;min-height:100%;min-width:0}
+  @media (max-width:620px){.tile.work.swipeable .swipe-face{padding:14px 14px 12px}}
+  .tile.work .swipe-rails{position:absolute;inset:0;display:flex;justify-content:space-between;pointer-events:none;z-index:0;border-radius:inherit}
+  .tile.work .swipe-rail{display:flex;align-items:stretch;gap:0;min-width:0;opacity:0;transition:opacity .18s var(--ease)}
+  .tile.work.swiping .swipe-rail,.tile.work.swipe-open .swipe-rail{opacity:1;pointer-events:auto}
+  .tile.work .swipe-rail.left{margin-right:auto}
+  .tile.work .swipe-rail.right{margin-left:auto}
+  .tile.work .swipe-rail button{border:0;padding:0 16px;min-width:72px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;letter-spacing:.02em}
+  .tile.work .swipe-rail button[data-qa="done"]{background:#2bb38a}
+  .tile.work .swipe-rail button[data-qa="snooze"]{background:#6b7bb8}
+  .tile.work .swipe-rail button[data-qa="ask"]{background:#7a6ad8}
+  .tile.work .swipe-face{position:relative;z-index:1;background:rgba(255,255,255,.96);border-radius:inherit;transition:transform .22s var(--ease);will-change:transform}
+  .tile.work.swiping .swipe-face{transition:none}
+  .qa-bar{display:none;gap:6px;margin-top:8px;padding-top:2px}
+  .qa-bar button{border:0;background:rgba(30,40,80,.05);color:var(--ink2);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:650;cursor:pointer;transition:background .15s,color .15s,transform .15s}
+  .qa-bar button:hover{background:rgba(122,106,216,.12);color:var(--violet)}
+  .qa-bar button:active{transform:scale(.96)}
+  .qa-bar button[data-qa="done"]:hover{background:rgba(43,179,138,.14);color:var(--teal)}
+  .qa-bar button[data-qa="snooze"]:hover{background:rgba(107,123,184,.14);color:#4e5d96}
+  @media (hover:hover) and (pointer:fine){
+    .tile.work.swipeable:hover .qa-bar,.tile.work.swipeable:focus-within .qa-bar{display:flex;flex-wrap:wrap}
+  }
+  .snooze-sheet{position:fixed;inset:0;z-index:10050;display:flex;align-items:flex-end;justify-content:center;background:rgba(20,22,40,.28);opacity:0;pointer-events:none;transition:opacity .2s var(--ease)}
+  .snooze-sheet.open{opacity:1;pointer-events:auto}
+  .snooze-sheet .ss-panel{width:min(420px,100%);background:#fff;border-radius:18px 18px 0 0;padding:14px 16px 22px;box-shadow:0 -8px 40px rgba(20,22,40,.18);transform:translateY(12px);transition:transform .22s var(--ease-sheet)}
+  .snooze-sheet.open .ss-panel{transform:none}
+  .snooze-sheet h4{margin:4px 0 12px;font-size:15px}
+  .snooze-sheet .ss-opts{display:grid;gap:8px}
+  .snooze-sheet .ss-opts button{border:1px solid rgba(30,40,80,.08);background:rgba(30,40,80,.03);border-radius:12px;padding:12px 14px;text-align:left;font-size:14px;font-weight:650;color:var(--ink);cursor:pointer}
+  .snooze-sheet .ss-opts button:active{transform:scale(.985)}
+  .snooze-sheet .ss-opts button small{display:block;font-weight:500;font-size:12px;color:var(--ink3);margin-top:2px}
+  .snooze-sheet .ss-cancel{margin-top:10px;width:100%;border:0;background:transparent;color:var(--ink3);padding:10px;font-size:13.5px;cursor:pointer}
+  .tile.empty .empty-ctas{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:14px}
+  .tile.empty .empty-ctas .step{min-width:7.5em}
+  .tile.done-today .dt-cta{margin-top:12px}
+  .composer-tip:not([hidden]){display:block;font-size:12.5px;line-height:1.45;color:var(--ink3);padding:2px 4px 6px}
+  .chip.chip-act{background:rgba(122,106,216,.1);border-color:rgba(122,106,216,.22);color:var(--violet);font-weight:650}
+  @media (max-width:620px){
+    .grid2 .tile.work:active{transform:scale(.978);filter:brightness(.99)}
+    .tile.work .swipe-face{background:var(--card,#fff)}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .tile.work .swipe-face,.snooze-sheet,.snooze-sheet .ss-panel{transition:none!important}
+  }
+
   /* Logo: lighter think on small screens */
   @media (max-width:620px){
     .douya-think .dy-all{animation-duration:1.45s}
@@ -2986,11 +3034,17 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const prep = waitingOnly ? [] : (card.prepared || []);
     const primary = prep.find(p => p.kind !== 'snooze') || null;
     const secondary = prep.filter(p => p !== primary);
+    // Progressive disclosure: one insight on the face. If a primary CTA already says the next step, drop the duplicate 下一步 bar.
+    const showNext = !!(na && !primary);
     const actsHtml = primary
       ? `<div class="w-acts">${stepBtnHtml(primary, 0, 'primary')}${secondary.length ? `<details class="w-more"><summary>更多</summary>${secondary.map((p, i) => stepBtnHtml(p, i + 1, '')).join('')}</details>` : ''}</div>`
       : '';
+    const qa = waitingOnly ? '' : `<div class="qa-bar" aria-label="快捷操作"><button type="button" data-qa="done">完成</button><button type="button" data-qa="snooze">推迟</button><button type="button" data-qa="ask">交给豆芽</button></div>`;
+    const rails = waitingOnly ? '' : `<div class="swipe-rails" aria-hidden="true"><div class="swipe-rail left"><button type="button" data-qa="done">完成</button><button type="button" data-qa="snooze">推迟</button></div><div class="swipe-rail right"><button type="button" data-qa="ask">交给豆芽</button></div></div>`;
     return `
-      <article class="tile work ${big ? 'size-wide' : 'size-normal'}${waitingOnly ? ' waiting-only' : ''}${hasFace ? ' has-face' : ''}" data-idx="${idx}">
+      <article class="tile work swipeable ${big ? 'size-wide' : 'size-normal'}${waitingOnly ? ' waiting-only' : ''}${hasFace ? ' has-face' : ''}" data-idx="${idx}">
+        ${rails}
+        <div class="swipe-face">
         <header class="w-top">
           ${av}
           <div class="w-src"><span class="w-label">${escapeHtml(label)}</span><span class="w-repo">${escapeHtml(r ? `${r.owner} / ${r.name}` : (card.subtitle || (card.source === 'slack' ? '频道消息' : '') || ''))}</span></div>
@@ -3000,10 +3054,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         ${isMailGroup(card) && tags.length ? `<div class="w-senders">${tags.map(t => `<span title="${escapeHtml(t.text)}">${escapeHtml(t.text)}</span>`).join('')}</div>` : ''}
         ${!waitingOnly && desc && !hasFace ? `<p class="w-desc">${escapeHtml(desc)}</p>` : ''}
         ${waitingOnly ? '' : (card.faceView ? renderFace(card.faceView) || (metrics + avRow) : metrics + avRow)}
-        ${na ? `<div class="w-next"><span class="w-next-k">下一步</span><span class="w-next-v">${escapeHtml(na)}</span></div>` : ''}
+        ${showNext ? `<div class="w-next"><span class="w-next-k">下一步</span><span class="w-next-v">${escapeHtml(na)}</span></div>` : ''}
         ${actsHtml}
+        ${qa}
         <div class="w-slot"></div>
         ${waitingOnly || hasFace ? '' : `<div class="w-links">${links.slice(0, 2).map(linkRow).join('')}</div>`}
+        </div>
       </article>`;
   }
 
@@ -3086,6 +3142,161 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   // Countdowns on the page tick in place.
   setInterval(() => document.querySelectorAll('[data-at]').forEach(el => { const b = el.querySelector('b'); if (b) b.textContent = countdownText(Number(el.getAttribute('data-at'))); }), 30000);
 
+
+  // ===== UX interact pack: swipe / hover QA, snooze presets, empty CTAs, dock cue =====
+  const SNOOZE_LABEL = { 'snooze': '明早 9 点再提醒你', 'snooze:tomorrow': '明早 9 点再提醒你', 'snooze:1h': '一小时后再看', 'snooze:week': '下周同一时间再看' };
+  function closeSnoozeSheet() {
+    const el = document.querySelector('.snooze-sheet');
+    if (!el) return;
+    el.classList.remove('open');
+    setTimeout(() => el.remove(), 220);
+  }
+  function openSnoozeSheet(card) {
+    if (!card || !card.id) return;
+    closeSnoozeSheet();
+    const el = document.createElement('div');
+    el.className = 'snooze-sheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', '推迟到…');
+    el.innerHTML = `<div class="ss-panel"><h4>推迟「${escapeHtml(clip(card.title, 18))}」</h4><div class="ss-opts">
+      <button type="button" data-snooze="snooze:1h">1 小时后<small>先把眼前这件做完</small></button>
+      <button type="button" data-snooze="snooze:tomorrow">明天<small>明早 9 点再出现</small></button>
+      <button type="button" data-snooze="snooze:week">下周<small>七天后再看</small></button>
+    </div><button type="button" class="ss-cancel">取消</button></div>`;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('open'));
+    el.addEventListener('click', e => { if (e.target === el || e.target.classList.contains('ss-cancel')) closeSnoozeSheet(); });
+    el.querySelectorAll('[data-snooze]').forEach(btn => btn.addEventListener('click', async () => {
+      const prepId = btn.getAttribute('data-snooze');
+      closeSnoozeSheet();
+      await runQuickSnooze(card, prepId);
+    }));
+  }
+  async function runQuickSnooze(card, prepId = 'snooze:tomorrow') {
+    const cardId = card.id;
+    const r = await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardId, prepId }) }).then(x => x.json()).catch(e => ({ success: false, error: e.message }));
+    if (!r.success) { showUiToast(r.error || '没推迟成'); return; }
+    const tile = document.querySelector(`.tile.work[data-id="${CSS.escape(cardId)}"]`);
+    if (tile) { tile.classList.add('leaving'); await sleep(280); }
+    showUiToast(SNOOZE_LABEL[prepId] || SNOOZE_LABEL.snooze, null, { label: '撤销', onClick: async () => { await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardId, prepId: 'unsnooze' }) }); loadToday(); } });
+    loadToday().catch(() => {});
+  }
+  async function runQuickDone(card) {
+    if (!card || !card.id) return;
+    const r = await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'done' }) }).then(x => x.json()).catch(() => ({}));
+    if (!r.success) { showUiToast(r.error || '没标上'); return; }
+    const tile = document.querySelector(`.tile.work[data-id="${CSS.escape(card.id)}"]`);
+    if (tile) {
+      tile.classList.add('leaving-done');
+      const badge = document.createElement('div'); badge.className = 'done-badge'; badge.textContent = '✓ 搞定了';
+      tile.appendChild(badge); sprout(badge);
+    }
+    showUiToast(`「${clip(card.title, 18)}」搞定了`, null, { label: '撤销', onClick: async () => {
+      await fetch('/api/opendigitalmate/card-update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, status: 'active' }) }).catch(() => {});
+      loadToday({ force: true });
+    }});
+    setTimeout(() => loadToday({ force: true }).catch(() => {}), reducedMotion() ? 200 : 900);
+  }
+  function runQuickAsk(card) {
+    if (!card) return;
+    setChatContext(card);
+    openTodayChat({ byUser: true, contextual: true });
+    const prep = (card.prepared || []).find(p => p.kind === 'ask');
+    dockPrompt(prep && prep.prompt ? prep.prompt : `帮我处理「${clip(card.title, 16)}」`);
+  }
+  function runQuickAction(card, qa) {
+    if (qa === 'done') return runQuickDone(card);
+    if (qa === 'snooze') return openSnoozeSheet(card);
+    if (qa === 'ask') return runQuickAsk(card);
+  }
+  function resetSwipe(tile) {
+    if (!tile) return;
+    const face = tile.querySelector('.swipe-face');
+    tile.classList.remove('swiping', 'swipe-open');
+    tile.dataset.swipeX = '0';
+    if (face) face.style.transform = '';
+  }
+  function bindQuickActions(tile, card) {
+    if (!tile || !card || tile.classList.contains('waiting-only')) return;
+    tile.querySelectorAll('[data-qa]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
+        resetSwipe(tile);
+        runQuickAction(card, btn.getAttribute('data-qa'));
+      });
+    });
+    const face = tile.querySelector('.swipe-face');
+    if (!face || tile.dataset.swipeBound) return;
+    tile.dataset.swipeBound = '1';
+    let sx = 0, sy = 0, dx = 0, active = false, axis = null;
+    const max = 148;
+    const onStart = (x, y) => { sx = x; sy = y; dx = 0; active = true; axis = null; tile.classList.add('swiping'); tile.dataset.moved = '0'; };
+    const onMove = (x, y, ev) => {
+      if (!active) return;
+      const mx = x - sx, my = y - sy;
+      if (!axis) {
+        if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;
+        axis = Math.abs(mx) > Math.abs(my) * 1.15 ? 'x' : 'y';
+        if (axis === 'y') { active = false; tile.classList.remove('swiping'); return; }
+      }
+      if (axis !== 'x') return;
+      if (ev && ev.cancelable) ev.preventDefault();
+      dx = Math.max(-max, Math.min(max, mx));
+      face.style.transform = `translateX(${dx}px)`;
+      if (Math.abs(dx) > 10) tile.dataset.moved = '1';
+    };
+    const onEnd = () => {
+      if (!active && axis !== 'x') { resetSwipe(tile); return; }
+      active = false; tile.classList.remove('swiping');
+      if (dx <= -72) {
+        face.style.transform = 'translateX(-132px)';
+        tile.classList.add('swipe-open');
+        tile.dataset.swipeX = '-132';
+      } else if (dx >= 72) {
+        face.style.transform = 'translateX(110px)';
+        tile.classList.add('swipe-open');
+        tile.dataset.swipeX = '110';
+      } else {
+        resetSwipe(tile);
+      }
+      dx = 0; axis = null;
+    };
+    tile.addEventListener('touchstart', e => { if (e.touches.length !== 1) return; onStart(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+    tile.addEventListener('touchmove', e => { if (e.touches.length !== 1) return; onMove(e.touches[0].clientX, e.touches[0].clientY, e); }, { passive: false });
+    tile.addEventListener('touchend', onEnd);
+    tile.addEventListener('touchcancel', () => { active = false; resetSwipe(tile); });
+  }
+  function bindEmptyCtas(container) {
+    container.querySelectorAll('[data-empty-act]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
+        const act = btn.getAttribute('data-empty-act');
+        if (act === 'chat') {
+          openTodayChat({ byUser: true, contextual: true });
+          dockPrompt('今天想先做什么？');
+        } else if (act === 'review') {
+          openTodayChat({ byUser: true, contextual: true });
+          dockPrompt('帮我回顾今天：完成了什么、还欠什么、明天先做哪件？');
+          const dt = container.querySelector('.tile.done-today');
+          if (dt) dt.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'center' });
+        } else if (act === 'digest') {
+          const d = $('generateDigestBtn'); if (d) d.click();
+        }
+      });
+    });
+  }
+  function paintDockCue() {
+    const tip = $('todayComposerTip'); if (!tip) return;
+    let line = '';
+    if (chatCtx) line = `关于「${chatCtx.name}」，我可以起草、排程或帮你收掉。`;
+    else {
+      const nx = lastToday && lastToday.next;
+      if (nx && nx.kind === 'meeting') line = `「${clip(nx.title, 16)}」快到了——要我列会前要点吗？`;
+      else if (nx && nx.kind === 'card') line = `下一件是「${clip(nx.title, 16)}」，需要我接手吗？`;
+      else if (lastToday && lastToday.doneToday && lastToday.doneToday.count && !(lastToday.openCount > 0)) line = '今天的事都收好了，要不要一起回顾？';
+    }
+    if (!line) { tip.hidden = true; tip.textContent = ''; return; }
+    tip.hidden = false; tip.textContent = line;
+  }
+
   // ===== Live & motion (Phase C): in-place refresh, leaving/urgent motion, after-hours collapse, drag order, 今天搞定了什么 =====
   const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   /** Snapshot the main-grid tiles before a re-render so cards that went away can leave with a check, in place. */
@@ -3152,7 +3363,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function renderDoneToday(d) {
     if (!d || !d.count) return '';
     const rows = (d.highlights || []).map(h => `<li class="k-${escapeHtml(h.kind)}"><i>✓</i>${h.url ? `<a href="${escapeHtml(h.url)}" target="_blank" rel="noopener">${escapeHtml(h.text)}</a>` : `<span>${escapeHtml(h.text)}</span>`}</li>`).join('');
-    return `<article class="tile done-today size-wide"><div class="dt-head">${douyaSvg({ size: 40, state: 'idle', id: 'dt' })}<div><div class="eyebrow">今天搞定了什么</div><h3>${escapeHtml(String(d.count))} 件<span>${escapeHtml(d.line || '')}</span></h3></div></div>${rows ? `<ul class="dt-list">${rows}</ul>` : ''}</article>`;
+    return `<article class="tile done-today size-wide"><div class="dt-head">${douyaSvg({ size: 40, state: 'idle', id: 'dt' })}<div><div class="eyebrow">今天搞定了什么</div><h3>${escapeHtml(String(d.count))} 件<span>${escapeHtml(d.line || '')}</span></h3></div></div>${rows ? `<ul class="dt-list">${rows}</ul>` : ''}<div class="dt-cta empty-ctas"><button type="button" class="step" data-empty-act="review">回顾今天</button></div></article>`;
   }
   /** Drag a card to reorder; the order is saved as a user arrange op (stable keys, survives digests; 豆芽 won't override). */
   function bindDragOrder(container) {
@@ -3248,7 +3459,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (r.kind === 'snooze') {
       const tile = document.querySelector(`.tile.work[data-id="${CSS.escape(cardId)}"]`);
       if (tile) { tile.classList.add('leaving'); await sleep(320); }
-      showUiToast('明早 9 点再提醒你', null, { label: '撤销', onClick: async () => { await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardId, prepId: 'unsnooze' }) }); loadToday(); } });
+      const snoozeMsg = SNOOZE_LABEL[r.prepId] || SNOOZE_LABEL.snooze;
+      showUiToast(snoozeMsg, null, { label: '撤销', onClick: async () => { await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardId, prepId: 'unsnooze' }) }); loadToday(); } });
       loadToday().catch(() => {});
       return;
     }
@@ -3327,7 +3539,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function paintChatChips() {
     const box = $('chatChips'); if (!box) return;
     const chips = chatCtx ? chipsForCard(chatCtx.card) : chipsForDay();
-    box.replaceChildren(...chips.map(c => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = c; b.onclick = () => dockPrompt(c); return b; }));
+    box.replaceChildren(...chips.map(c => {
+      const b = document.createElement('button'); b.type = 'button';
+      if (typeof c === 'string') { b.className = 'chip'; b.textContent = c; b.onclick = () => dockPrompt(c); }
+      else { b.className = 'chip chip-act'; b.textContent = c.label; b.onclick = () => c.run && c.run(); }
+      return b;
+    }));
     box.hidden = !chips.length;
   }
   /** Chips from the card's current state (never generic when there is something specific to say). */
@@ -3358,15 +3575,29 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       out.push(need.length ? `${need.length} 条在等我回，怎么回？` : '这里有我需要知道的吗？');
     } else if (card.nextAction) out.push(`「${clip(card.nextAction, 14)}」怎么开始？`);
     out.push(card.waiting === 'you' ? '今天不做的话会怎样？' : '这张可以先放着吗？');
-    return [...new Set(out)].slice(0, 3);
+    const uniq = [];
+    const seen = new Set();
+    for (const c of out) {
+      const k = typeof c === 'string' ? c : c.label;
+      if (seen.has(k)) continue; seen.add(k); uniq.push(c);
+    }
+    uniq.splice(Math.min(2, uniq.length), 0, { label: '推迟这张', run: () => openSnoozeSheet(card) });
+    return uniq.slice(0, 3);
   }
   function chipsForDay() {
     const nx = lastToday && lastToday.next;
     const out = [];
     if (nx && nx.kind === 'meeting') out.push(`「${clip(nx.title, 12)}」会前要准备什么？`);
-    else if (nx && nx.kind === 'card') out.push(`先做「${clip(nx.title, 12)}」，怎么开始？`);
+    else if (nx && nx.kind === 'card') {
+      out.push(`先做「${clip(nx.title, 12)}」，怎么开始？`);
+      const card = lastCards.find(c => c.id === nx.cardId);
+      if (card) out.push({ label: '推迟下一件', run: () => openSnoozeSheet(card) });
+    }
     out.push('今天还剩什么最重要？');
     if ((lastToday && lastToday.openCount) > 3) out.push('哪些今天可以不管？');
+    if (lastToday && lastToday.doneToday && lastToday.doneToday.count && !(lastToday.openCount > 0)) {
+      out.unshift({ label: '回顾今天', run: () => { openTodayChat({ byUser: true, contextual: true }); dockPrompt('帮我回顾今天：完成了什么、还欠什么、明天先做哪件？'); } });
+    }
     return out.slice(0, 3);
   }
   function chatTemplate() {
@@ -3480,8 +3711,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (!work.length) {
       const doneN = lastToday && lastToday.doneToday && lastToday.doneToday.count;
       html += doneN
-        ? `<div class="tile empty size-wide">${douyaSvg({ size: 56, state: 'idle', id: 'te' })}<div class="eyebrow">今天的事都收好了 🌱</div><p class="w-desc">搞定了 ${doneN} 件。新的动态来了会再出现在这里；也可以点右上角「立即汇聚」再扫一遍。</p></div>`
-        : `<div class="tile empty size-wide">${douyaSvg({ size: 56, state: 'idle', id: 'te' })}<div class="eyebrow">今天还很清静 🌱</div><p class="w-desc">点右上角「立即汇聚」，豆芽会从邮箱、GitHub、日历里把今天的事拣出来。</p></div>`;
+        ? `<div class="tile empty size-wide all-done">${douyaSvg({ size: 56, state: 'idle', id: 'te' })}<div class="eyebrow">今天的事都收好了 🌱</div><p class="w-desc">搞定了 ${doneN} 件。新的动态来了会再出现在这里。</p><div class="empty-ctas"><button type="button" class="step primary" data-empty-act="review">回顾今天</button><button type="button" class="step" data-empty-act="chat">和豆芽聊聊</button></div></div>`
+        : `<div class="tile empty size-wide first-run">${douyaSvg({ size: 56, state: 'idle', id: 'te' })}<div class="eyebrow">今天还很清静 🌱</div><p class="w-desc">点右上角「立即汇聚」，豆芽会从邮箱、GitHub、日历里把今天的事拣出来；也可以先跟我说今天想做什么。</p><div class="empty-ctas"><button type="button" class="step primary" data-empty-act="digest">立即汇聚</button><button type="button" class="step" data-empty-act="chat">先跟豆芽说</button></div></div>`;
     }
     html += '</div>';
     html += renderOffHours(offCards, cards);
@@ -3540,14 +3771,18 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const card = cards[Number(tile.getAttribute('data-idx'))];
       if (card && Array.isArray(card.prepared)) bindSteps(tile, card.prepared, card);
       if (card && card.faceView) bindFace(tile, card);
+      if (card) bindQuickActions(tile, card);
       tile.addEventListener('click', e => {
         if (card && card.type === 'view') return; // a saved view is used in place
-        if (e.target.closest('.w-acts, .w-more, .w-slot, .act-card, .f-box, .wait-chip')) return;
+        if (e.target.closest('.w-acts, .w-more, .w-slot, .act-card, .f-box, .wait-chip, .qa-bar, .swipe-rail, [data-qa]')) return;
+        if (tile.dataset.moved === '1') { tile.dataset.moved = '0'; return; } // scroll/swipe threshold — don't open
+        if (tile.classList.contains('swipe-open')) { resetSwipe(tile); return; }
         if (e.target.closest('a')) { track(card, 'open'); return; }
         track(card, 'open');
         openTileZoom(card);
       });
     });
+    bindEmptyCtas(container);
     container.querySelectorAll('[data-focus]').forEach(el => {
       el.addEventListener('click', e => {
         e.stopPropagation();
@@ -3598,6 +3833,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (opts.byUser && chatInZoom()) {
       // Typing / sending beside a card: keep the borrowed sheet open, leave dock preference alone.
       if (wrap) wrap.classList.add('open');
+      if (opts.contextual) paintDockCue();
       return;
     }
     if (opts.byUser) setChatDockWanted(true);
@@ -3605,6 +3841,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (!wrap) return;
     wrap.classList.add('open');
     ensureInlineBotHistory();
+    if (opts.byUser) paintDockCue();
     if (opts.focus !== false && opts.byUser) setTimeout(() => $('todayChatInput')?.focus(), 50);
   }
 
@@ -4663,7 +4900,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     el.appendChild(x);
     el.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.remove('show'), undoId || extra ? 12000 : 5000);
+    toastTimer = setTimeout(() => el.classList.remove('show'), (extra && extra.ms) || 5000);
   }
   function rerenderToday() {
     const sc = views.today ? views.today.scrollTop : 0;
@@ -5156,7 +5393,25 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (e.target && e.target.id === 'tileZoomOverlay') closeTileZoom();
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && currentZoomCard) closeTileZoom();
+    if (e.key === 'Escape') {
+      if (document.querySelector('.snooze-sheet.open')) { closeSnoozeSheet(); return; }
+      if (currentZoomCard) { closeTileZoom(); return; }
+      const chat = $('todayChat');
+      if (chat && chat.classList.contains('open') && !chatInZoom()) { closeTodayChat(); return; }
+      return;
+    }
+    // Enter focuses the closed dock — skip when typing / composing / IME composing.
+    if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (e.isComposing || e.keyCode === 229) return;
+      const tag = (e.target && e.target.tagName) || '';
+      if (/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(tag) || (e.target && e.target.isContentEditable)) return;
+      if (currentZoomCard || document.querySelector('.snooze-sheet.open')) return;
+      const chat = $('todayChat');
+      if (chat && !chat.classList.contains('open')) {
+        e.preventDefault();
+        openTodayChat({ byUser: true, contextual: true });
+      }
+    }
   });
 
   // Initialize

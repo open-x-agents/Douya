@@ -9,8 +9,10 @@ test('Today composer exposes attach + mic + file picker', () => {
   assert.match(html, /id="todayAttachBtn"/)
   assert.match(html, /id="todayMicBtn"/)
   assert.match(html, /id="todayFilePick"/)
-  assert.match(html, /aria-label="添加图片或文件"/)
-  assert.match(html, /aria-label="语音输入"/)
+  assert.match(html, /id="todayAttachBtn"[^>]*aria-label="(?:Attach|添加图片或文件)"/)
+  assert.match(html, /id="todayMicBtn"[^>]*aria-label="(?:Voice input|语音输入)"/)
+  assert.match(html, /data-i18n="composer\.attach_title"|composer\.attach/)
+  assert.match(html, /data-i18n="composer\.mic"/)
   assert.match(html, /makeComposer\(\{[\s\S]*?attachBtnId: 'todayAttachBtn'[\s\S]*?micBtnId: 'todayMicBtn'/)
 })
 

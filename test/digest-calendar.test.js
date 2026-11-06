@@ -24,11 +24,13 @@ test('a connected-but-broken source shows as failed with the reason instead of v
   assert.deepEqual(auxSources([]), {})
 })
 
-test('Today header source line comes from live ACTIVE connected sources, incl. 日历', async () => {
+test('Today header source line comes from live ACTIVE connected sources, incl. Calendar', async () => {
   const { todaySourcesText } = await import('../src/web/api.js')
   const acc = (slug, status = 'ACTIVE') => ({ status, toolkit: { slug } })
-  assert.equal(todaySourcesText([acc('googlecalendar'), acc('github'), acc('gmail'), acc('slack'), acc('notion', 'EXPIRED')]), 'Gmail、GitHub、Slack、日历')
-  assert.equal(todaySourcesText([acc('gmail')], [{ source: 'github' }]), 'Gmail')
-  assert.equal(todaySourcesText(null, [{ source: 'github' }, { source: 'bot' }, { source: 'system' }]), 'GitHub')
-  assert.equal(todaySourcesText([], []), '暂无数据')
+  assert.equal(todaySourcesText([acc('googlecalendar'), acc('github'), acc('gmail'), acc('slack'), acc('notion', 'EXPIRED')], [], 'en'), 'Gmail, GitHub, Slack, Calendar')
+  assert.equal(todaySourcesText([acc('googlecalendar'), acc('github'), acc('gmail'), acc('slack')], [], 'zh'), 'Gmail、GitHub、Slack、日历')
+  assert.equal(todaySourcesText([acc('gmail')], [{ source: 'github' }], 'en'), 'Gmail')
+  assert.equal(todaySourcesText(null, [{ source: 'github' }, { source: 'bot' }, { source: 'system' }], 'en'), 'GitHub')
+  assert.equal(todaySourcesText([], [], 'en'), 'No sources yet')
+  assert.equal(todaySourcesText([], [], 'zh'), '暂无数据')
 })

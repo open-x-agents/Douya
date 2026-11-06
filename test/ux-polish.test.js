@@ -45,8 +45,8 @@ test('mobile density + zoom sticky chat on narrow', () => {
 })
 
 test('swipe rails expose aria labels; focus-visible rings', () => {
-  assert.match(html, /aria-label="滑动快捷操作"/)
-  assert.match(html, /aria-label="完成这张卡"/)
+  assert.match(html, /qa\.swipe_aria|滑动快捷操作/)
+  assert.match(html, /qa\.done_aria|完成这张卡/)
   assert.match(html, /:focus-visible/)
   assert.match(html, /prefers-reduced-motion:reduce\)\{[\s\S]*?tuck-done/)
 })

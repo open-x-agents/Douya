@@ -1182,8 +1182,8 @@
 
   /* Mobile composer: keep text input from collapsing to 0 width (~390px) */
   @media (max-width:420px){
-    #v-today .today-chat-input .input-wrap{padding:6px 6px 6px 10px;gap:6px;width:100%;max-width:100%}
-    #v-today .today-chat-input input,.today-chat-input input{flex:1 1 auto;min-width:4rem;width:0}
+    #v-today .today-chat-input .input-wrap{padding:6px 6px 6px 10px;gap:6px;width:100%;max-width:100%;display:flex;align-items:center}
+    #v-today .today-chat-input input,.today-chat-input input,#dockInput,.dockFoot input{flex:1 1 auto;min-width:4.5rem;width:0;max-width:100%}
     .composer-tools{flex-shrink:0}
     .today-chat-input .send-btn,#v-today .today-chat-input .send-btn{flex-shrink:0}
   }
@@ -1568,11 +1568,29 @@
   .tile.empty{text-align:center;padding:28px 22px}
   .tile.empty .eyebrow{font-size:15px;margin-top:4px}
   .tile.empty .w-desc{max-width:28em;margin:8px auto 0;line-height:1.6}
+  .tile.empty.first-run,.tile.empty.all-done{
+    position:relative;overflow:hidden;padding:36px 28px 32px;border-radius:26px;
+    background:linear-gradient(160deg,rgba(255,255,255,.96) 0%,rgba(241,237,252,.92) 55%,rgba(228,240,252,.92) 100%);
+    border:1px solid rgba(255,255,255,.98);box-shadow:var(--shadow-hi);
+  }
+  .tile.empty.first-run::after,.tile.empty.all-done::after{
+    content:"";position:absolute;right:-70px;top:-70px;width:240px;height:240px;border-radius:50%;
+    background:radial-gradient(circle,rgba(138,116,208,.18),transparent 70%);pointer-events:none;
+  }
+  .tile.empty.first-run .eyebrow,.tile.empty.all-done .eyebrow{
+    font-size:12px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;color:var(--violet);margin-top:2px;
+  }
+  .tile.empty.first-run .w-desc,.tile.empty.all-done .w-desc{font-size:14.5px;color:var(--ink2);max-width:32em;margin-top:10px}
+  .tile.empty.first-run .empty-ctas,.tile.empty.all-done .empty-ctas{margin-top:18px;gap:10px}
+  .tile.empty.first-run .empty-ctas .step.primary,.tile.empty.all-done .empty-ctas .step.primary{min-height:44px;padding:0 20px}
+  .side .lang-row span{min-width:4.5em;flex-shrink:0}
+  .lang-switch{min-height:28px}
+  .lang-switch button{min-width:3.6rem}
   .f-check .f-meta.local{opacity:.55;font-size:10.5px}
   /* Cleared / waiting-only (done-dismiss) */
   .wait-strip{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 16px;align-items:center;padding:10px 12px;border-radius:16px;background:linear-gradient(135deg,rgba(250,249,255,.9),rgba(245,247,252,.85));border:1px dashed rgba(122,106,216,.22)}
   .wait-strip:empty{display:none}
-  .wait-strip::before{content:"等别人回音";font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--violet);margin-right:4px;opacity:.85}
+  .wait-strip::before{content:attr(data-label);font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--violet);margin-right:4px;opacity:.85}
   .wait-chip{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.92);border:1px solid rgba(30,40,80,.06);font-size:12.5px;color:var(--ink2);cursor:pointer;transition:.2s;box-shadow:0 1px 2px rgba(40,44,90,.04)}
   .wait-chip:hover{background:#fff;box-shadow:0 4px 14px rgba(40,44,90,.1);color:var(--ink);transform:translateY(-1px)}
   .wait-chip b{font-weight:700;color:var(--ink)}
@@ -1870,7 +1888,7 @@
       <path class="dy-spark s3" d="M44 9 l.7 1.6 1.6.7 -1.6.7 -.7 1.6 -.7 -1.6 -1.6 -.7 1.6 -.7Z" fill="#b3c1ff"/>
     </g>
   </g>
-</svg>      <b>豆芽</b>
+</svg>      <b data-i18n="dock.head">Douya</b>
     </div>
     <div class="nav on" data-view="today" data-i18n="nav.today">Today</div>
     <div class="nav" data-view="sources" data-i18n="nav.sources">Sources</div>
@@ -2102,7 +2120,7 @@
       <path class="dy-spark s3" d="M44 9 l.7 1.6 1.6.7 -1.6.7 -.7 1.6 -.7 -1.6 -1.6 -.7 1.6 -.7Z" fill="#b3c1ff"/>
     </g>
   </g>
-</svg>    <div><b>豆芽</b><small data-i18n="dock.subtitle">Digital coworker</small></div>
+</svg>    <div><b data-i18n="dock.head">Douya</b><small data-i18n="dock.head_sub">Open Digital Mate · long-term memory</small></div>
     <button class="x" id="dockClose">✕</button>
   </div>
   <div class="dockBody" id="dockBody">
@@ -2137,6 +2155,9 @@
     I18N.setLocale(next);
     syncLangSwitch();
     I18N.applyDom();
+    const dock = $('todayChat');
+    if (dock) try { I18N.applyDom(dock); } catch (_) {}
+    if (typeof paintChatChips === 'function') try { paintChatChips(); } catch (_) {}
     if (reload && typeof loadToday === 'function') loadToday({ force: true }).catch(() => {});
   }
   document.querySelectorAll('.lang-switch').forEach(sw => {
@@ -2613,18 +2634,22 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       takeAutoLayout(data.autoLayout);
       if (data.ui) { uiLayout = data.ui; if (!uiBoot) { uiBoot = data.ui.bootId || null; uiSeq = Math.max(uiSeq, data.ui.seq || 0); } }
       const name = data.userName || '';
-      $('conclText').textContent = `${greetingWord()}${name ? '，' + name : ''}`;
-      $('stamp').textContent = `${data.date || ''}${data.sources ? ' · 来自 ' + data.sources : ''}`;
+      const hello = greetingWord();
+      $('conclText').textContent = name ? t('greet.hello_named', { hello, name }) : hello;
+      $('stamp').textContent = `${data.date || ''}${data.sources ? t('stamp.from', { sources: data.sources }) : ''}`;
       $('nOpen').textContent = data.openCount || 0;
       $('nUrgent').textContent = data.urgentCount || 0;
       $('nMeet').textContent = data.meetingCount || 0;
       $('daySummary').textContent = data.greetingLine || ''; // the counts live in the one-line summary under the hero
       { const sc = views.today ? views.today.scrollTop : 0; renderCardList(data.cards || []); if (views.today) views.today.scrollTop = sc; }
       if (data.hasDigest) {
-        $('digestStatus').textContent = data.lastDigestAt ? `已汇聚 · ${new Date(data.lastDigestAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}` : '已汇聚';
+        const loc = odmLang() === 'zh' ? 'zh-CN' : 'en-GB';
+        const tm = data.lastDigestAt ? new Date(data.lastDigestAt).toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+        $('digestStatus').textContent = tm ? t('digest.status_at', { time: tm }) : t('digest.status');
       } else {
         $('digestStatus').textContent = '';
       }
+      paintChatChips();
     } catch (err) {
       console.error('Failed to load today:', err);
       $('conclText').textContent = t('chat.load_fail');
@@ -2846,9 +2871,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function fmtMin(m) { return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
   function snapMin(m, step = 15) { return Math.max(0, Math.min(24 * 60, Math.round(m / step) * step)); }
   const CAT_IC = { meal: '🍜', focus: '◎', work: '✎', break: '☕', exercise: '🏃', meeting: '📅', review: '👁', admin: '📬', learning: '📘', personal: '❀', winddown: '🌙' };
-  function greetingWord() {
-    const h = new Date().getHours();
-    return h < 5 ? '夜深了' : h < 11 ? '早上好' : h < 13 ? '中午好' : h < 18 ? '下午好' : '晚上好';
+  function greetingWord(h = new Date().getHours()) {
+    if (h < 5) return t('greet.word_late');
+    if (h < 11) return t('greet.word_morning');
+    if (h < 13) return t('greet.word_noon');
+    if (h < 18) return t('greet.word_afternoon');
+    return t('greet.word_evening');
   }
 
   function ttTitle(t) {
@@ -3232,7 +3260,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       ? `<div class="w-acts">${stepBtnHtml(primary, 0, 'primary')}${secondary.length ? `<details class="w-more"><summary>更多</summary>${secondary.map((p, i) => stepBtnHtml(p, i + 1, '')).join('')}</details>` : ''}</div>`
       : '';
     const qa = waitingOnly ? '' : `<div class="qa-bar" aria-label="${t('qa.aria')}"><button type="button" data-qa="done" title="${t('qa.done_title')}">${t('qa.done')}<span class="kbd">C</span></button><button type="button" data-qa="snooze" title="${t('qa.snooze_title')}">${t('qa.snooze')}<span class="kbd">S</span></button><button type="button" data-qa="ask" title="${t('qa.ask_title')}">${t('qa.ask')}</button><button type="button" data-qa="useless" class="qa-useless" title="${t('qa.useless_title')}">${t('qa.useless')}</button></div>`;
-    const rails = waitingOnly ? '' : `<div class="swipe-rails" role="group" aria-label="滑动快捷操作"><div class="swipe-rail left"><button type="button" data-qa="done" aria-label="完成这张卡">完成</button><button type="button" data-qa="snooze" aria-label="推迟这张卡">推迟</button></div><div class="swipe-rail right"><button type="button" data-qa="ask" aria-label="交给豆芽处理">交给豆芽</button></div></div>`;
+    const rails = waitingOnly ? '' : `<div class="swipe-rails" role="group" aria-label="${escapeHtml(t('qa.swipe_aria'))}"><div class="swipe-rail left"><button type="button" data-qa="done" aria-label="${escapeHtml(t('qa.done_aria'))}">${escapeHtml(t('qa.done'))}</button><button type="button" data-qa="snooze" aria-label="${escapeHtml(t('qa.snooze_aria'))}">${escapeHtml(t('qa.snooze'))}</button></div><div class="swipe-rail right"><button type="button" data-qa="ask" aria-label="${escapeHtml(t('qa.ask_aria'))}">${escapeHtml(t('qa.ask'))}</button></div></div>`;
     return `
       <article class="tile work swipeable ${big ? 'size-wide' : 'size-normal'}${waitingOnly ? ' waiting-only' : ''}${hasFace ? ' has-face' : ''}" data-idx="${idx}">
         ${rails}
@@ -3273,7 +3301,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       else if (p.type === 'stage') out.push(`<div class="f-stage"><div class="f-bar"><i style="width:${p.total ? Math.round((p.done / p.total) * 100) : 0}%"></i></div><span>${escapeHtml(p.label)}</span></div>`);
       else if (p.type === 'checklist') {
         if (p.done && !(p.items || []).length) out.push('<div class="f-alldone"><span class="f-sprout">🌱</span>都处理完了</div>');
-        else out.push(`<ul class="f-check">${(p.items || []).map(it => `<li class="${it.done ? 'done' : ''}${it.needsYou ? ' need' : ''}"><button type="button" class="f-box" aria-label="在豆芽里标完成" title="只在豆芽里记下，不会改 Gmail / GitHub" data-item-url="${escapeHtml(it.url)}" data-item-title="${escapeHtml(it.title)}"></button><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</a><span class="f-meta">${escapeHtml(it.from || it.kindZh || '')}</span></li>`).join('')}</ul>${p.more ? `<div class="f-more">还有 ${p.more} 条</div>` : ''}`);
+        else out.push(`<ul class="f-check">${(p.items || []).map(it => `<li class="${it.done ? 'done' : ''}${it.needsYou ? ' need' : ''}"><button type="button" class="f-box" aria-label="${escapeHtml(t('item.mark_local'))}" title="${escapeHtml(t('item.mark_local_title'))}" data-item-url="${escapeHtml(it.url)}" data-item-title="${escapeHtml(it.title)}"></button><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</a><span class="f-meta">${escapeHtml(it.from || it.kindZh || '')}</span></li>`).join('')}</ul>${p.more ? `<div class="f-more">还有 ${p.more} 条</div>` : ''}`);
       }
       else if (p.type === 'quote') {
         const who = p.from ? `<span class="f-av" style="--h:${avHue(p.from)}">${escapeHtml(initial(p.from))}</span><span class="f-quote-who">${escapeHtml(p.from)}</span>` : '';
@@ -3568,7 +3596,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
           dockPrompt('今天想先做什么？');
         } else if (act === 'review') {
           openTodayChat({ byUser: true, contextual: true });
-          dockPrompt('帮我回顾今天：完成了什么、还欠什么、明天先做哪件？');
+          dockPrompt(t('chip.review_prompt'));
           const dt = container.querySelector('.tile.done-today');
           if (dt) dt.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'center' });
         } else if (act === 'digest') {
@@ -3580,12 +3608,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function paintDockCue() {
     const tip = $('todayComposerTip'); if (!tip) return;
     let line = '';
-    if (chatCtx) line = `关于「${chatCtx.name}」，我可以起草、排程或帮你收掉。`;
+    if (chatCtx) line = t('cue.about_card', { name: chatCtx.name });
     else {
       const nx = lastToday && lastToday.next;
-      if (nx && nx.kind === 'meeting') line = `「${clip(nx.title, 16)}」快到了——要我列会前要点吗？`;
-      else if (nx && nx.kind === 'card') line = `下一件是「${clip(nx.title, 16)}」，需要我接手吗？`;
-      else if (lastToday && lastToday.doneToday && lastToday.doneToday.count && !(lastToday.openCount > 0)) line = '今天的事都收好了，要不要一起回顾？';
+      if (nx && nx.kind === 'meeting') line = t('cue.meet_soon', { title: clip(nx.title, 16) });
+      else if (nx && nx.kind === 'card') line = t('cue.next_card', { title: clip(nx.title, 16) });
+      else if (lastToday && lastToday.doneToday && lastToday.doneToday.count && !(lastToday.openCount > 0)) line = t('cue.day_done');
     }
     if (!line) { tip.hidden = true; tip.textContent = ''; return; }
     tip.hidden = false; tip.textContent = line;
@@ -3653,7 +3681,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const n = c.waitingCount || 0;
       return `<button type="button" class="wait-chip" data-wait-id="${escapeHtml(c.id)}" title="打开看看，需要的话可以催一下"><span class="wc-n">${n ? n + ' 件' : '等候'}</span><b>${escapeHtml(name)}</b></button>`;
     }).join('');
-    return `<div class="wait-strip" id="waitStrip">${chips}</div>`;
+    return `<div class="wait-strip" id="waitStrip" data-label="${escapeHtml(t('today.wait_strip'))}">${chips}</div>`;
   }
   function bindWaitStrip(container, cards) {
     container.querySelectorAll('.wait-chip[data-wait-id]').forEach(btn => btn.addEventListener('click', () => {
@@ -3924,22 +3952,23 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const k = typeof c === 'string' ? c : c.label;
       if (seen.has(k)) continue; seen.add(k); uniq.push(c);
     }
-    uniq.splice(Math.min(2, uniq.length), 0, { label: '推迟这张', run: () => openSnoozeSheet(card) });
+    uniq.splice(Math.min(2, uniq.length), 0, { label: t('chip.snooze_this'), run: () => openSnoozeSheet(card) });
     return uniq.slice(0, 3);
   }
   function chipsForDay() {
     const nx = lastToday && lastToday.next;
     const out = [];
-    if (nx && nx.kind === 'meeting') out.push(`「${clip(nx.title, 12)}」会前要准备什么？`);
+    const zh = odmLang() === 'zh';
+    if (nx && nx.kind === 'meeting') out.push(zh ? `「${clip(nx.title, 12)}」会前要准备什么？` : `What to prep before “${clip(nx.title, 18)}”?`);
     else if (nx && nx.kind === 'card') {
-      out.push(`先做「${clip(nx.title, 12)}」，怎么开始？`);
+      out.push(zh ? `先做「${clip(nx.title, 12)}」，怎么开始？` : `Start with “${clip(nx.title, 18)}” — how?`);
       const card = lastCards.find(c => c.id === nx.cardId);
-      if (card) out.push({ label: '推迟下一件', run: () => openSnoozeSheet(card) });
+      if (card) out.push({ label: t('chip.snooze_next'), run: () => openSnoozeSheet(card) });
     }
-    out.push('今天还剩什么最重要？');
-    if ((lastToday && lastToday.openCount) > 3) out.push('哪些今天可以不管？');
+    out.push(t('chip.day_most'));
+    if ((lastToday && lastToday.openCount) > 3) out.push(t('chip.day_skip'));
     if (lastToday && lastToday.doneToday && lastToday.doneToday.count && !(lastToday.openCount > 0)) {
-      out.unshift({ label: '回顾今天', run: () => { openTodayChat({ byUser: true, contextual: true }); dockPrompt('帮我回顾今天：完成了什么、还欠什么、明天先做哪件？'); } });
+      out.unshift({ label: t('chip.day_review'), run: () => { openTodayChat({ byUser: true, contextual: true }); dockPrompt(t('chip.review_prompt')); } });
     }
     return out.slice(0, 3);
   }
@@ -3948,25 +3977,32 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     wrap.className = 'today-chat'; wrap.id = 'todayChat';
     wrap.innerHTML = `
       <div class="today-chat-sheet" id="todayChatSheet">
-        <div class="today-chat-head"><b>豆芽</b><small>数字同事 · 有长期记忆</small><button class="x" id="todayChatClose" type="button" aria-label="收起对话">✕</button></div>
+        <div class="today-chat-head"><b data-i18n="dock.head">Douya</b><small data-i18n="dock.head_sub">Open Digital Mate · long-term memory</small><button class="x" id="todayChatClose" type="button" data-i18n="dock.close" data-i18n-attr="aria-label" aria-label="Collapse chat">✕</button></div>
         <div class="today-chat-msgs" id="todayChatMsgs"></div>
       </div>
       <div class="today-chat-input">
-        <div class="chat-ctx" id="chatCtx" hidden><span>正在聊</span><b></b><button type="button" id="chatCtxClear" aria-label="不针对这张卡">✕</button></div>
+        <div class="chat-ctx" id="chatCtx" hidden><span data-i18n="chat.ctx_label">Talking about</span><b></b><button type="button" id="chatCtxClear" data-i18n="chat.ctx_clear" data-i18n-attr="aria-label" aria-label="Stop focusing this card">✕</button></div>
         <div class="chat-chips" id="chatChips" hidden></div>
         <div class="composer-attach" id="todayAttachRail" hidden></div>
         <div class="composer-tip" id="todayComposerTip" hidden></div>
         <div class="input-wrap">
-          <div class="composer-tools" role="group" aria-label="附件与语音">
-            <button type="button" id="todayAttachBtn" title="图片或文件" aria-label="添加图片或文件"><span class="ct-glyph" aria-hidden="true">＋</span></button>
-            <button type="button" id="todayMicBtn" class="composer-mic" title="语音输入" aria-label="语音输入"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v3.5"/></svg></button>
+          <div class="composer-tools" role="group" data-i18n="composer.tools_aria" data-i18n-attr="aria-label" aria-label="Attach & voice">
+            <button type="button" id="todayAttachBtn" data-i18n="composer.attach_title" data-i18n-attr="title" data-i18n-aria="composer.attach" title="Image or file" aria-label="Attach"><span class="ct-glyph" aria-hidden="true">＋</span></button>
+            <button type="button" id="todayMicBtn" class="composer-mic" data-i18n="composer.mic" data-i18n-attr="title" title="Voice input" aria-label="Voice input"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v3.5"/></svg></button>
           </div>
           <input type="text" id="todayChatInput" placeholder="Message Douya… paste or drop images" data-i18n="composer.placeholder" data-i18n-attr="placeholder" autocomplete="off" enterkeyhint="send" />
-          <button class="send-btn" id="todayChatSend" type="button" aria-label="发送" disabled><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+          <button class="send-btn" id="todayChatSend" type="button" data-i18n="composer.send" data-i18n-attr="aria-label" aria-label="Send" disabled><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
         </div>
         <input type="file" id="todayFilePick" hidden multiple accept="image/*,.pdf,.txt,.md,.csv,.json,.js,.ts,.py,.yaml,.yml,.html,.css,.sh,.log" />
       </div>`;
     wrap.querySelector('#chatCtxClear').addEventListener('click', e => { e.preventDefault(); setChatContext(null); });
+    try {
+      I18N.applyDom(wrap);
+      const att = wrap.querySelector('#todayAttachBtn');
+      if (att) att.setAttribute('aria-label', t('composer.attach'));
+      const mic = wrap.querySelector('#todayMicBtn');
+      if (mic) mic.setAttribute('aria-label', t('composer.mic'));
+    } catch (_) {}
     bindDockFit(wrap);
     return wrap;
   }
@@ -4094,7 +4130,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     html += '<div class="grid2 grid-main">';
     html += renderDoneToday(lastToday && lastToday.doneToday);
     html += order.map(c => (c.type === 'view' ? `<article class="tile work size-wide view-tile" data-idx="${cards.indexOf(c)}"></article>` : renderWorkTile(c, cards.indexOf(c)))).join('');
-    if (work.length && !ordered.length) html += `<div class="tile empty size-wide">${douyaSvg({ size: 48, state: 'idle', id: 'tf' })}<div class="eyebrow">筛选后空了</div><p class="w-desc">点上方「显示全部」，把收起来的卡放回来。</p></div>`;
+    if (work.length && !ordered.length) html += `<div class="tile empty size-wide">${douyaSvg({ size: 48, state: 'idle', id: 'tf' })}<div class="eyebrow">${t('today.empty_filtered_eyebrow')}</div><p class="w-desc">${t('today.empty_filtered_body')}</p></div>`;
     if (!work.length) {
       const doneN = lastToday && lastToday.doneToday && lastToday.doneToday.count;
       html += doneN

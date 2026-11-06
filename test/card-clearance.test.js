@@ -88,9 +88,9 @@ test('client: dock stays closed unless byUser; cardDone leave path present', () 
   // programmatic loadToday re-focus must not expand a closed dock
   assert.match(html, /hadFocus && chatDockWanted/)
   assert.match(html, /w-more/) // secondary CTAs collapsed
-  assert.match(html, /在豆芽里标完成/)
-  assert.match(html, /今天还很清静|今天的事都收好了/)
-  assert.match(html, /等别人回音/)
+  assert.match(html, /item\.mark_local|在豆芽里标完成/)
+  assert.match(html, /today\.empty_quiet_eyebrow|today\.empty_done_eyebrow|Quiet morning|今天还很清静|今天的事都收好了/)
+  assert.match(html, /today\.wait_strip|Waiting on others|等别人回音/)
   // zoom close restores snapshot — never openTodayChat from teardown
   const close = html.slice(html.indexOf('function closeTileZoom'), html.indexOf('function closeTileZoom') + 600)
   assert.match(close, /setChatDockWanted\(dockWantedBeforeZoom\)/)

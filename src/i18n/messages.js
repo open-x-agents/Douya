@@ -239,6 +239,53 @@ export const messages = {
     'done.line_items': 'Handled {n} items',
     'done.line_acts': 'Douya ran {n} for you',
 
+
+    'greet.word_late': 'Late night',
+    'greet.word_morning': 'Good morning',
+    'greet.word_noon': 'Good afternoon',
+    'greet.word_afternoon': 'Good afternoon',
+    'greet.word_evening': 'Good evening',
+    'greet.hello_named': '{hello}, {name}',
+
+    'stamp.from': ' · From {sources}',
+    'stamp.none': 'No sources yet',
+    'source.calendar': 'Calendar',
+
+    'dock.head': 'Douya',
+    'dock.head_sub': 'Open Digital Mate · long-term memory',
+    'dock.close': 'Collapse chat',
+
+    'chip.day_most': 'What\'s still most important today?',
+    'chip.day_skip': 'What can wait until tomorrow?',
+    'chip.day_review': 'Review today',
+    'chip.snooze_next': 'Snooze next',
+    'chip.review_prompt': 'Help me review today: what got done, what\'s left, and what to start with tomorrow?',
+
+    'chat.ctx_label': 'Talking about',
+    'chat.ctx_clear': 'Stop focusing this card',
+    'composer.tools_aria': 'Attach & voice',
+    'composer.attach_title': 'Image or file',
+
+    'digest.status': 'Refreshed',
+    'digest.status_at': 'Refreshed · {time}',
+
+    'today.empty_filtered_eyebrow': 'Nothing matches this filter',
+    'today.empty_filtered_body': 'Tap “Show all” above to bring the tucked cards back.',
+    'today.wait_strip': 'Waiting on others',
+
+
+    'cue.about_card': 'About “{name}” — I can draft, schedule, or tuck it away.',
+    'cue.meet_soon': '“{title}” is soon — want prep notes?',
+    'cue.next_card': 'Next up: “{title}”. Want me to take it?',
+    'cue.day_done': 'Today is cleared — review together?',
+    'chip.snooze_this': 'Snooze this',
+    'qa.swipe_aria': 'Swipe quick actions',
+    'qa.done_aria': 'Mark card done',
+    'qa.snooze_aria': 'Snooze card',
+    'qa.ask_aria': 'Ask Douya',
+    'item.mark_local': 'Mark done in Douya',
+    'item.mark_local_title': 'Noted only in Douya — does not change Gmail / GitHub',
+
     'page.today': 'Today',
     'page.sources': 'Sources',
     'page.settings': 'Settings',
@@ -479,6 +526,53 @@ export const messages = {
     'done.line_cards': '收掉 {n} 张卡',
     'done.line_items': '处理 {n} 条',
     'done.line_acts': '豆芽替你做了 {n} 件',
+
+
+    'greet.word_late': '夜深了',
+    'greet.word_morning': '早上好',
+    'greet.word_noon': '中午好',
+    'greet.word_afternoon': '下午好',
+    'greet.word_evening': '晚上好',
+    'greet.hello_named': '{hello}，{name}',
+
+    'stamp.from': ' · 来自 {sources}',
+    'stamp.none': '暂无数据',
+    'source.calendar': '日历',
+
+    'dock.head': '豆芽',
+    'dock.head_sub': '数字同事 · 有长期记忆',
+    'dock.close': '收起对话',
+
+    'chip.day_most': '今天还剩什么最重要？',
+    'chip.day_skip': '哪些今天可以不管？',
+    'chip.day_review': '回顾今天',
+    'chip.snooze_next': '推迟下一件',
+    'chip.review_prompt': '帮我回顾今天：完成了什么、还欠什么、明天先做哪件？',
+
+    'chat.ctx_label': '正在聊',
+    'chat.ctx_clear': '不针对这张卡',
+    'composer.tools_aria': '附件与语音',
+    'composer.attach_title': '图片或文件',
+
+    'digest.status': '已汇聚',
+    'digest.status_at': '已汇聚 · {time}',
+
+    'today.empty_filtered_eyebrow': '筛选后空了',
+    'today.empty_filtered_body': '点上方「显示全部」，把收起来的卡放回来。',
+    'today.wait_strip': '等别人回音',
+
+
+    'cue.about_card': '关于「{name}」，我可以起草、排程或帮你收掉。',
+    'cue.meet_soon': '「{title}」快到了——要我列会前要点吗？',
+    'cue.next_card': '下一件是「{title}」，需要我接手吗？',
+    'cue.day_done': '今天的事都收好了，要不要一起回顾？',
+    'chip.snooze_this': '推迟这张',
+    'qa.swipe_aria': '滑动快捷操作',
+    'qa.done_aria': '完成这张卡',
+    'qa.snooze_aria': '推迟这张卡',
+    'qa.ask_aria': '交给豆芽处理',
+    'item.mark_local': '在豆芽里标完成',
+    'item.mark_local_title': '只在豆芽里记下，不会改 Gmail / GitHub',
 
     'page.today': '今天',
     'page.sources': '信源状态',

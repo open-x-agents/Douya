@@ -4,6 +4,7 @@
 import { randomUUID } from 'node:crypto'
 import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
+import { createRequire } from 'node:module'
 import { facePrompt } from '../ui/face.js'
 import { CHANNELS, channelOfToolkit } from './channels.js'
 import { buildSnapshot } from './snapshot.js'
@@ -395,11 +396,54 @@ export function createBotDigest(deps) {
   return { store: digestStore, lastRun: () => lastRun, live: () => (liveRun?.status === 'running' ? liveRun.progress : null), run, toolSnapshot, toolPropose, toolNote, toolCommit, get running() { return !!running }, current: () => running, summarize, roleOf }
 }
 
+/** Read the dsh-memory SQLite recall block (plugin store at $DSH_HOME/memory/memory.db). */
+export function readDshMemoryRecall(dshHome, { recentCount = 10, maxChars = 2000 } = {}) {
+  const dbPath = join(dshHome || '', 'memory', 'memory.db')
+  if (!dbPath || !existsSync(dbPath)) return ''
+  let db
+  try {
+    const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite')
+    db = new DatabaseSync(dbPath, { readOnly: true })
+    const pinned = db.prepare('SELECT id, text, tags, pinned FROM memories WHERE pinned = 1 ORDER BY updated_at DESC, id DESC').all()
+    const recent = db.prepare('SELECT id, text, tags, pinned FROM memories WHERE pinned = 0 ORDER BY updated_at DESC, id DESC LIMIT ?').all(recentCount)
+    const rows = [...pinned, ...recent]
+    if (!rows.length) return ''
+    const header = 'Memories you previously stored (use memory_search for anything not listed):\n'
+    const lines = []
+    let used = header.length
+    let dropped = 0
+    for (const row of rows) {
+      const tags = row.tags ? ` [${row.tags}]` : ''
+      const line = `- (#${row.id}${row.pinned ? ', pinned' : ''})${tags} ${row.text}`
+      if (used + line.length + 1 > maxChars) { dropped++; continue }
+      lines.push(line)
+      used += line.length + 1
+    }
+    if (!lines.length) return ''
+    const tail = dropped > 0 ? `\n(${dropped} more memories not shown; use memory_search)` : ''
+    return header + lines.join('\n') + tail
+  } catch {
+    return ''
+  } finally {
+    try { db?.close() } catch {}
+  }
+}
+
+/** Chief brief memory: dsh-memory recall first, then ds-bot MEMORY.md if present. */
 export async function readChiefMemory(dshHome) {
+  const parts = []
+  try {
+    const recall = readDshMemoryRecall(dshHome)
+    if (recall) parts.push(recall)
+  } catch {}
   try {
     const { loadMainBotId } = await import('../web/muse-chat-core.js')
     const id = await loadMainBotId(dshHome)
     const f = join(dshHome, 'bot', 'memory', 'bots', id, 'MEMORY.md')
-    return existsSync(f) ? readFileSync(f, 'utf8') : ''
-  } catch { return '' }
+    if (existsSync(f)) {
+      const md = readFileSync(f, 'utf8').trim()
+      if (md) parts.push(md)
+    }
+  } catch {}
+  return parts.join('\n\n')
 }

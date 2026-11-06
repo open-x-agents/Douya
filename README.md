@@ -52,6 +52,19 @@ You can also copy `.env.example` → `.env` and set `DEEPSEEK_API_KEY` / `COMPOS
 
 Default UI language is **English**. Switch to 中文 from Settings or the compact control under the sidebar nav. Preference is stored in `localStorage` (`odm.lang`).
 
+### Long-term memory
+
+Douya uses the community **[dsh-memory](https://www.npmjs.com/package/dsh-memory)** plugin (local SQLite FTS5 — no embeddings, no sidecar). It registers `memory_write` / `memory_search` / `memory_forget` and a recall prompt section for every agent session. Today’s Chief digest also reads the same store.
+
+```bash
+# once per odm profile (rc.5 needs an exact-version exemption)
+dsh plugin --profile odm allow-version dsh-memory@0.1.0 --dsh-version 0.2.1-rc.5 --accept-risk
+dsh plugin --profile odm add dsh-memory@0.1.0
+# ensure package.json dsh.profile.bundles includes "dsh-memory", then restart
+```
+
+Store path: `$DSH_HOME/memory/memory.db` (with `npm start`, that is `.dsh-odm/memory/memory.db`).
+
 ## How digests and actions work
 
 1. **Per-source bots** gather candidates; **Chief** merges them into Today cards (legacy pipeline is a fallback).
@@ -90,7 +103,7 @@ Restart after pulls: `npm start` or your usual `scripts/.odm-restart.sh`.
 
 ## Status
 
-Shipped and in active use locally: multi-bot digests, desktop UX, pending-confirm sends, outcome sync across chats, English/中文 chrome.
+Shipped and in active use locally: multi-bot digests, desktop UX, pending-confirm sends, outcome sync across chats, English/中文 chrome, dsh-memory long-term memory.
 
 Still evolving: denser mobile layout polish, richer source coverage, and digest quality.
 

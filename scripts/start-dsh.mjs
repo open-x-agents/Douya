@@ -58,6 +58,26 @@ try {
     console.log(`🖼  Profile DeepSeek route now serves ${DEEPSEEK_DEFAULT_MODEL} (text+image): ${patch}`)
   }
 } catch (err) { console.warn(`[start-dsh] profile catalog update skipped: ${err?.message || err}`) }
+
+// Long-term memory: community plugin `dsh-memory` (SQLite FTS5). Chat tools + prompt
+// section come from the plugin; Muse digest reads the same $DSH_HOME/memory/memory.db.
+try {
+  const profilePkg = join(userProfile, 'package.json')
+  if (existsSync(profilePkg)) {
+    const pkg = JSON.parse(readFileSync(profilePkg, 'utf8'))
+    const bundles = pkg?.dsh?.profile?.bundles || []
+    const deps = pkg?.dependencies || {}
+    if (!bundles.includes('dsh-memory') || !deps['dsh-memory']) {
+      console.warn('[start-dsh] dsh-memory not in odm profile — chat long-term memory off.')
+      console.warn('  Install: dsh plugin --profile odm allow-version dsh-memory@0.1.0 --dsh-version 0.2.1-rc.5 --accept-risk')
+      console.warn('           dsh plugin --profile odm add dsh-memory@0.1.0')
+      console.warn('  Then add "dsh-memory" to dsh.profile.bundles in ~/.dsh/profiles/odm/package.json')
+    } else {
+      console.log(`🧠 Long-term memory: dsh-memory → ${join(DSH_HOME, 'memory', 'memory.db')}`)
+    }
+  }
+} catch (err) { console.warn(`[start-dsh] memory plugin check skipped: ${err?.message || err}`) }
+
 process.env.ODM_CHAT_MODEL = chatModel
 process.env.OPENAI_BASE_URL ||= 'https://api.deepseek.com'
 process.env.ODM_MUSE_URL = `http://127.0.0.1:${PORT}`

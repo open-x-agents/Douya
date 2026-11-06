@@ -5328,7 +5328,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       return new Date(ts).toLocaleString(odmLang() === 'zh' ? 'zh-CN' : 'en', { month: 'short', day: 'numeric' });
     }
   }
-  function tagLabel(tag) {
+  function memTagLabel(tag) {
     const k = 'memory.tag_' + tag;
     const v = t(k);
     return v === k ? tag : v;
@@ -5366,7 +5366,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const accent = memAccent(tags);
       const pills = [
         m.pinned ? `<span class="mem-pill pin">${escapeHtml(t('memory.pinned'))}</span>` : '',
-        ...tags.slice(0, 3).map(tg => `<span class="mem-pill tag">${escapeHtml(tagLabel(tg))}</span>`),
+        ...tags.slice(0, 3).map(tg => `<span class="mem-pill tag">${escapeHtml(memTagLabel(tg))}</span>`),
       ].join('');
       return `<article class="mem-card${m.pinned ? ' is-pinned' : ''}" data-id="${escapeHtml(String(m.id))}" style="--mem-accent:${accent};animation-delay:${Math.min(i, 12) * 45}ms">
         <div class="mem-mark" aria-hidden="true">${memMark(m.id)}</div>

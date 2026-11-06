@@ -429,6 +429,60 @@ export function readDshMemoryRecall(dshHome, { recentCount = 10, maxChars = 2000
   }
 }
 
+/** Structured rows for Memory 一瞥 UI (pinned first, then recent). */
+export function listDshMemories(dshHome, { limit = 40 } = {}) {
+  const dbPath = join(dshHome || '', 'memory', 'memory.db')
+  if (!dbPath || !existsSync(dbPath)) return { memories: [], total: 0, path: dbPath || null }
+  let db
+  try {
+    const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite')
+    db = new DatabaseSync(dbPath, { readOnly: true })
+    const total = db.prepare('SELECT COUNT(*) AS n FROM memories').get()?.n || 0
+    const pinned = db.prepare('SELECT id, text, tags, pinned, created_at, updated_at FROM memories WHERE pinned = 1 ORDER BY updated_at DESC, id DESC').all()
+    const recentLimit = Math.max(0, Number(limit) || 40)
+    const recent = db.prepare('SELECT id, text, tags, pinned, created_at, updated_at FROM memories WHERE pinned = 0 ORDER BY updated_at DESC, id DESC LIMIT ?').all(recentLimit)
+    const toRow = (r) => ({
+      id: r.id,
+      text: r.text,
+      tags: r.tags ? String(r.tags).split(/\s+/).filter(Boolean) : [],
+      pinned: !!r.pinned,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    })
+    const seen = new Set()
+    const memories = []
+    for (const r of [...pinned, ...recent]) {
+      if (seen.has(r.id)) continue
+      seen.add(r.id)
+      memories.push(toRow(r))
+    }
+    return { memories, total, path: dbPath }
+  } catch {
+    return { memories: [], total: 0, path: dbPath }
+  } finally {
+    try { db?.close() } catch {}
+  }
+}
+
+/** Forget one memory by id (same store the dsh-memory plugin uses). */
+export function forgetDshMemory(dshHome, id) {
+  const n = Number(id)
+  if (!Number.isInteger(n) || n < 1) return { ok: false, forgotten: false, error: 'invalid id' }
+  const dbPath = join(dshHome || '', 'memory', 'memory.db')
+  if (!dbPath || !existsSync(dbPath)) return { ok: false, forgotten: false, error: 'no memory store' }
+  let db
+  try {
+    const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite')
+    db = new DatabaseSync(dbPath)
+    const forgotten = db.prepare('DELETE FROM memories WHERE id = ?').run(n).changes > 0
+    return { ok: true, forgotten, id: n }
+  } catch (err) {
+    return { ok: false, forgotten: false, error: err?.message || String(err) }
+  } finally {
+    try { db?.close() } catch {}
+  }
+}
+
 /** Chief brief memory: dsh-memory recall first, then ds-bot MEMORY.md if present. */
 export async function readChiefMemory(dshHome) {
   const parts = []

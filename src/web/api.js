@@ -28,6 +28,7 @@ import { findTimetableCard, readPlan, applyPlanEdit, todaysCalendarEvents } from
 import { uiView } from '../ui/ops.js';
 import { createSurfaceService } from '../ui/surfaces.js';
 import { resolveDisplayName, lastGithubIdentity } from './aggregation.js';
+import { listDshMemories, forgetDshMemory } from '../digest/runner.js';
 import { recordCompletion, setItemStatus, clearItemStatus, annotateCards, cardItemUrls } from '../host/store.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1862,6 +1863,23 @@ export function createApiRouter(ctx) {
     },
 
     /**
+     * GET /api/opendigitalmate/memories — Memory 一瞥 list from dsh-memory SQLite.
+     */
+    async listMemories({ limit = 40 } = {}) {
+      const dshHome = process.env.DSH_HOME || null;
+      const data = listDshMemories(dshHome, { limit });
+      return { success: true, ...data, home: dshHome };
+    },
+
+    /**
+     * POST /api/opendigitalmate/memories/forget — forget one memory by id.
+     */
+    async forgetMemory({ id } = {}) {
+      const dshHome = process.env.DSH_HOME || null;
+      return forgetDshMemory(dshHome, id);
+    },
+
+    /**
      * GET /api/llm/config - Get LLM configuration
      */
     async getLLMConfig() {
@@ -2323,6 +2341,26 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
         const { html } = await router.composioCallback({ status: url.searchParams.get('status') || '', connectedAccountId: url.searchParams.get('connected_account_id') || '', error: url.searchParams.get('error') || '' });
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
         res.end(html);
+      } else if (url.pathname === '/api/opendigitalmate/memories' && req.method === 'GET') {
+        const lim = Number(url.searchParams.get('limit') || 40);
+        const data = await router.listMemories({ limit: Number.isFinite(lim) ? lim : 40 });
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(data));
+      } else if (url.pathname === '/api/opendigitalmate/memories/forget' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const data = body ? JSON.parse(body) : {};
+            const response = await router.forgetMemory(data);
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: err.message || 'Invalid request' }));
+          }
+        });
+        return;
       } else if (url.pathname === '/api/llm/config' && req.method === 'GET') {
         const data = await router.getLLMConfig();
         res.writeHead(200, { 'Content-Type': 'application/json' });

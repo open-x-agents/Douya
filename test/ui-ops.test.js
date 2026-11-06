@@ -52,6 +52,8 @@ test('ops only reference real, active cards and their own items', () => {
   assert.equal(validateUiOp({ op: 'deleteEverything' }, s).ok, false)
   assert.equal(validateUiOp({ op: 'navigate', page: 'sources' }, s).op.page, 'sources')
   assert.equal(validateUiOp({ op: 'navigate', page: '信源状态' }, s).op.page, 'sources')
+  assert.equal(validateUiOp({ op: 'navigate', page: 'memory' }, s).op.page, 'memory')
+  assert.equal(validateUiOp({ op: 'navigate', page: '回忆' }, s).op.page, 'memory')
   assert.equal(validateUiOp({ op: 'navigate', page: 'http://x' }, s).ok, false)
   assert.equal(validateUiOp({ op: 'filter', sources: 'jira' }, s).ok, false)
   assert.equal(validateUiOp({ op: 'filter' }, s).ok, false)

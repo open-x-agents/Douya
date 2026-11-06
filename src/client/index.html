@@ -641,6 +641,54 @@
   .size-normal .metrics .m b{font-size:22px}
   .w-links .lk:nth-child(n+4){display:none}
 
+
+  /* ===== Memory 一瞥 ===== */
+  #v-memory{padding:36px 44px 80px;max-width:980px}
+  .mem-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:28px}
+  .mem-hero .eyebrow{color:var(--violet);letter-spacing:.1em}
+  .mem-hero h1{font-size:32px;line-height:1.15;font-weight:650;letter-spacing:-.025em;margin:6px 0 0;background:linear-gradient(120deg,#3a3558 10%,#8a74d0 55%,#22a898 120%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .mem-hero p{margin:10px 0 0;font-size:14px;color:var(--ink2);max-width:42ch;line-height:1.5}
+  .mem-hero-side{display:flex;flex-direction:column;align-items:flex-end;gap:10px;flex-shrink:0}
+  .mem-count{font-size:12.5px;color:var(--ink3);background:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.9);border-radius:999px;padding:6px 12px;box-shadow:var(--shadow)}
+  .mem-count b{color:var(--ink);font-weight:650}
+  .mem-refresh{border:0;cursor:pointer;font:600 12.5px/1 inherit;color:var(--violet);background:var(--violet-soft);padding:8px 14px;border-radius:999px;transition:.2s var(--ease)}
+  .mem-refresh:hover{transform:translateY(-1px);box-shadow:0 6px 14px -8px rgba(138,116,208,.55)}
+  .mem-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+  .mem-card{position:relative;background:rgba(255,255,255,.78);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.95);border-radius:20px;padding:18px 18px 14px;box-shadow:var(--shadow);transition:.28s var(--ease);animation:memIn .55s var(--ease-out) both;overflow:hidden;min-height:132px;display:flex;flex-direction:column}
+  .mem-card::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--mem-accent,#8a74d0);opacity:.85;border-radius:20px 0 0 20px}
+  .mem-card:hover{transform:translateY(-3px) rotate(-.2deg);box-shadow:var(--shadow-hi)}
+  .mem-card.is-pinned{background:linear-gradient(155deg,rgba(255,255,255,.92),rgba(239,235,250,.88))}
+  .mem-card.is-leaving{opacity:0;transform:scale(.94) translateY(8px);pointer-events:none}
+  .mem-card .mem-mark{font-size:22px;line-height:1;margin-bottom:8px;filter:saturate(1.05)}
+  .mem-card .mem-text{font-size:14.5px;line-height:1.55;font-weight:550;color:var(--ink);flex:1;letter-spacing:-.01em}
+  .mem-card .mem-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .mem-card .mem-when{font-size:11.5px;color:var(--ink3);font-variant-numeric:tabular-nums}
+  .mem-pill{font-size:11px;font-weight:600;border-radius:999px;padding:2px 8px;background:rgba(30,40,80,.05);color:var(--ink2)}
+  .mem-pill.pin{background:var(--violet-soft);color:#6450a8}
+  .mem-pill.tag{background:color-mix(in srgb, var(--mem-accent,#8a74d0) 14%, #fff);color:color-mix(in srgb, var(--mem-accent,#8a74d0) 70%, #1c1d21)}
+  .mem-forget{margin-left:auto;border:0;cursor:pointer;font:600 11.5px/1 inherit;color:var(--ink3);background:transparent;padding:5px 8px;border-radius:8px;opacity:0;transition:.2s var(--ease)}
+  .mem-card:hover .mem-forget,.mem-forget[data-confirm]{opacity:1}
+  .mem-forget:hover{background:var(--rose-soft);color:var(--rose)}
+  .mem-forget[data-confirm]{background:var(--rose);color:#fff;opacity:1}
+  @keyframes memIn{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
+  .mem-empty{margin-top:8px;background:linear-gradient(160deg,rgba(255,255,255,.88),rgba(239,235,250,.75) 55%,rgba(227,246,243,.7));backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.95);border-radius:24px;padding:42px 36px;box-shadow:var(--shadow);text-align:center;animation:memIn .6s var(--ease-out) both}
+  .mem-empty .mem-empty-mark{width:72px;height:72px;margin:0 auto 14px;display:grid;place-items:center;border-radius:22px;background:rgba(255,255,255,.8);box-shadow:var(--shadow)}
+  .mem-empty h2{margin:0;font-size:22px;font-weight:650;letter-spacing:-.02em}
+  .mem-empty p{margin:10px auto 0;max-width:38ch;font-size:14px;color:var(--ink2);line-height:1.55}
+  .mem-empty .step{margin-top:18px}
+  .settings-apps-moved{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .settings-apps-moved p{margin:0;font-size:13.5px;color:var(--ink2);line-height:1.5;max-width:48ch}
+  @media (max-width:820px){
+    #v-memory{padding:24px 18px 70px}
+    .mem-hero{flex-direction:column;align-items:flex-start}
+    .mem-hero-side{align-items:flex-start}
+    .mem-hero h1{font-size:26px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .mem-card,.mem-empty{animation:none!important}
+    .mem-card:hover{transform:none}
+  }
+
   /* ===== v2 visual system (Muse / Today inspired) ===== */
   :root{
     --ink:#1c1d21; --ink2:#5a5e68; --ink3:#9296a0; --line:rgba(28,29,33,.07);
@@ -1900,6 +1948,7 @@
     </div>
     <div class="nav on" data-view="today" data-i18n="nav.today">Today</div>
     <div class="nav" data-view="sources" data-i18n="nav.sources">Sources</div>
+    <div class="nav" data-view="memory" data-i18n="nav.memory">Memories</div>
     <div class="grp" data-i18n="nav.settings_group">Settings</div>
     <div class="nav" data-view="settings" data-i18n="nav.settings">Settings</div>
     <div class="lang-row"><span data-i18n="lang.label">Language</span>
@@ -1942,6 +1991,22 @@
 
           <div id="digestRunBox" class="digest-run-box"></div>
           <div id="sourcesContent"></div>
+        </section>
+
+        <!-- 回忆一瞥 -->
+        <section class="view" id="v-memory">
+          <header class="mem-hero">
+            <div>
+              <div class="eyebrow" data-i18n="memory.eyebrow">Memory glimpse</div>
+              <h1 data-i18n="memory.title">What Douya remembers</h1>
+              <p data-i18n="memory.sub">Moments Douya keeps across chats — pinned ones stay close.</p>
+            </div>
+            <div class="mem-hero-side">
+              <div class="mem-count" id="memCount"><b>–</b></div>
+              <button type="button" class="mem-refresh" id="memRefresh" data-i18n="memory.refresh">Refresh</button>
+            </div>
+          </header>
+          <div id="memContent" class="mem-grid" aria-live="polite"></div>
         </section>
 
         <!-- 设置 -->
@@ -2044,12 +2109,11 @@
             </div>
           </div>
 
-          <!-- Available Apps Grid -->
-          <div style="margin-top:24px">
-            <h4 style="font-size:15px;font-weight:600;margin:0 0 12px" data-i18n="settings.apps">Connectable apps</h4>
-            <div id="appsGrid" class="apps-grid">
-              <!-- Apps will be loaded here -->
-            </div>
+          <!-- Apps live on Sources (less is more — one place for connection status) -->
+          <div class="card a in settings-apps-moved" id="appsMovedCard" style="margin-top:24px">
+            <p data-i18n="settings.apps_moved">Connect and disconnect apps on the Sources page — one place for connection status.</p>
+            <button type="button" class="btn primary" id="goSourcesBtn" data-i18n="settings.apps_cta">Go to Sources</button>
+            <div id="appsGrid" hidden></div>
           </div>
 
           <!-- Digest Settings -->
@@ -2177,7 +2241,7 @@
   });
   try { I18N.applyDom(); syncLangSwitch(); } catch (_) {}
 
-  const views = { today: $('v-today'), sources: $('v-sources'), settings: $('v-settings') };
+  const views = { today: $('v-today'), sources: $('v-sources'), memory: $('v-memory'), settings: $('v-settings') };
   
   // View navigation
   document.querySelectorAll('.nav[data-view]').forEach(nav => {
@@ -4797,7 +4861,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   }
   window.odmWatchComposio = odmWatchComposio;
   // Deep link: the callback page (no opener) redirects to …/app#sources.
-  const hashView = () => { const v = (location.hash || '').slice(1); if (v === 'sources' || v === 'settings') showView(v); };
+  const hashView = () => { const v = (location.hash || '').slice(1); if (v === 'sources' || v === 'settings' || v === 'memory') showView(v); };
   setTimeout(hashView, 0); window.addEventListener('hashchange', hashView);
   window.__reloadSources = () => { if ($('v-sources').classList.contains('on')) loadSources(true); };
 
@@ -4949,13 +5013,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         $('entityIdInput').value = cfg.entityId;
       }
 
-      // Load apps
-      const appsRes = await fetch('/api/composio/apps');
-      const appsData = await appsRes.json();
-      
-      const grid = $('appsGrid');
-      grid.className = '';
-      grid.innerHTML = (appsData.apps && appsData.apps.length) ? renderAppTiles(appsData.apps) : '<p style="color:var(--ink3);padding:20px;text-align:center">暂无可用应用</p>';
+      // Apps / connection status live on Sources only (less is more).
+      const go = $('goSourcesBtn');
+      if (go && !go._bound) {
+        go._bound = true;
+        go.addEventListener('click', () => showView('sources'));
+      }
     } catch (error) {
       console.error('Failed to load Composio settings:', error);
     }
@@ -5233,6 +5296,142 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function failBubbleHtml(text) {
     return `<div class="chat-fail"><span>${escMd(text)}</span><button class="chat-retry" type="button">${t('chat.retry')}</button></div>`;
   }
+
+  // ===== Memory 一瞥 (dsh-memory SQLite) =====
+  const MEM_MARKS = ['🌱', '✨', '📌', '🫧', '🌙', '🫖', '📎', '💫', '🪄', '🍃'];
+  const MEM_ACCENTS = {
+    preference: '#22a898', decision: '#8a74d0', project: '#4f9de8', person: '#e2667a',
+    habit: '#f0a35e', fact: '#5b6275', default: '#8a74d0',
+  };
+  function memAccent(tags) {
+    const t0 = (tags && tags[0] || '').toLowerCase();
+    if (MEM_ACCENTS[t0]) return MEM_ACCENTS[t0];
+    let h = 0; for (const c of t0 || 'm') h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    const palette = ['#22a898', '#8a74d0', '#4f9de8', '#e2667a', '#f0a35e', '#6450a8'];
+    return palette[h % palette.length];
+  }
+  function memMark(id) { return MEM_MARKS[Math.abs(Number(id) || 0) % MEM_MARKS.length]; }
+  function memAgo(ts) {
+    if (!ts) return '';
+    const seconds = Math.max(0, Math.round((Date.now() - Number(ts)) / 1000));
+    if (seconds < 60) return t('memory.ago_just');
+    try {
+      const format = new Intl.RelativeTimeFormat(odmLang() === 'zh' ? 'zh-CN' : 'en', { numeric: 'auto' });
+      const minutes = Math.round(seconds / 60);
+      if (minutes < 60) return format.format(-minutes, 'minute');
+      const hours = Math.round(minutes / 60);
+      if (hours < 24) return format.format(-hours, 'hour');
+      const days = Math.round(hours / 24);
+      if (days < 30) return format.format(-days, 'day');
+      return format.format(-Math.round(days / 30), 'month');
+    } catch (_) {
+      return new Date(ts).toLocaleString(odmLang() === 'zh' ? 'zh-CN' : 'en', { month: 'short', day: 'numeric' });
+    }
+  }
+  function tagLabel(tag) {
+    const k = 'memory.tag_' + tag;
+    const v = t(k);
+    return v === k ? tag : v;
+  }
+  function paintMemories(data) {
+    const box = $('memContent');
+    const countEl = $('memCount');
+    if (!box) return;
+    const rows = (data && data.memories) || [];
+    const total = (data && data.total) != null ? data.total : rows.length;
+    if (countEl) {
+      countEl.innerHTML = total === 1
+        ? `<b>${escapeHtml(t('memory.count_one'))}</b>`
+        : `<b>${escapeHtml(t('memory.count', { n: total }))}</b>`;
+    }
+    if (!rows.length) {
+      box.className = '';
+      box.innerHTML = `<div class="mem-empty">
+        <div class="mem-empty-mark">${typeof douyaSvg === 'function' ? douyaSvg({ size: 56, state: 'idle', id: 'mem' }) : '🌱'}</div>
+        <h2>${escapeHtml(t('memory.empty_title'))}</h2>
+        <p>${escapeHtml(t('memory.empty_body'))}</p>
+        <button type="button" class="step primary" id="memEmptyCta">${escapeHtml(t('memory.empty_cta'))}</button>
+      </div>`;
+      $('memEmptyCta')?.addEventListener('click', () => {
+        showView('today');
+        openTodayChat({ byUser: true });
+        const i = $('todayChatInput');
+        if (i) { i.value = t('memory.prompt'); i.focus(); }
+      });
+      return;
+    }
+    box.className = 'mem-grid';
+    box.innerHTML = rows.map((m, i) => {
+      const tags = Array.isArray(m.tags) ? m.tags : String(m.tags || '').split(/\s+/).filter(Boolean);
+      const accent = memAccent(tags);
+      const pills = [
+        m.pinned ? `<span class="mem-pill pin">${escapeHtml(t('memory.pinned'))}</span>` : '',
+        ...tags.slice(0, 3).map(tg => `<span class="mem-pill tag">${escapeHtml(tagLabel(tg))}</span>`),
+      ].join('');
+      return `<article class="mem-card${m.pinned ? ' is-pinned' : ''}" data-id="${escapeHtml(String(m.id))}" style="--mem-accent:${accent};animation-delay:${Math.min(i, 12) * 45}ms">
+        <div class="mem-mark" aria-hidden="true">${memMark(m.id)}</div>
+        <div class="mem-text">${escapeHtml(m.text || '')}</div>
+        <div class="mem-meta">${pills}<span class="mem-when">${escapeHtml(memAgo(m.updatedAt || m.createdAt))}</span>
+          <button type="button" class="mem-forget" data-id="${escapeHtml(String(m.id))}" aria-label="${escapeHtml(t('memory.forget'))}">${escapeHtml(t('memory.forget'))}</button>
+        </div>
+      </article>`;
+    }).join('');
+    box.querySelectorAll('.mem-forget').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-id');
+        if (!btn.hasAttribute('data-confirm')) {
+          btn.setAttribute('data-confirm', '1');
+          btn.textContent = t('memory.forget_confirm');
+          setTimeout(() => { if (btn.isConnected && btn.hasAttribute('data-confirm')) { btn.removeAttribute('data-confirm'); btn.textContent = t('memory.forget'); } }, 3500);
+          return;
+        }
+        btn.disabled = true;
+        try {
+          const r = await fetch('/api/opendigitalmate/memories/forget', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: Number(id) }) }).then(x => x.json());
+          if (r && (r.forgotten || r.ok)) {
+            const card = box.querySelector(`.mem-card[data-id="${CSS.escape(String(id))}"]`);
+            if (card) {
+              card.classList.add('is-leaving');
+              setTimeout(() => loadMemories({ force: true }), 280);
+            } else loadMemories({ force: true });
+            try { showUiToast(t('memory.forgotten')); } catch (_) {}
+          } else {
+            btn.disabled = false;
+            btn.removeAttribute('data-confirm');
+            btn.textContent = t('memory.forget');
+          }
+        } catch (_) {
+          btn.disabled = false;
+          btn.removeAttribute('data-confirm');
+          btn.textContent = t('memory.forget');
+        }
+      });
+    });
+  }
+  let memSeq = 0;
+  async function loadMemories() {
+    const seq = ++memSeq;
+    const box = $('memContent');
+    if (box && !box.querySelector('.mem-card') && !box.querySelector('.mem-empty')) {
+      box.className = '';
+      box.innerHTML = `<div class="loading">${escapeHtml(t('today.loading'))}</div>`;
+    }
+    try {
+      const data = await fetch('/api/opendigitalmate/memories?limit=40', { cache: 'no-store' }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+      if (seq !== memSeq) return;
+      paintMemories(data);
+    } catch (err) {
+      if (seq !== memSeq) return;
+      if (box) {
+        box.className = '';
+        box.innerHTML = `<div class="error">${escapeHtml(err.message || String(err))}</div>`;
+      }
+    }
+  }
+  window.loadMemories = loadMemories;
+  $('memRefresh')?.addEventListener('click', () => loadMemories());
+
   // ===== 豆芽 Intelligent UI (P1): view ops from Chief + 当前视图 context =====
   // Ops arrive as plain data (op name + card / item ids + short text) and are applied with the existing
   // components; nothing from the server is ever inserted as HTML. Text goes through textContent.
@@ -5245,6 +5444,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     document.querySelectorAll('.nav').forEach(n => n.classList.toggle('on', n.getAttribute('data-view') === view));
     Object.keys(views).forEach(k => views[k].classList.toggle('on', k === view));
     if (view === 'sources') loadSources();
+    if (view === 'memory') loadMemories();
     if (view === 'settings') { checkConfig(); loadLLMSettings(); loadComposioSettings(); }
     reportView();
   }

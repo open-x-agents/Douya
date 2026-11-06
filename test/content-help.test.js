@@ -116,6 +116,6 @@ test('a single actionable mail (email-action) offers a reply draft, not just 明
   const { prepareCardActions } = await import('../src/web/card-prep.js')
   const card = { id: 'e1', type: 'email-action', source: 'gmail', title: 'Fledge 等你回答 jitagent 的工单走向', waiting: 'you', status: 'active',
     blocks: [{ type: 'link-list', links: [{ title: '[Fledge] 团队需要你回答：Birfy/jitagent', url: 'https://mail.google.com/mail/u/0/#inbox/1a1a3f2144f1d300', type: 'email', from: 'fledge@hugoxk.online' }] }] }
-  const p = prepareCardActions(card, { max: 3 })
+  const p = prepareCardActions(card, { max: 3, lang: 'zh' })
   assert.equal(p[0].id, 'reply-first'); assert.match(p[0].label, /^起草回复/); assert.match(p[0].prompt, /等我确认再发/)
 })

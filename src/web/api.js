@@ -989,7 +989,7 @@ export function createApiRouter(ctx) {
           cards: annotateCards(activeCards, state.itemStatus).map(c => {
             if (c.type === 'view') return { ...c, view: surfaceService.cardView(c) };
             const cleared = applyClearance(c, state.itemStatus || {});
-            const prepared = cleared.clearance === 'cleared' ? [] : prepareCardActions(cleared, { itemStatus: state.itemStatus || {} });
+            const prepared = cleared.clearance === 'cleared' ? [] : prepareCardActions(cleared, { itemStatus: state.itemStatus || {}, lang: locale });
             const faceOpts = { itemStatus: state.itemStatus || {}, events: calToday, lang: locale };
             const faceView = hydrateFace(cleared, cleared.face || autoFace(cleared), faceOpts) || (cleared.face ? hydrateFace(cleared, autoFace(cleared), faceOpts) : null);
             return { ...cleared, workish: isWorkish(cleared), prepared, faceView };

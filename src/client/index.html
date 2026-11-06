@@ -2003,7 +2003,7 @@
               </div>
 
               <div>
-                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:4px">模型</label>
+                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:4px" data-i18n="settings.model">Model</label>
                 <input type="text" id="llmModelInput" placeholder="gpt-4o" 
                   style="width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px" />
               </div>
@@ -2290,15 +2290,15 @@
 
   function renderGroupCard(card) {
     const el = document.createElement('div');
-    const w = card.waiting === 'you' ? ['you', '等你处理'] : card.waiting === 'others' ? ['others', '等别人'] : ['fyi', '仅供参考'];
+    const w = card.waiting === 'you' ? ['you', t('chat.wait_you')] : card.waiting === 'others' ? ['others', t('chat.wait_others')] : ['fyi', t('chat.wait_fyi')];
     const links = (card.links || []).filter(l => l && /^https?:/.test(l.url)).slice(0, 3);
     el.className = `gcard g-${w[0]}`;
     el.innerHTML = `
       <div class="gc-top"><span class="gc-count">${Number(card.count) || 0}</span>
-        <div class="gc-h"><b>${escapeHtml(card.title || card.label || '')}</b><span class="gc-w ${w[0]}">${w[1]}</span></div></div>
+        <div class="gc-h"><b>${escapeHtml(card.title || card.label || '')}</b><span class="gc-w ${w[0]}">${escapeHtml(w[1])}</span></div></div>
       ${card.why || card.description ? `<p class="gc-why">${escapeHtml(card.why || card.description)}</p>` : ''}
       ${Array.isArray(card.breakdown) && card.breakdown.length > 1 ? `<div class="gc-bd">${card.breakdown.slice(0, 4).map(b => `<span>${escapeHtml(String(b.label).split('/').pop())} <b>×${b.count}</b></span>`).join('')}</div>` : ''}
-      ${card.nextAction && !VAGUE_NEXT.test(card.nextAction) ? `<div class="gc-next"><span>下一步</span>${escapeHtml(card.nextAction)}</div>` : ''}
+      ${card.nextAction && !VAGUE_NEXT.test(card.nextAction) ? `<div class="gc-next"><span>${escapeHtml(t('chat.next'))}</span>${escapeHtml(card.nextAction)}</div>` : ''}
       ${links.length ? `<div class="gc-links">${links.map(l => `<a href="${escapeHtml(l.url)}" target="_blank" rel="noopener" title="${escapeHtml(l.title || '')}">${escapeHtml(l.title || l.url)}</a>`).join('')}</div>` : ''}`;
     return el;
   }
@@ -2308,7 +2308,7 @@
     if (!list.length) return null;
     const el = document.createElement('div');
     el.className = 'cites';
-    el.innerHTML = `<span class="cites-h">依据</span>` + list.slice(0, 6).map((c, i) => `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" title="${escapeHtml(c.title || c.url)}"><i>${i + 1}</i>${escapeHtml(c.label || '')}${c.title ? ' · ' + escapeHtml(clip(c.title, 26)) : ''}</a>`).join('');
+    el.innerHTML = `<span class="cites-h">${escapeHtml(t('chat.cites'))}</span>` + list.slice(0, 6).map((c, i) => `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" title="${escapeHtml(c.title || c.url)}"><i>${i + 1}</i>${escapeHtml(c.label || '')}${c.title ? ' · ' + escapeHtml(clip(c.title, 26)) : ''}</a>`).join('');
     return el;
   }
 
@@ -2669,7 +2669,9 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   let lastCards = [];
   let lastToday = {};
   const CAT_ZH = { meal: '用餐', focus: '专注', work: '工作', break: '休息', exercise: '运动', meeting: '会议', review: '评审', admin: '杂务', learning: '学习', personal: '个人', winddown: '收尾' };
-  const TAG_ZH = { 'In Progress': '进行中', Active: '活跃', 'Needs Review': '待你审', Waiting: '等待中', Done: '已完成' };
+  const TAG_KEY = { 'In Progress': 'tag.in_progress', '进行中': 'tag.in_progress', Active: 'tag.active', '活跃': 'tag.active', 'Needs Review': 'tag.needs_review', '待你审': 'tag.needs_review', Waiting: 'tag.waiting', '等待中': 'tag.waiting', Done: 'tag.done', '已完成': 'tag.done', '等你': 'tag.waiting_you', '优先': 'tag.priority', '等别人': 'tag.waiting_others', Priority: 'tag.priority', 'Waiting on you': 'tag.waiting_you', 'Waiting on others': 'tag.waiting_others' };
+  const tagLabel = (text) => { const k = TAG_KEY[String(text || '')]; return k ? t(k) : String(text || ''); };
+  const TAG_ZH = { 'In Progress': '进行中', Active: '活跃', 'Needs Review': '待你审', Waiting: '等待中', Done: '已完成' }; // legacy alias
   const TITLE_ZH = { 'Lunch break': '午餐休息', 'Focus time': '专注时段', Breakfast: '早餐', Dinner: '晚餐', 'Evening walk': '晚间散步' };
   const SRC_ZH = { github: 'GitHub · 代码协作', gmail: 'Gmail · 邮件', googlecalendar: '日历 · 日程', slack: 'Slack · 消息', manual: '手动 · 待办' };
 
@@ -3213,39 +3215,39 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const links = deepLinks(card);
     const spark = blockOf(card, 'sparkline');
     const hasSpark = spark && (spark.data || []).some(v => v > 0);
-    const SRC_SHORT = { github: 'GitHub', gmail: 'Gmail', googlecalendar: '日历', slack: 'Slack', manual: '待办' };
-    const label = isMailGroup(card) ? '邮件' : (SRC_SHORT[card.source] || SRC_ZH[card.source] || (card.source || '动态'));
+    const SRC_SHORT = { github: t('src.github'), gmail: t('src.gmail'), googlecalendar: t('src.calendar'), slack: t('src.slack'), manual: t('src.manual') };
+    const label = isMailGroup(card) ? t('src.mail') : (SRC_SHORT[card.source] || SRC_ZH[card.source] || (card.source || t('src.misc')));
     const srcClass = 'src-' + String(card.source === 'googlecalendar' ? 'calendar' : (isMailGroup(card) ? 'mail' : (card.source || 'misc'))).replace(/[^a-z]/gi, '');
     const avLetter = r ? r.owner.slice(0, 1).toUpperCase() : (label.slice(0, 1) || '?');
     const av = r ? `<img class="av" src="https://github.com/${encodeURIComponent(r.owner)}.png?size=80" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'av av-f ${srcClass}',textContent:'${escapeHtml(avLetter)}'}))">` : `<span class="av av-f ${srcClass}">${escapeHtml(avLetter)}</span>`;
-    const review = statOf(card, '待你审') || statOf(card, '审');
+    const review = statOf(card, '待你审') || statOf(card, '审') || statOf(card, 'Needs Review') || statOf(card, 'review');
     const mine = statOf(card, '你开的') || pr;
     let metrics = '';
     if (review || mine || iss) {
       metrics = `<div class="metrics">
-        ${review ? `<div class="m"><b class="c-rose">${review}</b><span>待你审</span></div>` : ''}
-        ${mine ? `<div class="m"><b class="c-teal">${mine}</b><span>你开的 PR</span></div>` : ''}
-        ${iss ? `<div class="m"><b class="c-violet">${iss}</b><span>待处理 issue</span></div>` : ''}
+        ${review ? `<div class="m"><b class="c-rose">${review}</b><span>${escapeHtml(t('metric.review_you'))}</span></div>` : ''}
+        ${mine ? `<div class="m"><b class="c-teal">${mine}</b><span>${escapeHtml(t('metric.your_prs'))}</span></div>` : ''}
+        ${iss ? `<div class="m"><b class="c-violet">${iss}</b><span>${escapeHtml(t('metric.open_issues'))}</span></div>` : ''}
         <div class="m-bar"><i class="b-pr" style="flex:${Math.max(mine||pr,0)}"></i><i class="b-iss" style="flex:${Math.max(iss,0)}"></i></div>
       </div>`;
     }
     if (isMailGroup(card)) {
       const total = linksOf(card).length, open = openItemCount(card), you = card.waiting === 'you';
       metrics = `<div class="metrics mail-m">
-        <div class="m"><b class="${you ? 'c-rose' : 'c-teal'}">${open}</b><span>封待看</span></div>
-        ${total - open ? `<div class="m"><b class="c-violet">${total - open}</b><span>已处理</span></div>` : ''}
-        <span class="pill ${you ? 'pill-hot' : 'pill-gray'} need-pill">${you ? '需要你处理' : '无需处理'}</span>
+        <div class="m"><b class="${you ? 'c-rose' : 'c-teal'}">${open}</b><span>${escapeHtml(t('metric.mail_open'))}</span></div>
+        ${total - open ? `<div class="m"><b class="c-violet">${total - open}</b><span>${escapeHtml(t('metric.mail_done'))}</span></div>` : ''}
+        <span class="pill ${you ? 'pill-hot' : 'pill-gray'} need-pill">${escapeHtml(you ? t('metric.need_you') : t('metric.no_action'))}</span>
       </div>`;
     }
     const bar = (card.blocks || []).find(b => b.type === 'chart' && b.chartType === 'bar');
     if (bar && (bar.data || []).some(v => v > 0)) {
       const mx = Math.max(...bar.data, 1);
-      metrics += `<div class="mini-bars" title="等你 vs 等别人">${(bar.data||[]).map((v,i)=>`<div class="mb"><i style="height:${Math.max(8,(v/mx)*36)}px" class="${i===0?'b-pr':'b-iss'}"></i><span>${escapeHtml((bar.labels||[])[i]||'')}<b>${v}</b></span></div>`).join('')}</div>`;
+      metrics += `<div class="mini-bars" title="${escapeHtml(t('metric.wait_vs'))}">${(bar.data||[]).map((v,i)=>`<div class="mb"><i style="height:${Math.max(8,(v/mx)*36)}px" class="${i===0?'b-pr':'b-iss'}"></i><span>${escapeHtml((bar.labels||[])[i]||'')}<b>${v}</b></span></div>`).join('')}</div>`;
     }
     const tags = ((card.blocks || []).find(b => b.type === 'tags') || {}).tags || [];
     const avatars = (blockOf(card, 'avatars') || {}).urls || [];
     const avRow = avatars.length ? `<div class="av-row">${avatars.slice(0,5).map(u=>`<img class="av sm" src="${escapeHtml(u)}" alt="" loading="lazy" onerror="this.style.display='none'"/>`).join('')}</div>` : '';
-    const tagHtml = tags.length ? `<div class="w-tags">${tags.map(t=>{const tx=TAG_ZH[t.text]||t.text; return `<span class="pill pill-${escapeHtml(t.color||'gray')}">${escapeHtml(tx)}</span>`;}).join('')}</div>` : '';
+    const tagHtml = tags.length ? `<div class="w-tags">${tags.map(tg=>{const tx=tagLabel(tg.text); return `<span class="pill pill-${escapeHtml(tg.color||'gray')}">${escapeHtml(tx)}</span>`;}).join('')}</div>` : '';
     if (hasSpark) {
       const d = spark.data, mx = Math.max(...d, 1);
       const pts = d.map((v, i) => `${(i / (d.length - 1)) * 100},${30 - (v / mx) * 26}`).join(' ');
@@ -3254,10 +3256,14 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const waitingOnly = !!card.waitingOnly || card.clearance === 'waiting';
     const na = waitingOnly ? '' : nextAction(card);
     const hasFace = !!(card.faceView && !waitingOnly);
-    // With a live face, drop redundant status pills (进行中/你开的); keep 等你 / 优先 only.
-    const slimTags = (tags || []).filter(t => /等你|待你审|优先/.test(String(t.text || '')) || TAG_ZH[t.text] === '待你审');
+    // With a live face, drop redundant status pills; keep waiting-on-you / needs-review / priority only.
+    const slimTags = (tags || []).filter(tg => {
+      const raw = String(tg.text || '');
+      const key = TAG_KEY[raw];
+      return key === 'tag.waiting_you' || key === 'tag.needs_review' || key === 'tag.priority' || /等你|待你审|优先|Needs Review|Waiting on you|Priority/i.test(raw);
+    });
     const liveTags = waitingOnly || hasFace
-      ? (slimTags.length ? `<div class="w-tags">${slimTags.map(t => { const tx = TAG_ZH[t.text] || t.text; return `<span class="pill pill-${escapeHtml(t.color || 'gray')}">${escapeHtml(tx)}</span>`; }).join('')}</div>` : '')
+      ? (slimTags.length ? `<div class="w-tags">${slimTags.map(tg => { const tx = tagLabel(tg.text); return `<span class="pill pill-${escapeHtml(tg.color || 'gray')}">${escapeHtml(tx)}</span>`; }).join('')}</div>` : '')
       : tagHtml;
     const prep = waitingOnly ? [] : (card.prepared || []);
     const primary = prep.find(p => p.kind !== 'snooze') || null;
@@ -3674,7 +3680,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function renderOffHours(offCards, cards) {
     if (!offCards.length) return '';
     const open = offOpen();
-    return `<div class="offhours${open ? ' open' : ''}"><button type="button" class="off-toggle" id="offToggle" aria-expanded="${open}">🌙 下班时间 · ${offCards.length} 张工作卡先收起来了 <i>${open ? '收起 ▴' : '展开 ▾'}</i></button>${open ? `<div class="grid2 grid-off">${offCards.map(c => renderWorkTile(c, cards.indexOf(c))).join('')}</div>` : ''}</div>`;
+    return `<div class="offhours${open ? ' open' : ''}"><button type="button" class="off-toggle" id="offToggle" aria-expanded="${open}">🌙 ${escapeHtml(t('today.offhours', { n: offCards.length }))} <i>${open ? escapeHtml(t('today.offhours_collapse')) : escapeHtml(t('today.offhours_expand'))}</i></button>${open ? `<div class="grid2 grid-off">${offCards.map(c => renderWorkTile(c, cards.indexOf(c))).join('')}</div>` : ''}</div>`;
   }
   function bindOffHours(container) {
     const b = container.querySelector('#offToggle'); if (!b) return;
@@ -3687,7 +3693,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const r = repoOf(c);
       const name = r ? r.name : clip(c.title, 18);
       const n = c.waitingCount || 0;
-      return `<button type="button" class="wait-chip" data-wait-id="${escapeHtml(c.id)}" title="打开看看，需要的话可以催一下"><span class="wc-n">${n ? n + ' 件' : '等候'}</span><b>${escapeHtml(name)}</b></button>`;
+      return `<button type="button" class="wait-chip" data-wait-id="${escapeHtml(c.id)}" title="${escapeHtml(t('today.wait_chip_title'))}"><span class="wc-n">${n ? escapeHtml(t('today.wait_n', { n })) : escapeHtml(t('today.wait_idle'))}</span><b>${escapeHtml(name)}</b></button>`;
     }).join('');
     return `<div class="wait-strip" id="waitStrip" data-label="${escapeHtml(t('today.wait_strip'))}">${chips}</div>`;
   }
@@ -5280,10 +5286,10 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       tile.setAttribute('data-id', card.id);
       const p = pins.get(card.id);
       const why = !p && autoActive() && autoShown.reasons ? autoShown.reasons[card.id] : '';
-      if (why) { const w = document.createElement('div'); w.className = 'why-line'; w.textContent = `为什么在这里：${why}`; tile.appendChild(w); }
+      if (why) { const w = document.createElement('div'); w.className = 'why-line'; w.textContent = t('today.why_here', { why }); tile.appendChild(w); }
       const btn = document.createElement('button');
       btn.type = 'button'; btn.className = 'pin-btn' + (p ? ' on' : '');
-      btn.title = p ? (p.by === 'user' ? '取消固定' : '取消豆芽的置顶') : '固定到最前';
+      btn.title = p ? (p.by === 'user' ? t('today.unpin') : t('today.unpin_bot')) : t('today.pin');
       btn.textContent = p ? '📌' : '📍';
       btn.addEventListener('click', e => { e.stopPropagation(); userPin(card, !!p); });
       tile.appendChild(btn);

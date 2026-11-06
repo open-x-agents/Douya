@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
-import { pickNextThing, cardUrgency } from '../src/web/card-prep.js'
+import { pickNextThing, cardUrgency, prepareCardActions } from '../src/web/card-prep.js'
 import { hydrateFace, autoFace } from '../src/ui/face.js'
 import { t } from '../src/i18n/index.js'
 
@@ -47,4 +47,29 @@ test('EN face keys resolve; ZH keeps familiar chrome', () => {
     blocks: [{ type: 'link-list', links: [{ url: 'https://x.slack.com/archives/C1/p1', title: 't', from: 'A', text: 'hi', needsYou: true, at: '2026-11-03T07:00:00.000Z' }] }],
   }), { now: Date.parse('2026-11-04T08:00:00.000Z'), lang: 'en' })
   assert.equal(v.parts.find(p => p.type === 'people').label, 'Waiting on you')
+})
+
+test('EN prepared CTAs follow locale; ZH keeps familiar labels', () => {
+  const gh = { id: 'g1', type: 'project-cluster', source: 'github', title: 'jitagent', priority: 'high', waiting: 'others', status: 'active',
+    blocks: [{ type: 'link-list', links: [{ title: 'Fix x', url: 'https://github.com/o/r/pull/17', type: 'pr-mine' }] }] }
+  assert.match(prepareCardActions(gh, { lang: 'en' })[0].label, /Nudge #17/)
+  assert.match(prepareCardActions(gh, { lang: 'zh' })[0].label, /催一下 #17/)
+  assert.equal(t('today.offhours', 'en', { n: 3 }), 'After hours · 3 work cards tucked away')
+  assert.equal(t('today.wait_n', 'en', { n: 2 }), '2 open')
+  assert.equal(t('metric.review_you', 'en'), 'Needs your review')
+  assert.equal(t('prep.snooze', 'en'), 'Tomorrow')
+  assert.equal(t('chat.wait_you', 'zh'), '等你处理')
+})
+
+test('Today aggregation chrome uses locale hooks (no hardcoded ZH in wait/offhours/metrics)', () => {
+  assert.match(html, /t\('today\.offhours'/)
+  assert.match(html, /t\('today\.wait_n'/)
+  assert.match(html, /t\('today\.wait_idle'/)
+  assert.match(html, /t\('metric\.review_you'/)
+  assert.match(html, /t\('metric\.need_you'/)
+  assert.match(html, /t\('src\.calendar'/)
+  assert.match(html, /t\('chat\.wait_you'/)
+  assert.match(html, /tagLabel/)
+  assert.doesNotMatch(html, /🌙 下班时间 · \$\{offCards\.length\} 张工作卡/)
+  assert.doesNotMatch(html, /n \+ ' 件'/)
 })

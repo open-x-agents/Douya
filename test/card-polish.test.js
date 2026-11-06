@@ -20,7 +20,8 @@ test('phone chat is a conversation sheet (~82vh) with roomy messages', () => {
 
 test('work cards denser: short source labels, hide face desc, quiet next bar', () => {
   assert.match(html, /SRC_SHORT/)
-  assert.match(html, /GitHub', gmail: 'Gmail'/)
+  assert.match(html, /t\('src\.github'\)/)
+  assert.match(html, /t\('src\.gmail'\)/)
   assert.match(html, /\.tile\.work\.has-face \.w-desc/)
   assert.match(html, /\.w-next-k\{[^}]*color:var\(--ink3\)/)
   assert.match(html, /Card polish \(Muse density/)

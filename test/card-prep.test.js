@@ -11,9 +11,10 @@ const gh = (over = {}) => ({ id: 'g1', type: 'project-cluster', source: 'github'
   blocks: [{ type: 'link-list', links: [{ title: 'Fix x', url: 'https://github.com/o/r/pull/17', type: 'pr-mine' }] }], ...over })
 
 test('fyi mail group: archive-all with only the open items, then 明天再看', () => {
-  const steps = prepareCardActions(mail(), { itemStatus: { 'https://mail.google.com/mail/u/0/#inbox/bbb222': { status: 'done' } } })
+  const steps = prepareCardActions(mail(), { itemStatus: { 'https://mail.google.com/mail/u/0/#inbox/bbb222': { status: 'done' } }, lang: 'zh' })
   assert.deepEqual(steps.map(s => s.id), ['archive-all', 'snooze'])
   assert.equal(steps[0].label, '归档这封')
+  assert.equal(prepareCardActions(mail(), { itemStatus: { 'https://mail.google.com/mail/u/0/#inbox/bbb222': { status: 'done' } }, lang: 'en' })[0].label, 'Archive this')
   assert.deepEqual(steps[0].input.items.map(i => i.url), ['https://mail.google.com/mail/u/0/#inbox/aaa111'])
 })
 
@@ -25,12 +26,13 @@ test('needs-you mail: a reply draft request naming the real mail; no archive off
 })
 
 test('my PR waiting on others: nudge comment prepared; waiting on me: ask where it is stuck', () => {
-  const a = prepareCardActions(gh())
+  const a = prepareCardActions(gh(), { lang: 'zh' })
   assert.equal(a[0].action, 'github_comment'); assert.equal(a[0].input.url, 'https://github.com/o/r/pull/17')
   assert.match(a[0].label, /催一下 #17/)
+  assert.match(prepareCardActions(gh(), { lang: 'en' })[0].label, /Nudge #17/)
   assert.match(a[0].input.body, /叮一下：#17/)
   assert.match(a[0].input.body, /[一-龥]/) // Chinese, not the old English template
-  const b = prepareCardActions(gh({ waiting: 'you' }))
+  const b = prepareCardActions(gh({ waiting: 'you' }), { lang: 'zh' })
   assert.equal(b[0].kind, 'ask'); assert.match(b[0].label, /#17/)
 })
 

@@ -26,7 +26,7 @@ test('done cards tuck toward 今天搞定了什么', () => {
   assert.match(html, /tuck-done/)
   assert.match(html, /@keyframes doneTuck/)
   assert.match(html, /just-tucked/)
-  assert.match(html, /今天搞定了什么/)
+  assert.match(html, /t\('today\.done_tuck'\)/)
 })
 
 test('suggestion chips collapse while typing (no layout shove)', () => {

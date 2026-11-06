@@ -21,12 +21,12 @@ test('confirmed reply (mock executor): chat line, item handled, card tucked into
   assert.equal(p.pending, true); assert.equal(calls.length, 0, 'nothing runs before 确认执行')
   const r = await svc.userOp({ op: 'confirm', id: p.actionId })
   assert.equal(r.success, true); assert.deepEqual(calls, ['GMAIL_REPLY_TO_THREAD'])
-  assert.match(r.outcome.text, /^✓ 已发送 · \d{2}:\d{2}/); assert.equal(r.outcome.cardDone, true)
+  assert.match(r.outcome.text, /^✓ Sent · \d{2}:\d{2}/); assert.equal(r.outcome.cardDone, true)
   const s = store.get()
   assert.equal(s.itemStatus[THREAD].status, 'done'); assert.equal(s.itemStatus[THREAD].by, 'action')
   assert.equal(s.cards[0].status, 'done'); assert.equal(s.cards[0].nextAction, '')
   const chat = s.cardChats['gmail:action:gmail:1a1a3f2144f1d300']
-  assert.match(chat.at(-1).text, /已发送/); assert.equal(chat.at(-1).system, true)
+  assert.match(chat.at(-1).text, /Sent/); assert.equal(chat.at(-1).system, true)
   // 今天搞定了什么 counts the send once (not action + item + card)
   const d = doneToday({ completions: s.completions, itemStatus: s.itemStatus, pendingActions: s.pendingActions })
   assert.equal(d.count, 1)
@@ -40,7 +40,7 @@ test('failed send: 发送失败 with reason, action stays pending, item untouche
   const p = await svc.request('gmail_reply', reply, { cardId: 'card_m1' })
   const r = await svc.userOp({ op: 'confirm', id: p.actionId })
   assert.equal(r.success, false); assert.equal(r.action.status, 'pending'); assert.match(r.action.error, /401/)
-  assert.match(r.outcome.text, /^✗ 发送失败：Gmail 401/)
+  assert.match(r.outcome.text, /^✗ Send failed: Gmail 401/)
   const s = store.get()
   assert.equal(s.itemStatus[THREAD], undefined); assert.equal(s.cards[0].status, 'active')
 })
@@ -53,7 +53,7 @@ test('touchedUrls: thread id / issue number / slack ts map onto the card own lin
   // a comment on a PR leaves the other items on the card open → card not cleared
   const st = { cards: [{ id: 'g', type: 'project-cluster', status: 'active', ...gh }], itemStatus: {}, completions: [], cardChats: {} }
   const o = applyActionOutcome(st, { id: 'a1', action: 'github_comment', status: 'executed', cardId: 'g', summary: '评论 o/r#111', input: { url: 'https://github.com/o/r/pull/111' } })
-  assert.equal(o.marked.length, 1); assert.equal(o.cardDone, false); assert.match(o.text, /已评论.*这一条已标成处理完/)
+  assert.equal(o.marked.length, 1); assert.equal(o.cardDone, false); assert.match(o.text, /Commented.*marked done/)
 })
 
 test('next digest: a replied thread stays out, comes back only when the thread moved on', () => {
@@ -69,7 +69,7 @@ test('next digest: a replied thread stays out, comes back only when the thread m
 test('client shows the outcome line after 确认执行 and labels a failed pending send', () => {
   const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
   assert.match(html, /r\.outcome && r\.outcome\.text\) fresh\.after\(actSysLine/)
-  assert.match(html, /'发送失败' : '执行失败'/)
+  assert.match(html, /t\('act\.send_fail'\) : t\('act\.exec_fail'\)/)
   assert.match(readFileSync(new URL('../src/web/api.js', import.meta.url), 'utf8'), /onOutcome: \(st, a, o\) => applyActionOutcome/)
 })
 
@@ -125,7 +125,7 @@ test('general chat history: a stale 「还没发出去」 is followed by what ac
     { role: 'assistant', content: '已准备好，**邮件还没发出去**。去豆芽里找到「回复邮件给 fledge@example.com」，点「确认执行」' },
     { role: 'user', content: '今天还有什么' }, { role: 'assistant', content: '还有 #733' }]
   const acts = { a1: { id: 'a1', action: 'gmail_reply', status: 'executed', summary: '回复邮件给 fledge@example.com：「Re: x」', executedAt: '2026-11-04T12:59:53Z' } }
-  const out = annotateHistoryWithOutcomes(msgs, acts, { now })
+  const out = annotateHistoryWithOutcomes(msgs, acts, { now, lang: 'zh' })
   assert.equal(out.length, 5); assert.match(out[2].content, /^✓ 已发送 · \d{2}:\d{2}　回复邮件给 fledge@example\.com/); assert.equal(out[3].content, '今天还有什么')
   assert.equal(annotateHistoryWithOutcomes(msgs, {}, { now }).length, 4)
   assert.equal(annotateHistoryWithOutcomes(msgs, { a1: { ...acts.a1, status: 'pending' } }, { now }).length, 4, 'still pending → no line')

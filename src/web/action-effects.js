@@ -9,17 +9,15 @@
 import { setItemStatus, cardItemUrls } from '../host/store.js'
 import { cardClearance, completeClearedCard } from './card-clearance.js'
 import { chatKeysOf, stripDay } from '../host/reconcile.js'
+import { doneVerb, doneVerbMap, formatOutcomeText, formatHistoryOutcome, hhmmFor, resolveLang, DEFAULT_LOCALE } from '../i18n/index.js'
 
-export const DONE_VERB = {
-  gmail_reply: '已发送', gmail_send_email: '已发送', slack_reply: '已发到 Slack',
-  github_comment: '已评论', github_review: '已提交评审', github_close_issue: '已关闭', github_merge: '已合并',
-  gmail_archive: '已归档', gmail_archive_many: '已归档', gmail_trash: '已删除',
-}
+/** @deprecated prefer doneVerb(action, lang); kept as zh map for older callers/tests. */
+export const DONE_VERB = doneVerbMap('zh')
 /** Actions that finish the user's part of the item they touch. */
 const HANDLES = new Set(Object.keys(DONE_VERB))
 const CLOSED = new Set(['done', 'dismissed'])
 
-export const hhmm = (d = new Date()) => new Date(d).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+export const hhmm = (d = new Date(), lang = 'zh') => hhmmFor(lang, d)
 
 /** The card's own item URLs this action touched (never invents one outside the card, except an explicit url). */
 export function touchedUrls(card, a) {
@@ -49,7 +47,8 @@ export function chatKeyOf(card, cardChats = {}) {
  * @param {object} a the action record (status executed | failed)
  * @param {{ now?: Date, chat?: boolean }} opts chat=false skips the chat line (bot-run direct actions report themselves)
  */
-export function applyActionOutcome(state, a, { now = new Date(), chat = true } = {}) {
+export function applyActionOutcome(state, a, { now = new Date(), chat = true, lang = DEFAULT_LOCALE } = {}) {
+  const locale = resolveLang(lang)
   const card = (state.cards || []).find(c => c.id === a.cardId) || null
   const ok = a.status === 'executed'
   const marked = []
@@ -60,23 +59,24 @@ export function applyActionOutcome(state, a, { now = new Date(), chat = true } =
       const ll = (card.blocks || []).find(b => b?.type === 'link-list')
       const title = ll?.links?.find(l => l?.url === url)?.title || a.summary || ''
       setItemStatus(state, { card, url, title, action: 'done', by: 'action' })
-      state.itemStatus[url] = { ...state.itemStatus[url], via: a.id, verb: DONE_VERB[a.action] }
+      state.itemStatus[url] = { ...state.itemStatus[url], via: a.id, verb: doneVerb(a.action, locale) }
       marked.push(url)
     }
     if (marked.length && cardClearance(card, state.itemStatus || {}).kind === 'cleared') {
       cardDone = completeClearedCard(state, card, { by: 'action', at: now.toISOString() })
     }
   }
-  const text = ok
-    ? `✓ ${DONE_VERB[a.action] || '已执行'} · ${hhmm(now)}　${a.summary || a.action}${cardDone ? '。这张卡没有别的事了，已收进「今天搞定了什么」' : marked.length ? '。这一条已标成处理完' : ''}`
-    : `✗ ${/reply|send/.test(a.action) ? '发送失败' : '执行失败'}：${a.error || '未知原因'}。操作还在，确认无误可以再点「确认执行」。`
+  const text = formatOutcomeText({
+    ok, action: a.action, summary: a.summary, error: a.error,
+    time: hhmm(now, locale), cardDone, marked: marked.length, lang: locale,
+  })
   let key = null
   if (chat && card) {
     key = chatKeyOf(card, state.cardChats)
     const prior = state.cardChats?.[key] || []
-    state.cardChats = { ...(state.cardChats || {}), [key]: [...prior, { role: 'assistant', text, at: now.toISOString(), system: true, actionId: a.id }].slice(-40) }
+    state.cardChats = { ...(state.cardChats || {}), [key]: [...prior, { role: 'assistant', text, at: now.toISOString(), system: true, actionId: a.id, lang: locale }].slice(-40) }
   }
-  return { text, key, marked, cardDone, ok }
+  return { text, key, marked, cardDone, ok, lang: locale }
 }
 
 const clip = (t, n) => { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t }
@@ -124,7 +124,8 @@ export function backfillOutcomes(state, { now = new Date(), hours = 48 } = {}) {
  * show what became of it — 「✓ 已发送 · HH:MM」 — so the transcript never ends on a stale 「还没发出去」.
  * Matches by the action's label (e.g. 「回复邮件给 x@y」) in that message; pure, adds no stored message.
  */
-export function annotateHistoryWithOutcomes(messages = [], actions = {}, { now = Date.now(), hours = 48 } = {}) {
+export function annotateHistoryWithOutcomes(messages = [], actions = {}, { now = Date.now(), hours = 48, lang = DEFAULT_LOCALE } = {}) {
+  const locale = resolveLang(lang)
   const settled = Object.values(actions || {}).filter(a => a && (a.status === 'executed' || a.status === 'undone') && Date.parse(a.executedAt || '') >= now - hours * 3600e3)
   if (!settled.length || !Array.isArray(messages)) return messages
   const textOf = m => String(m?.content ?? m?.text ?? '')
@@ -133,15 +134,18 @@ export function annotateHistoryWithOutcomes(messages = [], actions = {}, { now =
     out.push(m)
     if (m?.role !== 'assistant') continue
     const t = textOf(m)
-    if (!/确认执行|待确认|还没发|未发送|没发出/.test(t)) continue
+    // Match Chinese or English pending-confirm phrasing in the preparing message.
+    if (!/确认执行|待确认|还没发|未发送|没发出|confirm|not sent|awaiting confirm|pending confirm/i.test(t)) continue
     for (const a of settled) {
       if (used.has(a.id)) continue
-      const label = String(a.summary || '').split('：')[0].trim()
+      const label = String(a.summary || '').split(/[：:]/)[0].trim()
       if (label.length < 6 || !t.includes(label)) continue
       used.add(a.id)
-      const text = a.status === 'undone'
-        ? `↩ 已撤销 · ${hhmm(a.undoneAt || now)}　${a.summary}`
-        : `✓ ${DONE_VERB[a.action] || '已执行'} · ${hhmm(a.executedAt)}　${a.summary}（你在豆芽里点了确认；上面「还没发」已过时）`
+      const text = formatHistoryOutcome({
+        status: a.status, action: a.action, summary: a.summary,
+        time: hhmm(a.status === 'undone' ? (a.undoneAt || now) : a.executedAt, locale),
+        lang: locale,
+      })
       out.push({ role: 'assistant', content: text, outcome: { actionId: a.id, status: a.status } })
     }
   }

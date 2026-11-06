@@ -9,7 +9,7 @@ test('desktop hover qa-bar with keyboard hint glyphs', () => {
   assert.match(html, /UX desktop pack/)
   assert.match(html, /hover:hover\) and \(pointer:fine\)/)
   assert.match(html, /is-kb-focus \.qa-bar/)
-  assert.match(html, /title="完成 · C"/)
+  assert.match(html, /t\('qa\.done_title'\)/)
   assert.match(html, /<span class="kbd">C<\/span>/)
   assert.match(html, /<span class="kbd">S<\/span>/)
 })
@@ -33,7 +33,7 @@ test('IME-safe j/k/e/c/s and ? help; Esc dismisses chips', () => {
   assert.match(html, /e\.isComposing \|\| e\.keyCode === 229/)
   assert.match(html, /deskTypingTarget/)
   assert.match(html, /dockOpen/)
-  assert.match(html, /键盘快捷键/)
+  assert.match(html, /t\('kb\.title'\)/)
 })
 
 test('desktop two-column zoom + larger Today conversation', () => {

@@ -109,7 +109,7 @@ test('没用 writes a digest preference naming the kind of thing', () => {
   assert.match(api, /if \(action === 'not-useful'\)[\s\S]{0,700}botDigest\.store\.addPref\(fb\.text/)
   assert.match(api, /if \(action === 'undo-not-useful'\)[\s\S]{0,300}removePref/)
   const html = fs.readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
-  assert.match(html, /data-qa="useless"[^>]*>没用<\/button>/); assert.match(html, /if \(qa === 'useless'\) return runQuickUseless\(card\)/)
+  assert.match(html, /data-qa="useless"[^>]*>\$\{t\('qa\.useless'\)\}<\/button>/); assert.match(html, /if \(qa === 'useless'\) return runQuickUseless\(card\)/)
 })
 
 test('a single actionable mail (email-action) offers a reply draft, not just 明天再看', async () => {

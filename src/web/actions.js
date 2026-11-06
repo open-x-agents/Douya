@@ -221,7 +221,7 @@ export function createActionService({ store, getClient, log = () => {}, onOutcom
     },
 
     /** User-only ops (HTTP route behind dsh owner auth). */
-    async userOp({ op = 'list', id, dryRun = false, since = null } = {}) {
+    async userOp({ op = 'list', id, dryRun = false, since = null, lang = null } = {}) {
       const state = store.get()
       const all = state.pendingActions || {}
       if (op === 'list') {
@@ -248,7 +248,7 @@ export function createActionService({ store, getClient, log = () => {}, onOutcom
         let outcome = null
         await save(s => {
           if (next.status === 'executed') ledger(s, next, 'executed')
-          try { outcome = onOutcome?.(s, next, { chat: true }) || null; if (outcome && next.status === 'executed') next.outcomeAt = new Date().toISOString() } catch (e) { log(`[actions] outcome ${e.message}`) }
+          try { outcome = onOutcome?.(s, next, { chat: true, ...(lang ? { lang } : {}) }) || null; if (outcome && next.status === 'executed') next.outcomeAt = new Date().toISOString() } catch (e) { log(`[actions] outcome ${e.message}`) }
           // A failed send stays pending (with its reason) so the user can fix and retry — never silently dropped.
           s.pendingActions[id] = next.status === 'failed' ? { ...next, status: 'pending', failedAt: new Date().toISOString() } : next
         })

@@ -9,6 +9,8 @@
 //   snooze → hide the card until tomorrow morning (reversible from the toast).
 //   open   → open the card (zoom).
 
+import { t as tr, resolveLang, DEFAULT_LOCALE } from '../i18n/index.js'
+
 const clip = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s }
 const SYSTEM_TYPES = new Set(['hero', 'timetable', 'achievements-tile'])
 export const isWorkCard = c => c && !SYSTEM_TYPES.has(c.type) && c.source !== 'system' && c.type !== 'view'
@@ -167,7 +169,8 @@ export function blockResolved(block, { cards = [], itemStatus = {}, doneBlocks =
  * { kind:'meeting'|'card'|'block'|'none', title, why, at?, endsAt?, startsInMin?, cardId?, url?, buttons:[…] }
  * Order: a calendar event live now or within 15 min → the top needs-you card → the current timetable block.
  */
-export function pickNextThing({ cards = [], itemStatus = {}, doneBlocks = [], now = new Date() } = {}) {
+export function pickNextThing({ cards = [], itemStatus = {}, doneBlocks = [], now = new Date(), lang = DEFAULT_LOCALE } = {}) {
+  const locale = resolveLang(lang)
   const t = now.getTime()
   const tt = cards.find(c => c && c.type === 'timetable')
   const ttb = (tt?.blocks || []).find(b => b.type === 'timetable') || {}
@@ -181,20 +184,24 @@ export function pickNextThing({ cards = [], itemStatus = {}, doneBlocks = [], no
   if (ev && ev.s - t <= 15 * 60000) {
     const live = ev.s <= t
     const buttons = []
-    if (ev.url) buttons.push({ kind: 'link', label: live ? '进入会议' : '打开会议', url: ev.url })
-    buttons.push({ kind: 'ask', label: '交给豆芽', hint: '会前要点', prompt: `「${clip(ev.title, 40)}」${live ? '已经开始' : `${hm(ev.s)} 开始`}，帮我用三条列出会前要点：相关的 PR / 邮件 / 消息里有什么要我在会上提的。` })
-    return { kind: 'meeting', title: clip(ev.title, 60), why: live ? `进行中 · ${hm(ev.s)}–${hm(ev.e)}` : `${Math.max(1, Math.round((ev.s - t) / 60000))} 分钟后开始 · ${hm(ev.s)}–${hm(ev.e)}`, at: hm(ev.s), endsAt: hm(ev.e), startsAtMs: ev.s, live, url: ev.url || null, buttons, upcoming: null }
+    if (ev.url) buttons.push({ kind: 'link', label: tr(live ? 'hero.btn_join' : 'hero.btn_open_meet', locale), url: ev.url })
+    // Prompt stays Chinese for model quality when owner chats in zh; English UI still shows EN button labels.
+    buttons.push({ kind: 'ask', label: tr('hero.btn_ask', locale), hint: locale === 'zh' ? '会前要点' : 'Pre-meeting notes', prompt: `「${clip(ev.title, 40)}」${live ? '已经开始' : `${hm(ev.s)} 开始`}，帮我用三条列出会前要点：相关的 PR / 邮件 / 消息里有什么要我在会上提的。` })
+    const why = live
+      ? (locale === 'zh' ? `进行中 · ${hm(ev.s)}–${hm(ev.e)}` : `In progress · ${hm(ev.s)}–${hm(ev.e)}`)
+      : (locale === 'zh' ? `${Math.max(1, Math.round((ev.s - t) / 60000))} 分钟后开始 · ${hm(ev.s)}–${hm(ev.e)}` : `Starts in ${Math.max(1, Math.round((ev.s - t) / 60000))} min · ${hm(ev.s)}–${hm(ev.e)}`)
+    return { kind: 'meeting', title: clip(ev.title, 60), why, at: hm(ev.s), endsAt: hm(ev.e), startsAtMs: ev.s, live, url: ev.url || null, buttons, upcoming: null }
   }
   const top = ranked.find(c => cardUrgency(c, { itemStatus }) >= 30) || null
   if (top) {
     const prep = prepareCardActions(top, { itemStatus, max: 3 })
     const hand = prep.find(p => p.kind === 'ask' || p.kind === 'act')
-    const buttons = [{ kind: 'open', label: '开始', cardId: top.id }]
-    buttons.push({ kind: 'snooze', label: '推迟', cardId: top.id, hint: '明早 9 点再出现' })
-    if (hand) buttons.push({ ...hand, label: hand.kind === 'ask' ? '交给豆芽' : hand.label, cardId: top.id })
-    else buttons.push({ kind: 'ask', label: '交给豆芽', cardId: top.id, prompt: `帮我推进「${clip(top.title, 40)}」（卡片 id ${top.id}）：${clip(top.nextAction || '看看下一步该做什么', 60)}。` })
+    const buttons = [{ kind: 'open', label: tr('hero.btn_start', locale), cardId: top.id }]
+    buttons.push({ kind: 'snooze', label: tr('hero.btn_snooze', locale), cardId: top.id, hint: locale === 'zh' ? '明早 9 点再出现' : 'Back tomorrow 9:00' })
+    if (hand) buttons.push({ ...hand, label: hand.kind === 'ask' ? tr('hero.btn_ask', locale) : hand.label, cardId: top.id })
+    else buttons.push({ kind: 'ask', label: tr('hero.btn_ask', locale), cardId: top.id, prompt: `帮我推进「${clip(top.title, 40)}」（卡片 id ${top.id}）：${clip(top.nextAction || '看看下一步该做什么', 60)}。` })
     const shortWhy = String(top.why || '').trim()
-    const why = [top.waiting === 'you' ? '在等你' : '', PRI[top.priority] >= 3 ? '优先' : '', shortWhy && shortWhy.length <= 36 && /[\u4e00-\u9fa5]/.test(shortWhy) ? shortWhy : ''].filter(Boolean).join(' · ')
+    const why = [top.waiting === 'you' ? tr('hero.waiting_you', locale) : '', PRI[top.priority] >= 3 ? tr('hero.priority', locale) : '', shortWhy && shortWhy.length <= 36 && /[\u4e00-\u9fa5]/.test(shortWhy) ? shortWhy : ''].filter(Boolean).join(' · ')
     return { kind: 'card', title: clip(top.title, 60), next: clip(top.nextAction || '', 70), why, cardId: top.id, source: top.source || null, buttons, upcoming }
   }
   const remaining = (ttb.suggestedBlocks || []).map(b => ({ ...b, s: toMs(b.start, now), e: toMs(b.end, now) })).filter(b => b.s != null && b.e > t).sort((a, b) => a.s - b.s)
@@ -205,26 +212,27 @@ export function pickNextThing({ cards = [], itemStatus = {}, doneBlocks = [], no
     const live = blk.s <= t
     // The card this block was planned for (still open) — the hero shows its prepared brief inline.
     const blockCard = (blk.cardIds || []).map(id => work.find(c => c.id === id)).find(Boolean) || null
-    return { kind: 'block', ...(blockCard ? { cardId: blockCard.id } : {}), title: clip(blk.title, 60), why: `${live ? '现在' : '接下来'} ${hm(blk.s)}–${hm(blk.e)}`, at: hm(blk.s), endsAt: hm(blk.e), live, blockKey: blockDoneKey(blk, now),
-      buttons: [{ kind: 'blockdone', label: '完成了', blockKey: blockDoneKey(blk, now), title: clip(blk.title, 60) }, { kind: 'timetable', label: '看安排' }, { kind: 'ask', label: '交给豆芽', prompt: `我${live ? '现在' : '接下来'}要做「${clip(blk.title, 40)}」（${hm(blk.s)}–${hm(blk.e)}），帮我列一个马上能开始的三步清单。` }], upcoming }
+    return { kind: 'block', ...(blockCard ? { cardId: blockCard.id } : {}), title: clip(blk.title, 60), why: `${tr(live ? 'hero.live' : 'hero.upcoming', locale)} ${hm(blk.s)}–${hm(blk.e)}`, at: hm(blk.s), endsAt: hm(blk.e), live, blockKey: blockDoneKey(blk, now),
+      buttons: [{ kind: 'blockdone', label: tr('hero.btn_done', locale), blockKey: blockDoneKey(blk, now), title: clip(blk.title, 60) }, { kind: 'timetable', label: tr('hero.btn_timetable', locale) }, { kind: 'ask', label: tr('hero.btn_ask', locale), prompt: `我${live ? '现在' : '接下来'}要做「${clip(blk.title, 40)}」（${hm(blk.s)}–${hm(blk.e)}），帮我列一个马上能开始的三步清单。` }], upcoming }
   }
   if (remaining.length) {
-    return { kind: 'none', title: '今天的安排都做完了', why: work.length ? `还有 ${work.length} 张卡，不急的话可以休息了` : '可以休息了', buttons: [{ kind: 'timetable', label: '看安排' }], upcoming }
+    return { kind: 'none', title: tr('hero.all_done_title', locale), why: work.length ? tr('hero.all_done_why_cards', locale, { n: work.length }) : tr('hero.all_done_why', locale), buttons: [{ kind: 'timetable', label: tr('hero.btn_timetable', locale) }], upcoming }
   }
-  return { kind: 'none', title: work.length ? '眼下没有特别急的事' : '今天还没有待办', why: work.length ? `${work.length} 张卡都不算急，挑一张顺手的处理就好` : '点「立即汇聚」拉取已连接信源的最新动态', buttons: [], upcoming }
+  return { kind: 'none', title: work.length ? tr('hero.idle_title', locale) : tr('hero.idle_title_empty', locale), why: work.length ? tr('hero.idle_why', locale, { n: work.length }) : tr('hero.idle_why_empty', locale), buttons: [], upcoming }
 }
 
 /** One-line summary of the day for the collapsed header. Only counts real data. */
-export function daySummaryLine({ cards = [], itemStatus = {}, meetings = 0, now = new Date() } = {}) {
+export function daySummaryLine({ cards = [], itemStatus = {}, meetings = 0, now = new Date(), lang = DEFAULT_LOCALE } = {}) {
+  const locale = resolveLang(lang)
   const work = cards.filter(c => isWorkCard(c) && (!c.status || c.status === 'active'))
   const needYou = work.filter(c => c.waiting === 'you').length
   const mails = work.filter(c => c.type === 'email-group').reduce((n, c) => n + openLinks(c, itemStatus).filter(l => linkType(l) === 'email').length, 0)
   const prs = work.reduce((n, c) => n + openLinks(c, itemStatus).filter(l => linkType(l) === 'pr').length, 0)
   const parts = []
-  parts.push(meetings ? `${meetings} 个会` : '没有会')
-  if (needYou) parts.push(`${needYou} 件等你`)
-  if (prs) parts.push(`${prs} 个 PR`)
-  if (mails) parts.push(`${mails} 封邮件`)
-  if (!needYou && !prs && !mails) parts.push(`${work.length} 张卡`)
+  parts.push(meetings ? tr('summary.meet_n', locale, { n: meetings }) : tr('summary.no_meet', locale))
+  if (needYou) parts.push(tr('summary.wait_n', locale, { n: needYou }))
+  if (prs) parts.push(tr('summary.pr_n', locale, { n: prs }))
+  if (mails) parts.push(tr('summary.mail_n', locale, { n: mails }))
+  if (!needYou && !prs && !mails) parts.push(tr('summary.card_n', locale, { n: work.length }))
   return parts.join(' · ')
 }

@@ -49,11 +49,11 @@ test('doneToday: only real completions of today; system marks, undone actions an
 
 test('greeting line is built from live counts and stays honest when empty', () => {
   const cards = [{ type: 'project-cluster', source: 'github', waiting: 'you', status: 'active' }, { type: 'email-action', source: 'gmail' }]
-  assert.equal(greetingLine({ hour: 9, cards, next: { kind: 'card', title: '审 PR #12' } }), '早安。今天 2 件在手，1 件有人在等你——先从「审 PR #12」开始吧。')
-  assert.match(greetingLine({ hour: 15, cards, done: { count: 4 } }), /已经搞定 4 件/)
-  assert.match(greetingLine({ hour: 21, cards: [], done: { count: 2 } }), /今天搞定了 2 件.*收工/)
-  assert.match(greetingLine({ hour: 9, cards: [] }), /没有待办/)
-  assert.doesNotMatch(greetingLine({ hour: 9, cards: [] }), /\d/)
+  assert.equal(greetingLine({ hour: 9, cards, next: { kind: 'card', title: '审 PR #12' }, lang: 'zh' }), '早安。今天 2 件在手，1 件有人在等你——先从「审 PR #12」开始吧。')
+  assert.match(greetingLine({ hour: 15, cards, done: { count: 4 }, lang: 'zh' }), /已经搞定 4 件/)
+  assert.match(greetingLine({ hour: 21, cards: [], done: { count: 2 }, lang: 'zh' }), /今天搞定了 2 件.*收工/)
+  assert.match(greetingLine({ hour: 9, cards: [], lang: 'zh' }), /没有待办/)
+  assert.doesNotMatch(greetingLine({ hour: 9, cards: [], lang: 'zh' }), /\d/)
 })
 
 test('a user drag order is kept by stable key and a bot reorder cannot override it', () => {

@@ -22,6 +22,7 @@ import { briefTarget, fetchPrBrief } from './card-brief.js';
 import { prepareCardActions, pickNextThing, daySummaryLine, tomorrowMorning, snoozeUntilFor } from './card-prep.js';
 import { hydrateFace, autoFace } from '../ui/face.js';
 import { isAfterHours, isWorkish, doneToday, greetingLine, shHour } from './day-pulse.js';
+import { resolveLang, t as i18nT, DEFAULT_LOCALE } from '../i18n/index.js';
 import { sweepClearedCards, applyClearance, cardClearance, completeClearedCard } from './card-clearance.js';
 import { findTimetableCard, readPlan, applyPlanEdit, todaysCalendarEvents } from './timetable-plan.js';
 import { uiView } from '../ui/ops.js';
@@ -889,9 +890,11 @@ export function createApiRouter(ctx) {
       return { success: true, enabled: store.get().prefs.autoLayout !== 'off' };
     },
 
-    async getToday({ hour = null } = {}) {
+    async getToday({ hour = null, lang = DEFAULT_LOCALE } = {}) {
       try {
-        const today = new Date().toLocaleDateString('zh-CN', {
+        const locale = resolveLang(lang)
+        const dateLocale = locale === 'zh' ? 'zh-CN' : 'en-US'
+        const today = new Date().toLocaleDateString(dateLocale, {
           year: 'numeric',
           month: '2-digit',
           day: '2-digit',
@@ -963,17 +966,17 @@ export function createApiRouter(ctx) {
         // Day pulse (Phase C): time-aware, all from live data.
         const hourNow = Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : shHour();
         const afterHours = isAfterHours({ hour: Number.isInteger(hour) ? hourNow : null });
-        const nextThing = pickNextThing({ cards: activeCards, itemStatus: state.itemStatus || {}, doneBlocks: state.timetableDone || [] });
-        const doneNow = doneToday({ completions: state.completions || [], itemStatus: state.itemStatus || {}, pendingActions: state.pendingActions || {} });
+        const nextThing = pickNextThing({ cards: activeCards, itemStatus: state.itemStatus || {}, doneBlocks: state.timetableDone || [], lang: locale });
+        const doneNow = doneToday({ completions: state.completions || [], itemStatus: state.itemStatus || {}, pendingActions: state.pendingActions || {}, lang: locale });
         const meetingsLeft = calToday.filter(b => Date.parse(b.end) > Date.now()).length;
         return {
           afterHours,
           doneToday: doneNow || null,
           doneIds: doneNow ? doneNow.cardIds : [],
-          greetingLine: greetingLine({ hour: hourNow, cards: activeCards, next: nextThing, meetingsLeft, done: doneNow }),
+          greetingLine: greetingLine({ hour: hourNow, cards: activeCards, next: nextThing, meetingsLeft, done: doneNow, lang: locale }),
           summary: activeCards.length === 0
-            ? '今天还没有待办，点「立即汇聚」拉取最新动态'
-            : `今天 ${meetings.length} 个会，${actionable.length} 件在手，其中 ${urgent.length} 件优先`,
+            ? i18nT('summary.today_empty', locale)
+            : i18nT('summary.today_line', locale, { meet: meetings.length, open: actionable.length, urgent: urgent.length }),
           date: today,
           sources: sourcesText,
           userName,
@@ -991,7 +994,8 @@ export function createApiRouter(ctx) {
             return { ...cleared, workish: isWorkish(cleared), prepared, faceView };
           }),
           next: nextThing,
-          summaryLine: daySummaryLine({ cards: activeCards, itemStatus: state.itemStatus || {}, meetings: meetings.length }),
+          summaryLine: daySummaryLine({ cards: activeCards, itemStatus: state.itemStatus || {}, meetings: meetings.length, lang: locale }),
+          lang: locale,
           ui: { ...uiView(state), bootId: uiService.bootId, seq: uiService.seq },
           autoLayout: await router.autoLayout(activeCards, { hour }),
           hasDigest: state.lastDigest !== null,
@@ -1586,7 +1590,7 @@ export function createApiRouter(ctx) {
     /**
      * GET /api/chat/history — transcript from the real ds-bot Chief.
      */
-    async getChatHistory() {
+    async getChatHistory({ lang = DEFAULT_LOCALE } = {}) {
       const { loadDsBotHistory, BOT_SESSION_ID } = await import('./dsbot-chat.js');
       const home = config.home || '.odm-data';
       try {
@@ -1596,7 +1600,7 @@ export function createApiRouter(ctx) {
           baseUrl: process.env.DSBOT_URL || 'http://127.0.0.1:7788',
           token: process.env.DSBOT_TOKEN,
         });
-        return { sessionId: hist.sessionId || BOT_SESSION_ID, messages: annotateHistoryWithOutcomes(router.dockSurfacesFor(hist.messages || []), store.get()?.pendingActions || {}), botId: hist.botId || null };
+        return { sessionId: hist.sessionId || BOT_SESSION_ID, messages: annotateHistoryWithOutcomes(router.dockSurfacesFor(hist.messages || []), store.get()?.pendingActions || {}, { lang: resolveLang(lang) }), botId: hist.botId || null };
       } catch (err) {
         console.error('[getChatHistory] ds-bot:', err.message);
         return { sessionId: BOT_SESSION_ID, messages: [], error: err.message };
@@ -2031,7 +2035,8 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
       // Route dispatch
       if (url.pathname === '/api/today' && req.method === 'GET') {
         const hq = url.searchParams.get('hour');
-        const data = await router.getToday({ hour: hq !== null && /^\d{1,2}$/.test(hq) ? Number(hq) : null });
+        const lq = url.searchParams.get('lang') || req.headers['x-odm-lang'];
+        const data = await router.getToday({ hour: hq !== null && /^\d{1,2}$/.test(hq) ? Number(hq) : null, lang: resolveLang(lq || DEFAULT_LOCALE) });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(data));
       } else if (url.pathname === '/api/digest' && req.method === 'GET') {
@@ -2179,6 +2184,11 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
         const body = await new Promise(r => { let d = ''; req.on('data', c => { d += c; }); req.on('end', () => { try { r(JSON.parse(d || '{}')); } catch { r({}); } }); });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(await router.setAutoLayout(body)));
+      } else if (url.pathname === '/api/opendigitalmate/i18n.js' && req.method === 'GET') {
+        const { browserScript } = await import('../i18n/index.js');
+        const js = browserScript();
+        res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(js);
       } else if (url.pathname === '/api/opendigitalmate/ui-renderer.js' && req.method === 'GET') {
         const js = await readFile(join(__dirname, '../client/ui-renderer.js'), 'utf8');
         res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' });

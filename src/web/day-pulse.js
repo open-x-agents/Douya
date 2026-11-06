@@ -2,6 +2,7 @@
 // greeting line, and the end-of-day "今天搞定了什么" card. Nothing here is hardcoded content: every count, title
 // and link comes from the store (cards, itemStatus, completions, executed actions). Times are Asia/Shanghai.
 import { isWorkCard } from './card-prep.js'
+import { t, resolveLang, DEFAULT_LOCALE } from '../i18n/index.js'
 
 const SH = 8 * 3600e3
 const clip = (v, n) => { const s = String(v ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? `${s.slice(0, n - 1)}…` : s }
@@ -26,7 +27,7 @@ export function isAfterHours({ now = Date.now(), hour = null } = {}) {
 }
 
 /** What got done today: cards finished, items ticked, actions 豆芽 executed (not undone). null when nothing. */
-export function doneToday({ completions = [], itemStatus = {}, pendingActions = {}, now = Date.now() } = {}) {
+export function doneToday({ completions = [], itemStatus = {}, pendingActions = {}, now = Date.now(), lang = DEFAULT_LOCALE } = {}) {
   const day = shDay(now)
   const today = at => { const t = Date.parse(at || ''); return Number.isFinite(t) && shDay(t) === day }
   const cards = (completions || []).filter(c => c && c.action === 'done' && c.kind !== 'item' && c.by !== 'action' && today(c.at))
@@ -40,25 +41,34 @@ export function doneToday({ completions = [], itemStatus = {}, pendingActions = 
   for (const [u, v] of items.sort((x, y) => String(y[1].at).localeCompare(String(x[1].at)))) hi.push({ kind: 'item', text: clip(v.title || u, 60), url: https(u), at: v.at })
   const seen = new Set()
   const highlights = hi.filter(h => h.text && !seen.has(h.text) && seen.add(h.text)).slice(0, 5)
+  const locale = resolveLang(lang)
   const parts = []
-  if (cards.length) parts.push(`收掉 ${cards.length} 张卡`)
-  if (items.length) parts.push(`处理 ${items.length} 条`)
-  if (acts.length) parts.push(`豆芽替你做了 ${acts.length} 件`)
+  if (cards.length) parts.push(t('done.line_cards', locale, { n: cards.length }))
+  if (items.length) parts.push(t('done.line_items', locale, { n: items.length }))
+  if (acts.length) parts.push(t('done.line_acts', locale, { n: acts.length }))
   return { count, cards: cards.length, items: items.length, actions: acts.length, line: parts.join(' · '), highlights, cardIds: [...new Set(cards.map(c => c.cardId).filter(Boolean))].slice(-40) }
 }
 
 /** One warm line under the greeting, from live counts. Never invents: empty data → a plain honest line. */
-export function greetingLine({ hour = null, now = Date.now(), cards = [], next = null, meetingsLeft = 0, done = null } = {}) {
+export function greetingLine({ hour = null, now = Date.now(), cards = [], next = null, meetingsLeft = 0, done = null, lang = DEFAULT_LOCALE } = {}) {
+  const locale = resolveLang(lang)
   const h = Number.isInteger(hour) ? hour : shHour(now)
   const work = cards.filter(c => isWorkCard(c) && (!c.status || c.status === 'active'))
   const waiting = work.filter(c => c.waiting === 'you').length
   const d = done?.count || 0
-  const first = next && next.kind === 'card' && next.title ? `先从「${clip(next.title, 18)}」开始吧` : next && next.kind === 'meeting' ? `「${clip(next.title, 16)}」${next.live ? '正在进行' : '马上开始'}` : ''
-  if (!work.length && !d) return h < 11 ? '早安，今天还很清爽，没有待办。' : '眼下没有待办，难得清闲。'
-  const left = work.length ? `今天 ${work.length} 件在手${waiting ? `，${waiting} 件有人在等你` : ''}` : '手上的都清空了'
-  const meet = meetingsLeft ? `，还有 ${meetingsLeft} 个会` : ''
-  if (h >= 5 && h < 11) return `早安。${left}${meet}${first ? `——${first}` : ''}。`
-  if (h >= 11 && h < 14) return `中午好${d ? `，上午已经搞定 ${d} 件` : ''}。${left}${meet}${first ? `，${first}` : ''}。`
-  if (h >= 14 && h < 19) return `下午好${d ? `，已经搞定 ${d} 件` : ''}。${left}${meet}${first ? `，${first}` : ''}。`
-  return d ? `辛苦了，今天搞定了 ${d} 件。${work.length ? '剩下的明早再说。' : '收工！'}` : `下班时间了。${work.length ? `还有 ${work.length} 件，明早再说也不迟。` : '好好休息。'}`
+  let firstBit = ''
+  if (next && next.kind === 'card' && next.title) firstBit = t('greet.start_card', locale, { title: clip(next.title, 18) })
+  else if (next && next.kind === 'meeting') firstBit = t(next.live ? 'greet.meet_live' : 'greet.meet_soon', locale, { title: clip(next.title, 16) })
+  if (!work.length && !d) return h < 11 ? t('greet.morning_empty', locale) : t('greet.idle_empty', locale)
+  const left = work.length
+    ? t('greet.hands_n', locale, { n: work.length }) + (waiting ? t('greet.waiting_n', locale, { n: waiting }) : '')
+    : t('greet.hands_clear', locale)
+  const meet = meetingsLeft ? t('greet.meet_n', locale, { n: meetingsLeft }) : ''
+  const firstMorning = firstBit ? (locale === 'zh' ? `——${firstBit}` : ` — ${firstBit}`) : ''
+  const firstOther = firstBit ? (locale === 'zh' ? `，${firstBit}` : `, ${firstBit}`) : ''
+  if (h >= 5 && h < 11) return t('greet.morning', locale, { left, meet, first: firstMorning })
+  if (h >= 11 && h < 14) return t('greet.noon', locale, { done: d ? t('greet.noon_done', locale, { n: d }) : '', left, meet, first: firstOther })
+  if (h >= 14 && h < 19) return t('greet.afternoon', locale, { done: d ? t('greet.afternoon_done', locale, { n: d }) : '', left, meet, first: firstOther })
+  if (d) return t('greet.evening_done', locale, { n: d, rest: work.length ? t('greet.evening_rest_open', locale) : t('greet.evening_rest_clear', locale) })
+  return t('greet.evening_empty', locale, { rest: work.length ? t('greet.evening_empty_open', locale, { n: work.length }) : t('greet.evening_empty_clear', locale) })
 }

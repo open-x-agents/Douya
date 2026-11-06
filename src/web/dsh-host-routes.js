@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { runMuseChatTurn, chatProgress } from './muse-chat-core.js'
 import { createChatLane } from './chat-lane.js'
 import { installUiFeed } from './ui-feed.js'
+import { browserScript, resolveLang, DEFAULT_LOCALE } from '../i18n/index.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const CLIENT_HTML = join(__dirname, '../client/index.html')
@@ -21,6 +22,15 @@ function json(data, status = 200) {
 
 function hourParam(request) {
   try { const h = new URL(request.url, 'http://x').searchParams.get('hour'); return h !== null && /^\d{1,2}$/.test(h) ? Number(h) : null } catch { return null }
+}
+
+function langParam(request) {
+  try {
+    const u = new URL(request.url, 'http://x')
+    const q = u.searchParams.get('lang')
+    if (q) return resolveLang(q)
+    return resolveLang(request.headers)
+  } catch { return DEFAULT_LOCALE }
 }
 
 async function readJson(request) {
@@ -79,7 +89,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     path: '/api/today',
     methods: ['GET'],
     requestBody: 'buffered',
-    fetch: async (request) => json(await router.getToday({ hour: hourParam(request) })),
+    fetch: async (request) => json(await router.getToday({ hour: hourParam(request), lang: langParam(request) })),
   }, 'opendigitalmate: /api/today')
 
   effect({
@@ -233,6 +243,13 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     requestBody: 'buffered',
     fetch: async () => new Response(await readFile(UI_RENDERER, 'utf8'), { status: 200, headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } }),
   }, 'opendigitalmate: ui-renderer')
+
+  effect({
+    path: '/api/opendigitalmate/i18n.js',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async () => new Response(browserScript(), { status: 200, headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } }),
+  }, 'opendigitalmate: i18n')
 
   effect({
     path: '/api/opendigitalmate/surface',

@@ -49,7 +49,7 @@ export function createUiService({ store, log = () => {}, now = () => Date.now() 
     await store.save({ ui: persist ? res.ui : state.ui, uiLog: res.log })
     const after = store.get()
     const undoable = !!res.entry.undo
-    const ev = emit({ kind: 'op', op: v.op, by, message: res.message, undoId: undoable ? res.entry.id : null, logId: res.entry.id, ui: uiView(after), source })
+    const ev = emit({ kind: 'op', op: v.op, by, message: res.message, undoId: undoable ? res.entry.id : null, logId: res.entry.id, ui: uiView(after, { now: now() }), source })
     log(`[ui] ${by} ${v.op.op} → ${res.message} (seq ${ev.seq})`)
     return {
       success: true, op: v.op.op, message: res.message, undoId: undoable ? res.entry.id : null, skipped: res.skipped,

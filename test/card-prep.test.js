@@ -42,16 +42,16 @@ test('system tiles get nothing; links never invented', () => {
 test('next thing: meeting within 15 min wins; else top needs-you card; else none', () => {
   const now = new Date('2026-11-04T10:00:00+08:00')
   const tt = { id: 't', type: 'timetable', blocks: [{ type: 'timetable', fixedBlocks: [{ start: '2026-11-04T10:10:00+08:00', end: '2026-11-04T10:40:00+08:00', title: '周会', url: 'https://meet.google.com/x' }], suggestedBlocks: [] }] }
-  const m = pickNextThing({ cards: [tt, gh({ waiting: 'you' })], now })
+  const m = pickNextThing({ cards: [tt, gh({ waiting: 'you' })], now, lang: 'zh' })
   assert.equal(m.kind, 'meeting'); assert.equal(m.buttons[0].url, 'https://meet.google.com/x'); assert.match(m.why, /10 分钟后/)
-  const later = pickNextThing({ cards: [tt, gh({ waiting: 'you' })], now: new Date('2026-11-04T09:00:00+08:00') })
-  assert.equal(later.kind, 'card'); assert.deepEqual(later.buttons.map(b => b.label), ['开始', '推迟', '交给豆芽'])
+  const later = pickNextThing({ cards: [tt, gh({ waiting: 'you' })], now: new Date('2026-11-04T09:00:00+08:00'), lang: 'zh' })
+  assert.equal(later.kind, 'card'); assert.deepEqual(later.buttons.map(b => b.label), ['开始', '推迟', '交给豆芽'])  // zh labels
   assert.equal(later.upcoming.title, '周会')
-  assert.equal(pickNextThing({ cards: [], now }).kind, 'none')
+  assert.equal(pickNextThing({ cards: [], now, lang: 'zh' }).kind, 'none')
 })
 
 test('summary line counts only real data', () => {
-  assert.equal(daySummaryLine({ cards: [mail(), gh({ waiting: 'you' })], meetings: 0 }), '没有会 · 1 件等你 · 1 个 PR · 2 封邮件')
+  assert.equal(daySummaryLine({ lang: 'zh',  cards: [mail(), gh({ waiting: 'you' })], meetings: 0 }), '没有会 · 1 件等你 · 1 个 PR · 2 封邮件')
 })
 
 test('tomorrowMorning is 09:00 Asia/Shanghai', () => {

@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
+import { t as i18nT } from '../src/i18n/index.js'
 
 const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
 const from = html.indexOf('  const escMd = ')
 const to = html.indexOf('  // ---- 豆芽 mark')
 assert.ok(from > 0 && to > from, 'renderMd block found')
-const renderMd = new Function(`${html.slice(from, to)}; return renderMd`)()
+const renderMd = new Function('t', `${html.slice(from, to)}; return renderMd`)((key, vars) => i18nT(key, 'zh', vars))
 
 const DRAFT = `这张卡上有 3 个待审的 PR，我先按最新开的 #2353 起草评论。
 

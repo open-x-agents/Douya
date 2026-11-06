@@ -891,8 +891,8 @@ export function createApiRouter(ctx) {
     },
 
     async getToday({ hour = null, lang = DEFAULT_LOCALE } = {}) {
+      const locale = resolveLang(lang)
       try {
-        const locale = resolveLang(lang)
         const dateLocale = locale === 'zh' ? 'zh-CN' : 'en-US'
         const today = new Date().toLocaleDateString(dateLocale, {
           year: 'numeric',
@@ -990,7 +990,8 @@ export function createApiRouter(ctx) {
             if (c.type === 'view') return { ...c, view: surfaceService.cardView(c) };
             const cleared = applyClearance(c, state.itemStatus || {});
             const prepared = cleared.clearance === 'cleared' ? [] : prepareCardActions(cleared, { itemStatus: state.itemStatus || {} });
-            const faceView = hydrateFace(cleared, cleared.face || autoFace(cleared), { itemStatus: state.itemStatus || {}, events: calToday }) || (cleared.face ? hydrateFace(cleared, autoFace(cleared), { itemStatus: state.itemStatus || {}, events: calToday }) : null);
+            const faceOpts = { itemStatus: state.itemStatus || {}, events: calToday, lang: locale };
+            const faceView = hydrateFace(cleared, cleared.face || autoFace(cleared), faceOpts) || (cleared.face ? hydrateFace(cleared, autoFace(cleared), faceOpts) : null);
             return { ...cleared, workish: isWorkish(cleared), prepared, faceView };
           }),
           next: nextThing,
@@ -1004,8 +1005,8 @@ export function createApiRouter(ctx) {
         console.error('API /today error:', err);
         return {
           error: err.message,
-          summary: '加载失败',
-          date: new Date().toLocaleDateString('zh-CN'),
+          summary: locale === 'zh' ? '加载失败' : 'Failed to load',
+          date: new Date().toLocaleDateString(locale === 'zh' ? 'zh-CN' : 'en-US'),
           openCount: 0,
           meetingHours: 0,
           waitingCount: 0,

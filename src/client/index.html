@@ -1329,6 +1329,14 @@
   .nx-mark{padding-top:2px}
   .nx-eyebrow{font-size:11.5px;font-weight:700;letter-spacing:.08em;color:var(--violet)}
   .nx-meeting .nx-eyebrow{color:var(--rose)}
+  .nx.nx-none{background:linear-gradient(160deg,rgba(255,255,255,.94) 0%,rgba(246,248,252,.9) 100%);box-shadow:var(--shadow)}
+  .nx.nx-none::after{opacity:.35}
+  .nx.nx-none .nx-eyebrow{color:var(--ink3);letter-spacing:.06em}
+  .nx.nx-none .nx-title{font-size:20px;font-weight:650;color:var(--ink2)}
+  .tile.work.waiting-only{background:rgba(255,255,255,.58);box-shadow:0 2px 10px rgba(40,44,90,.04);border-style:dashed;border-color:rgba(30,40,80,.08);opacity:.9}
+  .grid2 .tile.work.waiting-only:hover{transform:none;box-shadow:0 4px 14px rgba(40,44,90,.06);opacity:1}
+  .dayline{backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.7)}
+
   .nx-title{margin:6px 0 4px;font-size:24px;line-height:1.3;font-weight:720;letter-spacing:-.015em;color:var(--ink)}
   .nx-next{margin:0 0 6px;font-size:14.5px;line-height:1.55;color:var(--ink2)}
   .nx-why{font-size:12.5px;color:var(--ink3)}
@@ -3257,7 +3265,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     // Progressive disclosure: one insight on the face. If a primary CTA already says the next step, drop the duplicate 下一步 bar.
     const showNext = !!(na && !primary);
     const actsHtml = primary
-      ? `<div class="w-acts">${stepBtnHtml(primary, 0, 'primary')}${secondary.length ? `<details class="w-more"><summary>更多</summary>${secondary.map((p, i) => stepBtnHtml(p, i + 1, '')).join('')}</details>` : ''}</div>`
+      ? `<div class="w-acts">${stepBtnHtml(primary, 0, 'primary')}${secondary.length ? `<details class="w-more"><summary>${escapeHtml(t('today.more'))}</summary>${secondary.map((p, i) => stepBtnHtml(p, i + 1, '')).join('')}</details>` : ''}</div>`
       : '';
     const qa = waitingOnly ? '' : `<div class="qa-bar" aria-label="${t('qa.aria')}"><button type="button" data-qa="done" title="${t('qa.done_title')}">${t('qa.done')}<span class="kbd">C</span></button><button type="button" data-qa="snooze" title="${t('qa.snooze_title')}">${t('qa.snooze')}<span class="kbd">S</span></button><button type="button" data-qa="ask" title="${t('qa.ask_title')}">${t('qa.ask')}</button><button type="button" data-qa="useless" class="qa-useless" title="${t('qa.useless_title')}">${t('qa.useless')}</button></div>`;
     const rails = waitingOnly ? '' : `<div class="swipe-rails" role="group" aria-label="${escapeHtml(t('qa.swipe_aria'))}"><div class="swipe-rail left"><button type="button" data-qa="done" aria-label="${escapeHtml(t('qa.done_aria'))}">${escapeHtml(t('qa.done'))}</button><button type="button" data-qa="snooze" aria-label="${escapeHtml(t('qa.snooze_aria'))}">${escapeHtml(t('qa.snooze'))}</button></div><div class="swipe-rail right"><button type="button" data-qa="ask" aria-label="${escapeHtml(t('qa.ask_aria'))}">${escapeHtml(t('qa.ask'))}</button></div></div>`;
@@ -3267,14 +3275,14 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         <div class="swipe-face">
         <header class="w-top">
           ${av}
-          <div class="w-src"><span class="w-label">${escapeHtml(label)}</span><span class="w-repo">${escapeHtml(r ? `${r.owner} / ${r.name}` : (card.subtitle || (card.source === 'slack' ? '频道消息' : '') || ''))}</span></div>
-          ${waitingOnly ? `<span class="pill pill-gray">等别人${card.waitingCount ? ' · ' + card.waitingCount : ''}</span>` : (big ? '<span class="pill pill-hot">优先</span>' : '')}${isMailGroup(card) ? '' : liveTags}
+          <div class="w-src"><span class="w-label">${escapeHtml(label)}</span><span class="w-repo">${escapeHtml(r ? `${r.owner} / ${r.name}` : (card.subtitle || (card.source === 'slack' ? t('today.channel_msgs') : '') || ''))}</span></div>
+          ${waitingOnly ? `<span class="pill pill-gray">${escapeHtml(t('today.waiting_others'))}${card.waitingCount ? ' · ' + card.waitingCount : ''}</span>` : (big ? `<span class="pill pill-hot">${escapeHtml(t('today.priority_pill'))}</span>` : '')}${isMailGroup(card) ? '' : liveTags}
         </header>
         <h3 class="w-head">${escapeHtml(waitingOnly ? (r ? r.name : headline(card)) : headline(card))}</h3>
         ${isMailGroup(card) && tags.length ? `<div class="w-senders">${tags.map(t => `<span title="${escapeHtml(t.text)}">${escapeHtml(t.text)}</span>`).join('')}</div>` : ''}
         ${!waitingOnly && desc && !hasFace ? `<p class="w-desc">${escapeHtml(desc)}</p>` : ''}
         ${waitingOnly ? '' : (card.faceView ? renderFace(card.faceView) || (metrics + avRow) : metrics + avRow)}
-        ${showNext ? `<div class="w-next"><span class="w-next-k">下一步</span><span class="w-next-v">${escapeHtml(na)}</span></div>` : ''}
+        ${showNext ? `<div class="w-next"><span class="w-next-k">${escapeHtml(t('today.next_step'))}</span><span class="w-next-v">${escapeHtml(na)}</span></div>` : ''}
         ${actsHtml}
         ${qa}
         <div class="w-slot"></div>
@@ -3297,11 +3305,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const out = [];
     for (const p of fv.parts) {
       if (p.type === 'stats' && p.pairs && p.pairs.length) out.push(`<div class="f-stats">${p.pairs.map(x => `<div class="f-stat t-${escapeHtml(x.tone || 'cool')}"><b>${escapeHtml(x.value)}</b><span>${escapeHtml(x.label)}</span></div>`).join('')}</div>`);
-      else if (p.type === 'people' && p.people && p.people.length) out.push(`<div class="f-people"><span class="f-pl">${escapeHtml(p.label)}</span><span class="f-avs">${p.people.map(x => `<span class="f-av" style="--h:${avHue(x.name)}" title="${escapeHtml(x.name)}">${escapeHtml(initial(x.name))}</span>`).join('')}${p.more ? `<span class="f-av more">+${p.more}</span>` : ''}</span><em>${escapeHtml(p.people.slice(0, 2).map(x => x.name).join('、'))}${p.people.length > 2 ? ' 等' : ''}</em></div>`);
+      else if (p.type === 'people' && p.people && p.people.length) out.push(`<div class="f-people"><span class="f-pl">${escapeHtml(p.label)}</span><span class="f-avs">${p.people.map(x => `<span class="f-av" style="--h:${avHue(x.name)}" title="${escapeHtml(x.name)}">${escapeHtml(initial(x.name))}</span>`).join('')}${p.more ? `<span class="f-av more">+${p.more}</span>` : ''}</span><em>${escapeHtml(p.people.slice(0, 2).map(x => x.name).join(ODMi18n && ODMi18n.getLocale() === 'zh' ? '、' : ', '))}${p.people.length > 2 ? escapeHtml(t('face.people_etc')) : ''}</em></div>`);
       else if (p.type === 'stage') out.push(`<div class="f-stage"><div class="f-bar"><i style="width:${p.total ? Math.round((p.done / p.total) * 100) : 0}%"></i></div><span>${escapeHtml(p.label)}</span></div>`);
       else if (p.type === 'checklist') {
-        if (p.done && !(p.items || []).length) out.push('<div class="f-alldone"><span class="f-sprout">🌱</span>都处理完了</div>');
-        else out.push(`<ul class="f-check">${(p.items || []).map(it => `<li class="${it.done ? 'done' : ''}${it.needsYou ? ' need' : ''}"><button type="button" class="f-box" aria-label="${escapeHtml(t('item.mark_local'))}" title="${escapeHtml(t('item.mark_local_title'))}" data-item-url="${escapeHtml(it.url)}" data-item-title="${escapeHtml(it.title)}"></button><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</a><span class="f-meta">${escapeHtml(it.from || it.kindZh || '')}</span></li>`).join('')}</ul>${p.more ? `<div class="f-more">还有 ${p.more} 条</div>` : ''}`);
+        if (p.done && !(p.items || []).length) out.push('<div class="f-alldone"><span class="f-sprout">🌱</span>' + escapeHtml(t('face.all_done')) + '</div>');
+        else out.push(`<ul class="f-check">${(p.items || []).map(it => `<li class="${it.done ? 'done' : ''}${it.needsYou ? ' need' : ''}"><button type="button" class="f-box" aria-label="${escapeHtml(t('item.mark_local'))}" title="${escapeHtml(t('item.mark_local_title'))}" data-item-url="${escapeHtml(it.url)}" data-item-title="${escapeHtml(it.title)}"></button><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</a><span class="f-meta">${escapeHtml(it.from || it.kindZh || '')}</span></li>`).join('')}</ul>${p.more ? `<div class="f-more">${escapeHtml(t('face.more_n', { n: p.more }))}</div>` : ''}`);
       }
       else if (p.type === 'quote') {
         const who = p.from ? `<span class="f-av" style="--h:${avHue(p.from)}">${escapeHtml(initial(p.from))}</span><span class="f-quote-who">${escapeHtml(p.from)}</span>` : '';
@@ -3737,9 +3745,9 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   }
   function countdownText(ms) {
     const m = Math.round((ms - Date.now()) / 60000);
-    if (m <= 0) return '进行中';
-    if (m < 60) return `${m} 分钟后`;
-    return `${Math.floor(m / 60)} 小时 ${m % 60} 分后`;
+    if (m <= 0) return t('hero.countdown_live');
+    if (m < 60) return t('hero.countdown_mins', { n: m });
+    return t('hero.countdown_hours', { h: Math.floor(m / 60), m: m % 60 });
   }
   function renderNextHero(nx) {
     if (!nx) return '';
@@ -5243,7 +5251,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const pinIdx = new Map(pins.map((p, i) => [p.cardId, i]));
     const ordIdx = new Map((uiLayout.order || []).map((id, i) => [id, i]));
     const auto = autoActive() ? new Map(autoShown.order.map((id, i) => [id, i])) : null;
-    const prio = [...work].sort((a, b) => ((b.priority === 'high') - (a.priority === 'high')));
+    // Needs-you before mere high priority so the grid matches the hero's next-thing sense.
+    const prio = [...work].sort((a, b) => ((b.waiting === 'you') - (a.waiting === 'you')) || ((b.priority === 'high' || b.priority === 'urgent') - (a.priority === 'high' || a.priority === 'urgent')));
     const prioPos = new Map(prio.map((c, i) => [c.id, i]));
     const base = auto ? [...work].sort((a, b) => (auto.has(a.id) ? auto.get(a.id) : 1e4 + prioPos.get(a.id)) - (auto.has(b.id) ? auto.get(b.id) : 1e4 + prioPos.get(b.id))) : prio;
     const pos = new Map(base.map((c, i) => [c.id, i]));
@@ -5738,11 +5747,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
       if (pr || iss) html += `<div class="z-kpis">${pr ? `<div><b class="c-teal">${pr}</b><span>待推进 PR</span></div>` : ''}${iss ? `<div><b class="c-violet">${iss}</b><span>待处理 issue</span></div>` : ''}</div>`;
       const dl = deepLinks(card);
-      html += `<div class="z-next"><div><span class="w-next-k">下一步</span><b>${escapeHtml(nextAction(card))}</b></div>${dl[0] ? `<a class="z-btn" href="${escapeHtml(dl[0].url)}" target="_blank" rel="noopener">${isMailGroup(card) ? '打开第一封 ↗' : '去处理 ↗'}</a>` : ''}</div>`;
+      html += `<div class="z-next"><div><span class="w-next-k">${escapeHtml(t('today.next_step'))}</span><b>${escapeHtml(nextAction(card))}</b></div>${dl[0] ? `<a class="z-btn" href="${escapeHtml(dl[0].url)}" target="_blank" rel="noopener">${isMailGroup(card) ? '打开第一封 ↗' : '去处理 ↗'}</a>` : ''}</div>`;
       if (linksOf(card).length) html += `<div class="z-sec" id="zItemsSec">${zoomItemsHtml(card)}</div>`;
     }
     const name = r ? r.name : (isTT ? '今天的安排' : clip(card.title, 20));
-    if (!isTT && (card.prepared || []).length) html = html.replace('<div class="z-next">', `<div class="w-acts z-acts-row"><span class="w-acts-k">豆芽备好了</span>${card.prepared.map((p, i) => stepBtnHtml(p, i, i === 0 && p.kind !== 'snooze' ? 'primary' : '')).join('')}</div><div class="w-slot z-slot"></div><div class="z-next">`);
+    if (!isTT && (card.prepared || []).length) html = html.replace('<div class="z-next">', `<div class="w-acts z-acts-row"><span class="w-acts-k">${escapeHtml(t('today.ready_steps'))}</span>${card.prepared.map((p, i) => stepBtnHtml(p, i, i === 0 && p.kind !== 'snooze' ? 'primary' : '')).join('')}</div><div class="w-slot z-slot"></div><div class="z-next">`);
     html += '<details class="z-hist" id="zHist" hidden><summary></summary><div class="z-hist-b" id="zHistB"></div></details>';
     const modal = overlay.querySelector('.tile-zoom-modal');
     const hdr = modal.querySelector('.tile-zoom-header');

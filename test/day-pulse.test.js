@@ -75,7 +75,7 @@ test('cross-source merged card: timeline face across channels, one row per item,
     { title: 'Review requested', url: 'https://mail.google.com/mail/u/0/#inbox/x', type: 'email', mergedFrom: 'gmail', at: '2026-11-04T01:05:00Z' },
   ] }] }
   const spec = autoFace(card); assert.equal(spec.layout, 'timeline')
-  const v = hydrateFace(card, spec, { now: WED })
+  const v = hydrateFace(card, spec, { now: WED, lang: 'zh' })
   const tl = v.parts.find(p => p.type === 'timeline')
   assert.deepEqual(tl.items.map(i => i.kind), ['pr', 'email']); assert.deepEqual(tl.items.map(i => i.time), ['09:00', '09:05'])
   assert.equal(v.note, '同一件事 · GitHub + 邮件')

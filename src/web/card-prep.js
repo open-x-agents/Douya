@@ -135,7 +135,8 @@ const hm = ms => { const d = new Date(ms); return `${String(d.getHours()).padSta
 /** Score a work card for "what matters now". */
 export function cardUrgency(card, { itemStatus = {} } = {}) {
   let s = (PRI[card.priority] || 1) * 10
-  if (card.waiting === 'you') s += 12
+  // Waiting-on-you always clears the hero threshold (even low priority): someone is blocked on you.
+  if (card.waiting === 'you') s += 20
   if (card.pinned) s += 6
   if (card.type === 'task' || card.source === 'bot' || card.source === 'manual') s += 4
   if (card.waiting === 'fyi') s -= 8
@@ -192,16 +193,23 @@ export function pickNextThing({ cards = [], itemStatus = {}, doneBlocks = [], no
       : (locale === 'zh' ? `${Math.max(1, Math.round((ev.s - t) / 60000))} 分钟后开始 · ${hm(ev.s)}–${hm(ev.e)}` : `Starts in ${Math.max(1, Math.round((ev.s - t) / 60000))} min · ${hm(ev.s)}–${hm(ev.e)}`)
     return { kind: 'meeting', title: clip(ev.title, 60), why, at: hm(ev.s), endsAt: hm(ev.e), startsAtMs: ev.s, live, url: ev.url || null, buttons, upcoming: null }
   }
-  const top = ranked.find(c => cardUrgency(c, { itemStatus }) >= 30) || null
+  // Prefer any waiting-on-you card; otherwise the usual urgency floor (≥30).
+  const top = ranked.find(c => c.waiting === 'you' && cardUrgency(c, { itemStatus }) >= 20)
+    || ranked.find(c => cardUrgency(c, { itemStatus }) >= 30)
+    || null
   if (top) {
     const prep = prepareCardActions(top, { itemStatus, max: 3 })
     const hand = prep.find(p => p.kind === 'ask' || p.kind === 'act')
-    const buttons = [{ kind: 'open', label: tr('hero.btn_start', locale), cardId: top.id }]
-    buttons.push({ kind: 'snooze', label: tr('hero.btn_snooze', locale), cardId: top.id, hint: locale === 'zh' ? '明早 9 点再出现' : 'Back tomorrow 9:00' })
-    if (hand) buttons.push({ ...hand, label: hand.kind === 'ask' ? tr('hero.btn_ask', locale) : hand.label, cardId: top.id })
+    // Ready actions first: concrete prepared step (keep its label), then Start, then Snooze.
+    const buttons = []
+    if (hand) buttons.push({ ...hand, label: clip(hand.label, 22), cardId: top.id })
     else buttons.push({ kind: 'ask', label: tr('hero.btn_ask', locale), cardId: top.id, prompt: `帮我推进「${clip(top.title, 40)}」（卡片 id ${top.id}）：${clip(top.nextAction || '看看下一步该做什么', 60)}。` })
+    buttons.push({ kind: 'open', label: tr('hero.btn_start', locale), cardId: top.id })
+    buttons.push({ kind: 'snooze', label: tr('hero.btn_snooze', locale), cardId: top.id, hint: locale === 'zh' ? '明早 9 点再出现' : 'Back tomorrow 9:00' })
     const shortWhy = String(top.why || '').trim()
-    const why = [top.waiting === 'you' ? tr('hero.waiting_you', locale) : '', PRI[top.priority] >= 3 ? tr('hero.priority', locale) : '', shortWhy && shortWhy.length <= 36 && /[\u4e00-\u9fa5]/.test(shortWhy) ? shortWhy : ''].filter(Boolean).join(' · ')
+    // Keep a short honest why in any script (EN card bodies used to be dropped by a CJK-only filter).
+    const whyBit = shortWhy && shortWhy.length <= 48 ? shortWhy : ''
+    const why = [top.waiting === 'you' ? tr('hero.waiting_you', locale) : '', PRI[top.priority] >= 3 ? tr('hero.priority', locale) : '', whyBit].filter(Boolean).join(' · ')
     return { kind: 'card', title: clip(top.title, 60), next: clip(top.nextAction || '', 70), why, cardId: top.id, source: top.source || null, buttons, upcoming }
   }
   const remaining = (ttb.suggestedBlocks || []).map(b => ({ ...b, s: toMs(b.start, now), e: toMs(b.end, now) })).filter(b => b.s != null && b.e > t).sort((a, b) => a.s - b.s)
@@ -216,9 +224,12 @@ export function pickNextThing({ cards = [], itemStatus = {}, doneBlocks = [], no
       buttons: [{ kind: 'blockdone', label: tr('hero.btn_done', locale), blockKey: blockDoneKey(blk, now), title: clip(blk.title, 60) }, { kind: 'timetable', label: tr('hero.btn_timetable', locale) }, { kind: 'ask', label: tr('hero.btn_ask', locale), prompt: `我${live ? '现在' : '接下来'}要做「${clip(blk.title, 40)}」（${hm(blk.s)}–${hm(blk.e)}），帮我列一个马上能开始的三步清单。` }], upcoming }
   }
   if (remaining.length) {
-    return { kind: 'none', title: tr('hero.all_done_title', locale), why: work.length ? tr('hero.all_done_why_cards', locale, { n: work.length }) : tr('hero.all_done_why', locale), buttons: [{ kind: 'timetable', label: tr('hero.btn_timetable', locale) }], upcoming }
+    const buttons = [{ kind: 'timetable', label: tr('hero.btn_timetable', locale) }]
+    if (ranked[0]) buttons.unshift({ kind: 'open', label: tr('hero.btn_start', locale), cardId: ranked[0].id })
+    return { kind: 'none', title: tr('hero.all_done_title', locale), why: work.length ? tr('hero.all_done_why_cards', locale, { n: work.length }) : tr('hero.all_done_why', locale), buttons, upcoming }
   }
-  return { kind: 'none', title: work.length ? tr('hero.idle_title', locale) : tr('hero.idle_title_empty', locale), why: work.length ? tr('hero.idle_why', locale, { n: work.length }) : tr('hero.idle_why_empty', locale), buttons: [], upcoming }
+  const idleBtns = ranked[0] ? [{ kind: 'open', label: tr('hero.btn_start', locale), cardId: ranked[0].id }, { kind: 'ask', label: tr('hero.btn_ask', locale), cardId: ranked[0].id, prompt: `帮我推进「${clip(ranked[0].title, 40)}」（卡片 id ${ranked[0].id}）。` }] : []
+  return { kind: 'none', title: work.length ? tr('hero.idle_title', locale) : tr('hero.idle_title_empty', locale), why: work.length ? tr('hero.idle_why', locale, { n: work.length }) : tr('hero.idle_why_empty', locale), buttons: idleBtns, upcoming }
 }
 
 /** One-line summary of the day for the collapsed header. Only counts real data. */

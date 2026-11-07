@@ -653,6 +653,12 @@
   .mem-count b{color:var(--ink);font-weight:650}
   .mem-refresh{border:0;cursor:pointer;font:600 12.5px/1 inherit;color:var(--violet);background:var(--violet-soft);padding:8px 14px;border-radius:999px;transition:.2s var(--ease)}
   .mem-refresh:hover{transform:translateY(-1px);box-shadow:0 6px 14px -8px rgba(138,116,208,.55)}
+  .mem-sections{display:flex;flex-direction:column;gap:28px}
+  .mem-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 12px}
+  .mem-section-head h2{margin:0;font-size:13px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2)}
+  .mem-section-head .mem-section-n{font-size:12px;color:var(--ink3);font-variant-numeric:tabular-nums}
+  .mem-section.is-everyday .mem-card{opacity:.92}
+  .mem-section.is-everyday .mem-section-head h2{color:var(--ink3);font-weight:600}
   .mem-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
   .mem-card{position:relative;background:rgba(255,255,255,.78);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.95);border-radius:20px;padding:18px 18px 14px;box-shadow:var(--shadow);transition:.28s var(--ease);animation:memIn .55s var(--ease-out) both;overflow:hidden;min-height:132px;display:flex;flex-direction:column}
   .mem-card::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--mem-accent,#8a74d0);opacity:.85;border-radius:20px 0 0 20px}
@@ -2014,7 +2020,7 @@
             <div>
               <div class="eyebrow" data-i18n="memory.eyebrow">Memory glimpse</div>
               <h1 data-i18n="memory.title">What Douya remembers</h1>
-              <p data-i18n="memory.sub">Moments Douya keeps across chats — pinned ones stay close.</p>
+              <p data-i18n="memory.sub">Wins, decisions, and moments that matter — everyday prefs stay quieter.</p>
             </div>
             <div class="mem-hero-side">
               <div class="mem-count" id="memCount"><b>–</b></div>
@@ -5361,6 +5367,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   // ===== Memory 一瞥 (dsh-memory SQLite) =====
   const MEM_MARKS = ['🌱', '✨', '📌', '🫧', '🌙', '🫖', '📎', '💫', '🪄', '🍃'];
   const MEM_ACCENTS = {
+    achievement: '#d4a017', milestone: '#d4a017', win: '#d4a017',
     preference: '#22a898', decision: '#8a74d0', project: '#4f9de8', person: '#e2667a',
     habit: '#f0a35e', fact: '#5b6275', default: '#8a74d0',
   };
@@ -5371,7 +5378,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const palette = ['#22a898', '#8a74d0', '#4f9de8', '#e2667a', '#f0a35e', '#6450a8'];
     return palette[h % palette.length];
   }
-  function memMark(id) { return MEM_MARKS[Math.abs(Number(id) || 0) % MEM_MARKS.length]; }
+  function memMark(id, tags) {
+    const t0 = (tags && tags[0] || '').toLowerCase();
+    if (t0 === 'achievement' || t0 === 'milestone' || t0 === 'win') return '🏆';
+    if (t0 === 'decision') return '📌';
+    return MEM_MARKS[Math.abs(Number(id) || 0) % MEM_MARKS.length];
+  }
   function memAgo(ts) {
     if (!ts) return '';
     const seconds = Math.max(0, Math.round((Date.now() - Number(ts)) / 1000));
@@ -5393,6 +5405,36 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const k = 'memory.tag_' + tag;
     const v = t(k);
     return v === k ? tag : v;
+  }
+  const MEM_HIGH_TAGS = new Set(['achievement', 'milestone', 'win', 'decision', 'project']);
+  const MEM_MID_TAGS = new Set(['person', 'habit', 'fact']);
+  const MEM_ROUTINE_RE = /timezone|time\s*zone|\blocale\b|ui\s*language|interface\s*language|asia\/shanghai|\butc\s*[+-]?\s*\d|\bdark\s*mode\b|\bfont\s*size\b|\bdisplay\s*language\b/i;
+  function memIsRoutine(m, tags) {
+    const text = String(m.text || '');
+    if (!MEM_ROUTINE_RE.test(text)) return false;
+    return !tags.length || tags.includes('preference') || tags.every(tg => !MEM_HIGH_TAGS.has(tg) && !MEM_MID_TAGS.has(tg));
+  }
+  function memIsHighlight(m, tags) {
+    if (memIsRoutine(m, tags)) return false;
+    if (tags.some(tg => MEM_HIGH_TAGS.has(tg))) return true;
+    if (m.pinned) return true;
+    if (tags.some(tg => MEM_MID_TAGS.has(tg))) return true;
+    return false;
+  }
+  function memCardHtml(m, i) {
+    const tags = Array.isArray(m.tags) ? m.tags : String(m.tags || '').split(/\s+/).filter(Boolean);
+    const accent = memAccent(tags);
+    const pills = [
+      m.pinned ? `<span class="mem-pill pin">${escapeHtml(t('memory.pinned'))}</span>` : '',
+      ...tags.slice(0, 3).map(tg => `<span class="mem-pill tag">${escapeHtml(memTagLabel(tg))}</span>`),
+    ].join('');
+    return `<article class="mem-card${m.pinned ? ' is-pinned' : ''}" data-id="${escapeHtml(String(m.id))}" style="--mem-accent:${accent};animation-delay:${Math.min(i, 12) * 45}ms">
+        <div class="mem-mark" aria-hidden="true">${memMark(m.id, tags)}</div>
+        <div class="mem-text">${escapeHtml(m.text || '')}</div>
+        <div class="mem-meta">${pills}<span class="mem-when">${escapeHtml(memAgo(m.updatedAt || m.createdAt))}</span>
+          <button type="button" class="mem-forget" data-id="${escapeHtml(String(m.id))}" aria-label="${escapeHtml(t('memory.forget'))}">${escapeHtml(t('memory.forget'))}</button>
+        </div>
+      </article>`;
   }
   function paintMemories(data) {
     const box = $('memContent');
@@ -5421,22 +5463,23 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       });
       return;
     }
-    box.className = 'mem-grid';
-    box.innerHTML = rows.map((m, i) => {
-      const tags = Array.isArray(m.tags) ? m.tags : String(m.tags || '').split(/\s+/).filter(Boolean);
-      const accent = memAccent(tags);
-      const pills = [
-        m.pinned ? `<span class="mem-pill pin">${escapeHtml(t('memory.pinned'))}</span>` : '',
-        ...tags.slice(0, 3).map(tg => `<span class="mem-pill tag">${escapeHtml(memTagLabel(tg))}</span>`),
-      ].join('');
-      return `<article class="mem-card${m.pinned ? ' is-pinned' : ''}" data-id="${escapeHtml(String(m.id))}" style="--mem-accent:${accent};animation-delay:${Math.min(i, 12) * 45}ms">
-        <div class="mem-mark" aria-hidden="true">${memMark(m.id)}</div>
-        <div class="mem-text">${escapeHtml(m.text || '')}</div>
-        <div class="mem-meta">${pills}<span class="mem-when">${escapeHtml(memAgo(m.updatedAt || m.createdAt))}</span>
-          <button type="button" class="mem-forget" data-id="${escapeHtml(String(m.id))}" aria-label="${escapeHtml(t('memory.forget'))}">${escapeHtml(t('memory.forget'))}</button>
-        </div>
-      </article>`;
-    }).join('');
+    const highlights = [];
+    const everyday = [];
+    for (const m of rows) {
+      const tags = Array.isArray(m.tags) ? m.tags.map(x => String(x).toLowerCase()) : String(m.tags || '').split(/\s+/).map(x => x.toLowerCase()).filter(Boolean);
+      if (memIsHighlight(m, tags)) highlights.push(m);
+      else everyday.push(m);
+    }
+    const sections = [];
+    let anim = 0;
+    if (highlights.length) {
+      sections.push(`<section class="mem-section is-highlights"><div class="mem-section-head"><h2>${escapeHtml(t('memory.section_highlights'))}</h2><span class="mem-section-n">${highlights.length}</span></div><div class="mem-grid">${highlights.map(m => memCardHtml(m, anim++)).join('')}</div></section>`);
+    }
+    if (everyday.length) {
+      sections.push(`<section class="mem-section is-everyday"><div class="mem-section-head"><h2>${escapeHtml(t('memory.section_everyday'))}</h2><span class="mem-section-n">${everyday.length}</span></div><div class="mem-grid">${everyday.map(m => memCardHtml(m, anim++)).join('')}</div></section>`);
+    }
+    box.className = 'mem-sections';
+    box.innerHTML = sections.join('');
     box.querySelectorAll('.mem-forget').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();

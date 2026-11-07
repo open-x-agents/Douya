@@ -2291,6 +2291,25 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
         const data = await router.listCompletions();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(data));
+      } else if (url.pathname === '/api/opendigitalmate/logo' && req.method === 'GET') {
+        // Same-origin brand SVGs for Sources tiles (parity with dsh-host-routes).
+        const app = (url.searchParams.get('app') || '').toLowerCase();
+        if (!/^[a-z0-9_]{1,40}$/.test(app)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'bad app' }));
+          return;
+        }
+        try {
+          const body = await readFile(join(__dirname, '../client/logos', `${app}.svg`));
+          res.writeHead(200, {
+            'Content-Type': 'image/svg+xml; charset=utf-8',
+            'Cache-Control': 'public, max-age=604800, immutable',
+          });
+          res.end(body);
+        } catch {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'not found' }));
+        }
       } else if (url.pathname === '/api/sources' && req.method === 'GET') {
         const data = await router.getSources();
         res.writeHead(200, { 'Content-Type': 'application/json' });

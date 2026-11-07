@@ -1064,12 +1064,13 @@
   .src-summary span{font-size:12px;color:var(--ink3)}
   .src-warn{margin:0;font-size:13px;color:var(--rose)}
   .src-group{margin-bottom:26px}
-  .src-group-h{display:flex;align-items:baseline;gap:10px;margin:0 0 10px}
+  .src-group-h{position:sticky;top:0;z-index:3;display:flex;align-items:baseline;gap:10px;margin:0 0 10px;padding:8px 0 6px;background:linear-gradient(180deg,#fff 55%,rgba(255,255,255,.82));backdrop-filter:blur(10px)}
   .src-group-h b{font-size:15px;font-weight:650}
   .src-group-h span{font-size:12px;color:var(--ink3)}
   .src-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
   .src-tile{background:rgba(255,255,255,.82);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.95);border-radius:18px;padding:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;min-width:0;transition:.2s var(--ease)}
   .src-tile:hover{box-shadow:var(--shadow-hi);transform:translateY(-1px)}
+  .src-tile:focus-within{box-shadow:var(--shadow-hi),0 0 0 2px rgba(74,108,247,.35);transform:translateY(-1px)}
   .src-tile.is-on{background:linear-gradient(160deg,#fff,rgba(227,246,243,.9))}
   .src-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
   .src-top img,.src-fb{width:36px;height:36px;border-radius:10px;object-fit:contain;background:#fff;box-shadow:0 0 0 1px var(--line)}
@@ -1082,8 +1083,12 @@
   .src-tile p{margin:0 0 14px;font-size:12.5px;line-height:1.55;color:var(--ink2);flex:1}
   .src-foot{display:flex;align-items:center;justify-content:space-between;gap:8px}
   .src-auth{font-size:11px;color:var(--ink3)}
-  .src-btn{border:0;cursor:pointer;font:600 12.5px/1 inherit;color:#fff;padding:8px 14px;border-radius:999px;background:linear-gradient(135deg,#6f8df5,#8a74d0)}
+  .src-btn{border:0;cursor:pointer;font:600 12.5px/1 inherit;color:#fff;padding:8px 14px;border-radius:999px;background:linear-gradient(135deg,#6f8df5,#8a74d0);transition:transform .15s var(--ease),box-shadow .15s var(--ease),filter .15s var(--ease)}
+  .src-btn:hover{transform:translateY(-1px);filter:brightness(1.04);box-shadow:0 6px 14px -6px rgba(74,108,247,.55)}
+  .src-btn:focus-visible{outline:2px solid rgba(74,108,247,.55);outline-offset:2px}
   .src-btn.ghost{background:#fff;color:var(--ink2);box-shadow:0 0 0 1px var(--line)}
+  .src-btn.ghost:hover{box-shadow:0 0 0 1px rgba(74,108,247,.35),0 6px 14px -8px rgba(30,40,80,.18);filter:none}
+  .src-recheck:focus-visible,.nav[data-view]:focus-visible{outline:2px solid rgba(74,108,247,.5);outline-offset:2px}
 
   .dockPanel{width:420px;max-height:min(680px,calc(100vh - 32px))}
   /* flex column children default to flex-shrink:1; with overflow:hidden their min-height becomes 0,
@@ -2267,6 +2272,11 @@
   
   // View navigation
   document.querySelectorAll('.nav[data-view]').forEach(nav => {
+    if (!nav.hasAttribute('tabindex')) nav.setAttribute('tabindex', '0');
+    if (!nav.hasAttribute('role')) nav.setAttribute('role', 'button');
+    nav.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showView(nav.getAttribute('data-view')); }
+    });
     nav.addEventListener('click', () => showView(nav.getAttribute('data-view')));
   });
 

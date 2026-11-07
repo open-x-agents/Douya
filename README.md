@@ -31,7 +31,7 @@ Not a dashboard. Douya pulls live work from tools you already use, turns it into
 | **Pending confirm** | Outbound mail / comments / archives only leave after you click Confirm |
 | **Dock chat** | Talk with Douya (Chief). Confirmed sends echo into card chat + general chat |
 | **Sources** | Connect GitHub, Gmail, Slack, Calendar, … via Composio |
-| **Memories** | Glimpse of durable recalls — achievements & decisions first |
+| **Memories** (回忆 / Recall) | Readable memory tiles with photos — achievements & decisions first; open one to read it all or add a photo |
 | **Desktop UX** | Hover/swipe actions, IME-safe shortcuts (`J` `K` `E` `C` `S` `?`), two-column zoom |
 
 Local-only: binds to `127.0.0.1`.
@@ -135,6 +135,8 @@ dsh plugin --profile odm add @openviking/dsh-memory-plugin@0.5.33
 ```
 
 Remove legacy `dsh-memory` from the profile once OpenViking is healthy. While the server is down, Muse still falls back to the old SQLite `memory.db` for Glimpse only (chat auto-recall needs the server).
+
+**Recall page (in `dsh-muse-ui`).** Memories read as a short title plus plain sentences — no `viking://` URIs, marker tokens or markdown (`packages/dsh-muse-ui/memory-present.js`, served to the page as `/api/opendigitalmate/memory-present.js`). Open a tile to read the whole memory; **Add photo** (png / jpeg / gif / webp, ≤ 5 MB) stores the image **in OpenViking** as a resource under `viking://resources/recall/<memory>/` (memories reject binary writes) and appends `![caption](viking://resources/recall/…)` to the memory, so chat sees the same link. The host only adds `GET|POST /api/opendigitalmate/memories/image` (proxy restricted to `viking://resources/recall/`); forgetting a memory deletes its photos too.
 
 `openviking-server doctor` may warn that embedding / VLM are missing. **Memories list + forget** still work over the filesystem API; semantic auto-recall / search need a working embedding (local GGUF via `openviking[local-embed]`, Ollama, or a cloud key).
 

@@ -1,6 +1,74 @@
 /**
+ * Recall presentation helpers for Muse memory tiles. Pure, no DOM, browser-safe:
+ * the Muse plugin serves this same file to the page (MUSE_MEMORY_PRESENT_PATH), so there is one copy.
+ */
+
+/**
+ * Turn a stored memory (markdown, machine markers, URIs) into plain sentences a person reads.
+ * Keeps a leading `# heading` line so presentMemoryText can use it as the title.
+ */
+export function humanizeMemoryText(raw) {
+  let s = String(raw || '').replace(/\r\n/g, '\n')
+  s = s.replace(/^---\n[\s\S]*?\n---\n?/, '') // YAML front matter
+  s = s.replace(/<!--[\s\S]*?-->/g, '') // MEMORY_FIELDS and other machine comments
+  s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, '') // image links (shown as pictures, not text)
+  s = s.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1') // [label](url) → label
+  s = s.replace(/\bviking:\/\/\S+/g, '') // raw OpenViking URIs
+  s = s.replace(/\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+){2,}\b:?\s*/g, '') // MARKER_TOKENS_LIKE_THIS:
+  const out = []
+  let first = true
+  let lead = '' // a sub-heading leads into the next sentence: "Boundaries: Private things stay private."
+  for (let line of s.split('\n')) {
+    line = line.trim()
+    if (!line || /^(-{3,}|\*{3,}|_{3,})$/.test(line)) continue
+    const h = line.match(/^#{1,6}\s+(.+)$/)
+    if (h) {
+      // "soul.md - Who You Are" → "Who You Are"
+      const head = plain(h[1]).replace(/^[\w.-]+\.md\s*[-–—:]\s*/i, '').trim()
+      if (head && first) out.push(`# ${head}`)
+      else if (head) { if (lead) out.push(sentence(lead)); lead = head.replace(/[:：]$/, '') }
+      first = false
+      continue
+    }
+    first = false
+    line = line.replace(/^([-*•+]|\d+[.)])\s+/, '')
+    line = plain(line)
+    if (/^[^:：]{1,24}[:：]\s*$/.test(line)) continue // "Name:" with nothing after it
+    if (line) { out.push(sentence(lead ? `${lead}: ${line}` : line)); lead = '' }
+  }
+  if (lead) out.push(sentence(lead))
+  return out.join('\n').trim()
+}
+
+function plain(s) {
+  return String(s || '')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/\*\*([^*]*)\*\*/g, '$1')
+    .replace(/__([^_]*)__/g, '$1')
+    .replace(/(^|\s)[*_]([^*_]+)[*_](?=\s|$|[.,;:!?。！？])/g, '$1$2')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function sentence(s) {
+  const t = String(s || '').trim()
+  if (!t) return ''
+  return /[.!?。！？…:：]$/.test(t) ? t : (/[\u4e00-\u9fff]$/.test(t) ? t + '。' : t + '.')
+}
+
+/** Short, plain-sentence title / summary / full body for one memory row. */
+export function presentMemory(m, opts) {
+  const p = presentMemoryText(humanizeMemoryText(m && m.text), opts)
+  p.title = p.title.replace(/(?<![.。])[.。]$/, '')
+  if (!p.title) {
+    const name = String((m && (m.uri || m.id)) || '').split('/').pop().replace(/\.md$/i, '').replace(/[-_]+/g, ' ').trim()
+    p.title = name ? name[0].toUpperCase() + name.slice(1) : '…'
+  }
+  return p
+}
+
+/**
  * Split a raw memory blob into title / summary / body for Muse Glimpse tiles.
- * Pure, no DOM — kept tiny so the static index.html can mirror the same rules.
  */
 export function presentMemoryText(raw, { titleMax = 72, summaryMax = 140 } = {}) {
   const text = String(raw || '').replace(/\r\n/g, '\n').trim()

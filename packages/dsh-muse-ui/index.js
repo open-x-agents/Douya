@@ -4,7 +4,9 @@ import {
   MUSE_APP_PATH,
   MUSE_UI_RENDERER_PATH,
   MUSE_LOGO_PATH,
+  MUSE_MEMORY_PRESENT_PATH,
   museAppResponse,
+  museMemoryPresentResponse,
   museUiRendererResponse,
   museLogoResponse,
 } from './static-serve.js'
@@ -60,6 +62,13 @@ export function apply(ctx, _config = {}) {
     requestBody: 'buffered',
     fetch: async (request) => museLogoResponse(request),
   }, 'dsh-muse-ui: source logo')
+
+  effect({
+    path: MUSE_MEMORY_PRESENT_PATH,
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async () => museMemoryPresentResponse(),
+  }, 'dsh-muse-ui: memory-present')
 
   return true
 }

@@ -166,3 +166,91 @@ test('listMemories falls back to empty when OV down and no sqlite', async () => 
     globalThis.fetch = prev
   }
 })
+
+import {
+  splitMemoryImages,
+  decodeMemoryImageRef,
+  memoryImageSrc,
+  recallSlug,
+  attachMemoryImage,
+  downloadMemoryImage,
+} from '../src/digest/openviking.js'
+
+test('splitMemoryImages: image lines become same-origin srcs; text keeps no viking:// image link', () => {
+  const r = splitMemoryImages('# Demo day\n\nWe shipped it.\n\n![Demo day](viking://resources/recall/events--demo/abc/team.png)\n')
+  assert.equal(r.text, '# Demo day\n\nWe shipped it.')
+  assert.equal(r.images.length, 1)
+  assert.equal(r.images[0].caption, 'Demo day')
+  assert.match(r.images[0].src, /^\/api\/opendigitalmate\/memories\/image\?ref=[A-Za-z0-9_-]+$/)
+  assert.equal(decodeMemoryImageRef(r.images[0].src.split('ref=')[1]), 'viking://resources/recall/events--demo/abc/team.png')
+})
+
+test('decodeMemoryImageRef: only viking://resources/recall/… is served', () => {
+  const ref = (u) => memoryImageSrc(u).split('ref=')[1]
+  assert.equal(decodeMemoryImageRef(ref('viking://user/default/memories/soul.md')), '')
+  assert.equal(decodeMemoryImageRef(ref('viking://resources/recall/../secret')), '')
+  assert.equal(decodeMemoryImageRef('%%%'), '')
+})
+
+test('recallSlug: memory path → one folder per memory', () => {
+  assert.equal(recallSlug('viking://user/default/memories/experiences/odm-ship.md'), 'experiences--odm-ship')
+  assert.equal(recallSlug('viking://~/memories/soul.md'), 'soul')
+})
+
+test('attachMemoryImage: rejects non-memory ids, non-images and >5 MB without calling OpenViking', async () => {
+  const prev = globalThis.fetch
+  let calls = 0
+  globalThis.fetch = async () => { calls++; throw new Error('should not fetch') }
+  try {
+    const cfg = { url: 'http://127.0.0.1:19999', apiKey: '', account: '', user: '' }
+    assert.equal((await attachMemoryImage({ id: 'viking://resources/x', data: 'AAAA', type: 'image/png' }, cfg)).ok, false)
+    assert.equal((await attachMemoryImage({ id: 'viking://~/memories/a.md', data: 'AAAA', type: 'text/html' }, cfg)).ok, false)
+    const big = Buffer.alloc(5 * 1024 * 1024 + 1).toString('base64')
+    assert.match((await attachMemoryImage({ id: 'viking://~/memories/a.md', data: big, type: 'image/png' }, cfg)).error, /5 MB/)
+    assert.equal(calls, 0)
+  } finally {
+    globalThis.fetch = prev
+  }
+})
+
+test('attachMemoryImage: upload → add_resource under recall/<memory>/ → append image line to the memory', async () => {
+  const prev = globalThis.fetch
+  const seen = []
+  globalThis.fetch = async (url, init = {}) => {
+    const u = new URL(String(url))
+    seen.push({ path: u.pathname, method: init.method || 'GET', body: typeof init.body === 'string' ? JSON.parse(init.body) : null, query: Object.fromEntries(u.searchParams) })
+    const ok = (result) => new Response(JSON.stringify({ status: 'ok', result }), { status: 200 })
+    if (u.pathname === '/api/v1/resources/temp_upload') return ok({ temp_file_id: 'upload_1.png' })
+    if (u.pathname === '/api/v1/resources') return ok({ status: 'success' })
+    if (u.pathname === '/api/v1/fs/ls') return ok([{ isDir: false, uri: u.searchParams.get('uri') + 'team.png' }])
+    if (u.pathname === '/api/v1/content/write') return ok({ mode: 'append' })
+    throw new Error('unexpected ' + u.pathname)
+  }
+  try {
+    const cfg = { url: 'http://ov.test', apiKey: '', account: '', user: '' }
+    const r = await attachMemoryImage({ id: 'viking://user/default/memories/events/demo.md', data: 'data:image/png;base64,iVBORw0KGgo=', name: 'Team Photo.PNG', caption: 'Demo [day]' }, cfg)
+    assert.equal(r.ok, true)
+    const add = seen.find(s => s.path === '/api/v1/resources')
+    assert.match(add.body.to, /^viking:\/\/resources\/recall\/events--demo\/[a-z0-9]+\/$/)
+    assert.equal(add.body.wait, false)
+    const write = seen.find(s => s.path === '/api/v1/content/write')
+    assert.equal(write.body.mode, 'append')
+    assert.equal(write.body.uri, 'viking://user/default/memories/events/demo.md')
+    assert.match(write.body.content, /^\n\n!\[Demo day\]\(viking:\/\/resources\/recall\/events--demo\/[a-z0-9]+\/team\.png\)\n$/)
+    assert.equal(decodeMemoryImageRef(r.image.src.split('ref=')[1]), r.image.uri)
+  } finally {
+    globalThis.fetch = prev
+  }
+})
+
+test('downloadMemoryImage: bad ref is 400 and never fetches', async () => {
+  const prev = globalThis.fetch
+  globalThis.fetch = async () => { throw new Error('should not fetch') }
+  try {
+    const r = await downloadMemoryImage('bad', { url: 'http://ov.test' })
+    assert.equal(r.ok, false)
+    assert.equal(r.status, 400)
+  } finally {
+    globalThis.fetch = prev
+  }
+})

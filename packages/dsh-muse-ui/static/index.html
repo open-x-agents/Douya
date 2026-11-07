@@ -1974,6 +1974,7 @@
   .brief dt{color:var(--ink3)}.brief dd{margin:0;color:var(--ink)}
   .brief-next{margin:8px 0 0;font-size:13px;font-weight:600;color:var(--ink)}
   .brief-acts{margin-top:8px;display:flex;gap:8px}
+  .brief-note{font-size:13px;line-height:1.5;color:var(--ink)}
   .nx.leaving{opacity:0;transform:translateY(-6px);transition:opacity .22s var(--ease),transform .22s var(--ease)}
 </style>
 </head>
@@ -4041,6 +4042,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       m = { at: Date.now(), r }; briefMemo.set(card.id, m);
     }
     const b = m.r && m.r.success && m.r.brief;
+    if (m.r && m.r.blocked) { slot.innerHTML = `<div class="brief brief-note">${escapeHtml(m.r.error || '')}</div>`; return; }
     if (!b || !live() || !slot.isConnected) return;
     const rows = (compact ? b.lines.filter(l => l.k !== '作者说').slice(0, 2) : b.lines);
     const label = b.mine ? '让豆芽推进' : '起草评审意见';

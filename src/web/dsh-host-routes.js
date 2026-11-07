@@ -337,7 +337,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     path: '/api/chat/history',
     methods: ['GET'],
     requestBody: 'buffered',
-    fetch: async () => json(await router.getChatHistory({ reader: () => loadMuseHistory(ctx, { dshHome }) })),
+    fetch: async () => json(await router.getChatHistory({ reader: () => loadMuseHistory(ctx, { dshHome, display: router.chatDisplay() }) })),
   }, 'opendigitalmate: /api/chat/history')
 
   // One lane per Chief: turns never overlap, and quick follow-ups merge into one turn (see chat-lane.js).

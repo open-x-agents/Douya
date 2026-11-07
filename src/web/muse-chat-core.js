@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { buildChatContent, isImageModelError } from './chat-media.js'
+import { stripAttachNote, legacyAttachments } from './chat-display.js'
 import { DEEPSEEK_VISION_MODELS } from './llm-env.js'
 import { STEER_NOTE } from './chat-lane.js'
 
@@ -90,6 +91,13 @@ function messageText(ev) {
   const data = ev?.data || {}
   const msg = data.message || data
   return flattenContent(msg?.content ?? msg?.parts ?? data.content ?? msg?.text)
+}
+
+function messageParts(ev) {
+  const data = ev?.data || {}
+  const msg = data.message || data
+  const content = msg?.content ?? msg?.parts ?? data.content
+  return Array.isArray(content) ? content : []
 }
 
 // afterSeq < 0 keeps every record (a fresh part after a handoff). A known seq excludes the log from before this prompt.
@@ -543,16 +551,22 @@ export async function chatProgress(ctx, { dshHome, botId = null } = {}) {
 // only knows the pre-v4 file name. Read the same records the turn reads, in process.
 
 const HISTORY_INJECTED = /^(\[Handoff · part \d+\]|Current runtime context\.|<system-reminder>|Current time: \d{4}-)/
-const HISTORY_CTX = /^【(当前视图|当前卡片|cardId=)/
+const HISTORY_CTX = /^【(当前视图|当前卡片|刚处理完|cardId=)/
+// A follow-up steered into an open turn is stored with the lane's note in front of the user's sentence.
+const STEER_PREFIX = /^（(?:补充一条|我连续发了几条消息)[^）]*）\s*/
+const ATTACH_PLACEHOLDER = '请看我附上的内容。'
 
-/** The owner's own words: peel off the view/card context the turn prepends, keep the rest whole. */
+/**
+ * The owner's own words: peel off the model-only context the turn prepends (view / card / done),
+ * the steer note a merged follow-up carries, and the attachment note after the words. Keep the rest whole.
+ */
 function ownerText(raw) {
-  const text = String(raw || '').trim()
-  if (!HISTORY_CTX.test(text)) return cleanBlock(text)
+  const text = String(raw || '').trim().replace(STEER_PREFIX, '')
+  if (!HISTORY_CTX.test(text)) return cleanBlock(stripAttachNote(text))
   const paras = text.split(/\n\s*\n/)
   while (paras.length > 1 && HISTORY_CTX.test(paras[0].trim())) paras.shift()
   if (paras.length === 1 && HISTORY_CTX.test(paras[0].trim())) return ''
-  return cleanBlock(paras.join('\n\n'))
+  return cleanBlock(stripAttachNote(paras.join('\n\n')))
 }
 
 /**
@@ -560,21 +574,37 @@ function ownerText(raw) {
  * last assistant text (what the live bubble showed). Team relays, runtime context and clock
  * injections are not the owner's words, so they stay out.
  */
-export function historyFromRecords(records, { limit = 40 } = {}) {
+export function historyFromRecords(records, { limit = 40, display = null } = {}) {
   const out = []
-  let open = null      // the owner prompt whose turn is still the current one
+  let open = false     // the owner prompt whose turn is still the current one
   let replyIdx = -1    // index in `out` of this turn's assistant bubble
   for (const record of Array.isArray(records) ? records : []) {
     const ev = eventOf(record)
     if (ev.type === 'user/message') {
       const source = messageSource(ev)
       const text = messageText(ev)
-      open = null; replyIdx = -1
+      open = false; replyIdx = -1
       if (source?.kind !== 'user') continue
-      const content = ownerText(text)
-      if (!clean(content) || HISTORY_INJECTED.test(content)) continue
-      out.push({ role: 'user', content, ...(Number.isFinite(ev.time) ? { at: new Date(ev.time).toISOString() } : {}) })
-      open = content
+      const at = Number.isFinite(ev.time) ? { at: new Date(ev.time).toISOString() } : {}
+      // What the user saw when they sent it: their words plus attachment chips, never the prompt's
+      // model-only context. ds-bot keeps the prompt request id on the message as source.rpcId.
+      const shown = typeof display?.lookup === 'function' ? display.lookup(source.rpcId) : null
+      if (Array.isArray(shown) && shown.length) {
+        const bubbles = shown
+          .map(it => ({ text: cleanBlock(it?.text), attachments: Array.isArray(it?.attachments) ? it.attachments : [] }))
+          .filter(b => b.text || b.attachments.length)
+        for (const b of bubbles) out.push({ role: 'user', content: b.text, ...(b.attachments.length ? { attachments: b.attachments } : {}), ...at })
+        open = bubbles.length > 0
+        continue
+      }
+      // No display record (a Session from before it, or a relayed prompt): rebuild from the record.
+      const attachments = legacyAttachments(messageParts(ev), text)
+      const peeled = ownerText(text)
+      const words = clean(peeled) === ATTACH_PLACEHOLDER && attachments.length ? '' : peeled
+      if (HISTORY_INJECTED.test(clean(words))) continue
+      if (!clean(words) && !attachments.length) continue
+      out.push({ role: 'user', content: words, ...(attachments.length ? { attachments } : {}), ...at })
+      open = true
       continue
     }
     if (ev.type === 'assistant/message' && open) {
@@ -586,7 +616,7 @@ export function historyFromRecords(records, { limit = 40 } = {}) {
     }
     // A completed turn closes the bubble; an interrupted / blocked one is resumed, so its later
     // assistant text is still this turn's answer (the same rule ownReplyFromRecords uses).
-    if (ev.type === 'turn/end' && endsReply(ev.data?.reason)) { open = null; replyIdx = -1 }
+    if (ev.type === 'turn/end' && endsReply(ev.data?.reason)) { open = false; replyIdx = -1 }
   }
   return out.slice(-limit)
 }
@@ -618,14 +648,14 @@ async function pageTail(ctx, sessionId, { maxMessages = 80, pages = 2 } = {}) {
 }
 
 /** GET /api/chat/history for the Muse host: the Chief's transcript, read in this process. */
-export async function loadMuseHistory(ctx, { dshHome, botId = null, limit = 40 } = {}) {
+export async function loadMuseHistory(ctx, { dshHome, botId = null, limit = 40, display = null } = {}) {
   const chief = await resolveChief(dshHome, botId)
   const parts = (chief.parts?.length ? chief.parts : [chief.botId]).filter(Boolean)
   if (!parts.length || !ctx?.sessionController?.page) return { sessionId: chief.sessionId || null, botId: chief.botId || null, messages: [] }
   const messages = []
   for (const part of parts.slice(-2)) {
     try {
-      messages.push(...historyFromRecords(await pageTail(ctx, part), { limit }))
+      messages.push(...historyFromRecords(await pageTail(ctx, part), { limit, display }))
     } catch { /* one unreadable part (a retired Session) must not empty the transcript */ }
   }
   return { sessionId: chief.sessionId || null, botId: chief.botId || null, messages: messages.slice(-limit) }

@@ -25,6 +25,59 @@ function flattenContent(content) {
  * a fresh "part" Session (bots[id].sessionId); prompts to the bot id are routed there, but replies have to be
  * read from the current part. parts = earlier part Sessions, oldest first, then the current one.
  */
+// Turn ds-bot failures that mean "the Chief's saved session is gone or unreadable" into a next step.
+const HINTS = {
+  newer: {
+    zh: '豆芽的 Bot 团队文件（.dsh-odm/bot/state.json）是更新版本的 DS Bot 写的，当前只能只读。请先备份并移走这个文件再重启，Chief 会被重新创建。',
+    en: 'Douya’s Bot team file (.dsh-odm/bot/state.json) was saved by a newer DS Bot and is read-only here. Back it up, move it aside and restart — a new Chief will be created.',
+  },
+  noMain: {
+    zh: '还没能创建 Chief。请重启豆芽；如果还不行，检查 .dsh-odm/bot/state.json 能否被读取。',
+    en: 'Douya couldn’t set up its Chief yet. Restart Douya; if that doesn’t help, check that .dsh-odm/bot/state.json is readable.',
+  },
+  stale: {
+    zh: 'Chief 的旧对话找不到或格式太旧，无法继续。请备份并移走 .dsh-odm/bot/state.json 后重启，会新建一个 Chief。',
+    en: 'The Chief’s earlier conversation is missing or too old to resume. Back up and move aside .dsh-odm/bot/state.json, then restart — a new Chief will be created.',
+  },
+}
+export function chatErrorHint(err, lang = 'zh') {
+  const s = String(err || '')
+  const pick = k => HINTS[k][lang === 'en' ? 'en' : 'zh']
+  if (/could not be read \(saved by a newer DS Bot/i.test(s)) return pick('newer')
+  if (/no Main Bot/i.test(s)) return pick('noMain')
+  if (/session "[^"]+" not found|v0 artifact|cannot safely transform/i.test(s)) return pick('stale')
+  return ''
+}
+
+// A fresh team has no Chief until ds-bot's own 'state' endpoint bootstraps one; the Muse page never calls it,
+// so the first chat on a new install failed with "no Main Bot". Ask ds-bot once, with the user's own session cookie.
+// When a turn ends with no reply, ds-bot logged why (e.g. MISSING_CREDENTIAL) in bot/logs/diagnostics.jsonl.
+export async function lastTurnError(dshHome, sessionId, sinceMs = 0) {
+  try {
+    const raw = await readFile(join(dshHome, 'bot', 'logs', 'diagnostics.jsonl'), 'utf8')
+    const lines = raw.slice(-65536).split('\n').reverse()
+    for (const line of lines) {
+      let e; try { e = JSON.parse(line) } catch { continue }
+      if (e?.level === 'error' && e.sessionId === sessionId && Number(e.time) >= sinceMs) return String(e.text || e.code || '')
+    }
+  } catch {}
+  return ''
+}
+
+export async function bootstrapMainBot({ origin, cookie, fetchImpl = fetch, timeoutMs = 20_000 } = {}) {
+  if (!origin || !cookie) return false
+  try {
+    const res = await fetchImpl(`${String(origin).replace(/\/$/, '')}/api/bot`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ endpoint: 'state', payload: {} }),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (!res.ok) return false
+    return !!(await res.json().catch(() => null))?.ok
+  } catch { return false }
+}
+
 export async function resolveChief(dshHome, botId = null) {
   try {
     const state = JSON.parse(await readFile(join(dshHome, 'bot', 'state.json'), 'utf8'))
@@ -408,7 +461,8 @@ export async function runMuseChatTurn(ctx, {
 
   lane?.closeSteer?.()
   if (!reply) {
-    return { ok: false, error: 'Bot 没有产生新回复', botId: sessionId, sessionId }
+    const why = await lastTurnError(dshHome, sessionId, T.turnCallAt || 0)
+    return { ok: false, error: why || 'Bot 没有产生新回复', botId: sessionId, sessionId }
   }
   T.detectedAt = Date.now()
   try { Object.assign(T, await turnBreakdown(ctx, sessionId, T.promptAt)) } catch (err) { T.breakdownError = String(err?.message || err) }

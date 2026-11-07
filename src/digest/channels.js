@@ -1,3 +1,4 @@
+import { hasSourceRecipe } from '../web/source-recipes.js'
 // Source bots for the bot digest: one per channel. Adding Calendar or Notion is one entry here plus,
 // if its items need a special card shape, a `build` kind in build.js (the generic kind works for any list).
 export const CHANNELS = {
@@ -53,6 +54,6 @@ export const channelOfToolkit = slug => Object.entries(CHANNELS).find(([, c]) =>
 export function digestRoleForToolkit(slug) {
   const ch = channelOfToolkit(slug)
   if (ch) return { role: 'source-bot', channel: ch }
-  if (slug === 'googlecalendar') return { role: 'aux-fetch', channel: slug }
-  return { role: 'ignore', channel: null }
+  if ((slug === 'googlecalendar' || hasSourceRecipe(slug))) return { role: 'aux-fetch', channel: slug }
+  return { role: 'not-scanned', channel: slug }
 }

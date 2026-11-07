@@ -105,7 +105,7 @@ Default UI is **English**. Switch to 中文 in Settings or the sidebar control (
 - **Muse UI** (`packages/dsh-muse-ui`) — desktop-first shell: Future, Today, Memories, Sources, Settings.
 - **Chief / source bots** — channel bots propose when accounts are ACTIVE and snapshots are non-empty; Chief merges, ranks, and owns dock chat. Empty snapshots skip the bot. Calendar is aux fetch only.
 - **OpenViking** — durable memory for chat recall, Memories glimpse, and the memories Future plans are grounded in.
-- **Sources** — live connectors via Composio; nothing outbound without Confirm.
+- **Sources** — live connectors via Composio; bounded YouTube subscription and recent-content scans, with explicit unsupported/error rows. See [scan coverage and limits](docs/sources/connected-scans.md). Nothing outbound without Confirm.
 
 ### Bot routing — who does what
 

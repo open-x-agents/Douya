@@ -42,7 +42,7 @@ export const ACTIONS = {
     labels: a => ({ message_id: msgId(a), add: [], remove: ['INBOX'] }),
   },
   gmail_archive_many: {
-    risk: 'direct', desc: '一次归档多封邮件（移出收件箱，可整体撤销）', params: { items: { type: 'array', items: { type: 'object' }, description: '[{url,title}]，用 odm_card_list 的 items' } },
+    risk: 'direct', desc: '一次归档多封邮件（移出收件箱，可整体撤销）', params: { items: { type: 'array', items: { type: 'object', properties: { url: { type: 'string' }, title: { type: 'string' }, message_id: { type: 'string' } }, additionalProperties: true }, description: '[{url,title}]，用 odm_card_list 的 items' } },
     label: a => `归档 ${(a.items || []).length} 封邮件`,
     preview: a => ({ body: (a.items || []).slice(0, 12).map(x => `· ${x.title || gmailIdFromUrl(x.url)}`).join('\n') + ((a.items || []).length > 12 ? `\n… 共 ${(a.items || []).length} 封` : '') }),
     many: a => (a.items || []).map(x => ({ message_id: gmailIdFromUrl(x.url) || x.message_id, add: [], remove: ['INBOX'] })).filter(x => x.message_id),

@@ -644,8 +644,8 @@
   .w-links .lk:nth-child(n+4){display:none}
 
 
-  /* ===== Memory 一瞥 ===== */
-  #v-memory{padding:36px 44px 80px;max-width:980px}
+  /* ===== Memory 一瞥 — rich Muse-glass tiles ===== */
+  #v-memory{padding:36px 44px 80px;max-width:1040px}
   .mem-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:28px}
   .mem-hero .eyebrow{color:var(--violet);letter-spacing:.1em}
   .mem-hero h1{font-size:32px;line-height:1.15;font-weight:650;letter-spacing:-.025em;margin:6px 0 0;background:linear-gradient(120deg,#3a3558 10%,#8a74d0 55%,#22a898 120%);-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -656,29 +656,67 @@
   .mem-refresh{border:0;cursor:pointer;font:600 12.5px/1 inherit;color:var(--violet);background:var(--violet-soft);padding:8px 14px;border-radius:999px;transition:.2s var(--ease)}
   .mem-refresh:hover{transform:translateY(-1px);box-shadow:0 6px 14px -8px rgba(138,116,208,.55)}
   .mem-sections{display:flex;flex-direction:column;gap:28px}
-  .mem-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 12px}
+  .mem-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 14px}
   .mem-section-head h2{margin:0;font-size:13px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2)}
   .mem-section-head .mem-section-n{font-size:12px;color:var(--ink3);font-variant-numeric:tabular-nums}
-  .mem-section.is-everyday .mem-card{opacity:.92}
+  .mem-section.is-everyday .mem-card{opacity:.94}
   .mem-section.is-everyday .mem-section-head h2{color:var(--ink3);font-weight:600}
-  .mem-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
-  .mem-card{position:relative;background:rgba(255,255,255,.78);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.95);border-radius:20px;padding:18px 18px 14px;box-shadow:var(--shadow);transition:.28s var(--ease);animation:memIn .55s var(--ease-out) both;overflow:hidden;min-height:132px;display:flex;flex-direction:column}
-  .mem-card::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--mem-accent,#8a74d0);opacity:.85;border-radius:20px 0 0 20px}
-  .mem-card:hover{transform:translateY(-3px) rotate(-.2deg);box-shadow:var(--shadow-hi)}
-  .mem-card.is-pinned{background:linear-gradient(155deg,rgba(255,255,255,.92),rgba(239,235,250,.88))}
+  .mem-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+  .mem-card{position:relative;background:linear-gradient(165deg,rgba(255,255,255,.88) 0%,rgba(255,255,255,.72) 100%);backdrop-filter:blur(20px) saturate(160%);border:1px solid rgba(255,255,255,.95);border-radius:22px;padding:16px 16px 14px;box-shadow:var(--shadow);transition:.28s var(--ease);animation:memIn .55s var(--ease-out) both;overflow:hidden;min-height:148px;display:flex;flex-direction:column;gap:10px}
+  .mem-card::before{content:"";position:absolute;inset:0 auto 0 0;width:5px;background:linear-gradient(180deg,color-mix(in srgb,var(--mem-accent,#8a74d0) 92%,#fff),var(--mem-accent,#8a74d0));opacity:.95;border-radius:22px 0 0 22px}
+  .mem-card::after{content:"";position:absolute;right:-28px;top:-36px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--mem-accent,#8a74d0) 22%,transparent) 0%,transparent 70%);pointer-events:none;opacity:.85}
+  .mem-card:hover{transform:translateY(-4px) rotate(-.15deg);box-shadow:var(--shadow-hi)}
+  .mem-card.is-pinned{background:linear-gradient(155deg,rgba(255,255,255,.94),rgba(239,235,250,.9))}
+  .mem-card.is-achievement{background:linear-gradient(155deg,rgba(255,250,235,.95) 0%,rgba(255,255,255,.82) 48%,rgba(255,244,220,.78) 100%);border-color:rgba(212,160,23,.28);box-shadow:0 1px 2px rgba(180,120,20,.06),0 10px 28px -10px rgba(212,160,23,.28)}
+  .mem-card.is-achievement::after{background:radial-gradient(circle,rgba(242,190,70,.35) 0%,transparent 68%);opacity:1}
   .mem-card.is-leaving{opacity:0;transform:scale(.94) translateY(8px);pointer-events:none}
-  .mem-card .mem-mark{font-size:22px;line-height:1;margin-bottom:8px;filter:saturate(1.05)}
-  .mem-card .mem-text{font-size:14.5px;line-height:1.55;font-weight:550;color:var(--ink);flex:1;letter-spacing:-.01em}
-  .mem-card .mem-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
-  .mem-card .mem-when{font-size:11.5px;color:var(--ink3);font-variant-numeric:tabular-nums}
-  .mem-pill{font-size:11px;font-weight:600;border-radius:999px;padding:2px 8px;background:rgba(30,40,80,.05);color:var(--ink2)}
+  .mem-card-top{display:flex;align-items:center;justify-content:space-between;gap:10px;position:relative;z-index:1}
+  .mem-mark{width:40px;height:40px;border-radius:14px;display:grid;place-items:center;font-size:20px;line-height:1;background:color-mix(in srgb,var(--mem-accent,#8a74d0) 14%,#fff);border:1px solid color-mix(in srgb,var(--mem-accent,#8a74d0) 22%,#fff);box-shadow:0 4px 12px -6px color-mix(in srgb,var(--mem-accent,#8a74d0) 45%,transparent);filter:saturate(1.08)}
+  .mem-card.is-achievement .mem-mark{background:linear-gradient(145deg,#fff6d8,#ffe7a8);border-color:rgba(212,160,23,.35);box-shadow:0 6px 16px -6px rgba(212,160,23,.55);font-size:22px}
+  .mem-kinds{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;max-width:62%}
+  .mem-card-body{position:relative;z-index:1;display:flex;flex-direction:column;gap:6px;flex:1;min-width:0}
+  .mem-title{margin:0;font-size:15.5px;line-height:1.35;font-weight:650;letter-spacing:-.018em;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .mem-summary{margin:0;font-size:13px;line-height:1.5;font-weight:500;color:var(--ink2);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .mem-more{font-size:11.5px;font-weight:600;color:color-mix(in srgb,var(--mem-accent,#8a74d0) 70%,var(--ink3));letter-spacing:.01em}
+  .mem-card .mem-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:4px;position:relative;z-index:1}
+  .mem-card .mem-when,.mem-card .mem-source{font-size:11.5px;color:var(--ink3);font-variant-numeric:tabular-nums}
+  .mem-card .mem-source{display:inline-flex;align-items:center;gap:4px}
+  .mem-card .mem-source::before{content:"";width:3px;height:3px;border-radius:50%;background:currentColor;opacity:.55}
+  .mem-pill{font-size:10.5px;font-weight:650;border-radius:999px;padding:3px 9px;letter-spacing:.02em;background:rgba(30,40,80,.05);color:var(--ink2)}
   .mem-pill.pin{background:var(--violet-soft);color:#6450a8}
-  .mem-pill.tag{background:color-mix(in srgb, var(--mem-accent,#8a74d0) 14%, #fff);color:color-mix(in srgb, var(--mem-accent,#8a74d0) 70%, #1c1d21)}
+  .mem-pill.tag{background:color-mix(in srgb, var(--mem-accent,#8a74d0) 16%, #fff);color:color-mix(in srgb, var(--mem-accent,#8a74d0) 72%, #1c1d21);border:1px solid color-mix(in srgb, var(--mem-accent,#8a74d0) 22%, transparent)}
+  .mem-card.is-achievement .mem-pill.tag{background:rgba(212,160,23,.16);color:#8a6410;border-color:rgba(212,160,23,.28)}
   .mem-forget{margin-left:auto;border:0;cursor:pointer;font:600 11.5px/1 inherit;color:var(--ink3);background:transparent;padding:5px 8px;border-radius:8px;opacity:0;transition:.2s var(--ease)}
   .mem-card:hover .mem-forget,.mem-forget[data-confirm]{opacity:1}
   .mem-forget:hover{background:var(--rose-soft);color:var(--rose)}
   .mem-forget[data-confirm]{background:var(--rose);color:#fff;opacity:1}
   @keyframes memIn{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
+  /* Recall: photos on tiles + detail dialog */
+  .mem-card{cursor:pointer}
+  .mem-card:focus-visible{outline:2px solid var(--violet);outline-offset:3px}
+  .mem-photo{position:relative;z-index:1;margin:-16px -16px 2px;height:150px;overflow:hidden;border-radius:22px 22px 0 0;background:color-mix(in srgb,var(--mem-accent,#8a74d0) 10%,#fff)}
+  .mem-photo img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .5s var(--ease)}
+  .mem-card:hover .mem-photo img{transform:scale(1.04)}
+  .mem-photo .mem-photo-n{position:absolute;right:10px;bottom:10px;font-size:11px;font-weight:650;color:#fff;background:rgba(20,22,32,.5);backdrop-filter:blur(6px);border-radius:999px;padding:3px 8px}
+  .mem-card.has-photo .mem-card-top{margin-top:-34px}
+  .mem-card.has-photo .mem-mark{background:#fff}
+  dialog.mem-detail{border:0;padding:0;background:transparent;max-width:min(720px,92vw);width:100%;max-height:88vh;overflow:visible}
+  dialog.mem-detail::backdrop{background:rgba(28,30,40,.3);backdrop-filter:blur(10px)}
+  .mem-detail-card{position:relative;background:linear-gradient(165deg,rgba(255,255,255,.97),rgba(255,255,255,.9));border:1px solid rgba(255,255,255,.95);border-radius:26px;box-shadow:0 30px 80px -20px rgba(30,40,80,.35);padding:26px 28px 22px;max-height:88vh;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
+  .mem-detail-card.is-achievement{background:linear-gradient(155deg,rgba(255,250,235,.98) 0%,rgba(255,255,255,.95) 55%,rgba(255,244,220,.92) 100%)}
+  .mem-detail-close{position:absolute;top:14px;right:14px;border:0;cursor:pointer;width:32px;height:32px;border-radius:50%;background:rgba(30,40,80,.06);color:var(--ink2);font-size:18px;line-height:1}
+  .mem-detail-close:hover{background:rgba(30,40,80,.12)}
+  .mem-detail h2{margin:0;font-size:22px;line-height:1.3;font-weight:650;letter-spacing:-.02em;color:var(--ink);padding-right:36px}
+  .mem-detail-body p{margin:0 0 8px;font-size:14.5px;line-height:1.65;color:var(--ink2)}
+  .mem-detail-photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+  .mem-detail-photos figure{margin:0;border-radius:16px;overflow:hidden;background:rgba(30,40,80,.04)}
+  .mem-detail-photos figure:only-child{grid-column:1/-1}
+  .mem-detail-photos img{width:100%;max-height:420px;object-fit:cover;display:block}
+  .mem-detail-photos figcaption{font-size:12px;color:var(--ink3);padding:6px 10px}
+  .mem-detail-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--ink3);border-top:1px solid rgba(30,40,80,.06);padding-top:12px}
+  .mem-add-photo{margin-left:auto;border:0;cursor:pointer;font:600 12.5px/1 inherit;color:var(--violet);background:var(--violet-soft);padding:9px 14px;border-radius:999px;transition:.2s var(--ease)}
+  .mem-add-photo:hover{transform:translateY(-1px);box-shadow:0 6px 14px -8px rgba(138,116,208,.55)}
+  .mem-add-photo[disabled]{opacity:.6;cursor:progress;transform:none}
   .mem-empty{margin-top:8px;background:linear-gradient(160deg,rgba(255,255,255,.88),rgba(239,235,250,.75) 55%,rgba(227,246,243,.7));backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.95);border-radius:24px;padding:42px 36px;box-shadow:var(--shadow);text-align:center;animation:memIn .6s var(--ease-out) both}
   .mem-empty .mem-empty-mark{width:72px;height:72px;margin:0 auto 14px;display:grid;place-items:center;border-radius:22px;background:rgba(255,255,255,.8);box-shadow:var(--shadow)}
   .mem-empty h2{margin:0;font-size:22px;font-weight:650;letter-spacing:-.02em}
@@ -691,6 +729,7 @@
     .mem-hero{flex-direction:column;align-items:flex-start}
     .mem-hero-side{align-items:flex-start}
     .mem-hero h1{font-size:26px}
+    .mem-grid{grid-template-columns:1fr}
   }
   @media (prefers-reduced-motion:reduce){
     .mem-card,.mem-empty{animation:none!important}
@@ -2064,13 +2103,13 @@
           <div id="sourcesContent"></div>
         </section>
 
-        <!-- 回忆一瞥 -->
+        <!-- Recall / 回忆 -->
         <section class="view" id="v-memory">
           <header class="mem-hero">
             <div>
-              <div class="eyebrow" data-i18n="memory.eyebrow">Memory glimpse</div>
-              <h1 data-i18n="memory.title">What Douya remembers</h1>
-              <p data-i18n="memory.sub">Wins, decisions, and moments that matter — everyday prefs stay quieter.</p>
+              <div class="eyebrow" data-i18n="memory.eyebrow">Recall</div>
+              <h1 data-i18n="memory.title">Moments worth keeping</h1>
+              <p data-i18n="memory.sub">Readable memories and achievements first — everyday prefs stay quieter.</p>
             </div>
             <div class="mem-hero-side">
               <div class="mem-count" id="memCount"><b>–</b></div>
@@ -2078,6 +2117,8 @@
             </div>
           </header>
           <div id="memContent" class="mem-grid" aria-live="polite"></div>
+          <dialog class="mem-detail" id="memDetail" aria-labelledby="memDetailTitle"></dialog>
+          <input type="file" id="memPhotoInput" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
         </section>
 
         <!-- 设置 -->
@@ -5784,26 +5825,139 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (tags.some(tg => MEM_MID_TAGS.has(tg))) return true;
     return false;
   }
-  function memCardHtml(m, i) {
-    const tags = Array.isArray(m.tags) ? m.tags : String(m.tags || '').split(/\s+/).filter(Boolean);
-    const accent = memAccent(tags);
-    const pills = [
+  // Recall text rules live in memory-present.js (served by this plugin) so the page and tests share one copy.
+  let memPresentMod = null;
+  async function memLoadPresenter() {
+    if (!memPresentMod) memPresentMod = await import('/api/opendigitalmate/memory-present.js').catch(() => ({}));
+    return memPresentMod;
+  }
+  function memPresent(m) {
+    if (memPresentMod && memPresentMod.presentMemory) return memPresentMod.presentMemory(m);
+    const flat = String(m && m.text || '').replace(/\s+/g, ' ').trim();
+    return { title: flat.slice(0, 72) || '…', summary: '', body: flat, long: flat.length > 72 };
+  }
+  function memSourceKey(m) {
+    const src = String(m && m.source || '').toLowerCase();
+    if (src === 'openviking' || String(m && (m.uri || m.id) || '').startsWith('viking://')) return 'openviking';
+    if (src === 'dsh-memory' || src === 'sqlite' || src === 'local') return 'local';
+    if (typeof (m && m.id) === 'number' || /^\d+$/.test(String(m && m.id || ''))) return 'local';
+    return 'unknown';
+  }
+  function memSourceLabel(m) {
+    const key = memSourceKey(m);
+    if (key === 'unknown') return '';
+    const k = 'memory.source_' + key;
+    const v = t(k);
+    return v === k ? key : v;
+  }
+  function memTags(m) {
+    return Array.isArray(m.tags) ? m.tags.map(x => String(x).toLowerCase()) : String(m.tags || '').split(/\s+/).map(x => x.toLowerCase()).filter(Boolean);
+  }
+  function memIsAch(tags) { const k = tags[0] || ''; return k === 'achievement' || k === 'milestone' || k === 'win'; }
+  function memKindPills(m, tags) {
+    return [
       m.pinned ? `<span class="mem-pill pin">${escapeHtml(t('memory.pinned'))}</span>` : '',
       ...tags.slice(0, 3).map(tg => `<span class="mem-pill tag">${escapeHtml(memTagLabel(tg))}</span>`),
     ].join('');
-    return `<article class="mem-card${m.pinned ? ' is-pinned' : ''}" data-id="${escapeHtml(String(m.id))}" style="--mem-accent:${accent};animation-delay:${Math.min(i, 12) * 45}ms">
-        <div class="mem-mark" aria-hidden="true">${memMark(m.id, tags)}</div>
-        <div class="mem-text">${escapeHtml(m.text || '')}</div>
-        <div class="mem-meta">${pills}<span class="mem-when">${escapeHtml(memAgo(m.updatedAt || m.createdAt))}</span>
+  }
+  function memImages(m) { return Array.isArray(m.images) ? m.images.filter(im => im && /^\/api\/opendigitalmate\/memories\/image\?ref=/.test(String(im.src || ''))) : []; }
+  function memCardHtml(m, i) {
+    const tags = memTags(m);
+    const accent = memAccent(tags);
+    const isAch = memIsAch(tags);
+    const present = memPresent(m);
+    const title = present.title || '…';
+    const imgs = memImages(m);
+    const source = memSourceLabel(m);
+    const when = memAgo(m.updatedAt || m.createdAt);
+    const classes = ['mem-card', m.pinned ? 'is-pinned' : '', isAch ? 'is-achievement' : '', imgs.length ? 'has-photo' : ''].filter(Boolean).join(' ');
+    const photo = imgs.length
+      ? `<div class="mem-photo"><img src="${escapeHtml(imgs[0].src)}" alt="${escapeHtml(imgs[0].caption || title)}" loading="lazy">${imgs.length > 1 ? `<span class="mem-photo-n">+${imgs.length - 1}</span>` : ''}</div>`
+      : '';
+    return `<article class="${classes}" data-id="${escapeHtml(String(m.id))}" tabindex="0" role="button" aria-label="${escapeHtml(t('memory.open') + ': ' + title)}" style="--mem-accent:${accent};animation-delay:${Math.min(i, 12) * 45}ms">
+        ${photo}
+        <div class="mem-card-top">
+          <div class="mem-mark" aria-hidden="true">${memMark(m.id, tags)}</div>
+          <div class="mem-kinds">${memKindPills(m, tags)}</div>
+        </div>
+        <div class="mem-card-body">
+          <h3 class="mem-title">${escapeHtml(title)}</h3>
+          ${present.summary ? `<p class="mem-summary">${escapeHtml(present.summary)}</p>` : ''}
+          ${present.long ? `<div class="mem-more">${escapeHtml(t('memory.more'))}</div>` : ''}
+        </div>
+        <div class="mem-meta">
+          <span class="mem-when">${escapeHtml(when)}</span>
+          ${source ? `<span class="mem-source">${escapeHtml(source)}</span>` : ''}
           <button type="button" class="mem-forget" data-id="${escapeHtml(String(m.id))}" aria-label="${escapeHtml(t('memory.forget'))}">${escapeHtml(t('memory.forget'))}</button>
         </div>
       </article>`;
   }
+  // Detail view: the whole memory in plain sentences, its photos large, and "Add photo".
+  let memRows = [];
+  let memDetailId = null;
+  function memDetailHtml(m) {
+    const tags = memTags(m);
+    const present = memPresent(m);
+    const imgs = memImages(m);
+    const source = memSourceLabel(m);
+    const sentences = String(present.body || '').split(/(?<=[.!?。！？])\s+/).filter(Boolean);
+    const paras = [];
+    for (let k = 0; k < sentences.length; k += 3) paras.push(sentences.slice(k, k + 3).join(' '));
+    return `<div class="mem-detail-card${memIsAch(tags) ? ' is-achievement' : ''}" style="--mem-accent:${memAccent(tags)}">
+        <button type="button" class="mem-detail-close" data-mem-close aria-label="${escapeHtml(t('memory.close'))}">×</button>
+        <div class="mem-card-top"><div class="mem-mark" aria-hidden="true">${memMark(m.id, tags)}</div><div class="mem-kinds">${memKindPills(m, tags)}</div></div>
+        <h2 id="memDetailTitle">${escapeHtml(present.title || '…')}</h2>
+        ${imgs.length ? `<div class="mem-detail-photos">${imgs.map(im => `<figure><img src="${escapeHtml(im.src)}" alt="${escapeHtml(im.caption || present.title)}">${im.caption && im.caption !== present.title ? `<figcaption>${escapeHtml(im.caption)}</figcaption>` : ''}</figure>`).join('')}</div>` : ''}
+        ${paras.length ? `<div class="mem-detail-body">${paras.map(p => `<p>${escapeHtml(p)}</p>`).join('')}</div>` : ''}
+        <div class="mem-detail-foot">
+          <span>${escapeHtml(memAgo(m.updatedAt || m.createdAt))}</span>
+          ${source ? `<span class="mem-source">${escapeHtml(source)}</span>` : ''}
+          ${memSourceKey(m) === 'openviking' ? `<button type="button" class="mem-add-photo" data-mem-add-photo>${escapeHtml(t('memory.add_photo'))}</button>` : ''}
+        </div>
+      </div>`;
+  }
+  function openMemDetail(id) {
+    const dlg = $('memDetail');
+    const m = memRows.find(r => String(r.id) === String(id));
+    if (!dlg || !m) return;
+    memDetailId = String(m.id);
+    dlg.innerHTML = memDetailHtml(m);
+    if (!dlg.open) { try { dlg.showModal(); } catch (_) { dlg.setAttribute('open', ''); } }
+  }
+  $('memDetail')?.addEventListener('click', (e) => {
+    const dlg = $('memDetail');
+    if (e.target === dlg || e.target.closest('[data-mem-close]')) { dlg.close(); return; }
+    if (e.target.closest('[data-mem-add-photo]')) $('memPhotoInput')?.click();
+  });
+  $('memDetail')?.addEventListener('close', () => { memDetailId = null; });
+  $('memPhotoInput')?.addEventListener('change', async (e) => {
+    const input = e.target;
+    const file = input.files && input.files[0];
+    input.value = '';
+    const id = memDetailId;
+    if (!file || !id) return;
+    if (file.size > 5 * 1024 * 1024) { try { showUiToast(t('memory.photo_too_big')); } catch (_) {} return; }
+    const btn = $('memDetail')?.querySelector('[data-mem-add-photo]');
+    if (btn) { btn.disabled = true; btn.textContent = t('memory.photo_adding'); }
+    try {
+      const data = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(file); });
+      const m = memRows.find(r => String(r.id) === id);
+      const caption = m ? memPresent(m).title : '';
+      const r = await fetch('/api/opendigitalmate/memories/image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, data, type: file.type, name: file.name, caption }) }).then(x => x.json());
+      if (!r || !r.ok) throw new Error((r && r.error) || 'failed');
+      if (m && r.image) { m.images = [...memImages(m), { src: r.image.src, caption: r.image.caption }]; paintMemories({ memories: memRows, total: memRows.length }); openMemDetail(id); }
+      try { showUiToast(t('memory.photo_added')); } catch (_) {}
+    } catch (_) {
+      try { showUiToast(t('memory.photo_failed')); } catch (__) {}
+      if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = t('memory.add_photo'); }
+    }
+  });
   function paintMemories(data) {
     const box = $('memContent');
     const countEl = $('memCount');
     if (!box) return;
     const rows = (data && data.memories) || [];
+    memRows = rows;
     const total = (data && data.total) != null ? data.total : rows.length;
     if (countEl) {
       countEl.innerHTML = total === 1
@@ -5843,6 +5997,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     }
     box.className = 'mem-sections';
     box.innerHTML = sections.join('');
+    box.querySelectorAll('.mem-card').forEach(card => {
+      const open = () => openMemDetail(card.getAttribute('data-id'));
+      card.addEventListener('click', (e) => { if (!e.target.closest('.mem-forget')) open(); });
+      card.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === card) { e.preventDefault(); open(); } });
+    });
     box.querySelectorAll('.mem-forget').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -5885,7 +6044,10 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       box.innerHTML = `<div class="loading">${escapeHtml(t('today.loading'))}</div>`;
     }
     try {
-      const data = await fetch('/api/opendigitalmate/memories?limit=40', { cache: 'no-store' }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+      const [data] = await Promise.all([
+        fetch('/api/opendigitalmate/memories?limit=40', { cache: 'no-store' }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }),
+        memLoadPresenter(),
+      ]);
       if (seq !== memSeq) return;
       paintMemories(data);
     } catch (err) {

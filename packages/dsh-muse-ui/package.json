@@ -1,22 +1,24 @@
 {
   "name": "dsh-muse-ui",
   "version": "0.1.0",
-  "description": "Muse (\u8c46\u82bd) Today UI for DeepSeek Harness \u2014 replaces the stock dsh web shell",
+  "description": "Muse (豆芽) shell for DeepSeek Harness — Today · Memories/Recall · Sources; replaces the stock dsh web shell",
   "type": "module",
   "main": "index.js",
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
     "./package.json": "./package.json",
-    "./static-serve": "./static-serve.js"
+    "./static-serve": "./static-serve.js",
+    "./memory-present": "./memory-present.js"
   },
   "files": [
-    "index.js",
+    "README.md",
     "client.js",
     "cordis.patch.yml",
+    "index.js",
+    "memory-present.js",
     "static-serve.js",
-    "static/",
-    "README.md"
+    "static/"
   ],
   "keywords": [
     "dsh-plugin",

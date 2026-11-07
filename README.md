@@ -7,31 +7,41 @@
 [![dsh](https://img.shields.io/badge/host-dsh%20odm%20profile-0E4D8C?style=flat-square)](https://github.com/deepseek-ai/dsh)
 [![UI](https://img.shields.io/badge/UI-EN%20%2F%20中文-5B21B6?style=flat-square)](#language)
 
-Not a dashboard. Douya pulls live work from tools you already use, turns it into **Today** cards, and helps you finish — with every outbound send gated behind Confirm.
+<p align="center">
+  <img src="docs/design/three-pages.jpg" alt="Douya — Future · Today · Memories" width="920" />
+</p>
+
+One product. Three pages. Shared memory underneath.
+
+| **Future** | **Today** | **Memories** |
+| --- | --- | --- |
+| Long-term plans grown from your interests — fitness, study, craft. Propose first; **consent before work**. | Current affairs from mail, PRs, Slack, calendar. Finish something and the state writes back everywhere. | Readable memories & achievements — human sentences, photos welcome. Achievements surface first. |
+
+**Shipped today:** Today, Sources, Settings, Memories / Recall (readable tiles + photos), dock chat with Chief, Confirm-gated sends.  
+**Coming next:** consent-first Future plans (#137) — same Muse shell, same OpenViking store.
 
 ```
-  ┌─────────────┐     ┌──────────────┐     ┌────────────┐
-  │ Source bots │ ──▶ │ Chief merge  │ ──▶ │ Today page │
-  │ Gmail/GH/Sl │     │ rank + plan  │     │ act + chat │
-  └─────────────┘     └──────────────┘     └────────────┘
-         ▲                   ▲
-         │                   │
-   Composio live        OpenViking recall
+  Muse UI  ──▶  Chief / source bots  ──▶  OpenViking  ──▶  Sources
+  (Today ·     (merge, rank,          (shared            (Gmail · Slack ·
+   Memories ·   plan, chat)            memory)             GitHub · Calendar)
+   …Future)
 ```
+
+Less is more · bilingual EN / 中文 · ship via PR into `main` (never push `main` directly).
 
 **Repo:** [open-x-agents/openDigitalMate](https://github.com/open-x-agents/openDigitalMate) · **License:** Apache-2.0
 
 ---
 
-## What you get
+## Surfaces
 
 | Surface | What it does |
 | --- | --- |
-| **Today** | Hero (“what now”), timetable, digest cards with prep, “what got done” tuck |
-| **Pending confirm** | Outbound mail / comments / archives only leave after you click Confirm |
+| **Today** | Hero (“what now”), timetable, digest cards with prep, “what got done” tuck, real completion feedback |
+| **Memories** (回忆 / Recall) | Readable tiles with photos — achievements first; open one to read it all or add a photo; same `viking://~/memories` store |
+| **Pending confirm** | Outbound mail / comments / archives leave only after you click Confirm |
 | **Dock chat** | Talk with Douya (Chief). Confirmed sends echo into card chat + general chat |
 | **Sources** | Connect GitHub, Gmail, Slack, Calendar, … via Composio |
-| **Memories** | Glimpse of durable recalls — achievements & decisions first |
 | **Desktop UX** | Hover/swipe actions, IME-safe shortcuts (`J` `K` `E` `C` `S` `?`), two-column zoom |
 
 Local-only: binds to `127.0.0.1`.
@@ -67,8 +77,8 @@ On macOS you can put that behind a system-wide hotkey — see [docs/mac-shortcut
 
 ### Configure AI + Composio
 
-1. **Settings** → pick provider (e.g. DeepSeek), paste key, Save  
-2. Paste **Composio** key, Save, connect GitHub / Gmail / Slack / Calendar  
+1. **Settings** → pick provider (e.g. DeepSeek), paste key, Save
+2. Paste **Composio** key, Save, connect GitHub / Gmail / Slack / Calendar
 3. **Today** → **Refresh now**
 
 Keys also work from `.env` (`DEEPSEEK_API_KEY` / `COMPOSIO_API_KEY`) or `.odm-data/config.json` (gitignored). DeepSeek needs a real key — OpenAI-only setups make Chief say “No model is available”.
@@ -79,9 +89,26 @@ Default UI is **English**. Switch to 中文 in Settings or the sidebar control (
 
 ---
 
-## Bot routing — who does what
+## Architecture
 
-Dock chat is always **Chief**. Digest work is split:
+```
+┌─────────────┐     ┌──────────────────┐     ┌──────────────┐
+│  Muse UI    │ ◀── │  Chief / bots    │ ◀── │  Sources     │
+│  dsh-muse-ui│     │  merge · chat    │     │  Composio    │
+└──────┬──────┘     └────────┬─────────┘     └──────────────┘
+       │                     │
+       │              ┌──────▼──────┐
+       └─────────────▶│ OpenViking  │  shared store
+                      │ memories    │  viking://~/memories
+                      └─────────────┘
+```
+
+- **Muse UI** (`packages/dsh-muse-ui`) — desktop-first shell: Today, Memories, Sources, Settings (Future landing next).
+- **Chief / source bots** — channel bots propose when accounts are ACTIVE and snapshots are non-empty; Chief merges, ranks, and owns dock chat. Empty snapshots skip the bot. Calendar is aux fetch only.
+- **OpenViking** — durable memory for chat recall, Memories glimpse, and (soon) Future progress context.
+- **Sources** — live connectors via Composio; nothing outbound without Confirm.
+
+### Bot routing — who does what
 
 | When | Who | Why |
 | --- | --- | --- |
@@ -92,13 +119,13 @@ Dock chat is always **Chief**. Digest work is split:
 | ≥1 candidate from source bots | **Chief** merge | Dedupe, rank, headline, timeline |
 | Zero candidates after source passes | **Skip Chief** | Default empty plan; still refresh hero/timetable |
 
-Source bots never chat with you. Chief never re-fetches a channel during merge.
+Source bots never chat with you. Chief never re-fetches a channel during merge. Dock chat always goes to Chief.
 
 ---
 
 ## Long-term memory
 
-Douya uses **[OpenViking](https://docs.openviking.net/en/agent-integrations/17-dsh)** via [`@openviking/dsh-memory-plugin`](https://www.npmjs.com/package/@openviking/dsh-memory-plugin) (~0.5.33): auto-recall, session capture, and `mcp__openviking__*` tools in chat. **Memories** glimpse + Chief digest read the same server (`viking://~/memories`), ranked achievement-first (experiences / events / decisions above routine prefs). Forget uses the server `DELETE /api/v1/fs` (same as MCP `forget`).
+Douya uses **[OpenViking](https://docs.openviking.net/en/agent-integrations/17-dsh)** via [`@openviking/dsh-memory-plugin`](https://www.npmjs.com/package/@openviking/dsh-memory-plugin) (~0.5.33): auto-recall, session capture, and `mcp__openviking__*` tools in chat. **Memories** glimpse + Chief digest read the same server (`viking://~/memories`), ranked achievement-first. Forget uses the server `DELETE /api/v1/fs` (same as MCP `forget`).
 
 ### 1. OpenViking server (minimal local)
 
@@ -136,14 +163,15 @@ dsh plugin --profile odm add @openviking/dsh-memory-plugin@0.5.33
 
 Remove legacy `dsh-memory` from the profile once OpenViking is healthy. While the server is down, Muse still falls back to the old SQLite `memory.db` for Glimpse only (chat auto-recall needs the server).
 
+**Recall page (in `dsh-muse-ui`).** Memories read as a short title plus plain sentences — no `viking://` URIs, marker tokens or markdown (`packages/dsh-muse-ui/memory-present.js`, served to the page as `/api/opendigitalmate/memory-present.js`). Open a tile to read the whole memory; **Add photo** (png / jpeg / gif / webp, ≤ 5 MB) stores the image **in OpenViking** as a resource under `viking://resources/recall/<memory>/` (memories reject binary writes) and appends `![caption](viking://resources/recall/…)` to the memory, so chat sees the same link. The host only adds `GET|POST /api/opendigitalmate/memories/image` (proxy restricted to `viking://resources/recall/`); forgetting a memory deletes its photos too.
+
 `openviking-server doctor` may warn that embedding / VLM are missing. **Memories list + forget** still work over the filesystem API; semantic auto-recall / search need a working embedding (local GGUF via `openviking[local-embed]`, Ollama, or a cloud key).
 
 ---
 
-
 ## Muse UI plugin
 
-The Today page is a separate dsh client plugin: [`dsh-muse-ui`](./packages/dsh-muse-ui) (same spirit as OpenViking memory). The host package keeps APIs / digests / bots; the UI plugin replaces the stock shell and serves Muse at `/api/opendigitalmate/app`.
+The shell is a separate dsh client plugin: [`dsh-muse-ui`](./packages/dsh-muse-ui). The host package keeps APIs / digests / bots; the UI plugin replaces the stock shell and serves Muse at `/api/opendigitalmate/app`.
 
 ```bash
 # from this checkout (Mac / Linux):
@@ -155,14 +183,31 @@ dsh plugin --profile odm add link:$(pwd)/packages/dsh-muse-ui
 
 Restart dsh after adding. Without `dsh-muse-ui`, the stock dsh shell stays; host APIs still work.
 
+---
+
 ## Digests & actions
 
-1. Source bots propose → Chief merges into Today (legacy pipeline is fallback).  
-2. Cards carry prepared steps (open, snooze, ask Douya, or a write).  
-3. A write creates a **pending** action. Confirm runs via Composio; Cancel drops; Undo when the provider allows.  
+1. Source bots propose → Chief merges into Today (legacy pipeline is fallback).
+2. Cards carry prepared steps (open, snooze, ask Douya, or a write).
+3. A write creates a **pending** action. Confirm runs via Composio; Cancel drops; Undo when the provider allows.
 4. On success: item marked done, may tuck into “What got done today”, and a `✓ Sent · HH:MM` line lands in card + general chat.
 
 Optional schedule: `DIGEST_SCHEDULE=08:00`, `ENABLE_DIGEST=true`.
+
+### Site blocks
+
+Some sites — Cloudflare-fronted ones in particular — answer automated or personal-assistant traffic with an intercept page instead of the content. When that happens Douya says one plain sentence — “This site blocked this request; I won't try to get around it.” — on the card brief or as the first line in chat, and that is all it does about it.
+
+It does not get around the block:
+
+- no different domain,
+- no mirror or reader proxy (such as `r.jina.ai`),
+- no different User-Agent,
+- no `bash` + `curl` retry.
+
+The intercept page's HTML is not repeated and the body is not guessed; if you need the content, open the link and paste the points back.
+
+This is inferred from the intercept page: it says this one request was blocked, not what the site's policy is.
 
 ---
 
@@ -174,12 +219,13 @@ npm test
 
 | Path | Role |
 | --- | --- |
-| `packages/dsh-muse-ui/` | Muse Today UI (dsh client plugin) |
+| `packages/dsh-muse-ui/` | Muse shell (Today · Memories · Sources · Settings) |
 | `src/i18n/` | en/zh chrome |
 | `src/web/api.js` | Router / standalone HTTP |
 | `src/web/dsh-host-routes.js` | Routes on the dsh process |
 | `src/web/action-effects.js` | Confirmed-send outcome sync |
 | `src/digest/` | Snapshot / build / runner / bot routing |
+| `docs/design/` | Product narrative art (Future · Today · Memories) |
 
 Restart after pulls: `npm start` or `scripts/.odm-restart.sh`.
 
@@ -187,25 +233,26 @@ Restart after pulls: `npm start` or `scripts/.odm-restart.sh`.
 
 ## Security
 
-- **Localhost only** — other machines cannot open the UI  
-- Never commit `.env`, `.odm-data/`, or the token URL file  
-- Outbound actions require an explicit Confirm click  
+- **Localhost only** — other machines cannot open the UI
+- Never commit `.env`, `.odm-data/`, or the token URL file
+- Outbound actions require an explicit Confirm click
 
 ---
 
 ## Status
 
-**Shipped:** multi-bot digests with skip-empty routing, desktop UX, pending-confirm sends, outcome sync, EN/中文 chrome, OpenViking memory, Muse UI as `dsh-muse-ui`, Sources logos & Composio catalog.
+**Shipped:** multi-bot digests with skip-empty routing, desktop Muse UX, pending-confirm sends, outcome sync, EN/中文 chrome, OpenViking memory + Memories/Recall (readable tiles + photos), Muse UI as `dsh-muse-ui`, Sources logos & Composio catalog.
 
-**Evolving:** denser mobile polish, richer source coverage.
+**Evolving:** consent-first Future plans, denser mobile polish, richer source coverage.
 
 ---
 
 ## Contributing
 
-1. Fork and branch from `main`  
-2. Keep tests green: `npm test`  
-3. Open a PR with a clear English description  
+1. Branch from `main` — never push directly to `main`
+2. Keep tests green: `npm test`
+3. Open a PR with `Fixes #N`, a `Ran:` section, and the tip sha
+4. Merge only when the owner says so
 
 ## License
 

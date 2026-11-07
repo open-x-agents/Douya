@@ -6,6 +6,7 @@ import {
   MUSE_APP_PATH,
   MUSE_UI_RENDERER_PATH,
   MUSE_LOGO_PATH,
+  MUSE_MEMORY_PRESENT_PATH,
   readIndexHtml,
 } from '../packages/dsh-muse-ui/static-serve.js'
 
@@ -31,6 +32,7 @@ test('negative: host dsh routes do not register Muse static paths', () => {
   assert.ok(!hostRoutes.includes(`path: '${MUSE_APP_PATH}'`))
   assert.ok(!hostRoutes.includes(`path: '${MUSE_UI_RENDERER_PATH}'`))
   assert.ok(!hostRoutes.includes(`path: '${MUSE_LOGO_PATH}'`))
+  assert.ok(!hostRoutes.includes(`path: '${MUSE_MEMORY_PRESENT_PATH}'`))
 })
 
 test('host api.js does not hardcode packages/dsh-muse-ui asset paths', () => {
@@ -44,13 +46,18 @@ test('positive: muse plugin serves app + ui-renderer + logo; HTML is Douya', asy
     effect(fn) { fn(); return () => {} },
     connection: { fetch: { register(route) { handlers[route.path] = route.fetch } } },
   })
-  assert.deepEqual(Object.keys(handlers).sort(), [MUSE_APP_PATH, MUSE_LOGO_PATH, MUSE_UI_RENDERER_PATH].sort())
+  assert.deepEqual(Object.keys(handlers).sort(), [MUSE_APP_PATH, MUSE_LOGO_PATH, MUSE_MEMORY_PRESENT_PATH, MUSE_UI_RENDERER_PATH].sort())
 
   const app = await handlers[MUSE_APP_PATH]()
   const html = await app.text()
   assert.equal(app.status, 200)
   assert.match(app.headers.get('content-type') || '', /text\/html/)
   assert.match(html, /Douya|豆芽|Open Digital Mate/)
+
+  const present = await handlers[MUSE_MEMORY_PRESENT_PATH]()
+  assert.equal(present.status, 200)
+  assert.match(present.headers.get('content-type') || '', /javascript/)
+  assert.match(await present.text(), /export function presentMemory/)
 
   const ui = await handlers[MUSE_UI_RENDERER_PATH]()
   assert.equal(ui.status, 200)

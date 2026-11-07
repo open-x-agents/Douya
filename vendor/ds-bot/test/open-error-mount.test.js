@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { execFileSync, spawn } from 'node:child_process'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
+import { inflateSync } from 'node:zlib'
 import { createElement as h, useSyncExternalStore } from 'react'
 import { createRoot } from 'react-dom/client'
 import { act } from 'react'
@@ -128,15 +129,23 @@ test('a sessionless boot mounts the open error in the sidebar and the chat colum
     ${rule}${lines}${placed}
   </style>${doc.body.innerHTML}`)
   const png = join(shotDir, 'boot.png')
-  await chromeShot(page, png)
-  const dumped = readFileSync(png)
-  assert.ok(dumped.length > 1000, 'browser painted the boot page')
-  const domDump = await chromeDom(page)
-  assert.equal(domDump.match(/data-open-error="chat"/g)?.length, 1)
-  assert.equal(domDump.match(/data-open-error="sidebar"/g)?.length, 1)
-  assert.equal(domDump.includes('conversation.input.dock'), false)
-  writeFileSync('/tmp/verify-this/open-error-boot.png', dumped)
-  writeFileSync('/tmp/verify-this/open-error-boot.html', readFileSync(page))
+  const shot = await runChrome(['--screenshot=' + png, '--window-size=1100,640'], page)
+  let dumped
+  try {
+    dumped = readFileSync(png)
+  } catch (error) {
+    assert.fail(`boot.png was not written (${error.code ?? error.message}). ${chromeReport(shot)}`)
+  }
+  const image = decodePng(dumped)
+  const leftInk = darkPixels(image, 0, Math.floor(image.width * 0.28))
+  const rightInk = darkPixels(image, Math.floor(image.width * 0.32), image.width)
+  assert.ok(image.width >= 800 && image.height >= 400, `png ${image.width}x${image.height}. ${chromeReport(shot)}`)
+  assert.ok(leftInk > 30, `sidebar alert not painted (${leftInk} dark pixels). ${chromeReport(shot)}`)
+  assert.ok(rightInk > 30, `chat alert not painted (${rightInk} dark pixels). ${chromeReport(shot)}`)
+  const dumpedDom = await runChrome(['--dump-dom'], page)
+  assert.equal(dumpedDom.stdout.match(/data-open-error="chat"/g)?.length, 1, chromeReport(dumpedDom))
+  assert.equal(dumpedDom.stdout.match(/data-open-error="sidebar"/g)?.length, 1, chromeReport(dumpedDom))
+  assert.equal(dumpedDom.stdout.includes('conversation.input.dock'), false)
 
   await act(async () => {
     setRoster({ ready: true, mainBotId: 'm', byId: { m: { id: 'm' } }, loadError: '请求失败（HTTP 404）' })
@@ -204,28 +213,192 @@ test('a network failure stays on the chat column without restart guidance', asyn
   await act(async () => { root.unmount() })
 })
 
-function chromeShot(page, png) {
-  return chrome(['--screenshot=' + png, '--window-size=1100,640'], page)
+function chromeBinary() {
+  if (process.env.CHROME_BIN && existsSync(process.env.CHROME_BIN)) return process.env.CHROME_BIN
+  for (const name of ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser']) {
+    try {
+      const found = execFileSync('sh', ['-c', `command -v ${name}`], { encoding: 'utf8' }).trim()
+      if (found) return found
+    } catch { /* try the next name */ }
+  }
+  const roots = [process.env.PLAYWRIGHT_BROWSERS_PATH, join(homedir(), '.cache/ms-playwright')].filter(Boolean)
+  for (const root of roots) {
+    const found = findChrome(root, 0)
+    if (found) return found
+  }
+  return null
 }
 
-function chromeDom(page) {
-  return chrome(['--dump-dom'], page).then(({ stdout }) => stdout)
+function findChrome(dir, depth) {
+  if (depth > 4 || !existsSync(dir)) return null
+  let names
+  try { names = readdirSync(dir) } catch { return null }
+  for (const name of names) {
+    const path = join(dir, name)
+    if (name === 'chrome' || name === 'chromium' || name === 'google-chrome') {
+      try { if (statSync(path).isFile()) return path } catch { /* keep looking */ }
+    }
+  }
+  for (const name of names) {
+    const path = join(dir, name)
+    try { if (!statSync(path).isDirectory()) continue } catch { continue }
+    const found = findChrome(path, depth + 1)
+    if (found) return found
+  }
+  return null
 }
 
-function chrome(extra, page) {
+// Chrome on this host can write the PNG and then stay up, and a 4s kill on a
+// slower host can land before the file exists. Wait until the process exits or
+// the PNG is stable, and keep stderr, exit, signal, and size samples either way.
+function runChrome(extra, page) {
+  const bin = chromeBinary()
+  const started = Date.now()
+  const screenshot = extra.find(arg => arg.startsWith('--screenshot='))?.slice('--screenshot='.length) ?? null
+  if (!bin) {
+    return Promise.reject(new Error('no Chrome binary. Set CHROME_BIN or install google-chrome, chromium, or Playwright Chrome.'))
+  }
   const dir = mkdtempSync(join(tmpdir(), 'chrome-open-error-'))
-  return new Promise((resolve) => {
-    const child = spawn('google-chrome', [
+  return new Promise((resolve, reject) => {
+    const args = [
       '--headless=new', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
-      `--user-data-dir=${dir}`, '--virtual-time-budget=500',
+      `--user-data-dir=${dir}`, '--virtual-time-budget=2000',
       ...extra, page,
-    ], { stdio: ['ignore', 'pipe', 'pipe'] })
+    ]
+    const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] })
     let stdout = ''
     let stderr = ''
-    // Headless Chrome writes the screenshot and then can stay up on this host.
-    const timer = setTimeout(() => child.kill('SIGKILL'), 4000)
+    let settled = false
+    let stableAt = null
+    const samples = []
+    const sample = () => {
+      let size = null
+      try { size = screenshot && existsSync(screenshot) ? statSync(screenshot).size : null } catch { size = null }
+      samples.push({ ms: Date.now() - started, size })
+    }
+    const finish = (exitCode, signal) => {
+      if (settled) return
+      settled = true
+      clearInterval(poll)
+      clearTimeout(killTimer)
+      sample()
+      resolve({
+        bin, args, stdout, stderr, exitCode, signal,
+        elapsedMs: Date.now() - started, samples, screenshot,
+      })
+    }
+    // Chrome writes the PNG or the DOM and then can stay up. A fixed 4s kill
+    // can land before either exists. Once the artifact is stable, stop the
+    // process; SIGKILL follows if SIGTERM does not reap it.
+    const poll = setInterval(() => {
+      sample()
+      const last = samples.at(-1)
+      const prev = samples.at(-2)
+      const shotReady = Boolean(screenshot) && last?.size > 1000 && prev?.size === last.size
+      const domReady = !screenshot && stdout.includes('</html>') && stdout.length > 200
+      if (!(shotReady || domReady)) return
+      if (stableAt === null) {
+        stableAt = Date.now()
+        child.kill('SIGTERM')
+      } else if (Date.now() - stableAt > 1000) child.kill('SIGKILL')
+    }, 250)
+    const killTimer = setTimeout(() => child.kill('SIGKILL'), 45000)
     child.stdout.on('data', (chunk) => { stdout += chunk })
     child.stderr.on('data', (chunk) => { stderr += chunk })
-    child.on('close', () => { clearTimeout(timer); resolve({ stdout, stderr }) })
+    child.on('error', (error) => {
+      if (settled) return
+      settled = true
+      clearInterval(poll)
+      clearTimeout(killTimer)
+      reject(Object.assign(error, { bin, elapsedMs: Date.now() - started, stderr, samples }))
+    })
+    child.on('close', (code, signal) => finish(code, signal))
   })
+}
+
+function chromeReport(run, error) {
+  const sizes = (run.samples ?? []).map(sample => `${sample.ms}ms:${sample.size ?? 'missing'}`).join(' ')
+  const err = run.stderr ? run.stderr.slice(-800) : ''
+  return [
+    error ? String(error.message ?? error) : '',
+    `bin=${run.bin}`,
+    `exit=${run.exitCode}`,
+    `signal=${run.signal}`,
+    `elapsedMs=${run.elapsedMs}`,
+    `screenshot=${run.screenshot ?? 'none'}`,
+    `sizes=${sizes || 'none'}`,
+    err ? `stderr=${err}` : 'stderr empty',
+  ].filter(Boolean).join('\n')
+}
+
+function paeth(left, up, upLeft) {
+  const estimate = left + up - upLeft
+  const dl = Math.abs(estimate - left)
+  const du = Math.abs(estimate - up)
+  const dlu = Math.abs(estimate - upLeft)
+  if (dl <= du && dl <= dlu) return left
+  return du <= dlu ? up : upLeft
+}
+
+function decodePng(buf) {
+  assert.equal(buf.subarray(0, 8).toString('hex'), '89504e470d0a1a0a', 'not a PNG')
+  let offset = 8
+  let width = 0
+  let height = 0
+  let colorType = -1
+  const idat = []
+  while (offset + 8 <= buf.length) {
+    const length = buf.readUInt32BE(offset)
+    const type = buf.subarray(offset + 4, offset + 8).toString('ascii')
+    const data = buf.subarray(offset + 8, offset + 8 + length)
+    if (type === 'IHDR') {
+      width = data.readUInt32BE(0)
+      height = data.readUInt32BE(4)
+      colorType = data[9]
+      assert.equal(data[8], 8, 'png bit depth')
+      assert.equal(data[10], 0, 'png must be non-interlaced')
+    } else if (type === 'IDAT') idat.push(data)
+    else if (type === 'IEND') break
+    offset += 12 + length
+  }
+  const channels = colorType === 2 ? 3 : colorType === 6 ? 4 : null
+  assert.ok(channels, `png color type ${colorType}`)
+  const raw = inflateSync(Buffer.concat(idat))
+  const stride = width * channels
+  const rows = []
+  let cursor = 0
+  for (let y = 0; y < height; y += 1) {
+    const filter = raw[cursor]
+    cursor += 1
+    const row = Buffer.alloc(stride)
+    const prior = rows[y - 1] ?? Buffer.alloc(stride)
+    for (let i = 0; i < stride; i += 1) {
+      const value = raw[cursor]
+      cursor += 1
+      const left = i >= channels ? row[i - channels] : 0
+      const up = prior[i]
+      const upLeft = i >= channels ? prior[i - channels] : 0
+      if (filter === 0) row[i] = value
+      else if (filter === 1) row[i] = (value + left) & 255
+      else if (filter === 2) row[i] = (value + up) & 255
+      else if (filter === 3) row[i] = (value + Math.floor((left + up) / 2)) & 255
+      else if (filter === 4) row[i] = (value + paeth(left, up, upLeft)) & 255
+      else throw new Error(`png filter ${filter}`)
+    }
+    rows.push(row)
+  }
+  return { width, height, channels, rows }
+}
+
+function darkPixels(image, x0, x1) {
+  let count = 0
+  const step = Math.max(1, Math.floor(image.height / 200))
+  for (let y = 0; y < image.height; y += step) {
+    const row = image.rows[y]
+    for (let x = x0; x < x1; x += 2) {
+      const at = x * image.channels
+      if (row[at] < 80 && row[at + 1] < 80 && row[at + 2] < 80) count += 1
+    }
+  }
+  return count
 }

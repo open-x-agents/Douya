@@ -36,7 +36,7 @@ test('bot route: source bots vs aux vs ignore', () => {
   assert.equal(BOT_ROUTE.chat, 'chief')
   assert.deepEqual(digestRoleForToolkit('gmail'), { role: 'source-bot', channel: 'gmail' })
   assert.deepEqual(digestRoleForToolkit('googlecalendar'), { role: 'aux-fetch', channel: 'googlecalendar' })
-  assert.deepEqual(digestRoleForToolkit('notion'), { role: 'ignore', channel: null })
+  assert.deepEqual(digestRoleForToolkit('notion'), { role: 'aux-fetch', channel: 'notion' })
 })
 
 

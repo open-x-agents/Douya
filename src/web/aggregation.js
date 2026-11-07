@@ -1,3 +1,5 @@
+import { fetchRecipe, SOURCE_RECIPES, recipeItems, sourceCluster } from './source-recipes.js';
+import { fetchYouTube, youtubeItems, youtubeCluster } from './youtube.js';
 import { tidyRepoCopy } from './repo-copy.js';
 export { tidyRepoCopy };
 import { buildEmailClusters } from './email-groups.js';
@@ -154,6 +156,8 @@ export async function fetchFromSources(composioClient, activeSources) {
         }
         sourceData.slack = { messages: matches };
         console.log(`[Slack] Fetched ${matches.length} messages since ${since}`);
+      } else if (slug === 'youtube') {
+        sourceData.youtube = await fetchYouTube(composioClient, source);
       } else if (slug === 'googlecalendar') {
         // Calendar: today + tomorrow (typically small, no pagination needed)
         const now = new Date();
@@ -196,7 +200,7 @@ export async function fetchFromSources(composioClient, activeSources) {
         };
         
         console.log(`[Calendar] Fetched ${sourceData.googlecalendar.today.length} today, ${sourceData.googlecalendar.tomorrow.length} tomorrow`);
-      }
+      } else if (SOURCE_RECIPES[slug]) { sourceData[slug] = await fetchRecipe(composioClient, source); }
     } catch (err) {
       console.warn(`[fetchFromSources] Failed to fetch ${slug}:`, err.message);
       // Non-enumerable: callers that report per-source status read it; the data shape stays the same.
@@ -346,7 +350,7 @@ async function paginateGmail(composioClient, query) {
  * Stage 2: Normalize heterogeneous source data into uniform items
  */
 export function normalizeItems(sourceData) {
-  const items = [];
+  const items = [...youtubeItems(sourceData.youtube), ...recipeItems(sourceData)];
   for (const m of sourceData.slack?.messages || []) {
     const ch = m.channel || {};
     const isDm = !!(ch.is_im || ch.is_mpim);
@@ -961,6 +965,14 @@ export function clusterByProjectTheme(items, opts = {}) {
     console.log(`[Clustering] Calendar: ${calendarItems.length} events in today cluster`);
   }
   
+  const yt = youtubeCluster(items.filter(i => i.source === 'youtube'), opts.lang);
+  if (yt) clusters.push(yt);
+
+  for (const slug of Object.keys(SOURCE_RECIPES)) {
+    const c = sourceCluster(items.filter(i => i.source === slug), opts.lang);
+    if (c) clusters.push(c);
+  }
+
   // Add remaining individual items that didn't cluster
   const clusteredSourceIds = new Set(
     clusters.flatMap(c => c.items.map(i => i.sourceId))
@@ -1567,7 +1579,7 @@ export function generateClusterCards(grouped) {
     }
     
     // Email category groups / actionable mails: blocks and copy are prebuilt from real data.
-    else if (cluster.type === 'email-group' || cluster.type === 'email-action') {
+    else if (cluster.type === 'source-cluster' || cluster.type === 'youtube-cluster' || cluster.type === 'email-group' || cluster.type === 'email-action') {
       card.blocks.push(...(cluster.blocks || []));
       card.actions.push(...(cluster.actions || []));
       card.nextAction = cluster.nextAction;

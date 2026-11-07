@@ -1,3 +1,5 @@
+import { SOURCE_RECIPES, sourceCluster, UNSCANNED_REASONS } from '../web/source-recipes.js'
+import { youtubeItems, youtubeCluster } from '../web/youtube.js'
 // Bot digest runner: one dsh session per channel (source bots) in parallel, then a separate Chief digest session
 // that merges / prioritizes and commits. Cards are written through the same store.save({digest:true}) merge the
 // legacy pipeline uses (update-or-add, completions and itemStatus kept, done cards never overwritten).
@@ -133,14 +135,14 @@ ${prefs.length ? `\n用户的汇聚偏好（必须遵守）：\n${prefs.map(p =>
 ${memory.length ? `\n你记得的该渠道习惯：\n${memory.map(m => `- ${m}`).join('\n')}` : ''}`
 }
 
-const AUX = { googlecalendar: '日历' }
+const AUX = { googlecalendar: '日历', youtube: 'YouTube', ...Object.fromEntries(Object.keys(SOURCE_RECIPES).map(s => [s, s])) }
 const KNOWN_SOURCES = { gmail: 'Gmail', github: 'GitHub', slack: 'Slack', googlecalendar: '日历' }
 
 /** Calendar-like sources for one run: the ACTIVE account to read, or why a connected source is not read. */
 export function auxSources(items = [], { only = null } = {}) {
   const out = {}
   for (const [slug, label] of Object.entries(AUX)) {
-    if (only && !only.includes(slug) && !only.includes('calendar')) continue
+    if (only && !only.includes(slug) && !(slug === 'googlecalendar' && only.includes('calendar'))) continue
     const mine = items.filter(a => a?.toolkit?.slug === slug)
     if (!mine.length) continue
     const active = mine.filter(a => a.status === 'ACTIVE').sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')))
@@ -153,6 +155,13 @@ export function auxSources(items = [], { only = null } = {}) {
     if (AUX[slug] || (only && !only.includes(slug))) continue
     const mine = items.filter(a => a?.toolkit?.slug === slug)
     if (mine.length && !mine.some(a => a.status === 'ACTIVE')) out[slug] = { label, status: 'failed', error: `连接状态 ${mine.map(a => a.status).filter(Boolean).join('/')}，需要重新连接` }
+  }
+  for (const a of items) {
+    const slug = a?.toolkit?.slug
+    if (!slug || AUX[slug] || KNOWN_SOURCES[slug] || (only && !only.includes(slug))) continue
+    if (!out[slug] || a.status === 'ACTIVE') out[slug] = a.status === 'ACTIVE'
+      ? { label: a.toolkit.name || slug, status: 'not-scanned', note: UNSCANNED_REASONS[slug] || 'No read recipe available' }
+      : { label: a.toolkit.name || slug, status: 'failed', error: `Connection ${a.status || 'unknown'}; reconnect in Sources` }
   }
   return out
 }
@@ -318,7 +327,13 @@ export function createBotDigest(deps) {
     for (const v of Object.values(runRec.aux)) if (v.account) v.status = 'fetching'
     progress(runRec)
     let data = {}
-    try { data = await A.fetchFromSources(deps.client(), accounts) }
+    try {
+      // Bound cross-toolkit fanout while keeping one slow toolkit from blocking all others.
+      for (let i = 0; i < accounts.length; i += 3) {
+        const parts = await Promise.all(accounts.slice(i, i + 3).map(a => A.fetchFromSources(deps.client(), [a])))
+        for (const part of parts) { Object.assign(data, part); if (part.errors) data.errors = { ...data.errors, ...part.errors } }
+      }
+    }
     catch (err) { data = {}; for (const v of Object.values(runRec.aux)) if (v.account) v.error = err.message }
     for (const [slug, v] of Object.entries(runRec.aux)) {
       if (!v.account) continue
@@ -329,6 +344,10 @@ export function createBotDigest(deps) {
         v.status = 'done'; v.events = today.length
         const tomorrow = data.googlecalendar.tomorrow || []
         v.note = today.length ? `今天 ${today.length} 个日程` : `今天没有日程${tomorrow.length ? `（明天 ${tomorrow.length} 个）` : ''}`
+      } else if (slug === 'youtube' && data.youtube && !err) {
+        v.status = 'done'; v.note = `${data.youtube.videos.length} new videos${data.youtube.truncated ? ' (limited scan)' : ''}`
+      } else if (SOURCE_RECIPES[slug] && data[slug] && !err) {
+        v.status = 'done'; v.note = `${data[slug].items.length} recent items${data[slug].truncated ? ' (limited scan)' : ''}`
       } else if (err) { v.status = 'failed'; v.error = String(err).slice(0, 120) }
       else { v.status = 'failed'; v.error = '没有读到数据' }
     }
@@ -350,7 +369,7 @@ export function createBotDigest(deps) {
         // Connected sources without a source bot (calendar): fetched directly for the timeline / hero, shown in the strip.
         runRec.aux = auxSources(res?.items || [], { only })
         const extra = Object.values(runRec.aux).filter(v => v.account).map(v => v.account)
-        if (!chans.length) throw new Error('没有可用的信源渠道')
+        if (!chans.length && !extra.length) throw new Error('没有可用的信源渠道')
         for (const { ch } of chans) runRec.channels[ch] = { status: 'queued' }
         progress(runRec)
         const itemStatus = store.get()?.itemStatus || {}
@@ -358,7 +377,7 @@ export function createBotDigest(deps) {
         await Promise.all(chans.map(({ ch, a }) => runSource(runRec, ch, a, itemStatus)))
         const ok = Object.entries(runRec.channels).filter(([, v]) => v.status === 'done' || v.status === 'skipped')
         const failedOnly = Object.entries(runRec.channels).every(([, v]) => v.status === 'failed' || v.status === 'timeout')
-        if (!ok.length || failedOnly) throw new Error(`所有信源都失败：${Object.entries(runRec.channels).map(([k, v]) => `${k} ${v.error || v.status}`).join('；')}`)
+        if (chans.length && (!ok.length || failedOnly)) throw new Error(`所有信源都失败：${Object.entries(runRec.channels).map(([k, v]) => `${k} ${v.error || v.status}`).join('；')}`)
 
         // ---- Chief digest session (skip LLM when no candidates) ----
         const doneChans = ok.filter(([, v]) => v.status === 'done')
@@ -366,6 +385,7 @@ export function createBotDigest(deps) {
         for (const c of all) c.itemTitles = c.items.slice(0, 5).map(r => clip(runRec.channels[c.channel].snapshot.byRef.get(r.ref)?.title, 50))
         runRec.allCandidates = all
         const auxData = await extraData
+        if (!chans.length && !Object.keys(auxData).some(k => k !== 'errors')) throw new Error('No connected source could be scanned')
         const statuses = [
           ...Object.entries(runRec.channels).map(([k, v]) => {
             if (v.status === 'done') return `${CHANNELS[k].label} 完成 ${v.cards} 张`
@@ -406,10 +426,16 @@ export function createBotDigest(deps) {
         const hero = await A.generateHeroCard(grouped, sourceData, fake({ narrative: [runRec.plan.headline, runRec.plan.narrative].filter(Boolean).join('：') }), deps.profileContext?.() || {})
         const timetable = await A.generateTimetable(grouped, sourceData, fake({ suggestedBlocks: runRec.plan.timeline }), deps.profileContext?.() || {})
         const ach = A.generateAchievementsTile(sourceData, items)
-        const cards = [hero, timetable, ...built.cards, ...(ach ? [ach] : [])]
-        lastRun = { sourceData, validUrls: new Set([...valid, ...A.normalizeItems(sourceData).map(i => i.url).filter(Boolean)]), cards: built.cards.map(c => JSON.parse(JSON.stringify(c))).concat([hero, timetable]), at: Date.now() }
+        const yt = youtubeCluster(youtubeItems(auxData.youtube), deps.profileContext?.()?.lang || 'en')
+        const youtubeCards = yt ? A.generateClusterCards({ urgent: [], action: [], fyi: [yt] }) : []
+        const genericCards = Object.keys(SOURCE_RECIPES).flatMap(slug => {
+          const c = sourceCluster(auxData[slug]?.items || [], deps.profileContext?.()?.lang || 'en')
+          return c ? A.generateClusterCards({ urgent: [], action: [], fyi: [c] }) : []
+        })
+        const cards = [hero, timetable, ...youtubeCards, ...genericCards, ...built.cards, ...(ach ? [ach] : [])]
+        lastRun = { sourceData, validUrls: new Set([...valid, ...A.normalizeItems(sourceData).map(i => i.url).filter(Boolean)]), cards: [...built.cards, ...youtubeCards, ...genericCards].map(c => JSON.parse(JSON.stringify(c))).concat([hero, timetable]), at: Date.now() }
         const seen = new Map(); for (const [k, v] of doneChans) for (const [key, urls] of seenEntities(k, v.snapshot)) seen.set(key, urls)
-        const saved = await commit(cards, { summary: runRec.plan.headline || runRec.plan.narrative || '', sources: ok.map(([k]) => k), mode: 'bot', seen, channels: new Set(ok.map(([k]) => k)) })
+        const saved = await commit(cards, { summary: runRec.plan.headline || runRec.plan.narrative || '', sources: [...ok.map(([k]) => k), ...Object.keys(auxData)], mode: 'bot', seen, channels: new Set([...ok.map(([k]) => k), ...Object.keys(auxData)]) })
         runRec.reconcile = saved?.reconcile || null
         runRec.status = 'done'
         runRec.result = { cards: built.cards.length, total: cards.length, stats: built.stats, invalidLinks: bad.length, needsAction: built.cards.filter(c => c.waiting === 'you').length, saved }

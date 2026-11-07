@@ -4,6 +4,11 @@ export const LOCALES = ['en', 'zh']
 
 export const messages = {
   en: {
+    'sources.recent_items': '{source} · {n} recent items',
+    'sources.open_latest': 'Open latest item',
+    'youtube.new_videos': '{n} new videos from subscriptions',
+    'youtube.watch': 'Watch latest video',
+    'sources.not_scanned': 'Connected · not scanned yet',
     'app.title': 'Douya · Open Digital Mate',
     'nav.today': 'Today',
     'nav.sources': 'Sources',
@@ -542,6 +547,11 @@ export const messages = {
   },
 
   zh: {
+    'sources.recent_items': '{source} · {n} 条最近动态',
+    'sources.open_latest': '打开最新一条',
+    'youtube.new_videos': '订阅频道有 {n} 个新视频',
+    'youtube.watch': '观看最新视频',
+    'sources.not_scanned': '已连接 · 暂不扫描',
     'app.title': '豆芽 · Open Digital Mate',
     'nav.today': '今天',
     'nav.sources': '信源状态',

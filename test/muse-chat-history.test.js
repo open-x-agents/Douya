@@ -18,6 +18,14 @@ const assist = (seq, text) => ({ event: { seq, time: 1_790_000_000_000 + seq, ty
 const tool = seq => ({ event: { seq, time: 1_790_000_000_000 + seq, type: 'tool/call', data: { name: 'bash' } } })
 const end = seq => ({ event: { seq, time: 1_790_000_000_000 + seq, type: 'turn/end', data: { reason: { kind: 'completed' } } } })
 
+// What a prompt with one picture looks like on the wire, and what the user's bubble showed for it.
+const ATTACH_TEXT = '请看我附上的内容。'
+const ATTACH_NOTE = `${ATTACH_TEXT}\n\n【附件】\n图片「a.png」（12KB，mediaType=image/png）`
+const ATTACH_SHOWN = [{ text: ATTACH_TEXT, attachments: [{ kind: 'image', name: 'a.png', bytes: 12_288, mediaType: 'image/png' }] }]
+const picture = (seq, rpcId, text = ATTACH_NOTE) => ({ event: { seq, time: 1_790_000_000_000 + seq, type: 'user/message', data: { role: 'user', source: { kind: 'user', rpcId }, content: [{ type: 'text', text }, { type: 'image' }] } } })
+const steer = (seq, rpcId, more) => ({ event: { seq, time: 1_790_000_000_000 + seq, type: 'user/message', data: { role: 'user', source: { kind: 'user', rpcId }, content: [{ type: 'text', text: `（补充一条，请和上一条一起回答，一次回复）\n${more}` }] } } })
+const DONE = '【刚处理完 · 以此为准】下面这些用户已经做完（邮件/评论已发出），回答「还有什么没做」时不要再列它们：\n已发送：回复邮件给 fledge'
+
 function pairRecords() {
   return [
     owner(1, `${VIEW}\n\n你是谁`),
@@ -157,4 +165,75 @@ test('the Muse /api/chat/history route answers with the in-process transcript', 
   assert.equal(res.status, 200)
   const json = await res.json()
   assert.deepEqual(json.messages.map(m => [m.role, m.content]), [['user', '你是谁'], ['assistant', CHIEF], ['user', '在干嘛'], ['assistant', STANDBY]])
+})
+
+test('a restored bubble shows the user\'s picture, not the prompt\'s attachment note', () => {
+  const display = { lookup: id => (id === 'rpc-pic' ? ATTACH_SHOWN : null) }
+  const messages = historyFromRecords([picture(1, 'rpc-pic'), assist(2, '收到')], { display })
+  assert.deepEqual(messages.map(m => [m.role, m.content]), [['user', ATTACH_TEXT], ['assistant', '收到']])
+  assert.deepEqual(messages[0].attachments, ATTACH_SHOWN[0].attachments)
+  assert.doesNotMatch(messages[0].content, /【附件】/)
+})
+
+test('a Session from before the display record still peels the attachment note off the words', () => {
+  const messages = historyFromRecords([picture(1, 'rpc-old'), assist(2, '收到')])
+  assert.deepEqual(messages.map(m => [m.role, m.content]), [['user', ''], ['assistant', '收到']])
+  assert.deepEqual(messages[0].attachments.map(a => [a.kind, a.name]), [['image', 'a.png']])
+  assert.ok(messages.every(m => !/【附件】/.test(m.content)))
+})
+
+test('a steered follow-up is the owner\'s sentence, not the lane note', () => {
+  const messages = historyFromRecords([
+    owner(1, `${VIEW}\n\n你是谁`),
+    assist(2, CHIEF),
+    end(3),
+    steer(4, 'rpc-steer', '还要一句自我介绍'),
+    assist(5, STANDBY),
+    end(6),
+  ])
+  assert.deepEqual(messages.map(m => [m.role, m.content]), [
+    ['user', '你是谁'],
+    ['assistant', CHIEF],
+    ['user', '还要一句自我介绍'],
+    ['assistant', STANDBY],
+  ])
+  assert.ok(messages.every(m => !/补充一条/.test(m.content)))
+})
+
+test('the 【刚处理完】 runtime context never reaches a restored bubble', () => {
+  const messages = historyFromRecords([
+    owner(1, `${DONE}\n\n${VIEW}\n\n现在还有什么没做`),
+    assist(2, '都做完了'),
+  ])
+  assert.deepEqual(messages.map(m => [m.role, m.content]), [['user', '现在还有什么没做'], ['assistant', '都做完了']])
+  assert.ok(messages.every(m => !/【刚处理完】/.test(m.content)))
+})
+
+test('the Muse /api/chat/history route restores bubbles from the display record', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'odm-history-display-'))
+  writeFileSync(join(home, 'config.json'), JSON.stringify({}))
+  const configStore = createConfigStore(join(home, 'config.json'))
+  await configStore.load()
+  const state = { cards: [], completions: [] }
+  const router = createApiRouter({ store: { get: () => state, save: async s => Object.assign(state, s), load: async () => state }, config: { home, dataDir: home }, configStore })
+  router.chatDisplay().record('rpc-pic', ATTACH_SHOWN)
+
+  const dshHome = dshHomeWith('session-chief')
+  const records = [picture(1, 'rpc-pic'), assist(2, '收到')]
+  const registered = new Map()
+  const ctx = {
+    effect: dispose => { dispose(); return () => {} },
+    sessionController: {
+      async resolveAgent() { return { status: 'idle', session: { seq: records.length + 1 } } },
+      async page() { return { records, hasMore: false } },
+    },
+    connection: { fetch: { register: route => { registered.set(`${route.methods.join(',')} ${route.path}`, route); return () => {} } } },
+  }
+  assert.equal(registerMuseHostRoutes(ctx, { router, dshHome }), true)
+  const route = registered.get('GET /api/chat/history')
+  const res = await route.fetch(new Request('http://odm.local/api/chat/history'))
+  assert.equal(res.status, 200)
+  const json = await res.json()
+  assert.deepEqual(json.messages.map(m => [m.role, m.content]), [['user', ATTACH_TEXT], ['assistant', '收到']])
+  assert.deepEqual(json.messages[0].attachments, ATTACH_SHOWN[0].attachments)
 })

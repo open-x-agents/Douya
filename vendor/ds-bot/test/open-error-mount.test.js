@@ -796,8 +796,52 @@ test('a child that never becomes ready is reaped before the helper returns', { t
   assert.ok(earlyElapsed < 1000, `an already closed child waited out the ready timer (${earlyElapsed}ms)`)
 })
 
-function listen(server) {
-  return new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+test('a failed listen rejects and the caller finally runs', async () => {
+  const held = createServer()
+  const blocked = createServer()
+  let cleaned = false
+  try {
+    await listen(held)
+    assert.equal(held.listeners('error').some(fn => fn.name === 'onError'), false)
+    assert.equal(held.listeners('listening').some(fn => fn.name === 'onListening'), false)
+    try {
+      await listen(blocked, held.address().port)
+      assert.fail('listen accepted a port that was already taken')
+    } catch (error) {
+      assert.equal(error.code, 'EADDRINUSE')
+    } finally {
+      cleaned = true
+    }
+    assert.equal(cleaned, true)
+    assert.equal(blocked.listening, false)
+    assert.equal(blocked.listeners('error').some(fn => fn.name === 'onError'), false)
+    assert.equal(blocked.listeners('listening').some(fn => fn.name === 'onListening'), false)
+  } finally {
+    if (held.listening) await new Promise((resolve) => held.close(resolve))
+    if (blocked.listening) await new Promise((resolve) => blocked.close(resolve))
+  }
+})
+
+function listen(server, port = 0) {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const finish = (fn, value) => {
+      if (settled) return
+      settled = true
+      server.off('error', onError)
+      server.off('listening', onListening)
+      fn(value)
+    }
+    const onError = (error) => finish(reject, error)
+    const onListening = () => finish(resolve)
+    server.on('error', onError)
+    server.on('listening', onListening)
+    try {
+      server.listen(port, '127.0.0.1')
+    } catch (error) {
+      finish(reject, error)
+    }
+  })
 }
 
 function wsUrl(server) {

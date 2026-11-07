@@ -2,6 +2,7 @@
 // a PR's size / touched areas / CI / review state / risk flags, so 「审 #N」 starts with what changed and what to look at.
 // Everything comes from GitHub via Composio; missing data is simply left out.
 import { cardLinks, linkType } from './card-prep.js'
+import { blockedNote, classifyBlock } from '../sources/blocked.js'
 
 const clip = (s, n) => { s = String(s ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s }
 const ghRef = url => { const m = String(url || '').match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/); return m ? { owner: m[1], repo: m[2], number: Number(m[3]) } : null }
@@ -107,7 +108,9 @@ export async function fetchPrBrief(client, target) {
     exec('GITHUB_LIST_REQUESTED_REVIEWERS_FOR_A_PULL_REQUEST', { owner, repo, pull_number: number }),
     exec('GITHUB_LIST_REVIEWS_FOR_A_PULL_REQUEST', { owner, repo, pull_number: number, per_page: 50 }),
   ])
-  if (!issue || issue.__error || !issue.number) return { error: issue?.__error || '拿不到这个 PR' }
+  const failure = issue?.__error || '拿不到这个 PR'
+  if (classifyBlock({ error: failure }).blocked) return { blocked: true, error: blockedNote('zh', { site: 'GitHub' }) }
+  if (!issue || issue.__error || !issue.number) return { error: failure }
   const fl = Array.isArray(files) ? files : Array.isArray(files?.files) ? files.files : []
   const sha = (fl.map(f => (String(f.blob_url || '').match(/\/blob\/([0-9a-f]{40})\//) || [])[1]).find(Boolean)) || null
   let checks = []

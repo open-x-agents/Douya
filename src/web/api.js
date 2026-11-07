@@ -849,7 +849,7 @@ export function createApiRouter(ctx) {
       const client = getComposioClient();
       if (!client) return { success: false, error: 'GitHub 还没连上' };
       const brief = await fetchPrBrief(client, target);
-      if (!brief || brief.error) return { success: false, error: brief?.error || '拿不到这个 PR' };
+      if (!brief || brief.error) return { success: false, blocked: !!brief?.blocked, error: brief?.error || '拿不到这个 PR' };
       // Source says merged / closed → that item is finished; tick it (by system) so the card clears like any done item.
       let autoResolved = false;
       const st = store.get(); // re-read: the fetch took a while

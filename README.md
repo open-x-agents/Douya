@@ -63,6 +63,8 @@ open "$(cat .odm-data/dsh-web.url)"          # macOS
 
 > Do not commit or paste the token URL into issues or chat logs.
 
+On macOS you can put that behind a system-wide hotkey — see [docs/mac-shortcut.md](docs/mac-shortcut.md).
+
 ### Configure AI + Composio
 
 1. **Settings** → pick provider (e.g. DeepSeek), paste key, Save  

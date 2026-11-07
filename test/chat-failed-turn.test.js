@@ -11,6 +11,6 @@ test('a failed chat turn is kept locally and repainted with Retry after reload',
   assert.match(html, /rememberFailed\(msg, err instanceof ChatFail/)
   assert.match(html, /forgetFailed\(msg\);\n\s+const b = appendInlineBubble\('bot'/)
   // history read paints them after the transcript, retry resends through the dock
-  assert.match(html, /paintFailedTurns\(body, messages\);\n\s+stickTodayChat\(true\)/)
+  assert.match(html, /paintFailedTurns\(body, messages, userEls\);\n\s+stickTodayChat\(true\)/)
   assert.match(html, /forgetFailed\(f\.text\); dockPrompt\(f\.text\)/)
 })

@@ -2004,6 +2004,7 @@
   .brief-acts{margin-top:8px;display:flex;gap:8px}
   .brief-note{font-size:13px;line-height:1.5;color:var(--ink)}
   .nx.leaving{opacity:0;transform:translateY(-6px);transition:opacity .22s var(--ease),transform .22s var(--ease)}
+  .bubble.me.failed{opacity:.78;outline:1px dashed rgba(200,80,80,.45);outline-offset:-1px}
 </style>
 </head>
 <body>
@@ -4578,12 +4579,14 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       // would show that prompt twice, so the live turn stands.
       if (body.childElementCount) { inlineHistoryLoaded = true; return; }
       const messages = data.messages || [];
-      messages.forEach(m => {
+      const userEls = [];
+      messages.forEach((m, i) => {
         if (m.role === 'user') {
           const b = document.createElement('div');
           b.className = 'bubble me';
           fillUserBubble(b, m.content, m.attachments, m.at ? new Date(m.at).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}) : '');
           body.appendChild(b);
+          userEls[i] = b;
         } else if (m.role === 'assistant') {
           const b = document.createElement('div');
           b.className = 'bubble bot';
@@ -4595,7 +4598,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
           (m.surfaces || []).forEach(v => body.appendChild(renderSurface(v, { container: body, sendPrompt: dockPrompt }, 'chat')));
         }
       });
-      paintFailedTurns(body, messages);
+      paintFailedTurns(body, messages, userEls);
       stickTodayChat(true);
       // An empty answer is not a transcript: the session may simply not be hydrated yet, so the next
       // open reads again instead of pinning a blank dock for the rest of the page load.
@@ -5787,15 +5790,25 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function failedTurns() { try { const a = JSON.parse(localStorage.getItem(FAILED_KEY) || '[]'); return Array.isArray(a) ? a.filter(x => x && x.text && Date.now() - x.at < 2 * 864e5) : []; } catch (_) { return []; } }
   function rememberFailed(text, error) { try { const a = failedTurns().filter(x => x.text !== text); a.push({ text, error: String(error || ''), at: Date.now() }); localStorage.setItem(FAILED_KEY, JSON.stringify(a.slice(-5))); } catch (_) {} }
   function forgetFailed(text) { try { localStorage.setItem(FAILED_KEY, JSON.stringify(failedTurns().filter(x => x.text !== text))); } catch (_) {} }
-  function paintFailedTurns(body, messages) {
+  // Chief's session usually keeps the user's words even when the turn failed, but with no reply after them they
+  // looked delivered. Mark such a message failed (error + Retry); paint it ourselves if the session lost it.
+  function paintFailedTurns(body, messages, userEls = []) {
+    const msgs = messages || [];
     for (const f of failedTurns()) {
-      if ((messages || []).some(m => m.role === 'user' && String(m.content || '').trim() === f.text && (!m.at || new Date(m.at).getTime() >= f.at - 60e3))) { forgetFailed(f.text); continue; }
-      const me = document.createElement('div'); me.className = 'bubble me failed';
-      me.innerHTML = `${escapeHtml(f.text)}<small>${chatTime(new Date(f.at).toISOString())}</small>`;
+      let idx = -1;
+      msgs.forEach((m, i) => { if (m.role === 'user' && String(m.content || '').trim() === f.text && (!m.at || new Date(m.at).getTime() >= f.at - 120e3)) idx = i; });
+      if (idx >= 0 && msgs.slice(idx + 1).some(m => m.role === 'assistant')) { forgetFailed(f.text); continue; }
+      let me = idx >= 0 ? userEls[idx] : null;
+      if (!me) {
+        me = document.createElement('div'); me.className = 'bubble me';
+        me.innerHTML = `${escapeHtml(f.text)}<small>${chatTime(new Date(f.at).toISOString())}</small>`;
+        body.appendChild(me);
+      }
+      me.classList.add('failed');
       const d = document.createElement('div'); d.className = 'bubble bot fail';
       d.innerHTML = failBubbleHtml(f.error || t('chat.send_fail_short'));
       d.querySelector('.chat-retry').onclick = () => { d.remove(); me.remove(); forgetFailed(f.text); dockPrompt(f.text); };
-      body.appendChild(me); body.appendChild(d);
+      me.after(d);
     }
   }
   function failBubbleHtml(text) {

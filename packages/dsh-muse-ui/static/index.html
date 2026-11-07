@@ -2047,6 +2047,7 @@
     </div>
     <div class="nav on" data-view="today" data-i18n="nav.today">Today</div>
     <div class="nav" data-view="sources" data-i18n="nav.sources">Sources</div>
+    <div class="nav" data-view="future" data-i18n="nav.future">Future</div>
     <div class="nav" data-view="memory" data-i18n="nav.memory">Memories</div>
     <div class="grp" data-i18n="nav.settings_group">Settings</div>
     <div class="nav" data-view="settings" data-i18n="nav.settings">Settings</div>
@@ -2102,6 +2103,8 @@
           <div id="digestRunBox" class="digest-run-box"></div>
           <div id="sourcesContent"></div>
         </section>
+
+        <section class="view" id="v-future" aria-label="Future"></section>
 
         <!-- Recall / 回忆 -->
         <section class="view" id="v-memory">
@@ -2368,7 +2371,7 @@
   });
   try { I18N.applyDom(); syncLangSwitch(); } catch (_) {}
 
-  const views = { today: $('v-today'), sources: $('v-sources'), memory: $('v-memory'), settings: $('v-settings') };
+  const views = { today: $('v-today'), sources: $('v-sources'), future: $('v-future'), memory: $('v-memory'), settings: $('v-settings') };
   
   // View navigation
   document.querySelectorAll('.nav[data-view]').forEach(nav => {
@@ -5315,7 +5318,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   }
   window.odmWatchComposio = odmWatchComposio;
   // Deep link: the callback page (no opener) redirects to …/app#sources.
-  const hashView = () => { const v = (location.hash || '').slice(1); if (v === 'sources' || v === 'settings' || v === 'memory') showView(v); };
+  const hashView = () => { const v = (location.hash || '').slice(1); if (v === 'sources' || v === 'settings' || v === 'memory' || v === 'future') showView(v); };
   setTimeout(hashView, 0); window.addEventListener('hashchange', hashView);
   window.__reloadSources = () => { if ($('v-sources').classList.contains('on')) loadSources(true); };
 
@@ -6073,6 +6076,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     document.querySelectorAll('.nav').forEach(n => n.classList.toggle('on', n.getAttribute('data-view') === view));
     Object.keys(views).forEach(k => views[k].classList.toggle('on', k === view));
     if (view === 'sources') loadSources();
+    if (view === 'future') window.loadFuture?.();
     if (view === 'memory') loadMemories();
     if (view === 'settings') { checkConfig(); loadLLMSettings(); loadComposioSettings(); loadDigestPrefs(); }
     reportView();
@@ -6213,6 +6217,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     uiSeq = e.seq;
     if (e.kind === 'surface') { onSurfaceEvent(e); return; }
     if (e.kind === 'suggest') { showSuggest(e); return; }
+    if (e.kind === 'future') { window.loadFuture?.(); return; }
     if (e.kind === 'cards') { if (!dutyBusy()) await loadToday(); if (e.reason === 'timetable') { const el = document.querySelector('.myday'); if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } } if (e.message) showUiToast(e.message); return; }
     if (e.by === 'bot' && HOLDABLE.has((e.op || {}).op) && userTyping()) { holdEvent(e); return; }
     return applyOpEvent(e, false);
@@ -6294,6 +6299,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   // buttons open links / cards, run view ops or send a prompt; a form draft only shows the existing 待你确认 card.
   const panelViews = new Map(); // surfaceId -> view, shown on 今天
   const PANEL_KEY = 'odm.panels.v1';
+  window.futureChat = text => { showView('today'); openTodayChat({ byUser: true }); const i = $('todayChatInput'); if (i) { i.value = text; i.dispatchEvent(new Event('input')); i.focus(); } };
   function dockPrompt(text) { const i = $('todayChatInput'); if (!i) return; if (currentView() !== 'today') showView('today'); i.value = String(text || ''); $('todayChatSend')?.click(); }
   function surfaceHost(ctx = {}) {
     return {

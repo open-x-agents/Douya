@@ -23,6 +23,7 @@ export function emptyState() {
     sources: {},
     week: [],
     prefs: {},
+    futurePlans: [],
     cards: [],
     // Durable completion / dismiss ledger — digests never clear this.
     completions: [],
@@ -73,6 +74,7 @@ export function normalizeState(raw) {
     sources: isRecord(raw.sources) ? raw.sources : {},
     week: Array.isArray(raw.week) ? raw.week : [],
     prefs: isRecord(raw.prefs) ? raw.prefs : {},
+    futurePlans: Array.isArray(raw.futurePlans) ? raw.futurePlans : [],
     cards: Array.isArray(raw.cards) ? cleanupCards(raw.cards.map(fixRepoCard), raw) : [],
     completions: Array.isArray(raw.completions) ? dedupeItemCompletions(raw.completions) : [],
     itemStatus: isRecord(raw.itemStatus) ? raw.itemStatus : {},
@@ -244,7 +246,7 @@ export function createStore(path) {
     },
     /**
      * @param {object} next
-     * @param {{ digest?: boolean, replaceCards?: boolean }} [opts]
+     * @param {{ digest?: boolean, replaceCards?: boolean, futurePlans?: boolean }} [opts]
      *   digest: preserve terminal cards when merging by sourceId
      *   replaceCards: rare; replace the whole card list (still keeps completions)
      */
@@ -275,6 +277,8 @@ export function createStore(path) {
       state = {
         ...existing,
         ...next,
+        // Only the Future service writes plans. A digest / unrelated stale full-state save must not rewind progress.
+        futurePlans: opts.futurePlans === true && Array.isArray(next.futurePlans) ? next.futurePlans : (existing.futurePlans || []),
         cards,
         completions,
         revision: (next?.revision ?? existing.revision ?? 0) + 1,

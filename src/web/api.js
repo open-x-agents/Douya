@@ -1,3 +1,4 @@
+import { createFutureService } from './future-plans.js';
 /**
  * API routes for the web interface
  */
@@ -732,6 +733,7 @@ export function createApiRouter(ctx) {
   const uiService = createUiService({ store, log: m => console.log(m) });
   const chatDisplay = createChatDisplay({ home: config.home || '.odm-data' });
   // P2: temporary views Chief generates (odm_ui_render / odm_ui_update). Form drafts only become pending actions.
+  const futureService = createFutureService({ store, emit: e => uiService.emit(e) });
   const surfaceService = createSurfaceService({ store, actions: ACTIONS, requestAction: (n, input, o) => actionService.request(n, input, o), emit: e => uiService.emit(e), log: m => console.log(m) });
 
   let botDigest = null; // bot digest runner (src/digest/runner.js), set by index.js in the dsh host
@@ -796,6 +798,9 @@ export function createApiRouter(ctx) {
       console.log(`[composio-callback] status=${status} account=${connectedAccountId || '-'} toolkit=${toolkit || '-'} verified=${accountStatus || '-'}`);
       return { html: callbackPage({ status, connectedAccountId, error, toolkit, accountStatus }), accountStatus, toolkit };
     },
+    futureGet() { return futureService.get(); },
+    futureApply(input, opts) { return futureService.apply(input, opts); },
+
     /** 我的一天: Chief reads / edits the suggested blocks; persisted on the timetable card, pushed live to open tabs. */
     timetableGet() {
       const card = findTimetableCard(store.get().cards || []);
@@ -2252,6 +2257,14 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
           }
         });
         return;
+      } else if (url.pathname === '/api/opendigitalmate/future' && ['GET', 'POST'].includes(req.method)) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        if (req.method === 'GET') res.end(JSON.stringify(await router.futureGet()));
+        else {
+          let body = ''; for await (const chunk of req) { body += chunk; if (body.length > 32000) break; }
+          try { res.end(JSON.stringify(await router.futureApply(JSON.parse(body || '{}'), { by: 'user' }))); }
+          catch (err) { res.end(JSON.stringify({ ok: false, error: err.message })); }
+        }
       } else if (url.pathname === '/api/opendigitalmate/timetable' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(router.timetableGet()));

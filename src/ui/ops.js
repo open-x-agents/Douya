@@ -11,7 +11,7 @@ import { cardItemUrls } from '../host/store.js'
 
 export const UI_OPS = ['openCard', 'closeCard', 'highlight', 'filter', 'clearFilter', 'arrange', 'navigate', 'undo']
 export const LAYOUT_OPS = new Set(['filter', 'clearFilter', 'arrange'])
-export const PAGES = { today: '今天', sources: '信源状态', memory: '回忆', settings: '配置' }
+export const PAGES = { today: '今天', sources: '信源状态', memory: '回忆', future: '未来', settings: '配置' }
 export const FILTER_STATUSES = { 'needs-you': '需要你处理', 'waiting-others': '在等别人', priority: '优先', fyi: '仅供参考' }
 const SOURCE_ZH = { github: 'GitHub', gmail: 'Gmail', slack: 'Slack', googlecalendar: '日历', manual: '手动', 'bot-test': 'bot-test' }
 const SOURCE_ALIAS = {

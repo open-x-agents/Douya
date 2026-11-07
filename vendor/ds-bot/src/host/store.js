@@ -167,6 +167,12 @@ export function install(rt) {
       state.pendingRoutes = {}
       migrated = true
     }
+    // Absent on older teams. Only a corrupt value is replaced, so a file that
+    // never had this key is not rewritten just by being opened.
+    if ('privateHolds' in state && (state.privateHolds === null || typeof state.privateHolds !== 'object' || Array.isArray(state.privateHolds))) {
+      state.privateHolds = {}
+      migrated = true
+    }
     // LEGACY: aside cards lived in this file only before the feature shipped;
     // they are kept under btw/ per part now. A saved copy is dropped, not moved.
     if ('btwCards' in state) {

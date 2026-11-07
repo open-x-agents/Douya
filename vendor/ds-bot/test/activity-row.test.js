@@ -150,6 +150,21 @@ test('a running turn with no steer and no fresh input stays on the thinking phra
   assert.equal(cue.fixed, undefined)
 })
 
+test('a private hold note is fixed copy and does not replace the steer ack', () => {
+  const noted = activityCue({
+    moving: false,
+    inputAt: 0,
+    steeredAt: 0,
+    tool: tool(100),
+    routeNote: { at: 400, text: 'Held for confirmation. The current model will not read this.', label: 'budget review' },
+  })
+  assert.equal(noted.fixed, true)
+  assert.match(noted.label, /will not read this/)
+  assert.match(noted.label, /budget review/)
+  const steer = activityCue({ moving: false, inputAt: 500, steeredAt: 400, tool: tool(100) })
+  assert.equal(steer.label, ACK)
+})
+
 test('a folder move wins over a steer ack', () => {
   const cue = activityCue({ moving: true, inputAt: 500, steeredAt: 400, tool: tool(100) })
   assert.equal(cue.key, 'move')

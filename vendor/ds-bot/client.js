@@ -633,6 +633,12 @@ var ZH = {
   "Moving to a fresh conversation": "整理记忆，换到新对话",
   "Switching working folder": "正在切换工作文件夹",
   "Folded into this step. Continuing when it finishes.": "已并进当前这条，这一步做完再继续",
+  "Queued after the current line. This step will not read it.": "已排到当前这条之后。这一步不会读到。",
+  "Held for confirmation. The current model will not read this.": "先等你确认。当前模型不会读到这句。",
+  "“New” is waiting for confirmation. It does not open another chat yet.": "「新开」先停在确认里，还不会另开一条会话。",
+  "Bind to this line": "绑到这条",
+  "Bound. The model has not been given this sentence.": "已记下绑定。这句还没有交给模型。",
+  "Opening another chat is not part of this step.": "这一步还不会另开一条会话。",
   "Searching online": "上网搜索",
   "Reading a page": "阅读网页",
   "Running shell commands": "运行命令",
@@ -1617,6 +1623,47 @@ function choiceBotName(choice, roster) {
   if (typeof bot?.name === "string" && bot.name !== "") return bot.name;
   return typeof choice?.botId === "string" ? choice.botId : "";
 }
+function PrivateHoldDock({ sessionId, useRoster, actions }) {
+  const hold = useRoster((value) => value.privateHolds?.[sessionId]);
+  const [sending, setSending] = (0, import_react.useState)(false);
+  if (hold == null) return null;
+  const latest = Array.isArray(hold.items) ? hold.items[hold.items.length - 1] : void 0;
+  const text = typeof latest?.text === "string" ? latest.text : "";
+  if (text === "") return null;
+  const choices = Array.isArray(hold.choices) ? hold.choices : [];
+  const bound2 = hold.status === "bound";
+  const choose = (id) => {
+    if (sending || bound2 || typeof id !== "string" || id === "" || typeof actions.confirmPrivate !== "function") return;
+    setSending(true);
+    void Promise.resolve(actions.confirmPrivate(sessionId, id)).finally(() => setSending(false));
+  };
+  return (0, import_react.createElement)(
+    "div",
+    { className: "bt-route-dock", "data-route-dock": "private", "data-private-hold": hold.status ?? "pending" },
+    (0, import_react.createElement)(
+      "div",
+      { className: "bt-route", role: "group", "aria-label": t("Which line should this go on?") },
+      (0, import_react.createElement)("p", { className: "bt-route-text" }, text),
+      bound2 ? (0, import_react.createElement)("p", { className: "bt-route-miss" }, `${t("Bound. The model has not been given this sentence.")} ${t("Opening another chat is not part of this step.")}`) : (0, import_react.createElement)("div", { className: "bt-route-list" }, choices.map((choice) => {
+        const id = typeof choice?.id === "string" ? choice.id : "";
+        const label = choiceLabel(choice);
+        return (0, import_react.createElement)(
+          "button",
+          {
+            key: id !== "" ? id : label,
+            type: "button",
+            className: "bt-route-choice",
+            disabled: sending || id === "",
+            "data-highlight": hold.highlight === id ? "" : void 0,
+            onClick: () => choose(id)
+          },
+          (0, import_react.createElement)("span", { className: "bt-route-choice-name" }, label),
+          (0, import_react.createElement)("span", { className: "bt-route-choice-state" }, t("Bind to this line"))
+        );
+      }))
+    )
+  );
+}
 function RouteDock({ sessionId, useRoster, actions }) {
   const room2 = useRoster((value) => value.roomsById?.[sessionId]);
   const pending = useRoster((value) => value.pendingRoutes?.[sessionId]);
@@ -1627,7 +1674,8 @@ function RouteDock({ sessionId, useRoster, actions }) {
   (0, import_react.useEffect)(() => () => {
     noteRouteComposerSend(sessionId, "", null);
   }, [sessionId, cardKey]);
-  if (room2 == null || pending == null || typeof pending.text !== "string") return null;
+  if (room2 == null) return (0, import_react.createElement)(PrivateHoldDock, { sessionId, useRoster, actions });
+  if (pending == null || typeof pending.text !== "string") return null;
   const choices = Array.isArray(pending.choices) ? pending.choices : [];
   const choose = (id) => {
     if (sending || typeof id !== "string" || id === "" || typeof actions.send !== "function") return;
@@ -1809,6 +1857,8 @@ function teamActions({ call: call2, after, partFor, roster, ui: ui2, live, cards
     // The private chat's own stop. `partFor` sends the Bot's current part; the host
     // cancels that part only, and leaves the Bot's group Sessions running.
     stopPrivate: (sessionId) => after(call2("stop-private", { sessionId: partFor(sessionId) })),
+    // Records the chosen line. The host does not steer or queue the sentence.
+    confirmPrivate: (sessionId, choiceId) => after(call2("confirm-private", { sessionId: partFor(sessionId), choiceId })),
     // Values go out in these requests and never come back in a response.
     secretSet: (payload) => after(call2("secret-set", payload)),
     secretAllow: (requestId) => after(call2("secret-allow", { requestId })),
@@ -9966,10 +10016,15 @@ var import_react18 = require("react");
 var import_react_dom2 = require("react-dom");
 var PHRASE_HOLD_MS = 800;
 var drawPhrase = (pool) => t(pool[Math.min(pool.length - 1, Math.floor(Math.random() * pool.length))]);
-function activityCue({ moving, inputAt, steeredAt, tool }) {
+function activityCue({ moving, inputAt, steeredAt, tool, routeNote }) {
   if (moving) return { key: "move", label: t("Switching working folder"), state: "thinking" };
   const toolAt = typeof tool?.at === "number" ? tool.at : 0;
   const steered = typeof steeredAt === "number" ? steeredAt : 0;
+  const noted2 = typeof routeNote?.at === "number" ? routeNote.at : 0;
+  if (noted2 > toolAt && noted2 >= steered && typeof routeNote?.text === "string" && routeNote.text !== "") {
+    const name = typeof routeNote.label === "string" && routeNote.label !== "" ? ` ${routeNote.label}` : "";
+    return { key: `route:${noted2}`, label: `${t(routeNote.text)}${name}`, state: "thinking", fixed: true };
+  }
   if (steered > toolAt) {
     return { key: `steer:${steered}`, label: t("Folded into this step. Continuing when it finishes."), state: "thinking", fixed: true };
   }
@@ -10081,6 +10136,7 @@ function ActivityIndicator({ sessionId, useRoster, useSessionStatus, useLive, us
   else if (runAt.current === 0) runAt.current = Date.now();
   const liveKey = useLive((state) => JSON.stringify(state[sessionId] ?? {}));
   const steeredAt = useWork?.((work) => work.steered?.[sessionId]);
+  const routeNote = useWork?.((work) => work.routeNotes?.[sessionId]);
   const pendingInput = useSession((snapshot) => freshInputAt(snapshot?.pendingSubmissions, steeredAt));
   const bot = roster.byId[sessionId];
   const room2 = roster.roomsById[sessionId];
@@ -10097,7 +10153,7 @@ function ActivityIndicator({ sessionId, useRoster, useSessionStatus, useLive, us
   const inputRef = (0, import_react18.useRef)(0);
   const inputAt = Math.max(inputRef.current, pendingInput);
   inputRef.current = inputAt;
-  const want = !visible ? null : activityCue({ moving: moveAt !== 0, inputAt, steeredAt, tool });
+  const want = !visible ? null : activityCue({ moving: moveAt !== 0, inputAt, steeredAt, tool, routeNote });
   const [shown, setShown] = (0, import_react18.useState)(null);
   const wantKey = want?.key ?? null;
   const markState = (0, import_react18.useRef)("thinking");

@@ -21,10 +21,15 @@ export { reducedMotion }
 // submission of that same send can be a moment newer than `steeredAt`; the ack
 // still belongs to the steer. Folder moves and a tool that started after the
 // steer keep their own phrases.
-export function activityCue({ moving, inputAt, steeredAt, tool }) {
+export function activityCue({ moving, inputAt, steeredAt, tool, routeNote }) {
   if (moving) return { key: 'move', label: t('Switching working folder'), state: 'thinking' }
   const toolAt = typeof tool?.at === 'number' ? tool.at : 0
   const steered = typeof steeredAt === 'number' ? steeredAt : 0
+  const noted = typeof routeNote?.at === 'number' ? routeNote.at : 0
+  if (noted > toolAt && noted >= steered && typeof routeNote?.text === 'string' && routeNote.text !== '') {
+    const name = typeof routeNote.label === 'string' && routeNote.label !== '' ? ` ${routeNote.label}` : ''
+    return { key: `route:${noted}`, label: `${t(routeNote.text)}${name}`, state: 'thinking', fixed: true }
+  }
   if (steered > toolAt) {
     return { key: `steer:${steered}`, label: t('Folded into this step. Continuing when it finishes.'), state: 'thinking', fixed: true }
   }
@@ -144,6 +149,7 @@ export function ActivityIndicator({ sessionId, useRoster, useSessionStatus, useL
   else if (runAt.current === 0) runAt.current = Date.now()
   const liveKey = useLive(state => JSON.stringify(state[sessionId] ?? {}))
   const steeredAt = useWork?.(work => work.steered?.[sessionId])
+  const routeNote = useWork?.(work => work.routeNotes?.[sessionId])
   const pendingInput = useSession(snapshot => freshInputAt(snapshot?.pendingSubmissions, steeredAt))
   const bot = roster.byId[sessionId]
   const room = roster.roomsById[sessionId]
@@ -165,7 +171,7 @@ export function ActivityIndicator({ sessionId, useRoster, useSessionStatus, useL
   // the newest activity, and the phrase and the clock restart from the send.
   const inputAt = Math.max(inputRef.current, pendingInput)
   inputRef.current = inputAt
-  const want = !visible ? null : activityCue({ moving: moveAt !== 0, inputAt, steeredAt, tool })
+  const want = !visible ? null : activityCue({ moving: moveAt !== 0, inputAt, steeredAt, tool, routeNote })
   const [shown, setShown] = useState(null)
   const wantKey = want?.key ?? null
   const markState = useRef('thinking')

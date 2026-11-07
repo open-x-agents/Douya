@@ -11,6 +11,7 @@ import { resolveSendMode } from '../shared/send-mode.js'
 import { clearDraftIfPosted } from '../shared/room-draft.js'
 import { decideRoomSteer, roomMembers, textNamesMember } from './group-steer.js'
 import { routeTakesEffect } from './route-inbound.js'
+import { bindPrivateHold } from './route-private.js'
 import { citedFromLog } from '../shared/cite.js'
 
 const LANGUAGES = { zh: 'Chinese (简体中文)', en: 'English' }
@@ -87,6 +88,8 @@ export function install(rt) {
     questions: state.questions,
     // Inbound ask cards. The desktop reads these from /api state; a timeout does not send them.
     pendingRoutes: state.pendingRoutes ?? {},
+    // Private sentences held out of the model until a later slice delivers them.
+    privateHolds: state.privateHolds ?? {},
     views: state.views ?? {},
     // Aside answers of each Bot's current part, newest first. Not part of the
     // model-visible history; earlier parts send their cards on their own pages.
@@ -121,7 +124,7 @@ export function install(rt) {
   // and per Session, when its running turn began.
   const live = () => ({
     activity: rt.activityView(),
-    work: { bots: rt.workView(), rooms: rt.roomWorkView(), approvals: rt.approvalsView(), waiting: rt.waitingView?.() ?? {}, turns: rt.turnsView?.() ?? {}, steered: rt.steeredView?.() ?? {}, completions: rt.completionView?.() ?? {} },
+    work: { bots: rt.workView(), rooms: rt.roomWorkView(), approvals: rt.approvalsView(), waiting: rt.waitingView?.() ?? {}, turns: rt.turnsView?.() ?? {}, steered: rt.steeredView?.() ?? {}, routeNotes: rt.routeNoteView?.() ?? {}, completions: rt.completionView?.() ?? {} },
     memoryNews: rt.memoryNews(),
     memoryReviews: rt.memoryReviews(),
     learning: rt.learningView(),
@@ -377,6 +380,18 @@ export function install(rt) {
           return ok(await rt.stopRoomWork(String(body.roomId ?? '')))
         // Stop the open private chat only. Rooms, member Sessions, and browser holds
         // stay as they are: this does not walk rooms or call stopRoomWork.
+        // Record which line the user picked. The sentence stays out of every inbox.
+        case 'confirm-private': {
+          if (typeof body.sessionId !== 'string' || body.sessionId === '') return fail('Nothing to confirm', 'bot/invalid')
+          if (typeof body.choiceId !== 'string' || body.choiceId === '') return fail('Nothing to confirm', 'bot/invalid')
+          await rt.load()
+          const sessionId = rt.botOf(body.sessionId) ? rt.chatOf(body.sessionId) : body.sessionId
+          if (rt.roomOf(sessionId)) return fail('Not a private chat', 'bot/invalid')
+          const bound = bindPrivateHold(rt.state, sessionId, body.choiceId)
+          if (bound === undefined) return ok(false)
+          await rt.save()
+          return ok(true)
+        }
         case 'stop-private': {
           if (typeof body.sessionId !== 'string' || body.sessionId === '') return fail('Nothing to stop', 'bot/invalid')
           await rt.load()

@@ -3081,8 +3081,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (!blocks.length) {
       note = '今天还没有安排 · 豆芽会按精力曲线帮你填上专注与缓冲';
     } else if (upcoming) {
-      const t = ttTitle(upcoming.title), c = CAT_ZH[upcoming.category] || '';
-      const label = escapeHtml(c && !t.startsWith(c) ? c + '：' + t : t);
+      const ttl = ttTitle(upcoming.title), c = CAT_ZH[upcoming.category] || '';
+      const label = escapeHtml(c && !ttl.startsWith(c) ? c + '：' + ttl : ttl);
       note = upcoming.s <= nowM
         ? `<span class="tt-nowlbl">${t('tt.now')}</span> ${escapeHtml(upcoming.start)}–${escapeHtml(upcoming.end)} ${label}`
         : `<span class="tt-nowlbl">${t('tt.next')}</span> ${escapeHtml(upcoming.start)} ${label}`;
@@ -5507,7 +5507,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     el.querySelectorAll('button[data-op]').forEach(b => {
       b.onclick = async () => {
         el.querySelectorAll('button').forEach(x => { x.disabled = true; });
-        if (b.dataset.op === 'confirm') b.textContent = '执行中…';
+        if (b.dataset.op === 'confirm') b.textContent = t('act.running');
         const r = await actionsApi({ op: b.dataset.op, id: a.id });
         const next = r.action || { ...a, error: r.error || '操作失败' };
         if (!r.success && r.error) next.error = r.error;
@@ -5515,8 +5515,24 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         el.replaceWith(fresh);
         // The rest of 豆芽 learns the outcome at once: a 「已发送 · HH:MM」 line in this chat (the
         // server also saved it into the card's transcript and marked the item handled).
-        if (r.outcome && r.outcome.text) fresh.after(actSysLine(r.outcome.text, r.success));
-        loadToday().catch(() => {});
+        if (r.outcome && r.outcome.text) {
+          fresh.after(actSysLine(r.outcome.text, r.success));
+          // Also mirror into the open dock / zoom chat so Today never looks stuck on 「还没发出去」.
+          const dockBody = document.querySelector('#todayChatMsgs, #zoomMsgs, #dockBody, .today-chat-msgs, .z-msgs');
+          if (dockBody && !fresh.closest('#todayChatMsgs, #zoomMsgs, #dockBody, .today-chat-msgs, .z-msgs, .dockBody')) {
+            const line = actSysLine(r.outcome.text, r.success);
+            dockBody.appendChild(line);
+            dockBody.scrollTop = dockBody.scrollHeight;
+          }
+          if (r.success) showUiToast(r.outcome.text);
+        }
+        if (r.success && r.outcome && r.outcome.cardDone) {
+          const tile = document.querySelector(`.tile.work[data-id="${CSS.escape(a.cardId || '')}"]`);
+          if (tile) { softHaptic('commit'); markDoneTuck(tile); }
+          const hero = document.querySelector('.nx[data-sys="next"]');
+          if (hero) { hero.classList.add('leaving'); await sleep(240); }
+        }
+        await loadToday({ force: true }).catch(() => {});
       };
     });
     return el;

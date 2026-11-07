@@ -62,8 +62,19 @@ export function applyActionOutcome(state, a, { now = new Date(), chat = true, la
       state.itemStatus[url] = { ...state.itemStatus[url], via: a.id, verb: doneVerb(a.action, locale) }
       marked.push(url)
     }
-    if (marked.length && cardClearance(card, state.itemStatus || {}).kind === 'cleared') {
-      cardDone = completeClearedCard(state, card, { by: 'action', at: now.toISOString() })
+    if (marked.length) {
+      const clr = cardClearance(card, state.itemStatus || {})
+      if (clr.kind === 'cleared') {
+        cardDone = completeClearedCard(state, card, { by: 'action', at: now.toISOString() })
+      } else {
+        // Reply / comment / review handed the ball back — stop treating the card as "waiting on you".
+        const handBack = /^(gmail_reply|gmail_send_email|slack_reply|github_comment|github_review)$/.test(a.action)
+        if (handBack && card.waiting === 'you') {
+          card.waiting = 'others'
+          card.updatedAt = now.toISOString()
+          if (card.nextAction) card.nextAction = ''
+        }
+      }
     }
   }
   const text = formatOutcomeText({

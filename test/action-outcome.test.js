@@ -56,6 +56,27 @@ test('touchedUrls: thread id / issue number / slack ts map onto the card own lin
   assert.equal(o.marked.length, 1); assert.equal(o.cardDone, false); assert.match(o.text, /Commented.*marked done/)
 })
 
+test('reply/comment flips waiting-on-you → waiting-on-them when the card still has open items', () => {
+  const gh = {
+    id: 'g', type: 'project-cluster', status: 'active', waiting: 'you', nextAction: '催一下 review',
+    blocks: [{ type: 'link-list', links: [
+      { url: 'https://github.com/o/r/pull/111', title: 'PR 111' },
+      { url: 'https://github.com/o/r/pull/7', title: 'PR 7' },
+    ] }],
+  }
+  const st = { cards: [gh], itemStatus: {}, completions: [], cardChats: {} }
+  const o = applyActionOutcome(st, {
+    id: 'a1', action: 'github_comment', status: 'executed', cardId: 'g',
+    summary: '评论 o/r#111', input: { url: 'https://github.com/o/r/pull/111' },
+  })
+  assert.equal(o.cardDone, false)
+  assert.equal(o.marked.length, 1)
+  assert.equal(st.cards[0].waiting, 'others')
+  assert.equal(st.cards[0].nextAction, '')
+  assert.equal(st.itemStatus['https://github.com/o/r/pull/111'].status, 'done')
+  assert.equal(st.itemStatus['https://github.com/o/r/pull/7'], undefined)
+})
+
 test('next digest: a replied thread stays out, comes back only when the thread moved on', () => {
   const st = { [THREAD]: { status: 'done', by: 'action', at: '2026-11-04T13:00:00Z' } }
   const before = buildSnapshot('gmail', [{ url: THREAD, title: 'x', createdAt: '2026-11-04T12:59:53Z' }], st)
@@ -68,7 +89,10 @@ test('next digest: a replied thread stays out, comes back only when the thread m
 
 test('client shows the outcome line after 确认执行 and labels a failed pending send', () => {
   const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
-  assert.match(html, /r\.outcome && r\.outcome\.text\) fresh\.after\(actSysLine/)
+  assert.match(html, /r\.outcome && r\.outcome\.text/)
+  assert.match(html, /fresh\.after\(actSysLine/)
+  assert.match(html, /r\.outcome\.cardDone/)
+  assert.match(html, /loadToday\(\{ force: true \}/)
   assert.match(html, /t\('act\.send_fail'\) : t\('act\.exec_fail'\)/)
   assert.match(readFileSync(new URL('../src/web/api.js', import.meta.url), 'utf8'), /onOutcome: \(st, a, o\) => applyActionOutcome/)
 })

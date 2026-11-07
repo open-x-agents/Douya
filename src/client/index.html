@@ -1612,6 +1612,21 @@
   /* Polish: denser cards, intentional wait strip, soft refresh */
   #cardList{transition:opacity .18s ease}
   #cardList.is-refreshing{opacity:.88}
+  /* One standing line on Today: pinned above the hero, until ✓ */
+  .duty-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:10px 14px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+  .duty-line.duty-empty{border-style:dashed;background:transparent}
+  .duty-line .duty-eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);font-weight:700}
+  .duty-line .duty-main{display:flex;align-items:center;gap:10px;flex:1 1 auto;min-width:0}
+  .duty-line .duty-text{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .duty-line .duty-meta{font-size:12px;color:var(--ink3);white-space:nowrap}
+  .duty-line .duty-done{margin-left:auto;width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--violet);font-size:15px;font-weight:700;cursor:pointer}
+  .duty-line .duty-done:hover{background:rgba(120,90,220,.08)}
+  .duty-line .duty-add{border:1px dashed var(--line);border-radius:999px;background:transparent;color:var(--ink2);font-size:12.5px;padding:5px 12px;cursor:pointer}
+  .duty-line .duty-add:hover{color:var(--violet);border-color:var(--violet)}
+  .duty-line .duty-form{display:flex;align-items:center;gap:8px;flex:1 1 auto;min-width:0}
+  .duty-line .duty-form[hidden]{display:none}
+  .duty-line .duty-input{flex:1 1 auto;min-width:0;border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13px;background:var(--bg);color:var(--ink)}
+  .duty-line .duty-save{border:0;border-radius:999px;padding:6px 12px;font-size:12.5px;background:var(--violet);color:#fff;cursor:pointer}
   .tile.work .w-desc.short{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:8px}
   .tile.work.has-face .w-links{display:none}
   .tile.work .w-acts{margin-top:2px}
@@ -3819,6 +3834,50 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (m < 60) return t('hero.countdown_mins', { n: m });
     return t('hero.countdown_hours', { h: Math.floor(m / 60), m: m % 60 });
   }
+  // The one standing line on 今天 ("still on you today"): pinned above everything, until ✓ tucks it away.
+  function renderDutyLine(duty) {
+    if (!duty || !duty.text) {
+      return `<div class="duty-line duty-empty" id="dutyLine"><button type="button" class="duty-add" data-duty-add>＋ ${escapeHtml(t('duty.add'))}</button><form class="duty-form" data-duty-form hidden><input type="text" class="duty-input" data-duty-input maxlength="120" placeholder="${escapeHtml(t('duty.placeholder'))}" aria-label="${escapeHtml(t('duty.add'))}"><button type="submit" class="duty-save">${escapeHtml(t('duty.add'))}</button></form></div>`
+    }
+    const meta = duty.by === 'bot' ? t('duty.by_bot') : t('duty.by_user')
+    const age = duty.days ? ` · ${t('face.ago_day', { n: duty.days })}` : ''
+    return `<section class="duty-line" id="dutyLine"><div class="duty-eyebrow">${escapeHtml(t('duty.eyebrow'))}</div><div class="duty-main"><span class="duty-text">${escapeHtml(duty.text)}</span><span class="duty-meta">${escapeHtml(meta + age)}</span><button type="button" class="duty-done" data-duty-done aria-label="${escapeHtml(t('duty.done'))}" title="${escapeHtml(t('duty.done'))}">✓</button></div></section>`
+  }
+  /** A half-typed line must not be cleared by a background refresh. */
+  function dutyBusy() {
+    const input = document.querySelector('[data-duty-input]')
+    if (!input) return false
+    return document.activeElement === input || !!String(input.value || '').trim()
+  }
+  function bindDutyLine(container) {
+    const dutyPost = body => fetch('/api/opendigitalmate/duty', { method: 'POST', headers: odmHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) }).then(r => r.json()).catch(() => null)
+    const add = container.querySelector('[data-duty-add]')
+    const form = container.querySelector('[data-duty-form]')
+    const input = container.querySelector('[data-duty-input]')
+    if (add && form && input) {
+      add.addEventListener('click', () => { add.hidden = true; form.hidden = false; input.focus() })
+      input.addEventListener('keydown', e => { if (e.key === 'Escape') { input.value = ''; form.hidden = true; add.hidden = false } })
+      form.addEventListener('submit', async e => {
+        e.preventDefault()
+        const text = input.value.trim()
+        if (!text) return
+        const r = await dutyPost({ op: 'set', text })
+        if (r && r.success) { showUiToast(t('duty.set_toast')); await loadToday({ force: true }) }
+      })
+    }
+    const done = container.querySelector('[data-duty-done]')
+    if (!done) return
+    done.addEventListener('click', async () => {
+      const cur = lastToday && lastToday.duty
+      const text = cur && cur.text
+      if (!text) return
+      done.disabled = true
+      const r = await dutyPost({ op: 'done' })
+      if (!r || !r.success) { done.disabled = false; return }
+      showUiToast(t('duty.done_toast'), null, { label: t('toast.undo'), onClick: async () => { await dutyPost({ op: 'restore', text }); loadToday({ force: true }) } })
+      await loadToday({ force: true })
+    })
+  }
   function renderNextHero(nx) {
     if (!nx) return '';
     const btns = (nx.buttons || []).map((b, i) => stepBtnHtml(b, i, i === 0 ? 'primary' : '')).join('');
@@ -4197,7 +4256,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const order = offHours ? actionable.filter(c => !c.workish) : actionable;
     const nx = lastToday && lastToday.next;
     const more = dayMoreOpen();
-    let html = renderNextHero(nx);
+    let html = renderDutyLine(lastToday && lastToday.duty);
+    html += renderNextHero(nx);
     html += renderDayLine(lastToday || {});
     html += `<div class="daymore${more ? ' open' : ''}" id="dayMore"><div class="daymore-in">`;
     html += tt ? renderTimetable(tt) : '';
@@ -4228,6 +4288,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const beforeTiles = captureTiles(container);
     const hadPrev = !!prevStamp;
     container.innerHTML = html;
+    bindDutyLine(container);
     const fresh = !liveChat;
     if (!liveChat) liveChat = chatTemplate();
     if (!borrowed) {
@@ -5584,7 +5645,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     uiSeq = e.seq;
     if (e.kind === 'surface') { onSurfaceEvent(e); return; }
     if (e.kind === 'suggest') { showSuggest(e); return; }
-    if (e.kind === 'cards') { await loadToday(); if (e.reason === 'timetable') { const el = document.querySelector('.myday'); if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } } if (e.message) showUiToast(e.message); return; }
+    if (e.kind === 'cards') { if (!dutyBusy()) await loadToday(); if (e.reason === 'timetable') { const el = document.querySelector('.myday'); if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } } if (e.message) showUiToast(e.message); return; }
     if (e.by === 'bot' && HOLDABLE.has((e.op || {}).op) && userTyping()) { holdEvent(e); return; }
     return applyOpEvent(e, false);
   }

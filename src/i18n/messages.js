@@ -43,8 +43,9 @@ export const messages = {
     'duty.by_bot': 'Pinned by Douya',
     'duty.by_user': 'Pinned by you',
 
+    'sources.eyebrow': 'Sources',
     'sources.title': 'Source connections',
-    'sources.subtitle': 'Connected accounts and permission scopes',
+    'sources.subtitle': 'Connect apps once — Douya reads them into Today.',
     'sources.connected': 'connected',
     'sources.available': 'available sources',
     'sources.need_key': 'Composio API key is not set yet. Add it under Settings, then connect.',
@@ -549,8 +550,9 @@ export const messages = {
     'duty.by_bot': '豆芽钉的',
     'duty.by_user': '你钉的',
 
+    'sources.eyebrow': '信源',
     'sources.title': '信源接入状态',
-    'sources.subtitle': '查看已连接的数据源和权限范围',
+    'sources.subtitle': '一次连接，豆芽把它们收进今天。',
     'sources.connected': '已连接',
     'sources.available': '可用信源',
     'sources.need_key': '尚未配置 Composio API Key，请先到「配置」页填写后再连接。',

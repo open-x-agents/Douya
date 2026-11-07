@@ -1057,38 +1057,69 @@
   .z-item-b>*{white-space:normal!important;overflow-wrap:anywhere;word-break:break-word}
   .tile-zoom-title,.tile-zoom-content p,.tile-zoom-content div{overflow-wrap:anywhere}
 
-  /* sources grid */
+  /* sources grid — Muse glass */
   #v-sources,#v-settings{padding:36px 44px 60px}
-  .src-summary{display:flex;align-items:center;gap:28px;margin:4px 0 22px}
-  .src-summary b{display:block;font-size:28px;font-weight:650;line-height:1.1}
-  .src-summary span{font-size:12px;color:var(--ink3)}
-  .src-warn{margin:0;font-size:13px;color:var(--rose)}
-  .src-group{margin-bottom:26px}
-  .src-group-h{position:sticky;top:0;z-index:3;display:flex;align-items:baseline;gap:10px;margin:0 0 10px;padding:8px 0 6px;background:linear-gradient(180deg,#fff 55%,rgba(255,255,255,.82));backdrop-filter:blur(10px)}
-  .src-group-h b{font-size:15px;font-weight:650}
-  .src-group-h span{font-size:12px;color:var(--ink3)}
-  .src-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
-  .src-tile{background:rgba(255,255,255,.82);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.95);border-radius:18px;padding:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;min-width:0;transition:.2s var(--ease)}
-  .src-tile:hover{box-shadow:var(--shadow-hi);transform:translateY(-1px)}
-  .src-tile:focus-within{box-shadow:var(--shadow-hi),0 0 0 2px rgba(74,108,247,.35);transform:translateY(-1px)}
-  .src-tile.is-on{background:linear-gradient(160deg,#fff,rgba(227,246,243,.9))}
-  .src-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-  .src-top img,.src-fb{width:36px;height:36px;border-radius:10px;object-fit:contain;background:#fff;box-shadow:0 0 0 1px var(--line)}
-  .src-fb{display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--ink2)}
-  .src-pill{font-size:11px;font-weight:650;padding:3px 9px;border-radius:999px}
-  .src-pill.on{background:var(--teal-soft);color:var(--teal)}
-  .src-pill.wait{background:var(--peach-soft);color:var(--peach)}
-  .src-pill.off{background:#eef0f4;color:var(--ink3)}
-  .src-tile h4{margin:0 0 4px;font-size:14.5px;font-weight:650}
+  #v-sources{max-width:1180px}
+  .src-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:22px}
+  .src-hero .eyebrow{color:var(--violet);letter-spacing:.1em;font-size:11.5px;font-weight:650}
+  .src-hero h1{font-size:32px;line-height:1.15;font-weight:650;letter-spacing:-.025em;margin:6px 0 0;background:linear-gradient(120deg,#3a3558 10%,#8a74d0 55%,#22a898 120%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .src-hero p{margin:10px 0 0;font-size:14px;color:var(--ink2);max-width:46ch;line-height:1.5}
+  .src-hero-side{display:flex;flex-direction:column;align-items:flex-end;gap:12px;flex-shrink:0}
+  .src-kpis{display:flex;gap:8px}
+  .src-kpi{min-width:92px;text-align:center;background:rgba(255,255,255,.72);border:1px solid rgba(255,255,255,.95);border-radius:16px;padding:10px 14px;box-shadow:var(--shadow);backdrop-filter:blur(14px)}
+  .src-kpi b{display:block;font-size:22px;font-weight:650;letter-spacing:-.02em;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums}
+  .src-kpi:first-child b{color:var(--teal)}
+  .src-kpi:nth-child(2) b{color:var(--violet)}
+  .src-kpi span{display:block;margin-top:4px;font-size:11px;color:var(--ink3);letter-spacing:.01em}
+  .src-refresh{border:0;cursor:pointer;font:600 12.5px/1 inherit;color:var(--violet);background:var(--violet-soft);padding:9px 15px;border-radius:999px;transition:.2s var(--ease)}
+  .src-refresh:hover{transform:translateY(-1px);box-shadow:0 6px 14px -8px rgba(138,116,208,.55)}
+  .src-refresh:focus-visible{outline:2px solid rgba(74,108,247,.5);outline-offset:2px}
+  .src-summary{display:none}
+  .src-warn{margin:0 0 14px;font-size:13px;color:var(--rose);background:var(--rose-soft);border-radius:12px;padding:10px 14px}
+  .src-group{margin-bottom:28px}
+  .src-group-h{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:10px 0 8px;background:linear-gradient(180deg,rgba(243,244,247,.92) 40%,rgba(243,244,247,.72) 75%,rgba(243,244,247,0));backdrop-filter:blur(12px)}
+  .src-group-h b{font-size:12.5px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2)}
+  .src-group-h span{font-size:11.5px;font-weight:600;color:var(--ink3);background:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.95);border-radius:999px;padding:3px 10px;box-shadow:0 1px 2px rgba(30,40,80,.04);font-variant-numeric:tabular-nums}
+  .src-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+  .src-tile{position:relative;background:rgba(255,255,255,.78);backdrop-filter:blur(18px) saturate(150%);border:1px solid rgba(255,255,255,.95);border-radius:20px;padding:16px 16px 14px;box-shadow:var(--shadow);display:flex;flex-direction:column;min-width:0;min-height:168px;overflow:hidden;transition:transform .28s var(--ease),box-shadow .28s var(--ease);animation:srcIn .5s var(--ease-out) both;animation-delay:calc(var(--stagger,0) * 28ms)}
+  .src-tile::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:transparent;border-radius:20px 0 0 20px;transition:background .25s var(--ease)}
+  .src-tile:hover{transform:translateY(-3px);box-shadow:var(--shadow-hi)}
+  .src-tile:focus-within{box-shadow:var(--shadow-hi),0 0 0 2px rgba(138,116,208,.35);transform:translateY(-2px)}
+  .src-tile.is-on{background:linear-gradient(160deg,rgba(255,255,255,.94),rgba(227,246,243,.88))}
+  .src-tile.is-on::before{background:var(--teal)}
+  .src-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px}
+  .src-logo{width:40px;height:40px;border-radius:12px;object-fit:contain;background:rgba(255,255,255,.95);box-shadow:0 0 0 1px rgba(28,29,33,.06),0 4px 10px -6px rgba(30,40,80,.18);padding:6px;box-sizing:border-box}
+  .src-top img,.src-fb{width:40px;height:40px;border-radius:12px;object-fit:contain;background:rgba(255,255,255,.95);box-shadow:0 0 0 1px rgba(28,29,33,.06),0 4px 10px -6px rgba(30,40,80,.18)}
+  .src-top img{padding:6px;box-sizing:border-box}
+  .src-fb{display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--ink2);font-size:15px;background:linear-gradient(160deg,#fff,var(--violet-soft))}
+  .src-pill{font-size:11px;font-weight:650;padding:4px 10px;border-radius:999px;letter-spacing:.01em;white-space:nowrap}
+  .src-pill.on{background:var(--teal-soft);color:#16786d;box-shadow:inset 0 0 0 1px rgba(34,168,152,.18)}
+  .src-pill.wait{background:var(--peach-soft);color:#c07a2e;box-shadow:inset 0 0 0 1px rgba(240,163,94,.22)}
+  .src-pill.off{background:rgba(30,40,80,.05);color:var(--ink3)}
+  .src-tile h4{margin:0 0 5px;font-size:15px;font-weight:650;letter-spacing:-.015em;color:var(--ink)}
   .src-tile p{margin:0 0 14px;font-size:12.5px;line-height:1.55;color:var(--ink2);flex:1}
-  .src-foot{display:flex;align-items:center;justify-content:space-between;gap:8px}
-  .src-auth{font-size:11px;color:var(--ink3)}
-  .src-btn{border:0;cursor:pointer;font:600 12.5px/1 inherit;color:#fff;padding:8px 14px;border-radius:999px;background:linear-gradient(135deg,#6f8df5,#8a74d0);transition:transform .15s var(--ease),box-shadow .15s var(--ease),filter .15s var(--ease)}
-  .src-btn:hover{transform:translateY(-1px);filter:brightness(1.04);box-shadow:0 6px 14px -6px rgba(74,108,247,.55)}
+  .src-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto}
+  .src-auth{font-size:11px;color:var(--ink3);font-weight:500}
+  .src-btn{border:0;cursor:pointer;font:600 12.5px/1 inherit;color:#fff;padding:9px 15px;border-radius:999px;background:linear-gradient(135deg,#6f8df5 0%,#8a74d0 100%);box-shadow:0 4px 12px -6px rgba(74,108,247,.55);transition:transform .15s var(--ease),box-shadow .15s var(--ease),filter .15s var(--ease)}
+  .src-btn:hover{transform:translateY(-1px);filter:brightness(1.05);box-shadow:0 8px 18px -8px rgba(74,108,247,.65)}
   .src-btn:focus-visible{outline:2px solid rgba(74,108,247,.55);outline-offset:2px}
-  .src-btn.ghost{background:#fff;color:var(--ink2);box-shadow:0 0 0 1px var(--line)}
-  .src-btn.ghost:hover{box-shadow:0 0 0 1px rgba(74,108,247,.35),0 6px 14px -8px rgba(30,40,80,.18);filter:none}
+  .src-btn.ghost{background:rgba(255,255,255,.9);color:var(--ink2);box-shadow:0 0 0 1px var(--line)}
+  .src-btn.ghost:hover{box-shadow:0 0 0 1px rgba(34,168,152,.35),0 6px 14px -8px rgba(30,40,80,.16);color:var(--teal);filter:none}
+  .src-note{margin:0 0 16px;font-size:12.5px;color:var(--ink3);display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(255,255,255,.55);border:1px solid rgba(255,255,255,.9);border-radius:12px;padding:8px 12px;box-shadow:0 1px 2px rgba(30,40,80,.03)}
+  .src-note.src-bad{color:var(--rose);background:var(--rose-soft);border-color:transparent}
+  .src-recheck{border:1px solid var(--line);background:#fff;border-radius:999px;padding:3px 10px;font:500 12px inherit;color:var(--ink2);cursor:pointer}
   .src-recheck:focus-visible,.nav[data-view]:focus-visible{outline:2px solid rgba(74,108,247,.5);outline-offset:2px}
+  @keyframes srcIn{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+  @media (max-width:820px){
+    #v-sources{padding:24px 18px 70px}
+    .src-hero{flex-direction:column;align-items:flex-start}
+    .src-hero-side{align-items:flex-start}
+    .src-hero h1{font-size:26px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .src-tile{animation:none!important}
+    .src-tile:hover{transform:none}
+  }
 
   .dockPanel{width:420px;max-height:min(680px,calc(100vh - 32px))}
   /* flex column children default to flex-shrink:1; with overflow:hidden their min-height becomes 0,
@@ -2012,9 +2043,20 @@
 
         <!-- 信源状态 -->
         <section class="view" id="v-sources">
-          <h3 class="concl" data-i18n="sources.title">Source connections</h3>
-          <div class="stamp a in" data-i18n="sources.subtitle">Connected accounts and permission scopes</div>
-
+          <header class="src-hero">
+            <div>
+              <div class="eyebrow" data-i18n="sources.eyebrow">Sources</div>
+              <h1 data-i18n="sources.title">Source connections</h1>
+              <p data-i18n="sources.subtitle">Connect apps once — Douya reads them into Today.</p>
+            </div>
+            <div class="src-hero-side">
+              <div class="src-kpis" id="srcKpis">
+                <div class="src-kpi"><b>–</b><span data-i18n="sources.connected">connected</span></div>
+                <div class="src-kpi"><b>–</b><span data-i18n="sources.available">available sources</span></div>
+              </div>
+              <button type="button" class="src-refresh" id="srcRefresh" data-i18n="sources.recheck">Recheck</button>
+            </div>
+          </header>
           <div id="digestRunBox" class="digest-run-box"></div>
           <div id="sourcesContent"></div>
         </section>
@@ -4993,11 +5035,16 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         ? t('sources.group_on', { n, total: list.length })
         : t('sources.group_off', { n: list.length });
       return `<section class="src-group"><div class="src-group-h"><b>${escapeHtml(srcCatLabel(cat))}</b><span>${escapeHtml(count)}</span></div>
-      <div class="src-grid">${list.map(a => {
+      <div class="src-grid">${list.map((a, i) => {
         const st = a.connected ? ['on', t('sources.status_on')] : a.unknown ? ['wait', t('sources.status_unknown')] : a.pending ? ['wait', t('sources.status_pending')] : ['off', t('sources.status_off')];
         const displayName = srcAppName(a);
-        return `<div class="src-tile ${a.connected ? 'is-on' : ''}">
-          <div class="src-top">${(a.key || a.logo) ? `<img src="${escapeHtml(a.key ? ('/api/opendigitalmate/logo?app=' + encodeURIComponent(a.key)) : a.logo)}" alt="" width="36" height="36" decoding="async" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'src-fb',textContent:'${escapeHtml((displayName||'?').charAt(0))}'}))">` : `<span class="src-fb">${escapeHtml((displayName||'?').charAt(0))}</span>`}<span class="src-pill ${st[0]}">${escapeHtml(st[1])}</span></div>
+        const logo = a.key ? ('/api/opendigitalmate/logo?app=' + encodeURIComponent(a.key)) : (a.logo || '');
+        const mark = escapeHtml((displayName||'?').charAt(0));
+        const img = logo
+          ? `<img class="src-logo" src="${escapeHtml(logo)}" alt="" width="40" height="40" decoding="async" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'src-fb',textContent:'${mark}'}))">`
+          : `<span class="src-fb">${mark}</span>`;
+        return `<div class="src-tile ${a.connected ? 'is-on' : ''}" style="--stagger:${Math.min(i, 8)}" tabindex="0">
+          <div class="src-top">${img}<span class="src-pill ${st[0]}">${escapeHtml(st[1])}</span></div>
           <h4>${escapeHtml(displayName)}</h4>
           <p>${escapeHtml(srcAppDesc(a))}</p>
           <div class="src-foot"><span class="src-auth">${escapeHtml(authLabel[a.authMode] || '')}</span>
@@ -5025,6 +5072,10 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const st = data.status || {};
     const unknown = !!st.unknown;
     const on = apps.filter(a => a.connected).length;
+    const kpis = $('srcKpis');
+    if (kpis) {
+      kpis.innerHTML = `<div class="src-kpi"><b>${unknown ? '–' : on}</b><span>${escapeHtml(t('sources.connected'))}</span></div><div class="src-kpi"><b>${apps.length}</b><span>${escapeHtml(t('sources.available'))}</span></div>`;
+    }
     const recheckBtn = `<button class="src-recheck" onclick="loadSources(true)">${escapeHtml(t('sources.recheck'))}</button>`;
     let note = '';
     if (phase === 'checking') {
@@ -5037,10 +5088,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       note = `<p class="src-note src-bad">${escapeHtml(t('sources.error_timeout', { error: st.error }))}${tail} ${recheckBtn}</p>`;
     } else if (st.checkedAt) {
       const ms = st.probeMs != null && !st.cached ? escapeHtml(t('sources.probe_ms', { s: (st.probeMs / 1000).toFixed(1) })) : '';
-      note = `<p class="src-note">${escapeHtml(t('sources.checked_at', { when: fmtCheckedAt(st.checkedAt) }))}${ms} ${recheckBtn}</p>`;
+      note = `<p class="src-note">${escapeHtml(t('sources.checked_at', { when: fmtCheckedAt(st.checkedAt) }))}${ms}</p>`;
     }
-    content.innerHTML = `<div class="src-summary"><div><b>${unknown ? '–' : on}</b><span>${escapeHtml(t('sources.connected'))}</span></div><div><b>${apps.length}</b><span>${escapeHtml(t('sources.available'))}</span></div>${data.configured === false ? `<p class="src-warn">${escapeHtml(t('sources.need_key'))}</p>` : ''}</div>` + note + renderAppTiles(apps.map(a => ({ ...a, unknown: unknown && !a.connected })));
+    const warn = data.configured === false ? `<p class="src-warn">${escapeHtml(t('sources.need_key'))}</p>` : '';
+    content.innerHTML = warn + note + renderAppTiles(apps.map(a => ({ ...a, unknown: unknown && !a.connected })));
   }
+
   async function loadSources(force = false) {
     loadDigestRun();
     const content = $('sourcesContent');
@@ -5094,6 +5147,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     sel.onchange = async () => { const r = await (await fetch('/api/opendigitalmate/digest-mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: sel.value }) })).json().catch(() => ({})); $('digestModeNote').textContent = r.success ? '已保存' : '保存失败'; };
   }
   window.loadSources = loadSources;
+  const srcRefreshBtn = $('srcRefresh');
+  if (srcRefreshBtn && !srcRefreshBtn.__bound) { srcRefreshBtn.__bound = true; srcRefreshBtn.addEventListener('click', () => loadSources(true)); }
   // ---- Composio OAuth: refresh 信源 the moment the popup reports back; poll as a fallback ----
   let composioPoll = null;
   async function refreshSourcesNow() {

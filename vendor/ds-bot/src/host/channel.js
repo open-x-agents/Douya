@@ -387,10 +387,18 @@ export function install(rt) {
           await rt.load()
           const sessionId = rt.botOf(body.sessionId) ? rt.chatOf(body.sessionId) : body.sessionId
           if (rt.roomOf(sessionId)) return fail('Not a private chat', 'bot/invalid')
+          const before = rt.state.privateHolds?.[sessionId] == null ? undefined : structuredClone(rt.state.privateHolds[sessionId])
           const bound = bindPrivateHold(rt.state, sessionId, body.choiceId)
-          if (bound === undefined) return ok(false)
-          await rt.save()
-          return ok(true)
+          if (bound === undefined) return fail('Not a line on this hold', 'bot/invalid')
+          try {
+            await rt.save({ required: true })
+          } catch (error) {
+            if (before === undefined) delete rt.state.privateHolds[sessionId]
+            else rt.state.privateHolds[sessionId] = before
+            rt.warn?.('ds-bot: private binding was not saved: %s', error)
+            return fail('Could not save the binding', 'bot/save')
+          }
+          return ok({ bound: true, delivered: false })
         }
         case 'stop-private': {
           if (typeof body.sessionId !== 'string' || body.sessionId === '') return fail('Nothing to stop', 'bot/invalid')

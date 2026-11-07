@@ -43,6 +43,12 @@ function lineLabel(line) {
   return typeof line?.label === 'string' && line.label.trim() !== '' ? line.label.trim() : undefined
 }
 
+function clearHit(text, line) {
+  if (lineLabel(line) === undefined) return false
+  const marks = scored(text, [line])
+  return marks.hits.length === 1 && marks.unsures.length === 0
+}
+
 function scored(text, lines) {
   const hits = []
   const unsures = []
@@ -124,26 +130,30 @@ export function routePrivate({ text = '', busy = false, lines = [], explicitQueu
   }
 
   if (explicitQueue) {
-    if (busy && current && lineLabel(current) !== undefined) return bound('queue', current, body)
-    if (!busy && (current || open.length === 0)) return bound('steer', current, body)
+    if (busy && (lineLabel(current) === undefined || clearHit(body, current))) return bound('queue', current, body)
+    if (!busy && (lineLabel(current) === undefined || clearHit(body, current))) return bound('steer', current, body)
     return ask(open, body)
   }
 
   const marks = scored(body, open)
-  const others = open.filter(line => line?.current !== true && lineLabel(line) !== undefined)
-  if (marks.hits.length === 1 && marks.unsures.length === 0) {
-    const hit = marks.hits[0]
-    if (hit.current === true) return bound('steer', hit, body)
-    return ask(open, body, hit.id)
+  if (marks.hits.length === 1 && marks.unsures.length === 0 && marks.hits[0].current === true) {
+    return bound('steer', marks.hits[0], body)
   }
-  // Several labeled lines and no single clear hit: ask. One private chat with
-  // no rival line keeps today's steer, including a weak overlap with its label.
-  if (others.length > 0 && (marks.unsures.length > 0 || marks.hits.length > 1)) return ask(open, body)
-  if (!busy || others.length === 0) return bound('steer', current, body)
+  if (marks.hits.length === 1 && marks.unsures.length === 0) return ask(open, body, marks.hits[0].id)
+  // No labeled line yet: this sentence is the opening, not a guess between lines.
+  const labeled = open.filter(line => lineLabel(line) !== undefined)
+  if (labeled.length === 0) return bound('steer', current, body)
+  // A labeled line that this sentence does not clearly continue is uncertainty,
+  // including when it is the only line.
   return ask(open, body)
 }
 
-/** Activity-row copy. Not an assistant message. */
+/** Shown when the sentence stayed out of the model but the team file did not keep it. */
+export function routeFailureAck() {
+  return 'This sentence stayed out of the model, but the hold could not be saved.'
+}
+
+/** Activity-row copy. Not an assistant message. A success ack is only for a saved hold. */
 export function routeAck(decision) {
   const action = decision?.action
   switch (action) {
@@ -177,6 +187,8 @@ function itemOf(input) {
     ...(typeof input.label === 'string' && input.label !== '' ? { label: input.label } : {}),
     ...(typeof input.workLineId === 'string' && input.workLineId !== '' ? { workLineId: input.workLineId } : {}),
     ...(typeof input.sessionId === 'string' && input.sessionId !== '' ? { sessionId: input.sessionId } : {}),
+    ...(typeof input.botId === 'string' && input.botId !== '' ? { botId: input.botId } : {}),
+    ...(input.outcome === 'queued' || input.outcome === 'queue-failed' || input.outcome === 'held' || input.outcome === 'held-unsaved' ? { outcome: input.outcome } : {}),
     at: typeof input.at === 'number' ? input.at : Date.now(),
   }
 }
@@ -195,10 +207,21 @@ export function rememberPrivateHold(state, input = {}) {
     items: [...without, next],
     ...(Array.isArray(input.choices) ? { choices: input.choices } : (Array.isArray(previous?.choices) ? { choices: previous.choices } : {})),
     ...(typeof input.highlight === 'string' && input.highlight !== '' ? { highlight: input.highlight } : (typeof previous?.highlight === 'string' ? { highlight: previous.highlight } : {})),
-    status: 'pending',
+    ...(typeof input.botId === 'string' && input.botId !== '' ? { botId: input.botId } : (typeof previous?.botId === 'string' ? { botId: previous.botId } : {})),
+    status: previous?.status === 'bound' ? 'bound' : 'pending',
+    ...(typeof previous?.boundTo === 'string' ? { boundTo: previous.boundTo, boundAt: previous.boundAt, delivered: false } : { delivered: false }),
     at: next.at,
   }
   return table[sessionId]
+}
+
+/** Set one item's outcome without dropping its text. */
+export function noteHoldOutcome(state, sessionId, messageId, outcome) {
+  const hold = privateHold(state, sessionId)
+  const item = (hold?.items ?? []).find(entry => entry.messageId === messageId)
+  if (item == null) return undefined
+  item.outcome = outcome
+  return item
 }
 
 export function privateHold(state, sessionId) {
@@ -207,15 +230,26 @@ export function privateHold(state, sessionId) {
   return hold == null ? undefined : hold
 }
 
-/** Record which line the user picked. Does not put the sentence back in an inbox. */
+/**
+ * Record which open work line the user picked. Does not put the sentence back
+ * in an inbox. An unknown, closed, or other-bot choice leaves the hold unchanged.
+ */
 export function bindPrivateHold(state, sessionId, choiceId, now = Date.now()) {
   const hold = privateHold(state, sessionId)
   if (hold == null || typeof choiceId !== 'string' || choiceId === '') return undefined
   const choice = (hold.choices ?? []).find(item => item?.id === choiceId)
+  if (choice == null) return undefined
+  const lines = state.workLines
+  const line = lines != null && typeof lines === 'object' && !Array.isArray(lines) ? lines[choiceId] : undefined
+  if (line == null || line.closedAt != null) return undefined
+  if (typeof choice.sessionId === 'string' && choice.sessionId !== '' && line.sessionId !== choice.sessionId) return undefined
+  if (typeof hold.botId === 'string' && hold.botId !== '' && line.botId !== hold.botId) return undefined
   hold.status = 'bound'
   hold.boundTo = choiceId
   hold.boundAt = now
-  if (choice?.label) hold.label = choice.label
+  hold.delivered = false
+  if (typeof choice.label === 'string' && choice.label !== '') hold.label = choice.label
+  else if (typeof line.label === 'string' && line.label !== '') hold.label = line.label
   return hold
 }
 
@@ -238,7 +272,7 @@ function messageText(message) {
  * @param {{ items?: { messageId?: string, text?: string, action?: string }[] }} [hold]
  */
 export function withholdFromStep(messages, hold) {
-  const items = (hold?.items ?? []).filter(item => item?.action === 'ask' || item?.action === 'new' || item?.action === 'queue')
+  const items = (hold?.items ?? []).filter(item => item?.outcome !== 'queued' && (item?.action === 'ask' || item?.action === 'new' || item?.action === 'queue'))
   if (items.length === 0) return { kept: messages, withheld: [] }
   const kept = []
   const withheld = []

@@ -11,7 +11,7 @@ import { textOf } from './text.js'
 import { reminderText } from './schedules.js'
 import { appendCite, citeCarrier, citeItem, citesOf, mergeCites, visibleRoomCites } from '../shared/cite.js'
 import { lineBySession, listByBot, noteLineLabel } from './work-lines.js'
-import { rememberPrivateHold, routeAck, routePrivate } from './route-private.js'
+import { rememberPrivateHold, routeAck, routeFailureAck, routePrivate } from './route-private.js'
 
 // A failed turn's `LlmFailure`, kept to what can be shown and logged. Like DSH's own
 // error row, an AUTH failure loses its message: providers may echo part of the key.
@@ -900,6 +900,7 @@ function notePrivateSplice(rt, id, entry, event, inserted) {
   const lines = listByBot(rt.state, botId, sessionId => rt.live.get(sessionId))
     .map(line => ({ ...line, current: line.sessionId === id }))
   let held = false
+  const jobs = []
   for (const message of inserted) {
     const text = textOf(message.content)
     if (text === '') continue
@@ -912,15 +913,16 @@ function notePrivateSplice(rt, id, entry, event, inserted) {
     if (decision.action === 'steer') {
       const before = lineBySession(rt.state, id)?.label
       noteLineLabel(rt.state, id, text, event.time ?? Date.now())
-      if (lineBySession(rt.state, id)?.label !== before) void rt.save?.().catch(() => {})
+      if (lineBySession(rt.state, id)?.label !== before) jobs.push(persistTeam(rt))
       continue
     }
-    const ack = routeAck(decision)
-    if (ack !== undefined) entry.routeNote = { at: event.time ?? Date.now(), text: ack, action: decision.action, ...(decision.label ? { label: decision.label } : {}) }
     // A busy explicit queue is already in next-turn. The running step claims
     // next-step only, so the sentence is not in this model call. Remembering a
     // queue hold would strip it again on the following turn.
-    if (decision.action === 'queue' && target === 'next-turn') continue
+    if (decision.action === 'queue' && target === 'next-turn') {
+      jobs.push(persistAck(rt, entry, decision, event.time ?? Date.now()))
+      continue
+    }
     held = true
     rememberPrivateHold(rt.state, {
       sessionId: id,
@@ -931,9 +933,34 @@ function notePrivateSplice(rt, id, entry, event, inserted) {
       workLineId: decision.workLineId,
       choices: decision.choices,
       highlight: decision.highlight,
+      botId,
       at: event.time ?? Date.now(),
     })
-    void rt.save?.().catch(() => {})
+    jobs.push(persistAck(rt, entry, decision, event.time ?? Date.now()))
   }
+  const persist = Promise.all(jobs)
+  rt.privateHoldPersist = Promise.resolve(rt.privateHoldPersist).then(() => persist, () => persist)
   return { held }
+}
+
+function persistTeam(rt) {
+  if (typeof rt.save !== 'function') return Promise.resolve(false)
+  return rt.save({ required: true }).then(() => true, (error) => {
+    rt.warn?.('ds-bot: private work-line label was not saved: %s', error)
+    return false
+  })
+}
+
+async function persistAck(rt, entry, decision, at) {
+  const saved = await persistTeam(rt)
+  const text = saved ? routeAck(decision) : routeFailureAck()
+  if (text === undefined) return saved
+  entry.routeNote = {
+    at,
+    text,
+    action: decision.action,
+    saved,
+    ...(decision.label ? { label: decision.label } : {}),
+  }
+  return saved
 }

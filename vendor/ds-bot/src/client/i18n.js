@@ -581,6 +581,7 @@ const ZH = {
   'Folded into this step. Continuing when it finishes.': '已并进当前这条，这一步做完再继续',
   'Queued after the current line. This step will not read it.': '已排到当前这条之后。这一步不会读到。',
   'Held for confirmation. The current model will not read this.': '先等你确认。当前模型不会读到这句。',
+  'This sentence stayed out of the model, but the hold could not be saved.': '这句没有交给模型，但这次没能保存。',
   '“New” is waiting for confirmation. It does not open another chat yet.': '「新开」先停在确认里，还不会另开一条会话。',
   'Bind to this line': '绑到这条',
   'Bound. The model has not been given this sentence.': '已记下绑定。这句还没有交给模型。',

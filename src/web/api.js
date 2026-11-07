@@ -34,6 +34,19 @@ import { recordCompletion, setItemStatus, clearItemStatus, annotateCards, cardIt
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+/** Optional Muse UI package — never hardcode packages/dsh-muse-ui paths in the host. */
+let _museStatic
+async function museStatic() {
+  if (_museStatic !== undefined) return _museStatic
+  try {
+    _museStatic = await import('dsh-muse-ui/static-serve')
+  } catch {
+    _museStatic = null
+  }
+  return _museStatic
+}
+
+
 // Static list of popular Composio apps
 // category + description are i18n keys (sources.cat.* / app.*.desc); name is display except googlecalendar uses app.googlecalendar.name.
 const COMPOSIO_APPS = [
@@ -2022,11 +2035,13 @@ export function createApiRouter(ctx) {
      * Serve the main HTML interface
      */
     async serveIndex() {
-      const html = await readFile(
-        join(__dirname, '../../packages/dsh-muse-ui/static/index.html'),
-        'utf-8'
-      );
-      return html;
+      const muse = await museStatic()
+      if (!muse) {
+        return '<!doctype html><html lang="en"><meta charset="utf-8"><title>Muse UI missing</title>'
+          + '<body style="font:16px system-ui;padding:2rem"><h1>Muse UI not installed</h1>'
+          + '<p>Add the <code>dsh-muse-ui</code> plugin to the odm profile, then restart.</p></body></html>'
+      }
+      return muse.readIndexHtml()
     },
   };
   
@@ -2251,7 +2266,13 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
         res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
         res.end(js);
       } else if (url.pathname === '/api/opendigitalmate/ui-renderer.js' && req.method === 'GET') {
-        const js = await readFile(join(__dirname, '../../packages/dsh-muse-ui/static/ui-renderer.js'), 'utf8');
+        const muse = await museStatic()
+        if (!muse) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'dsh-muse-ui not installed' }));
+          return;
+        }
+        const js = await muse.readUiRendererJs();
         res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
         res.end(js);
       } else if (url.pathname === '/api/opendigitalmate/ui-events' && req.method === 'GET') {
@@ -2292,24 +2313,30 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(data));
       } else if (url.pathname === '/api/opendigitalmate/logo' && req.method === 'GET') {
-        // Same-origin brand SVGs for Sources tiles (parity with dsh-host-routes).
+        // Brand SVGs live in dsh-muse-ui; standalone borrows them via the package export.
+        const muse = await museStatic()
         const app = (url.searchParams.get('app') || '').toLowerCase();
+        if (!muse) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'dsh-muse-ui not installed' }));
+          return;
+        }
         if (!/^[a-z0-9_]{1,40}$/.test(app)) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'bad app' }));
           return;
         }
-        try {
-          const body = await readFile(join(__dirname, '../../packages/dsh-muse-ui/static/logos', `${app}.svg`));
-          res.writeHead(200, {
-            'Content-Type': 'image/svg+xml; charset=utf-8',
-            'Cache-Control': 'public, max-age=604800, immutable',
-          });
-          res.end(body);
-        } catch {
+        const body = await muse.readLogoSvg(app);
+        if (!body) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'not found' }));
+          return;
         }
+        res.writeHead(200, {
+          'Content-Type': 'image/svg+xml; charset=utf-8',
+          'Cache-Control': 'public, max-age=604800, immutable',
+        });
+        res.end(body);
       } else if (url.pathname === '/api/sources' && req.method === 'GET') {
         const data = await router.getSources();
         res.writeHead(200, { 'Content-Type': 'application/json' });

@@ -20,4 +20,5 @@ Restart dsh. Opening the token URL should land on Muse, not the stock shell.
 | `client.js` | Redirect stock shell → `/api/opendigitalmate/app` |
 | `index.js` | Serve Muse HTML, `ui-renderer.js`, brand logos |
 | `static/` | Muse assets (EN/中文 i18n in the page) |
+| `static-serve.js` | Shared reads/responses for the host half + optional standalone import |
 | `cordis.patch.yml` | Mount plugin + disable stock `ui-*` modules |

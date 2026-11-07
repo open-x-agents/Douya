@@ -11,7 +11,7 @@ DSH（DeepSeek Harness）
         ├── 飞书卡片发送        src/host/feishu.js
         ├── 日报组装 + 卡片      src/host/report.js, cards.js
         ├── 日程提醒规划 + 投递  src/host/reminders.js, index.js
-        ├── 面板接口 + 页面      src/host/panel.js, src/client/panel.html
+        ├── 面板接口 + 页面      src/host/panel.js, src/host/panel.html
         ├── 面板坏状态（纯函数） src/host/panel-states.js
         └── 状态                 <DSH_HOME>/opendigitalmate/state.json
 ```
@@ -216,7 +216,7 @@ node scripts/source-probe.mjs --fixture test/fixtures/github/ok --dir /tmp/p  # 
 
 **交互**：飞书把按钮回调 POST 到 `/api/opendigitalmate/card` → `readAction()` 只接受自己发的卡片（`k` ∈ {report, reminder}，`op` ∈ 已知 5 个）→ 改一条记录 → 返回 toast。
 
-**面板**：`/api/opendigitalmate/page` 读 `src/client/panel.html` 外壳，把 `<!--panel:body-->` 换成服务端渲染的七幕页面；页面不带脚本、不带外链、不发任何请求，只读本机 `state.json`，不写飞书 / 日历 / 文档。
+**面板**：`/api/opendigitalmate/page` 读 `src/host/panel.html` 外壳，把 `<!--panel:body-->` 换成服务端渲染的七幕页面；页面不带脚本、不带外链、不发任何请求，只读本机 `state.json`，不写飞书 / 日历 / 文档。
 
 ## 归一化与去重（#13）
 
@@ -313,7 +313,7 @@ node scripts/source-probe.mjs --fixture test/fixtures/github/ok --dir /tmp/p  # 
 
 ## Web 卡片看板与问答（src/web，#17）
 
-`npm start`（`scripts/server.js`）起一个独立 HTTP 服务（默认 7777），托管 `src/client/index.html` 的卡片看板（今天 / 信源状态 / 配置）。它和插件共用 `createRuntime` 与 `src/host/store.js`，但看板自己的逻辑都在 `src/web/`，不进 `src/host/`——`src/host` 仍然不出现具体 app 名、不自己格式化时间（`test/composio/add-app.test.js`、`test/event.test.js` 守着）。
+`npm start`（`scripts/server.js`）起一个独立 HTTP 服务（默认 7777），托管 Muse Today（`dsh-muse-ui` 插件的 static；standalone 经 `dsh-muse-ui/static-serve` 引入）（今天 / 信源状态 / 配置）。它和插件共用 `createRuntime` 与 `src/host/store.js`，但看板自己的逻辑都在 `src/web/`，不进 `src/host/`——`src/host` 仍然不出现具体 app 名、不自己格式化时间（`test/composio/add-app.test.js`、`test/event.test.js` 守着）。
 
 | 文件 | 职责 |
 |---|---|
@@ -357,8 +357,8 @@ node scripts/source-probe.mjs --fixture test/fixtures/github/ok --dir /tmp/p  # 
 
 `opendigitalmate` 以 Host + Web client 双面插件挂进 `dsh --profile odm`：
 
-- `cordis.patch.yml` 插入 Host 行，并 `disable` 掉库存 `ui-layout` / `ui-sidebar` / `ui-conversation`
-- `client.js`（`dsh.client.platform: web`, `immediately: true`）把 `/` 重定向到 `/api/opendigitalmate/app`
+- Host `cordis.patch.yml` 只插入 `opendigitalmate`
+- Muse UI 插件 `dsh-muse-ui`：`dsh.client` 把 `/` 重定向到 `/api/opendigitalmate/app`，并 `disable` 库存 `ui-layout` / `ui-sidebar` / `ui-conversation`
 - Host 在同一进程注册 Muse HTML 与全部 `/api/*`；对话走进程内 `sessionController`（ds-bot Chief）
 - 卡片完成写入 `state.completions` 持久账本；digest 合并带 `{ digest: true }`，不抹掉 done/dismissed
 - 今天页最上面那一行是 `state.duty` 的一句常驻话，不是卡片：刷新、重新汇聚和布局筛选都不动它，点 ✓ 才进 `completions`，撤销再放回来

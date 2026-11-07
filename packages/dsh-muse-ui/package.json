@@ -1,18 +1,20 @@
 {
   "name": "dsh-muse-ui",
   "version": "0.1.0",
-  "description": "Muse (豆芽) Today UI for DeepSeek Harness — replaces the stock dsh web shell",
+  "description": "Muse (\u8c46\u82bd) Today UI for DeepSeek Harness \u2014 replaces the stock dsh web shell",
   "type": "module",
   "main": "index.js",
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./static-serve": "./static-serve.js"
   },
   "files": [
     "index.js",
     "client.js",
     "cordis.patch.yml",
+    "static-serve.js",
     "static/",
     "README.md"
   ],

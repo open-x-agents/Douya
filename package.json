@@ -34,10 +34,14 @@
     "reminder"
   ],
   "peerDependencies": {
-    "ds-bot": ">=0.2.4"
+    "ds-bot": ">=0.2.4",
+    "dsh-muse-ui": ">=0.1.0"
   },
   "peerDependenciesMeta": {
     "ds-bot": {
+      "optional": true
+    },
+    "dsh-muse-ui": {
       "optional": true
     }
   },
@@ -46,7 +50,8 @@
   },
   "license": "Apache-2.0",
   "devDependencies": {
-    "playwright": "^1.64.1"
+    "playwright": "^1.64.1",
+    "dsh-muse-ui": "file:packages/dsh-muse-ui"
   },
   "dsh": {
     "bundle": {

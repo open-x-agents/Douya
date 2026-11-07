@@ -1,33 +1,57 @@
-# openDigitalMate (Douya / 豆芽)
+# openDigitalMate
 
-A Muse-style **coworker** personal assistant that runs locally in your browser — not a dashboard.
+### Douya / 豆芽 — a Muse-style coworker that lives in your browser
 
-Douya pulls live work from the tools you already use (GitHub, Gmail, Slack, Calendar, …), turns it into actionable cards for **Today**, and helps you finish things: PR briefs, reply drafts, a timetable hero, and concrete next steps. Outbound mail / comments / archives only go out after you confirm.
+[![License](https://img.shields.io/badge/license-Apache--2.0-0B3D2E?style=flat-square)](./LICENSE)
+[![Node](https://img.shields.io/badge/node-ESM-1B6B4A?style=flat-square)](#requirements)
+[![dsh](https://img.shields.io/badge/host-dsh%20odm%20profile-0E4D8C?style=flat-square)](https://github.com/deepseek-ai/dsh)
+[![UI](https://img.shields.io/badge/UI-EN%20%2F%20中文-5B21B6?style=flat-square)](#language)
 
-- **Repo:** https://github.com/open-x-agents/openDigitalMate
-- **License:** Apache-2.0
+Not a dashboard. Douya pulls live work from tools you already use, turns it into **Today** cards, and helps you finish — with every outbound send gated behind Confirm.
+
+```
+  ┌─────────────┐     ┌──────────────┐     ┌────────────┐
+  │ Source bots │ ──▶ │ Chief merge  │ ──▶ │ Today page │
+  │ Gmail/GH/Sl │     │ rank + plan  │     │ act + chat │
+  └─────────────┘     └──────────────┘     └────────────┘
+         ▲                   ▲
+         │                   │
+   Composio live        dsh-memory recall
+```
+
+**Repo:** [open-x-agents/openDigitalMate](https://github.com/open-x-agents/openDigitalMate) · **License:** Apache-2.0
+
+---
 
 ## What you get
 
-- **Today** — hero (“what to do now”), timetable, digest cards with prep, and a “what got done today” tuck for cleared work
-- **Pending confirm** — every outbound send is a pending action; nothing leaves until you click Confirm
-- **Dock chat** — talk with Douya (Chief + per-source ds-bot bots); confirmed sends show up in card chat and the general chat
-- **Desktop-first UX** — hover / swipe quick actions, IME-safe shortcuts (`J` `K` `E` `C` `S` `?`), two-column zoom
-- **English / 中文 UI** — chrome follows the language switch (Settings or the sidebar control). Digest card *bodies* stay as the bots produced them
-- **Local-only** — listens on `127.0.0.1` only
+| Surface | What it does |
+| --- | --- |
+| **Today** | Hero (“what now”), timetable, digest cards with prep, “what got done” tuck |
+| **Pending confirm** | Outbound mail / comments / archives only leave after you click Confirm |
+| **Dock chat** | Talk with Douya (Chief). Confirmed sends echo into card chat + general chat |
+| **Sources** | Connect GitHub, Gmail, Slack, Calendar, … via Composio |
+| **Memories** | Glimpse of durable recalls — achievements & decisions first |
+| **Desktop UX** | Hover/swipe actions, IME-safe shortcuts (`J` `K` `E` `C` `S` `?`), two-column zoom |
+
+Local-only: binds to `127.0.0.1`.
+
+---
 
 ## Requirements
 
 - Node.js (ESM)
-- [dsh](https://github.com/deepseek-ai/dsh) on your `PATH`, with an `odm` profile that includes ds-bot + this plugin
-- API keys: an LLM provider (DeepSeek recommended) and [Composio](https://app.composio.dev) for live sources
+- [`dsh`](https://github.com/deepseek-ai/dsh) on `PATH`, with an `odm` profile that includes ds-bot + this plugin
+- API keys: an LLM provider (DeepSeek recommended) + [Composio](https://app.composio.dev)
+
+---
 
 ## Quick start
 
 ```bash
 npm install
 npm start
-# = node scripts/start-dsh.mjs → dsh --profile odm --port 7777
+# → node scripts/start-dsh.mjs → dsh --profile odm --port 7777
 ```
 
 The process writes a login URL (with token) to `.odm-data/dsh-web.url`. **Open that token URL** — bare `http://127.0.0.1:7777` returns 401.
@@ -37,81 +61,106 @@ open "$(cat .odm-data/dsh-web.url)"          # macOS
 # xdg-open "$(cat .odm-data/dsh-web.url)"   # Linux
 ```
 
-Do not commit or paste the token URL into issues or chat logs.
+> Do not commit or paste the token URL into issues or chat logs.
 
 ### Configure AI + Composio
 
-1. Open **Settings** in the sidebar
-2. **AI model** — pick a provider (e.g. DeepSeek), paste the API key, choose a model, Save (optional: Test connection)
-3. **Composio** — paste the API key, Save, then connect GitHub / Gmail / Slack / Calendar
-4. Back on **Today**, click **Refresh now** to run a digest
+1. **Settings** → pick provider (e.g. DeepSeek), paste key, Save  
+2. Paste **Composio** key, Save, connect GitHub / Gmail / Slack / Calendar  
+3. **Today** → **Refresh now**
 
-You can also copy `.env.example` → `.env` and set `DEEPSEEK_API_KEY` / `COMPOSIO_API_KEY`. Keys saved in Settings live in `.odm-data/config.json` (gitignored); `start-dsh` exports them for Chief. DeepSeek needs a real key — OpenAI-only setups make Chief say “No model is available”.
+Keys also work from `.env` (`DEEPSEEK_API_KEY` / `COMPOSIO_API_KEY`) or `.odm-data/config.json` (gitignored). DeepSeek needs a real key — OpenAI-only setups make Chief say “No model is available”.
 
 ### Language
 
-Default UI language is **English**. Switch to 中文 from Settings or the compact control under the sidebar nav. Preference is stored in `localStorage` (`odm.lang`).
+Default UI is **English**. Switch to 中文 in Settings or the sidebar control (`localStorage` key `odm.lang`). Digest card *bodies* stay as the bots wrote them.
 
-### Long-term memory
+---
 
-Douya uses the community **[dsh-memory](https://www.npmjs.com/package/dsh-memory)** plugin (local SQLite FTS5 — no embeddings, no sidecar). It registers `memory_write` / `memory_search` / `memory_forget` and a recall prompt section for every agent session. Today’s Chief digest also reads the same store.
+## Bot routing — who does what
+
+Dock chat is always **Chief**. Digest work is split:
+
+| When | Who | Why |
+| --- | --- | --- |
+| ACTIVE Composio account for Gmail / GitHub / Slack **and** live items | **Source bot** | Owns that channel’s candidate cards |
+| Snapshot empty (all done / nothing new) | **Skip** source bot | No wasted LLM turn; strip shows skipped |
+| Calendar connected | **Aux fetch** only | Feeds hero + timetable; no source bot |
+| Account connected but not ACTIVE | Strip **failed** | Reconnect in Sources |
+| ≥1 candidate from source bots | **Chief** merge | Dedupe, rank, headline, timeline |
+| Zero candidates after source passes | **Skip Chief** | Default empty plan; still refresh hero/timetable |
+
+Source bots never chat with you. Chief never re-fetches a channel during merge.
+
+---
+
+## Long-term memory
+
+Douya uses community **[dsh-memory](https://www.npmjs.com/package/dsh-memory)** (local SQLite FTS5 — no embeddings, no sidecar): `memory_write` / `memory_search` / `memory_forget` + recall prompt section. Memories glimpse and Chief digest read the same store.
 
 ```bash
-# once per odm profile (rc.5 needs an exact-version exemption)
 dsh plugin --profile odm allow-version dsh-memory@0.1.0 --dsh-version 0.2.1-rc.5 --accept-risk
 dsh plugin --profile odm add dsh-memory@0.1.0
 # ensure package.json dsh.profile.bundles includes "dsh-memory", then restart
 ```
 
-Store path: `$DSH_HOME/memory/memory.db` (with `npm start`, that is `.dsh-odm/memory/memory.db`).
+Store: `$DSH_HOME/memory/memory.db` (with `npm start` → `.dsh-odm/memory/memory.db`).
 
-## How digests and actions work
+> Want something more advanced? Ready-made options: **OpenViking** (`@openviking/dsh-memory-plugin`, needs an OpenViking server) or **dsh-ltm** (`@tr1v3r/dsh-ltm`, drop-in SQLite upgrade with CJK search + migration). Pick one before we swap.
 
-1. **Per-source bots** gather candidates; **Chief** merges them into Today cards (legacy pipeline is a fallback).
-2. Cards carry prepared steps (open, snooze, ask Douya, or a write action).
-3. A write creates a **pending** action card. Confirm runs it via Composio; Cancel drops it; Undo reverses when the provider allows.
-4. On success, Douya marks the item done, may tuck a cleared card into “What got done today”, and appends a system line (e.g. “Sent · HH:MM”) in the card chat and general chat so nothing still says “not sent yet”.
+---
 
-Schedule (optional): `DIGEST_SCHEDULE=08:00` (24h `HH:MM`), `ENABLE_DIGEST=true`.
+## Digests & actions
+
+1. Source bots propose → Chief merges into Today (legacy pipeline is fallback).  
+2. Cards carry prepared steps (open, snooze, ask Douya, or a write).  
+3. A write creates a **pending** action. Confirm runs via Composio; Cancel drops; Undo when the provider allows.  
+4. On success: item marked done, may tuck into “What got done today”, and a `✓ Sent · HH:MM` line lands in card + general chat.
+
+Optional schedule: `DIGEST_SCHEDULE=08:00`, `ENABLE_DIGEST=true`.
+
+---
 
 ## Development
 
 ```bash
 npm test
-# node --test 'test/**/*.test.js' 'acceptance-cases/**/*.test.js'
 ```
-
-Useful entry points:
 
 | Path | Role |
 | --- | --- |
 | `src/client/index.html` | Muse Today UI |
-| `src/i18n/` | en/zh chrome catalogs + helpers |
+| `src/i18n/` | en/zh chrome |
 | `src/web/api.js` | Router / standalone HTTP |
 | `src/web/dsh-host-routes.js` | Routes on the dsh process |
-| `src/web/action-effects.js` | Confirmed-send outcome propagation |
-| `src/web/card-prep.js` | Hero + prepared steps |
-| `src/digest/` | Snapshot / build / runner |
+| `src/web/action-effects.js` | Confirmed-send outcome sync |
+| `src/digest/` | Snapshot / build / runner / bot routing |
 
-Restart after pulls: `npm start` or your usual `scripts/.odm-restart.sh`.
+Restart after pulls: `npm start` or `scripts/.odm-restart.sh`.
+
+---
 
 ## Security
 
-- Bound to **localhost** only — other machines cannot open your UI
-- **Never commit** `.env`, `.odm-data/`, or the token URL file
-- Outbound actions require an explicit Confirm click
+- **Localhost only** — other machines cannot open the UI  
+- Never commit `.env`, `.odm-data/`, or the token URL file  
+- Outbound actions require an explicit Confirm click  
+
+---
 
 ## Status
 
-Shipped and in active use locally: multi-bot digests, desktop UX, pending-confirm sends, outcome sync across chats, English/中文 chrome, dsh-memory long-term memory.
+**Shipped:** multi-bot digests with skip-empty routing, desktop UX, pending-confirm sends, outcome sync, EN/中文 chrome, dsh-memory, Sources logos & Composio catalog.
 
-Still evolving: denser mobile layout polish, richer source coverage, and digest quality.
+**Evolving:** denser mobile polish, richer source coverage, memory backend upgrade (owner pick).
+
+---
 
 ## Contributing
 
-1. Fork and branch from `main`
-2. Keep tests green: `npm test`
-3. Open a PR with a clear English description of the change
+1. Fork and branch from `main`  
+2. Keep tests green: `npm test`  
+3. Open a PR with a clear English description  
 
 ## License
 

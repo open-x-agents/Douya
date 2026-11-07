@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { CHANNELS, channelOfToolkit } from '../src/digest/channels.js'
+import { CHANNELS, channelOfToolkit, digestRoleForToolkit, BOT_ROUTE } from '../src/digest/channels.js'
 import { buildSnapshot } from '../src/digest/snapshot.js'
 import { validateCandidates, validatePlan, buildCards, invalidLinks } from '../src/digest/build.js'
 import { createBotDigest, createDigestStore, usageOf, SOURCE_TOOLS } from '../src/digest/runner.js'
@@ -31,6 +31,14 @@ test('channels: one config entry per channel, toolkit lookup', () => {
   assert.equal(channelOfToolkit('github'), 'github'); assert.equal(channelOfToolkit('googlecalendar'), null)
   for (const c of Object.values(CHANNELS)) assert.ok(c.readTools.length && c.letter && c.guide)
 })
+
+test('bot route: source bots vs aux vs ignore', () => {
+  assert.equal(BOT_ROUTE.chat, 'chief')
+  assert.deepEqual(digestRoleForToolkit('gmail'), { role: 'source-bot', channel: 'gmail' })
+  assert.deepEqual(digestRoleForToolkit('googlecalendar'), { role: 'aux-fetch', channel: 'googlecalendar' })
+  assert.deepEqual(digestRoleForToolkit('notion'), { role: 'ignore', channel: null })
+})
+
 
 test('snapshot: refs only for real items; completed/dismissed items are skipped', () => {
   const snap = buildSnapshot('gmail', gmailItems(), { 'https://mail.google.com/mail/u/0/#inbox/a5': { status: 'done' } })
@@ -118,6 +126,31 @@ function fakeDsh(script) {
   } }
   return { ctx, sessions }
 }
+
+test('runner: empty snapshot skips source bot; zero candidates skip Chief', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'odm-bd-skip-'))
+  const store = createStore(join(home, 'state.json'))
+  let prompts = 0
+  const { ctx } = fakeDsh(async () => { prompts++ })
+  const runner = createBotDigest({
+    ctx, store, home,
+    aggregation: {
+      ...agg,
+      fetchFromSources: async () => ({ gmailItems: [] }),
+      normalizeItems: () => [],
+      dedupeItems: x => x,
+    },
+    digestStore: createDigestStore(home),
+    client: () => ({ getConnectedAccounts: async () => ({ items: [{ status: 'ACTIVE', toolkit: { slug: 'gmail' } }] }) }),
+    commit: async (cards) => { await store.save({ ...store.get(), cards }, { digest: true }); return { success: true } },
+  })
+  const r = await runner.run()
+  assert.equal(r.status, 'done', r.error)
+  assert.equal(r.channels.gmail.status, 'skipped')
+  assert.match(r.channels.gmail.note || '', /没有新条目/)
+  assert.equal(r.chief.status, 'skipped')
+  assert.equal(prompts, 0, 'no LLM turns when nothing to propose')
+})
 
 test('runner: parallel source bots + Chief commit; a failing channel keeps its old cards; completions survive', async () => {
   const home = mkdtempSync(join(tmpdir(), 'odm-bd-'))

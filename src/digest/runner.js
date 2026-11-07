@@ -157,12 +157,13 @@ ${existing ? `\n今天页上已有、用户关注过的卡（参考，不必重�
 ${prefs.length ? `\n用户的汇聚偏好（必须遵守）：\n${prefs.map(p => `- ${p.text}${p.channel ? `（${p.channel}）` : ''}`).join('\n')}` : ''}
 ${chiefMemory ? `\n你的长期记忆（关于用户）：\n${clip(chiefMemory, 3000)}` : ''}
 
+角色：你是汇聚 Chief。信源 Bot（Gmail/GitHub/Slack）已经各自出完候选；日历没有信源 Bot，只提供真实日程。不要回头再拉信源。
 要做的：
 0. 规则：今天页不能有两张讲同一件事的卡。target=update:<id> 的候选会更新那张原卡；target=new 的才会新建。
-1. 去重 / 跨渠道合并：同一件事在多个渠道（GitHub 通知邮件 + 对应 PR 卡；Slack 里讨论某个 PR）→ merges:[{"into":"github:0","from":["gmail:3"],"reason":"同一 PR"}]。只合并确实是同一件事的；into 填工作本身那张（GitHub/Slack 卡），from 填通知邮件。
+1. 去重 / 跨渠道合并：同一件事在多个渠道（GitHub 通知邮件 + 对应 PR 卡；Slack 里讨论某个 PR）→ merges:[{"into":"github:0","from":["gmail:3"],"reason":"同一 PR"}]。只合并确实是同一件事的；into 填工作本身那张（GitHub/Slack 卡），from 填通知邮件。不确定就别合并。
 2. 排优先级：cards:[{"id","priority":"urgent|high|medium|low","nextStep"?,"title"?}]，按重要性从高到低列出（不列的保持原样）。先排「有人卡在等你 / 有截止 / CI 挂了」的，再排普通待办；促销/社交类保持 low。改写 nextStep 时只能用候选卡里出现过的编号，必须是动词+具体对象。
 3. 今天的标题 headline（≤20 字）和 narrative（一两句：今天最该先做什么，基于真实候选卡）。
-4. timeline：今天剩余时间的建议安排 3~6 段 [{"start":"HH:MM","end":"HH:MM","title","category":"focus|work|review|meeting|break|admin|personal"}]，从现在之后开始。
+4. timeline：今天剩余时间的建议安排 3~6 段 [{"start":"HH:MM","end":"HH:MM","title","category":"focus|work|review|meeting|break|admin|personal"}]，从现在之后开始；不要和真实日历冲突。
 然后调用一次 odm_digest_commit，参数 plan 是上述 JSON 对象（字符串）。返回 errors 时修正后重试一次。最后回复一行：已提交。`
 }
 
@@ -212,7 +213,7 @@ export function createBotDigest(deps) {
 
   function progress(run) {
     const p = { runId: run.id, mode: 'bot', status: run.status, startedAt: run.startedAt, channels: Object.fromEntries([
-      ...Object.entries(run.channels).map(([k, v]) => [k, { label: CHANNELS[k].label, status: v.status, cards: v.cards ?? null, error: v.error || null, ms: v.ms ?? null }]),
+      ...Object.entries(run.channels).map(([k, v]) => [k, { label: CHANNELS[k].label, status: v.status, cards: v.cards ?? null, note: v.note || null, error: v.error || null, ms: v.ms ?? null }]),
       // Calendar and other connected sources without a source bot: fetched directly, still shown (with failures).
       ...Object.entries(run.aux || {}).map(([k, v]) => [k, { label: v.label, status: v.status, cards: null, note: v.note || null, error: v.error || null, ms: v.ms ?? null }]),
     ]), chief: { status: run.chief.status, error: run.chief.error || null } }
@@ -268,6 +269,16 @@ export function createBotDigest(deps) {
     })().catch(err => { ch.error = `fetch: ${err.message}`; return null })
     const snap = await ch.snapshotP
     if (!snap) { ch.status = 'failed'; ch.ms = Date.now() - t0; progress(run); return }
+    // Empty live queue: skip the source-bot LLM turn (nothing to propose).
+    if (!snap.rows.length) {
+      ch.status = 'skipped'
+      ch.candidates = []
+      ch.cards = 0
+      ch.note = snap.skipped ? `没有新条目（已处理 ${snap.skipped}）` : '没有新条目'
+      ch.ms = Date.now() - t0
+      progress(run)
+      return
+    }
     ch.status = 'thinking'; progress(run)
     try {
       const sid = await ensureSession(channel, [...SOURCE_TOOLS, ...CHANNELS[channel].readTools])
@@ -328,27 +339,40 @@ export function createBotDigest(deps) {
         const itemStatus = store.get()?.itemStatus || {}
         const extraData = fetchAux(runRec, extra)
         await Promise.all(chans.map(({ ch, a }) => runSource(runRec, ch, a, itemStatus)))
-        const ok = Object.entries(runRec.channels).filter(([, v]) => v.status === 'done')
-        if (!ok.length) throw new Error(`所有信源都失败：${Object.entries(runRec.channels).map(([k, v]) => `${k} ${v.error || v.status}`).join('；')}`)
+        const ok = Object.entries(runRec.channels).filter(([, v]) => v.status === 'done' || v.status === 'skipped')
+        const failedOnly = Object.entries(runRec.channels).every(([, v]) => v.status === 'failed' || v.status === 'timeout')
+        if (!ok.length || failedOnly) throw new Error(`所有信源都失败：${Object.entries(runRec.channels).map(([k, v]) => `${k} ${v.error || v.status}`).join('；')}`)
 
-        // ---- Chief digest session ----
-        runRec.chief.status = 'thinking'; progress(runRec)
-        const all = ok.flatMap(([, v]) => v.candidates)
+        // ---- Chief digest session (skip LLM when no candidates) ----
+        const doneChans = ok.filter(([, v]) => v.status === 'done')
+        const all = doneChans.flatMap(([, v]) => v.candidates || [])
         for (const c of all) c.itemTitles = c.items.slice(0, 5).map(r => clip(runRec.channels[c.channel].snapshot.byRef.get(r.ref)?.title, 50))
         runRec.allCandidates = all
         const auxData = await extraData
         const statuses = [
-          ...Object.entries(runRec.channels).map(([k, v]) => `${CHANNELS[k].label} ${v.status === 'done' ? `完成 ${v.cards} 张` : `失败（${v.error || v.status}，这个渠道的旧卡保持不变）`}`),
+          ...Object.entries(runRec.channels).map(([k, v]) => {
+            if (v.status === 'done') return `${CHANNELS[k].label} 完成 ${v.cards} 张`
+            if (v.status === 'skipped') return `${CHANNELS[k].label} 跳过（${v.note || '没有新条目'}）`
+            return `${CHANNELS[k].label} 失败（${v.error || v.status}，这个渠道的旧卡保持不变）`
+          }),
           ...Object.values(runRec.aux).map(v => `${v.label} ${v.status === 'done' ? `完成 · ${v.note}` : `${v.status === 'skipped' ? '跳过' : '失败'}（${v.error || v.status}）`}`),
         ].join('；') + calendarLines(auxData)
-        const chiefSid = await ensureSession('chief', CHIEF_TOOLS)
-        bySession.set(chiefSid, { role: 'chief', run: runRec }); runRec.chief.sessionId = chiefSid
-        const s = digestStore.get()
-        const pinned = (store.get()?.cards || []).filter(c => c.pinned && c.status === 'active').slice(0, 6).map(c => clip(c.title, 30)).join('、')
-        const turn = await runTurn(ctx, chiefSid, chiefPrompt({ candidates: all, statuses, prefs: s.prefs, chiefMemory: (await deps.chiefMemory?.()) || '', now: Date.now(), existing: pinned }), { timeoutMs: deps.chiefTimeoutMs || 150_000 })
-        runRec.chief.usage = turn.usage; runRec.chief.ms = turn.ms
-        if (!runRec.plan) throw new Error(turn.timeout ? 'Chief 汇聚超时，没有提交' : 'Chief 没有提交汇聚计划')
-        runRec.chief.status = 'done'; progress(runRec)
+        if (!all.length) {
+          runRec.plan = { headline: '今天没有新待办', narrative: '各信源没有需要处理的新条目；日程与时间表仍按日历刷新。', merges: [], edits: new Map(), timeline: [], errors: [] }
+          runRec.chief.status = 'skipped'
+          runRec.chief.note = 'zero candidates'
+          progress(runRec)
+        } else {
+          runRec.chief.status = 'thinking'; progress(runRec)
+          const chiefSid = await ensureSession('chief', CHIEF_TOOLS)
+          bySession.set(chiefSid, { role: 'chief', run: runRec }); runRec.chief.sessionId = chiefSid
+          const s = digestStore.get()
+          const pinned = (store.get()?.cards || []).filter(c => c.pinned && c.status === 'active').slice(0, 6).map(c => clip(c.title, 30)).join('、')
+          const turn = await runTurn(ctx, chiefSid, chiefPrompt({ candidates: all, statuses, prefs: s.prefs, chiefMemory: (await deps.chiefMemory?.()) || '', now: Date.now(), existing: pinned }), { timeoutMs: deps.chiefTimeoutMs || 150_000 })
+          runRec.chief.usage = turn.usage; runRec.chief.ms = turn.ms
+          if (!runRec.plan) throw new Error(turn.timeout ? 'Chief 汇聚超时，没有提交' : 'Chief 没有提交汇聚计划')
+          runRec.chief.status = 'done'; progress(runRec)
+        }
 
         // ---- build + validate + commit ----
         const snaps = Object.fromEntries(ok.map(([k, v]) => [k, v.snapshot]))
@@ -367,7 +391,7 @@ export function createBotDigest(deps) {
         const ach = A.generateAchievementsTile(sourceData, items)
         const cards = [hero, timetable, ...built.cards, ...(ach ? [ach] : [])]
         lastRun = { sourceData, validUrls: new Set([...valid, ...A.normalizeItems(sourceData).map(i => i.url).filter(Boolean)]), cards: built.cards.map(c => JSON.parse(JSON.stringify(c))).concat([hero, timetable]), at: Date.now() }
-        const seen = new Map(); for (const [k, v] of ok) for (const [key, urls] of seenEntities(k, v.snapshot)) seen.set(key, urls)
+        const seen = new Map(); for (const [k, v] of doneChans) for (const [key, urls] of seenEntities(k, v.snapshot)) seen.set(key, urls)
         const saved = await commit(cards, { summary: runRec.plan.headline || runRec.plan.narrative || '', sources: ok.map(([k]) => k), mode: 'bot', seen, channels: new Set(ok.map(([k]) => k)) })
         runRec.reconcile = saved?.reconcile || null
         runRec.status = 'done'
@@ -389,10 +413,10 @@ export function createBotDigest(deps) {
 
   function summarize(r) {
     return { id: r.id, startedAt: r.startedAt, status: r.status, error: r.error || null, ms: r.ms, tokens: r.tokens, result: r.result || null, reconcile: r.reconcile || null,
-      channels: Object.fromEntries(Object.entries(r.channels).map(([k, v]) => [k, { status: v.status, error: v.error || null, cards: v.cards ?? null, items: v.snapshot?.rows.length ?? null, truncated: v.snapshot?.truncated ?? null, skippedDone: v.snapshot?.skipped ?? null, droppedRefs: v.droppedRefs || 0, proposeErrors: (v.proposeErrors || []).slice(0, 5), fetchMs: v.fetchMs ?? null, ms: v.ms ?? null, usage: v.usage || null }])),
+      channels: Object.fromEntries(Object.entries(r.channels).map(([k, v]) => [k, { status: v.status, note: v.note || null, error: v.error || null, cards: v.cards ?? null, items: v.snapshot?.rows.length ?? null, truncated: v.snapshot?.truncated ?? null, skippedDone: v.snapshot?.skipped ?? null, droppedRefs: v.droppedRefs || 0, proposeErrors: (v.proposeErrors || []).slice(0, 5), fetchMs: v.fetchMs ?? null, ms: v.ms ?? null, usage: v.usage || null }])),
       aux: Object.fromEntries(Object.entries(r.aux || {}).map(([k, v]) => [k, { status: v.status, note: v.note || null, error: v.error || null, events: v.events ?? null, ms: v.ms ?? null }])),
       candidates: (r.allCandidates || []).map(c => ({ id: c.id, target: c.target, cat: c.category, title: c.title, needs: c.needsAction, pri: c.priority, n: c.items.length, mergedInto: c.mergedInto || undefined })),
-      chief: { status: r.chief.status, error: r.chief.error || null, ms: r.chief.ms ?? null, usage: r.chief.usage || null, merges: r.plan?.merges || [], planErrors: r.plan?.errors || [] } }
+      chief: { status: r.chief.status, note: r.chief.note || null, error: r.chief.error || null, ms: r.chief.ms ?? null, usage: r.chief.usage || null, merges: r.plan?.merges || [], planErrors: r.plan?.errors || [] } }
   }
 
   return { store: digestStore, lastRun: () => lastRun, live: () => (liveRun?.status === 'running' ? liveRun.progress : null), run, toolSnapshot, toolPropose, toolNote, toolCommit, get running() { return !!running }, current: () => running, summarize, roleOf }

@@ -46,7 +46,7 @@ function schemaToParams(inputSchema) {
   return out
 }
 
-export const CARD_WORK_PROMPT = `你是「豆芽」背后的 Main Bot（Chief）。对话不只是问答——用户要你干活时，必须调用工具改 Today 卡片或查信源，不要只嘴上答应。
+export const CARD_WORK_PROMPT = `你是「豆芽」背后的 Main Bot（Chief）。对话一律由你处理——Gmail/GitHub/Slack 信源 Bot 只在汇聚流水线里出候选卡，不会跟用户聊天。对话不只是问答——用户要你干活时，必须调用工具改 Today 卡片或查信源，不要只嘴上答应。
 
 ## 用户正在看的卡片（【当前卡片】）
 - 在卡片对话里，每条用户消息前面都带着这张卡片此刻的快照：id、标题、来源、摘要、数字、下一步、链接，以及「相关条目」（标题、URL、待处理/已完成/已忽略、发件人、时间、消息内容）。

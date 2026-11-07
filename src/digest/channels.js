@@ -24,5 +24,35 @@ nextStep 写具体动作（例如「先审 #123：xxx」）。`,
   },
 }
 
+/**
+ * When to wake which bot (digest only — dock chat always goes to Chief).
+ *
+ * | Situation | Who runs | Why |
+ * |---|---|---|
+ * | Toolkit has a CHANNELS entry + ACTIVE Composio account + live items | **Source bot** (gmail/github/slack session) | Owns that channel's candidates |
+ * | CHANNELS entry but snapshot rows empty (all done / nothing new) | **Skip** source bot | No LLM turn; strip shows skipped |
+ * | Connected calendar (no CHANNELS entry) | **Aux fetch** only | Feeds timeline/hero; no source bot |
+ * | Account connected but not ACTIVE | **Skip / failed strip** | Reconnect in Sources |
+ * | ≥1 source bot produced candidates | **Chief** merge session | Dedupes, ranks, headline, timeline |
+ * | Every source skipped/failed with 0 candidates | **Skip Chief** | Default empty plan; still refresh hero/timetable from aux |
+ * | Dock / card chat | **Chief only** | Source bots are digest workers, not chat personas |
+ */
+export const BOT_ROUTE = Object.freeze({
+  chat: 'chief',
+  sourceWhen: 'active-account + CHANNELS entry + non-empty snapshot',
+  skipSourceWhen: 'empty snapshot (nothing live to propose)',
+  auxWhen: 'connected toolkit without CHANNELS entry (e.g. googlecalendar)',
+  chiefWhen: 'at least one candidate from a source bot',
+  skipChiefWhen: 'zero candidates after source passes',
+})
+
 export const channelIds = () => Object.keys(CHANNELS)
 export const channelOfToolkit = slug => Object.entries(CHANNELS).find(([, c]) => c.toolkit === slug)?.[0] || null
+
+/** Classify how a connected toolkit should participate in one digest run. */
+export function digestRoleForToolkit(slug) {
+  const ch = channelOfToolkit(slug)
+  if (ch) return { role: 'source-bot', channel: ch }
+  if (slug === 'googlecalendar') return { role: 'aux-fetch', channel: slug }
+  return { role: 'ignore', channel: null }
+}

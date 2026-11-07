@@ -4740,7 +4740,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       <div class="src-grid">${list.map(a => {
         const st = a.connected ? ['on', '已连接'] : a.unknown ? ['wait', '状态未知'] : a.pending ? ['wait', '授权中'] : ['off', '未连接'];
         return `<div class="src-tile ${a.connected ? 'is-on' : ''}">
-          <div class="src-top"><img src="${escapeHtml(a.logo)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'src-fb',textContent:'${escapeHtml(a.name.charAt(0))}'}))"><span class="src-pill ${st[0]}">${st[1]}</span></div>
+          <div class="src-top">${(a.key || a.logo) ? `<img src="${escapeHtml(a.key ? ('/api/opendigitalmate/logo?app=' + encodeURIComponent(a.key)) : a.logo)}" alt="" width="36" height="36" decoding="async" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'src-fb',textContent:'${escapeHtml((a.name||'?').charAt(0))}'}))">` : `<span class="src-fb">${escapeHtml((a.name||'?').charAt(0))}</span>`}<span class="src-pill ${st[0]}">${st[1]}</span></div>
           <h4>${escapeHtml(a.name)}</h4>
           <p>${escapeHtml(a.description || '')}</p>
           <div class="src-foot"><span class="src-auth">${authZh[a.authMode] || ''}</span>

@@ -322,6 +322,31 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     },
   }, 'opendigitalmate: chat attachment')
 
+  // Brand logos for Sources cards (same-origin; avoids CDN/onerror letter fallbacks).
+  const LOGOS_DIR = join(__dirname, '../client/logos')
+  effect({
+    path: '/api/opendigitalmate/logo',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async (request) => {
+      const app = (new URL(request.url).searchParams.get('app') || '').toLowerCase()
+      if (!/^[a-z0-9_]{1,40}$/.test(app)) return json({ error: 'bad app' }, 400)
+      const file = join(LOGOS_DIR, `${app}.svg`)
+      try {
+        const body = await readFile(file)
+        return new Response(body, {
+          status: 200,
+          headers: {
+            'content-type': 'image/svg+xml; charset=utf-8',
+            'cache-control': 'public, max-age=604800, immutable',
+          },
+        })
+      } catch {
+        return json({ error: 'not found' }, 404)
+      }
+    },
+  }, 'opendigitalmate: source logo')
+
   effect({
     path: '/api/chat/history',
     methods: ['GET'],

@@ -235,6 +235,16 @@ function toRow(entry) {
 }
 
 /** List memories under viking://~/memories/ (recursive). */
+// OpenViking seeds agent persona files (soul.md "Who You Are", identity.md "Who Am I? Fill this in…").
+// Until someone fills them in they're scaffolding, not memories, so Recall leaves them out.
+const PERSONA_FILES = new Set(['soul.md', 'identity.md', 'user.md', 'agents.md', 'tools.md', 'heartbeat.md', 'bootstrap.md', 'memory.md'])
+const TEMPLATE_MARKERS = /Fill this in|You['’]re not a chatbot|Make it yours|_\(optional\)_|^#\s*[\w-]+\.md\s*[-—]/im
+export function isPersonaTemplate(row) {
+  const name = String(row?.uri || '').split('/').pop().toLowerCase()
+  if (!PERSONA_FILES.has(name)) return false
+  return TEMPLATE_MARKERS.test(String(row?.text || row?.abstract || ''))
+}
+
 export async function listOpenVikingMemories({ limit = 40, cfg = resolveOpenVikingConfig() } = {}) {
   const health = await openVikingHealth(cfg)
   if (!health.ok) {
@@ -278,11 +288,12 @@ export async function listOpenVikingMemories({ limit = 40, cfg = resolveOpenViki
   for (const row of files) {
     if (!row.text) row.text = fallbackName({ name: String(row.uri).split('/').pop(), uri: row.uri })
   }
-  const ranked = rankMemories(files)
+  const kept = files.filter(r => !isPersonaTemplate(r))
+  const ranked = rankMemories(kept)
   const capped = ranked.slice(0, Math.max(1, Number(limit) || 40))
   return {
     memories: capped,
-    total: files.length,
+    total: kept.length,
     backend: 'openviking',
     available: true,
     url: cfg.url,

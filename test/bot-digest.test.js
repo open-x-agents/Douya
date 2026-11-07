@@ -240,3 +240,43 @@ test('digest preferences: stored once, read by later digests', () => {
   assert.equal(p.channel, 'gmail')
   assert.ok(ds.removePref(p.id))
 })
+
+test("digest preferences reach the next run's source bots and the Chief", async () => {
+  const home = mkdtempSync(join(tmpdir(), 'odm-bd-prefs-'))
+  const store = createStore(join(home, 'state.json'))
+  const digestStore = createDigestStore(home)
+  digestStore.addPref('促销邮件不单独出卡')                               // global: every channel + Chief
+  digestStore.addPref('GitHub 只留要我处理的', { channel: 'github' })    // github only
+
+  const prompts = []
+  let runner
+  const { ctx } = fakeDsh(async (sid, text) => {
+    prompts.push(text)
+    if (text.includes('Chief')) return runner.toolCommit(sid, JSON.stringify({ headline: '先审 PR', narrative: '两件事', merges: [], cards: [], timeline: [] }))
+    const snap = await runner.toolSnapshot(sid)
+    const items = snap.items || []
+    if (!items.length) return
+    runner.toolPropose(sid, JSON.stringify([{ title: '一件事', category: 'single', needsAction: true, items: items.map(r => r.ref) }]))
+  })
+  runner = createBotDigest({
+    ctx, store, home,
+    aggregation: {
+      ...agg,
+      fetchFromSources: async (_c, [acc]) => acc.toolkit.slug === 'gmail' ? { gmailItems: gmailItems() } : { githubItems: [pr(7, 'ThinkFlowLab/FlyBot', 'Add digest bots')] },
+      normalizeItems: d => d.gmailItems || d.githubItems || [],
+    },
+    digestStore,
+    client: () => ({ getConnectedAccounts: async () => ({ items: ['gmail', 'github'].map(s => ({ status: 'ACTIVE', toolkit: { slug: s } })) }) }),
+    commit: async (cards) => { await store.save({ ...store.get(), cards }, { digest: true }); return { success: true } },
+  })
+  const r = await runner.run()
+  assert.equal(r.status, 'done', r.error)
+  const promptOf = marker => prompts.find(t => t.includes(marker)) || ''
+  const gmail = promptOf('【汇聚 · Gmail 信源 Bot】')
+  const github = promptOf('【汇聚 · GitHub 信源 Bot】')
+  const chief = promptOf('【汇聚 · Chief】')
+  assert.ok(gmail && github && chief, 'all three prompts ran')
+  for (const p of [gmail, github, chief]) assert.ok(p.includes('促销邮件不单独出卡'), 'a global pref reaches every prompt')
+  for (const p of [github, chief]) assert.ok(p.includes('GitHub 只留要我处理的'), 'a channel pref reaches its channel and the Chief')
+  assert.ok(!gmail.includes('GitHub 只留要我处理的'), 'a channel pref stays out of the other channel')
+})

@@ -29,7 +29,7 @@ import { findTimetableCard, readPlan, applyPlanEdit, todaysCalendarEvents } from
 import { uiView } from '../ui/ops.js';
 import { createSurfaceService } from '../ui/surfaces.js';
 import { resolveDisplayName, lastGithubIdentity } from './aggregation.js';
-import { listMemories as listMemoriesStore, forgetMemory as forgetMemoryStore } from '../digest/runner.js';
+import { listMemories as listMemoriesStore, forgetMemory as forgetMemoryStore, MAX_PREFS } from '../digest/runner.js';
 import { recordCompletion, setItemStatus, clearItemStatus, annotateCards, cardItemUrls } from '../host/store.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1099,6 +1099,48 @@ export function createApiRouter(ctx) {
     digestStatus() {
       const runner = botDigest;
       return { success: true, mode: router.digestMode(), botAvailable: !!runner, running: !!runner?.running, live: runner?.live?.() || null, last: router.digestRuns()[0] || null, prefs: runner?.store?.get().prefs || [] };
+    },
+    /**
+     * Standing digest preferences: every reply carries the fresh list, so one call is one repaint.
+     * `error` is a reason the card can show: empty / duplicate / unknown-id / bot digest unavailable.
+     */
+    digestPrefs() {
+      const st = botDigest?.store;
+      if (!st) return { success: false, error: 'bot digest unavailable', prefs: [], max: MAX_PREFS };
+      return { success: true, prefs: st.get().prefs || [], max: MAX_PREFS };
+    },
+    addDigestPref({ text, channel } = {}) {
+      const st = botDigest?.store;
+      if (!st) return { success: false, error: 'bot digest unavailable', prefs: [], max: MAX_PREFS };
+      const p = st.addPref(text, { channel: channel || null, by: 'user' });
+      const prefs = st.get().prefs || [];
+      return p ? { success: true, pref: p, prefs, max: MAX_PREFS } : { success: false, error: 'empty', prefs, max: MAX_PREFS };
+    },
+    editDigestPref({ id, text } = {}) {
+      const st = botDigest?.store;
+      if (!st) return { success: false, error: 'bot digest unavailable', prefs: [], max: MAX_PREFS };
+      const prefs = () => st.get().prefs || [];
+      const cur = prefs().find(x => x.id === String(id));
+      const t = String(text ?? '').trim();
+      const error = !cur ? 'unknown-id'
+        : !t ? 'empty'
+        : prefs().some(x => x.id !== cur.id && x.text === t) ? 'duplicate'
+        : null;
+      if (error) return { success: false, error, prefs: prefs(), max: MAX_PREFS };
+      const p = st.editPref(String(id), t);
+      return p ? { success: true, pref: p, prefs: prefs(), max: MAX_PREFS } : { success: false, error: 'empty', prefs: prefs(), max: MAX_PREFS };
+    },
+    removeDigestPref(id) {
+      const st = botDigest?.store;
+      if (!st) return { success: false, error: 'bot digest unavailable', prefs: [], max: MAX_PREFS };
+      const removed = st.removePref(String(id));
+      return { success: true, removed, prefs: st.get().prefs || [], max: MAX_PREFS };
+    },
+    clearDigestPrefs() {
+      const st = botDigest?.store;
+      if (!st) return { success: false, error: 'bot digest unavailable', prefs: [], max: MAX_PREFS };
+      const cleared = st.clearPrefs();
+      return { success: true, cleared, prefs: [], max: MAX_PREFS };
     },
     /** Run the legacy pipeline as a dry run on the last bot run's exact source data and compare. Writes nothing. */
     async compareDigest() {

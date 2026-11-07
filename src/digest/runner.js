@@ -24,6 +24,8 @@ const clip = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n
 const shNow = (t = Date.now()) => new Date(t + 8 * 3600e3).toISOString().slice(0, 16).replace('T', ' ')
 export const SOURCE_TOOLS = ['odm_digest_snapshot', 'odm_digest_propose', 'odm_digest_note']
 export const CHIEF_TOOLS = ['odm_digest_commit', 'odm_digest_pref_add']
+/** Standing preferences are a short list a person can still read, not an ever-growing history. */
+export const MAX_PREFS = 20
 
 /** Persistent digest state (session ids, per-channel memory, digest preferences, last runs): .odm-data/digest.json */
 export function createDigestStore(home) {
@@ -36,10 +38,18 @@ export function createDigestStore(home) {
     addPref(text, { channel = null, by = 'chief' } = {}) {
       const s = get(); const t = clip(String(text || '').trim(), 160); if (!t) return null
       if (s.prefs.some(p => p.text === t)) return s.prefs.find(p => p.text === t)
-      const p = { id: `p${Date.now().toString(36)}`, text: t, channel: CHANNELS[channel] ? channel : null, by, at: new Date().toISOString() }
-      s.prefs.push(p); while (s.prefs.length > 40) s.prefs.shift(); save(); return p
+      const p = { id: `p${randomUUID()}`, text: t, channel: CHANNELS[channel] ? channel : null, by, at: new Date().toISOString() }
+      s.prefs.push(p); while (s.prefs.length > MAX_PREFS) s.prefs.shift(); save(); return p
     },
     removePref(id) { const s = get(); const n = s.prefs.length; s.prefs = s.prefs.filter(p => p.id !== id); save(); return n !== s.prefs.length },
+    /** Rewrite one pref in place. `null` means refused (unknown id, empty text, or another pref already says it) and nothing is written. */
+    editPref(id, text) {
+      const s = get(); const p = s.prefs.find(x => x.id === String(id)); if (!p) return null
+      const t = clip(String(text ?? '').trim(), 160); if (!t) return null
+      if (s.prefs.some(x => x.id !== p.id && x.text === t)) return null
+      p.text = t; p.at = new Date().toISOString(); save(); return p
+    },
+    clearPrefs() { const s = get(); const n = s.prefs.length; s.prefs = []; save(); return n },
     addNote(channel, note) { const s = get(); const t = clip(String(note || '').trim(), 160); if (!t || !CHANNELS[channel]) return false; (s.memory[channel] ||= []); if (!s.memory[channel].includes(t)) s.memory[channel].push(t); while (s.memory[channel].length > 20) s.memory[channel].shift(); save(); return true },
     recordRun(run) { const s = get(); s.runs.unshift(run); s.runs = s.runs.slice(0, 10); save() },
   }

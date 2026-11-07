@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFile
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
 import { inflateSync } from 'node:zlib'
 import { createElement as h, useSyncExternalStore } from 'react'
@@ -122,30 +122,37 @@ test('a sessionless boot mounts the open error in the sidebar and the chat colum
   const lines = css.match(/\.bt-open-error-line\{[^}]+\}/g).join('')
   const placed = css.match(/\[data-conversation-region=chat\]>\.bt-open-error\{[^}]+\}/)[0]
   writeFileSync(page, `<!doctype html><meta charset="utf-8"><style>
-    body{margin:0;display:flex;height:640px;font-family:-apple-system,sans-serif;background:#fcfcfc}
+    body{margin:0;display:flex;height:640px;font-family:-apple-system,sans-serif;background:#fcfcfc;color:#141414;--bt-ink:#141414}
     [data-sidebar]{width:280px;background:#f7f7f7;padding:12px;box-sizing:border-box}
     [data-conversation-region=chat]{position:relative;flex:1}
     [data-composer-card]{position:absolute;left:24px;right:24px;bottom:16px;height:44px;border:1px dashed #ccc;border-radius:22px}
     ${rule}${lines}${placed}
   </style>${doc.body.innerHTML}`)
   const png = join(shotDir, 'boot.png')
-  const shot = await runChrome(['--screenshot=' + png, '--window-size=1100,640'], page)
-  let dumped
+  // Eval run 7616 (pid 105646, /usr/bin/google-chrome) launched
+  // `--virtual-time-budget=2000 --screenshot=boot.png` plus a bare filesystem
+  // path. The PNG was missing at every 250ms sample. Stdout stayed empty.
+  // Stderr was six DBus lines in the first 219ms and one XNNPACK line at
+  // 12.3s, then silence. The 2000ms budget never exited the process; SIGKILL
+  // landed at 45.0s with no PNG. Those flags are not used here. DevTools
+  // captures the bitmap of an explicit file:// page and this test writes the
+  // PNG before the browser is closed. A throw before decode is a capture fault.
+  const shot = await capturePage(page, png)
+  const dumped = readFileSync(png)
+  let image
   try {
-    dumped = readFileSync(png)
+    image = decodePng(dumped)
   } catch (error) {
-    assert.fail(`boot.png was not written (${error.code ?? error.message}). ${chromeReport(shot)}`)
+    assert.fail(`PNG decode failed after capture (${error.message}). ${shot.report}`)
   }
-  const image = decodePng(dumped)
   const leftInk = darkPixels(image, 0, Math.floor(image.width * 0.28))
   const rightInk = darkPixels(image, Math.floor(image.width * 0.32), image.width)
-  assert.ok(image.width >= 800 && image.height >= 400, `png ${image.width}x${image.height}. ${chromeReport(shot)}`)
-  assert.ok(leftInk > 30, `sidebar alert not painted (${leftInk} dark pixels). ${chromeReport(shot)}`)
-  assert.ok(rightInk > 30, `chat alert not painted (${rightInk} dark pixels). ${chromeReport(shot)}`)
-  const dumpedDom = await runChrome(['--dump-dom'], page)
-  assert.equal(dumpedDom.stdout.match(/data-open-error="chat"/g)?.length, 1, chromeReport(dumpedDom))
-  assert.equal(dumpedDom.stdout.match(/data-open-error="sidebar"/g)?.length, 1, chromeReport(dumpedDom))
-  assert.equal(dumpedDom.stdout.includes('conversation.input.dock'), false)
+  assert.ok(image.width >= 800 && image.height >= 400, `visual: png ${image.width}x${image.height}. ${shot.report}`)
+  assert.ok(leftInk > 30, `visual: sidebar alert not painted (${leftInk} dark pixels). ${shot.report}`)
+  assert.ok(rightInk > 30, `visual: chat alert not painted (${rightInk} dark pixels). ${shot.report}`)
+  assert.equal(shot.html.match(/data-open-error="chat"/g)?.length, 1, shot.report)
+  assert.equal(shot.html.match(/data-open-error="sidebar"/g)?.length, 1, shot.report)
+  assert.equal(shot.html.includes('conversation.input.dock'), false)
 
   await act(async () => {
     setRoster({ ready: true, mainBotId: 'm', byId: { m: { id: 'm' } }, loadError: '请求失败（HTTP 404）' })
@@ -248,87 +255,156 @@ function findChrome(dir, depth) {
   return null
 }
 
-// Chrome on this host can write the PNG and then stay up, and a 4s kill on a
-// slower host can land before the file exists. Wait until the process exits or
-// the PNG is stable, and keep stderr, exit, signal, and size samples either way.
-function runChrome(extra, page) {
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms))
+
+// Eval 7616 never produced boot.png from `--screenshot`. Ask the live browser
+// for the bitmap over DevTools, write that PNG, then close Chrome. SIGKILL is
+// only cleanup after the bytes are already on disk.
+async function capturePage(page, png) {
   const bin = chromeBinary()
   const started = Date.now()
-  const screenshot = extra.find(arg => arg.startsWith('--screenshot='))?.slice('--screenshot='.length) ?? null
-  if (!bin) {
-    return Promise.reject(new Error('no Chrome binary. Set CHROME_BIN or install google-chrome, chromium, or Playwright Chrome.'))
-  }
+  if (!bin) throw new Error('capture: no Chrome binary. Set CHROME_BIN or install google-chrome, chromium, or Playwright Chrome.')
   const dir = mkdtempSync(join(tmpdir(), 'chrome-open-error-'))
-  return new Promise((resolve, reject) => {
-    const args = [
-      '--headless=new', '--disable-gpu', '--no-sandbox', '--hide-scrollbars',
-      `--user-data-dir=${dir}`, '--virtual-time-budget=2000',
-      ...extra, page,
-    ]
-    const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] })
-    let stdout = ''
-    let stderr = ''
-    let settled = false
-    let stableAt = null
-    const samples = []
-    const sample = () => {
-      let size = null
-      try { size = screenshot && existsSync(screenshot) ? statSync(screenshot).size : null } catch { size = null }
-      samples.push({ ms: Date.now() - started, size })
-    }
-    const finish = (exitCode, signal) => {
-      if (settled) return
-      settled = true
-      clearInterval(poll)
-      clearTimeout(killTimer)
-      sample()
-      resolve({
-        bin, args, stdout, stderr, exitCode, signal,
-        elapsedMs: Date.now() - started, samples, screenshot,
-      })
-    }
-    // Chrome writes the PNG or the DOM and then can stay up. A fixed 4s kill
-    // can land before either exists. Once the artifact is stable, stop the
-    // process; SIGKILL follows if SIGTERM does not reap it.
-    const poll = setInterval(() => {
-      sample()
-      const last = samples.at(-1)
-      const prev = samples.at(-2)
-      const shotReady = Boolean(screenshot) && last?.size > 1000 && prev?.size === last.size
-      const domReady = !screenshot && stdout.includes('</html>') && stdout.length > 200
-      if (!(shotReady || domReady)) return
-      if (stableAt === null) {
-        stableAt = Date.now()
-        child.kill('SIGTERM')
-      } else if (Date.now() - stableAt > 1000) child.kill('SIGKILL')
-    }, 250)
-    const killTimer = setTimeout(() => child.kill('SIGKILL'), 45000)
-    child.stdout.on('data', (chunk) => { stdout += chunk })
-    child.stderr.on('data', (chunk) => { stderr += chunk })
-    child.on('error', (error) => {
-      if (settled) return
-      settled = true
-      clearInterval(poll)
-      clearTimeout(killTimer)
-      reject(Object.assign(error, { bin, elapsedMs: Date.now() - started, stderr, samples }))
-    })
-    child.on('close', (code, signal) => finish(code, signal))
+  const args = [
+    '--headless=new', '--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage',
+    '--hide-scrollbars', '--no-first-run', '--no-default-browser-check',
+    '--disable-extensions', '--remote-allow-origins=*',
+    `--remote-debugging-port=0`, `--user-data-dir=${dir}`,
+    '--window-size=1100,640', 'about:blank',
+  ]
+  const child = spawn(bin, args, {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, DBUS_SESSION_BUS_ADDRESS: 'disabled:' },
   })
+  let stderr = ''
+  let exitCode = null
+  let signal = null
+  child.stderr.on('data', (chunk) => { stderr += chunk })
+  child.on('close', (code, sig) => { exitCode = code; signal = sig })
+  const trace = () => ({
+    bin, args, stderr, exitCode, signal,
+    elapsedMs: Date.now() - started, phase: 'launch',
+  })
+  const stop = async () => {
+    if (exitCode !== null) return
+    child.kill('SIGTERM')
+    const deadline = Date.now() + 3000
+    while (exitCode === null && Date.now() < deadline) await wait(50)
+    if (exitCode === null) child.kill('SIGKILL')
+  }
+  try {
+    const port = await devtoolsPort(dir, child, () => exitCode, () => stderr)
+    const list = await fetch(`http://127.0.0.1:${port}/json/list`).then(response => response.json())
+    const target = list.find(entry => entry.type === 'page' && entry.webSocketDebuggerUrl)
+    if (!target) throw Object.assign(new Error('capture: DevTools listed no page'), { phase: 'devtools', ...trace() })
+    const html = await withPage(target.webSocketDebuggerUrl, pathToFileURL(page).href, async (send) => {
+      const shot = await send('Page.captureScreenshot', { format: 'png' })
+      if (typeof shot?.data !== 'string' || shot.data.length < 100) {
+        throw Object.assign(new Error('capture: Page.captureScreenshot returned no PNG'), { phase: 'screenshot' })
+      }
+      writeFileSync(png, Buffer.from(shot.data, 'base64'))
+      const dom = await send('Runtime.evaluate', { expression: 'document.documentElement.outerHTML', returnByValue: true })
+      return dom?.result?.value ?? ''
+    })
+    await stop()
+    return {
+      html,
+      report: [
+        'phase=captured',
+        `bin=${bin}`,
+        `exit=${exitCode}`,
+        `signal=${signal}`,
+        `elapsedMs=${Date.now() - started}`,
+        `pngBytes=${statSync(png).size}`,
+        stderr ? `stderr=${stderr.slice(-800)}` : 'stderr empty',
+      ].join('\n'),
+    }
+  } catch (error) {
+    await stop()
+    const phase = error.phase ?? 'capture'
+    const detail = [
+      `${phase}: ${error.message}`,
+      'This failed before pixel checks, so it is a browser launch/capture fault, not a visual assertion.',
+      `bin=${bin}`,
+      `exit=${exitCode}`,
+      `signal=${signal}`,
+      `elapsedMs=${Date.now() - started}`,
+      `png=${existsSync(png) ? statSync(png).size : 'missing'}`,
+      stderr ? `stderr=${stderr.slice(-800)}` : 'stderr empty',
+    ].join('\n')
+    throw new Error(detail)
+  }
 }
 
-function chromeReport(run, error) {
-  const sizes = (run.samples ?? []).map(sample => `${sample.ms}ms:${sample.size ?? 'missing'}`).join(' ')
-  const err = run.stderr ? run.stderr.slice(-800) : ''
-  return [
-    error ? String(error.message ?? error) : '',
-    `bin=${run.bin}`,
-    `exit=${run.exitCode}`,
-    `signal=${run.signal}`,
-    `elapsedMs=${run.elapsedMs}`,
-    `screenshot=${run.screenshot ?? 'none'}`,
-    `sizes=${sizes || 'none'}`,
-    err ? `stderr=${err}` : 'stderr empty',
-  ].filter(Boolean).join('\n')
+async function devtoolsPort(dir, child, exitCode, stderr) {
+  const file = join(dir, 'DevToolsActivePort')
+  const deadline = Date.now() + 8000
+  while (Date.now() < deadline) {
+    if (existsSync(file)) {
+      const port = Number(readFileSync(file, 'utf8').split('\n')[0])
+      if (port > 0) return port
+    }
+    if (exitCode() !== null) break
+    await wait(50)
+  }
+  throw Object.assign(new Error(`capture: DevTools port was not published. stderr=${stderr().slice(-800)}`), { phase: 'devtools-port' })
+}
+
+function withPage(wsUrl, url, run) {
+  const ws = new WebSocket(wsUrl)
+  let next = 0
+  const pending = new Map()
+  const events = []
+  const waiters = []
+  ws.addEventListener('message', (event) => {
+    const message = JSON.parse(event.data)
+    if (message.id !== undefined && pending.has(message.id)) {
+      const job = pending.get(message.id)
+      pending.delete(message.id)
+      if (message.error) job.reject(new Error(message.error.message))
+      else job.resolve(message.result)
+      return
+    }
+    events.push(message)
+    for (let index = waiters.length - 1; index >= 0; index -= 1) {
+      if (waiters[index].method === message.method) {
+        const waiter = waiters.splice(index, 1)[0]
+        clearTimeout(waiter.timer)
+        waiter.resolve(message.params)
+      }
+    }
+  })
+  const send = (method, params = {}) => new Promise((resolve, reject) => {
+    const id = ++next
+    const timer = setTimeout(() => {
+      pending.delete(id)
+      reject(Object.assign(new Error(`capture: ${method} timed out`), { phase: 'screenshot' }))
+    }, 8000)
+    pending.set(id, {
+      resolve: (value) => { clearTimeout(timer); resolve(value) },
+      reject: (error) => { clearTimeout(timer); reject(error) },
+    })
+    ws.send(JSON.stringify({ id, method, params }))
+  })
+  const once = (method) => new Promise((resolve, reject) => {
+    const already = events.find(message => message.method === method)
+    if (already) { resolve(already.params); return }
+    const timer = setTimeout(() => reject(Object.assign(new Error(`capture: ${method} was not emitted`), { phase: 'navigate' })), 8000)
+    waiters.push({ method, timer, resolve })
+  })
+  return new Promise((resolve, reject) => {
+    const fail = (error) => { ws.close(); reject(error) }
+    ws.addEventListener('error', () => fail(Object.assign(new Error('capture: DevTools socket failed'), { phase: 'devtools' })))
+    ws.addEventListener('open', () => {
+      send('Page.enable').then(() => send('Runtime.enable')).then(() => {
+        const loaded = once('Page.loadEventFired')
+        return send('Page.navigate', { url }).then(() => loaded)
+      }).then(() => run(send)).then((value) => {
+        ws.close()
+        resolve(value)
+      }).catch(fail)
+    })
+  })
 }
 
 function paeth(left, up, upLeft) {
@@ -355,8 +431,11 @@ function decodePng(buf) {
       width = data.readUInt32BE(0)
       height = data.readUInt32BE(4)
       colorType = data[9]
-      assert.equal(data[8], 8, 'png bit depth')
-      assert.equal(data[10], 0, 'png must be non-interlaced')
+      // IHDR data: 8 bit depth, 9 color type, 10 compression, 11 filter, 12 interlace.
+      assert.equal(data[8], 8, 'IHDR bit depth (index 8)')
+      assert.equal(data[10], 0, 'IHDR compression method (index 10)')
+      assert.equal(data[11], 0, 'IHDR filter method (index 11)')
+      assert.equal(data[12], 0, 'IHDR interlace method (index 12)')
     } else if (type === 'IDAT') idat.push(data)
     else if (type === 'IEND') break
     offset += 12 + length

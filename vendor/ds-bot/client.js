@@ -636,6 +636,8 @@ var ZH = {
   "Queued after the current line. This step will not read it.": "已排到当前这条之后。这一步不会读到。",
   "Held for confirmation. The current model will not read this.": "先等你确认。当前模型不会读到这句。",
   "This sentence stayed out of the model, but it could not be saved and will not survive a restart.": "这句没有交给模型，而且没能保存，重启后不会留下。",
+  "Not saved. Copy this sentence and send it again if you still want it.": "没能保存。如果还要这句，请复制后再发送。",
+  "Save this hold again": "再保存这次保留",
   "“New” is waiting for confirmation. It does not open another chat yet.": "「新开」先停在确认里，还不会另开一条会话。",
   "Bind to this line": "绑到这条",
   "Bound. The model has not been given this sentence.": "已记下绑定。这句还没有交给模型。",
@@ -1634,18 +1636,26 @@ function PrivateHoldDock({ sessionId, useRoster, actions }) {
   const choices = Array.isArray(hold.choices) ? hold.choices : [];
   const bound2 = hold.status === "bound";
   const generation = hold.generation;
+  const unsaved = (hold.items ?? []).some((item) => item?.outcome === "unrecoverable" || item?.outcome === "queue-failed");
   const choose = (id) => {
     if (sending || bound2 || typeof id !== "string" || id === "" || typeof generation !== "number" || typeof actions.confirmPrivate !== "function") return;
     setSending(true);
     void Promise.resolve(actions.confirmPrivate(sessionId, id, generation)).finally(() => setSending(false));
   };
+  const retry = () => {
+    if (sending || typeof actions.retryPrivateSave !== "function") return;
+    setSending(true);
+    void Promise.resolve(actions.retryPrivateSave(sessionId)).finally(() => setSending(false));
+  };
   return (0, import_react.createElement)(
     "div",
-    { className: "bt-route-dock", "data-route-dock": "private", "data-private-hold": hold.status ?? "pending" },
+    { className: "bt-route-dock", "data-route-dock": "private", "data-private-hold": hold.status ?? "pending", "data-private-unsaved": unsaved ? "" : void 0 },
     (0, import_react.createElement)(
       "div",
       { className: "bt-route", role: "group", "aria-label": t("Which line should this go on?") },
       (0, import_react.createElement)("p", { className: "bt-route-text" }, text),
+      unsaved ? (0, import_react.createElement)("p", { className: "bt-route-miss", "data-private-unsaved-note": "" }, t("Not saved. Copy this sentence and send it again if you still want it.")) : null,
+      unsaved ? (0, import_react.createElement)("button", { type: "button", className: "bt-route-choice", disabled: sending, onClick: retry }, t("Save this hold again")) : null,
       bound2 ? (0, import_react.createElement)("p", { className: "bt-route-miss" }, `${t("Bound. The model has not been given this sentence.")} ${t("Opening another chat is not part of this step.")}`) : (0, import_react.createElement)("div", { className: "bt-route-list" }, choices.map((choice) => {
         const id = typeof choice?.id === "string" ? choice.id : "";
         const label = choiceLabel(choice);
@@ -1861,6 +1871,7 @@ function teamActions({ call: call2, after, partFor, roster, ui: ui2, live, cards
     stopPrivate: (sessionId) => after(call2("stop-private", { sessionId: partFor(sessionId) })),
     // Records the chosen line. The host does not steer or queue the sentence.
     confirmPrivate: (sessionId, choiceId, generation) => after(call2("confirm-private", { sessionId: partFor(sessionId), choiceId, generation })),
+    retryPrivateSave: (sessionId) => after(call2("retry-private-save", { sessionId: partFor(sessionId) })),
     // Values go out in these requests and never come back in a response.
     secretSet: (payload) => after(call2("secret-set", payload)),
     secretAllow: (requestId) => after(call2("secret-allow", { requestId })),

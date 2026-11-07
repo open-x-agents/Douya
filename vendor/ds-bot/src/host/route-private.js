@@ -216,12 +216,15 @@ export function rememberPrivateHold(state, input = {}) {
   return table[sessionId]
 }
 
-/** One private-chat mutation at a time, so a confirm cannot roll back a newer sentence. */
-export function serializePrivate(rt, sessionId, job) {
-  if (rt.privateGate == null) rt.privateGate = new Map()
-  const previous = rt.privateGate.get(sessionId) ?? Promise.resolve()
+/**
+ * One team-file checkpoint at a time. A per-session lock is not enough:
+ * save() snapshots the whole team, so session B can store session A's
+ * uncommitted bind. Callers still pass the session id for the log.
+ */
+export function serializePrivate(rt, _sessionId, job) {
+  const previous = rt.privateGateAll ?? Promise.resolve()
   const run = previous.then(() => job(), () => job())
-  rt.privateGate.set(sessionId, run.then(() => {}, () => {}))
+  rt.privateGateAll = run.then(() => {}, () => {})
   return run
 }
 

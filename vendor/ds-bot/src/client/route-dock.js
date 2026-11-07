@@ -63,14 +63,22 @@ function PrivateHoldDock({ sessionId, useRoster, actions }) {
   const choices = Array.isArray(hold.choices) ? hold.choices : []
   const bound = hold.status === 'bound'
   const generation = hold.generation
+  const unsaved = (hold.items ?? []).some(item => item?.outcome === 'unrecoverable' || item?.outcome === 'queue-failed')
   const choose = (id) => {
     if (sending || bound || typeof id !== 'string' || id === '' || typeof generation !== 'number' || typeof actions.confirmPrivate !== 'function') return
     setSending(true)
     void Promise.resolve(actions.confirmPrivate(sessionId, id, generation)).finally(() => setSending(false))
   }
-  return h('div', { className: 'bt-route-dock', 'data-route-dock': 'private', 'data-private-hold': hold.status ?? 'pending' },
+  const retry = () => {
+    if (sending || typeof actions.retryPrivateSave !== 'function') return
+    setSending(true)
+    void Promise.resolve(actions.retryPrivateSave(sessionId)).finally(() => setSending(false))
+  }
+  return h('div', { className: 'bt-route-dock', 'data-route-dock': 'private', 'data-private-hold': hold.status ?? 'pending', 'data-private-unsaved': unsaved ? '' : undefined },
     h('div', { className: 'bt-route', role: 'group', 'aria-label': t('Which line should this go on?') },
       h('p', { className: 'bt-route-text' }, text),
+      unsaved ? h('p', { className: 'bt-route-miss', 'data-private-unsaved-note': '' }, t('Not saved. Copy this sentence and send it again if you still want it.')) : null,
+      unsaved ? h('button', { type: 'button', className: 'bt-route-choice', disabled: sending, onClick: retry }, t('Save this hold again')) : null,
       bound
         ? h('p', { className: 'bt-route-miss' }, `${t('Bound. The model has not been given this sentence.')} ${t('Opening another chat is not part of this step.')}`)
         : h('div', { className: 'bt-route-list' }, choices.map((choice) => {

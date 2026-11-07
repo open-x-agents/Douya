@@ -416,6 +416,28 @@ export function install(rt) {
             return ok({ bound: true, delivered: false, generation: bound.generation })
           })
         }
+        case 'retry-private-save': {
+          if (typeof body.sessionId !== 'string' || body.sessionId === '') return fail('Nothing to save', 'bot/invalid')
+          await rt.load()
+          const sessionId = rt.botOf(body.sessionId) ? rt.chatOf(body.sessionId) : body.sessionId
+          if (rt.roomOf(sessionId)) return fail('Not a private chat', 'bot/invalid')
+          return serializePrivate(rt, sessionId, async () => {
+            const hold = privateHold(rt.state, sessionId)
+            if (hold == null) return ok(false)
+            const prior = (hold.items ?? []).map(item => item.outcome)
+            for (const item of hold.items ?? []) {
+              if (item.outcome === 'unrecoverable' || item.outcome === 'queue-failed') item.outcome = 'held'
+            }
+            try {
+              await rt.save({ required: true })
+            } catch (error) {
+              ;(hold.items ?? []).forEach((item, index) => { item.outcome = prior[index] })
+              rt.warn?.('ds-bot: private hold retry was not saved: %s', error)
+              return fail('Could not save the hold', 'bot/save')
+            }
+            return ok({ saved: true, delivered: false })
+          })
+        }
         case 'stop-private': {
           if (typeof body.sessionId !== 'string' || body.sessionId === '') return fail('Nothing to stop', 'bot/invalid')
           await rt.load()

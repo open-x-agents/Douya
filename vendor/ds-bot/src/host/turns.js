@@ -683,7 +683,7 @@ export function install(rt) {
       case 'agent/inbox/spliced': {
         // A message the user steered into the running turn is fresh input, like
         // a send that never queued.
-        const inserted = (event.data?.inserted ?? []).filter(message => message?.source?.kind === 'user')
+        const inserted = (event.data?.inserted ?? []).filter(message => message?.source?.kind === 'user' && message?.source?.dsBotQueue !== true)
         const privateRoute = !rt.roomOf(id) && rt.chatOwners.has(id)
           ? notePrivateSplice(rt, id, entry, event, inserted)
           : undefined

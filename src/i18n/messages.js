@@ -497,8 +497,8 @@ export const messages = {
     'page.memory': 'Memories',
 
     'memory.eyebrow': 'Recall',
-    'memory.title': 'What Douya remembers',
-    'memory.sub': 'Wins, decisions, and moments that matter — everyday prefs stay quieter.',
+    'memory.title': 'Moments worth keeping',
+    'memory.sub': 'Readable memories and achievements first — everyday prefs stay quieter.',
     'memory.count': '{n} remembered',
     'memory.count_one': '1 remembered',
     'memory.empty_title': 'Nothing remembered yet',
@@ -1030,8 +1030,8 @@ export const messages = {
     'page.memory': '回忆',
 
     'memory.eyebrow': '回忆',
-    'memory.title': '豆芽记得的事',
-    'memory.sub': '成就、决定与重要片刻优先——日常偏好会安静一些。',
+    'memory.title': '值得留下的片刻',
+    'memory.sub': '人读得懂的回忆与成就优先——日常偏好会安静一些。',
     'memory.count': '记得 {n} 件',
     'memory.count_one': '记得 1 件',
     'memory.empty_title': '还没有回忆',

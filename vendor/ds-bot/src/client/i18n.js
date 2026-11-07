@@ -61,6 +61,7 @@ const ZH = {
   'Bot list': 'Bot 列表',
   'Setting up your Main Bot…': '正在设置你的主 Bot…',
   'Could not open this chat. {detail}': '这个对话打不开。{detail}',
+  'Restart DS Bot after the session file can be read again. Refreshing this page does not restart the failed startup.': '会话文件恢复可读之后，请重启 DS Bot。刷新这个页面不会重新启动这次失败的进程。',
   'Automation tasks': '自动化任务',
   Connectors: '连接器',
   'Search connectors': '搜索连接器',

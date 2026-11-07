@@ -45,7 +45,7 @@ import { ErrorToast, FEEDBACK_CSS } from './feedback.js'
 import { ABOUT_CSS } from './about.js'
 import { MEMBER_CSS, MemberDock } from './member-status.js'
 import { PrivateStopDock } from './private-stop.js'
-import { OpenErrorDock } from './open-error.js'
+import { OpenErrorNotice } from './open-error.js'
 import { USER_MESSAGE_CSS, UserMessageCell, canDrawUserMessages } from './user-message.js'
 import { noticeApprovals } from './approval-notices.js'
 import { listedOpener } from './open-listed.js'
@@ -209,8 +209,9 @@ export function apply(ctx) {
       } catch (error) {
         if (!stopped) {
           console.warn('[ds-bot] state', error)
-          // A team that never arrived must not keep saying it is still being set up.
-          // A team that already loaded keeps its transcript; the next pull retries.
+          // The page keeps asking. A process whose workspace activation already
+          // failed stays pending until that process is started again; a later
+          // successful answer clears the alert. Reloading the page does not.
           const current = roster.getSnapshot()
           const loadError = error?.message ?? String(error)
           if (!current.ready && current.loadError !== loadError) roster.set({ ...current, loadError })
@@ -898,6 +899,10 @@ export function apply(ctx) {
     () => shadow('shell.overlay', { id: 'bot', order: 50, inject: face }, Overlays),
     () => shadow('shell.overlay', { id: 'bot-signin', order: 55, inject: face }, DeepSeekSignIn),
     () => shadow('shell.overlay', { id: 'bot-toast', order: 60, inject: face }, ErrorToast),
+    // The chat column's open-error. The shell overlay is up with the sidebar.
+    // conversation.input.dock is not: the host skips that list until a Session
+    // and its input exist, and an EACCES boot has neither.
+    () => shadow('shell.overlay', { id: 'bot-open-error', order: 40, inject: face }, OpenErrorNotice),
   ]
   const installConversation = () => [
     () => installCompiledStyles(CONVERSATION_CSS, 'conversation'),
@@ -937,7 +942,6 @@ export function apply(ctx) {
       priority: BOT_PRIORITY,
       select: owner => (owner.pendingInteraction?.kind === 'question' ? owner.pendingInteraction : null),
     }, QuestionCard),
-    () => shadow('conversation.input.dock', { id: 'bot-open-error', order: -130, inject: face }, OpenErrorDock),
     () => shadow('conversation.input.dock', { id: 'bot-members', order: -120, inject: face }, MemberDock),
     () => shadow('conversation.input.dock', { id: 'bot-model', order: -110, inject: face }, ModelChoiceDock),
     () => shadow('conversation.input.dock', { id: 'bot-question', order: -100, inject: face }, QuestionDock),

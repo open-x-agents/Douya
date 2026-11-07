@@ -413,9 +413,11 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
       }
       if (!result.ok) {
         const err = String(result.error || '')
-        const noModel = /No model is available|没有可用的模型/i.test(err)
+        const noModel = /No model is available|没有可用的模型|MISSING_CREDENTIAL|no API key for provider/i.test(err)
         const text = noModel
-          ? '还没有可用的模型。请打开「配置」→ AI 模型，选择 DeepSeek 并保存 API Key（会写入 DEEPSEEK_API_KEY）。若刚保存仍不行，重启 npm start 后再用 .odm-data/dsh-web.url 里的登录链接打开。'
+          ? (langParam(request) === 'en'
+            ? 'No AI model is set up yet. Open Settings → AI model, choose DeepSeek and save an API key (stored as DEEPSEEK_API_KEY). If it still fails right after saving, restart npm start and reopen the login link in .odm-data/dsh-web.url.'
+            : '还没有可用的模型。请打开「配置」→ AI 模型，选择 DeepSeek 并保存 API Key（会写入 DEEPSEEK_API_KEY）。若刚保存仍不行，重启 npm start 后再用 .odm-data/dsh-web.url 里的登录链接打开。')
           : (() => { const lang = langParam(request); const hint = chatErrorHint(err, lang); return `${lang === 'en' ? 'Couldn’t finish the chat: ' : '没法完成对话：'}${hint || err}` })()
         return json({
           text,

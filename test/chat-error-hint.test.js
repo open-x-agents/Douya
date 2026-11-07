@@ -27,3 +27,21 @@ test('bootstrapMainBot asks ds-bot state with the user cookie, and fails closed'
   assert.equal(await bootstrapMainBot({ origin: 'http://x', cookie: 'c', fetchImpl: async () => { throw new Error('down') } }), false)
   assert.equal(await bootstrapMainBot({ origin: 'http://x', cookie: 'c', fetchImpl: async () => ({ ok: true, json: async () => ({ ok: false }) }) }), false)
 })
+
+test('a silent turn reports the logged reason (e.g. missing model key)', async () => {
+  const { mkdtemp, mkdir, writeFile } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const { lastTurnError } = await import('../src/web/muse-chat-core.js')
+  const home = await mkdtemp(join(tmpdir(), 'odm-diag-'))
+  await mkdir(join(home, 'bot', 'logs'), { recursive: true })
+  await writeFile(join(home, 'bot', 'logs', 'diagnostics.jsonl'), [
+    JSON.stringify({ time: 100, level: 'error', sessionId: 's1', text: 'old' }),
+    JSON.stringify({ time: 200, level: 'warn', sessionId: 's1', text: 'memory review failed' }),
+    JSON.stringify({ time: 300, level: 'error', sessionId: 's2', text: 'other bot' }),
+    JSON.stringify({ time: 400, level: 'error', sessionId: 's1', code: 'MISSING_CREDENTIAL', text: 'llm-deepseek: no API key for provider route' }),
+  ].join('\n') + '\n')
+  assert.match(await lastTurnError(home, 's1', 150), /no API key/)
+  assert.equal(await lastTurnError(home, 's1', 500), '')
+  assert.equal(await lastTurnError(join(home, 'missing'), 's1', 0), '')
+})

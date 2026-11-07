@@ -51,6 +51,19 @@ export function chatErrorHint(err, lang = 'zh') {
 
 // A fresh team has no Chief until ds-bot's own 'state' endpoint bootstraps one; the Muse page never calls it,
 // so the first chat on a new install failed with "no Main Bot". Ask ds-bot once, with the user's own session cookie.
+// When a turn ends with no reply, ds-bot logged why (e.g. MISSING_CREDENTIAL) in bot/logs/diagnostics.jsonl.
+export async function lastTurnError(dshHome, sessionId, sinceMs = 0) {
+  try {
+    const raw = await readFile(join(dshHome, 'bot', 'logs', 'diagnostics.jsonl'), 'utf8')
+    const lines = raw.slice(-65536).split('\n').reverse()
+    for (const line of lines) {
+      let e; try { e = JSON.parse(line) } catch { continue }
+      if (e?.level === 'error' && e.sessionId === sessionId && Number(e.time) >= sinceMs) return String(e.text || e.code || '')
+    }
+  } catch {}
+  return ''
+}
+
 export async function bootstrapMainBot({ origin, cookie, fetchImpl = fetch, timeoutMs = 20_000 } = {}) {
   if (!origin || !cookie) return false
   try {
@@ -448,7 +461,8 @@ export async function runMuseChatTurn(ctx, {
 
   lane?.closeSteer?.()
   if (!reply) {
-    return { ok: false, error: 'Bot 没有产生新回复', botId: sessionId, sessionId }
+    const why = await lastTurnError(dshHome, sessionId, T.turnCallAt || 0)
+    return { ok: false, error: why || 'Bot 没有产生新回复', botId: sessionId, sessionId }
   }
   T.detectedAt = Date.now()
   try { Object.assign(T, await turnBreakdown(ctx, sessionId, T.promptAt)) } catch (err) { T.breakdownError = String(err?.message || err) }

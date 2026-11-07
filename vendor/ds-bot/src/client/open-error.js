@@ -1,16 +1,7 @@
 import { createElement as h, useLayoutEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { t } from './i18n.js'
+import { openErrorView, openRecoveryCopy } from './open-error-copy.js'
 import { rosterGate } from './roster-gate.js'
-
-export const OPEN_DETAIL = 'Could not open this chat. {detail}'
-// A failed workspace startup stays pending in that process. The page keeps
-// asking, and a later successful answer clears the alert, but reloading the
-// page does not start the process again.
-export const OPEN_RECOVERY = 'Restart DS Bot after the session file can be read again. Refreshing this page does not restart the failed startup.'
-
-export const openErrorCopy = detail => t(OPEN_DETAIL, { detail })
-export const openRecoveryCopy = () => t(OPEN_RECOVERY)
 
 // The chat body the shell paints even when no Session exists. `conversation.input.dock`
 // does not: that list is session-scoped and is skipped while session and input are missing,
@@ -22,18 +13,21 @@ export function chatAlertHost(doc = document) {
 }
 
 export function openErrorNode(detail, place) {
+  const view = openErrorView(detail)
   return h('div', {
     className: place === 'sidebar' ? 'bt-hint bt-open-error' : 'bt-open-error',
     role: 'alert',
     'data-open-error': place,
   },
-    h('p', { className: 'bt-open-error-line' }, openErrorCopy(detail)),
-    h('p', { className: 'bt-open-error-line' }, openRecoveryCopy()))
+    h('p', { className: 'bt-open-error-line' }, view.text),
+    view.restart ? h('p', { className: 'bt-open-error-line' }, openRecoveryCopy()) : null)
 }
 
 // Registered on the shell overlay, which is mounted whenever the sidebar is.
-// The node itself is portaled into the chat column, because the overlay is not
-// part of that column and the composer dock is absent during this boot.
+// The node is portaled into the chat column. The observer stays for the whole
+// failure so a replaced chat region does not leave the portal on a detached node.
+// An identical error string does not re-render the roster, so the observer is
+// what notices the new node.
 export function OpenErrorNotice({ useRoster }) {
   const roster = useRoster(value => value)
   const gate = rosterGate({
@@ -41,16 +35,19 @@ export function OpenErrorNotice({ useRoster }) {
     hasMain: roster.byId?.[roster.mainBotId] != null,
     loadError: roster.loadError,
   })
-  const seen = gate.kind === 'error' && typeof document !== 'undefined' ? chatAlertHost() : null
-  const [late, setLate] = useState(null)
+  const [host, setHost] = useState(null)
   useLayoutEffect(() => {
-    if (seen || gate.kind !== 'error') return undefined
+    if (gate.kind !== 'error') { setHost(null); return undefined }
     let frame = 0
+    let current = null
+    const apply = (node) => {
+      if (node === current) return
+      current = node
+      setHost(node)
+    }
     const find = () => {
       frame = 0
-      const node = chatAlertHost()
-      setLate(prev => (prev === node ? prev : node))
-      if (node) observer.disconnect()
+      apply(typeof document === 'undefined' ? null : chatAlertHost())
     }
     const observer = typeof MutationObserver === 'function'
       ? new MutationObserver(() => { if (!frame) frame = requestAnimationFrame(find) })
@@ -58,8 +55,7 @@ export function OpenErrorNotice({ useRoster }) {
     observer?.observe(document.body, { childList: true, subtree: true })
     find()
     return () => { cancelAnimationFrame(frame); observer?.disconnect() }
-  }, [gate.kind, seen])
-  const host = seen ?? late
+  }, [gate.kind])
   if (gate.kind !== 'error' || host == null) return null
   return createPortal(openErrorNode(gate.text, 'chat'), host)
 }

@@ -9,7 +9,8 @@ import { createRequire } from 'node:module'
 import { createElement as h, useSyncExternalStore } from 'react'
 import { createRoot } from 'react-dom/client'
 import { act } from 'react'
-import { OPEN_RECOVERY, OpenErrorNotice, openErrorNode } from '../src/client/open-error.js'
+import { OPEN_RECOVERY } from '../src/client/open-error-copy.js'
+import { OpenErrorNotice, openErrorNode } from '../src/client/open-error.js'
 import { rosterGate } from '../src/client/roster-gate.js'
 
 const PLUGIN = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -101,9 +102,10 @@ test('a sessionless boot mounts the open error in the sidebar and the chat colum
   assert.equal(found.chat.length, 1, 'chat column alert')
   assert.equal(found.chat[0].getAttribute('data-open-error'), 'chat')
   assert.equal(found.side[0].getAttribute('data-open-error'), 'sidebar')
-  assert.match(found.chat[0].textContent, /请求失败（HTTP 404）/)
+  assert.match(found.chat[0].textContent, /HTTP 404/)
   assert.match(found.chat[0].textContent, /Restart DS Bot/)
   assert.match(found.side[0].textContent, /Restart DS Bot/)
+  assert.equal(found.chat[0].textContent.includes('session.v4'), false)
   assert.equal(found.chat[0].textContent.includes(OPEN_RECOVERY) || found.chat[0].textContent.includes('Restart DS Bot'), true)
 
   await act(async () => { setRoster({ ready: false, byId: {}, loadError: '请求失败（HTTP 404）' }) })
@@ -146,6 +148,60 @@ test('a sessionless boot mounts the open error in the sidebar and the chat colum
     sideRoot.unmount()
     overlayRoot.unmount()
   })
+})
+
+test('the chat alert attaches when the region appears later and follows a replacement', async () => {
+  const dom = new JSDOM('<!doctype html><body><div id="overlay"></div></body>')
+  installDom(dom)
+  const doc = dom.window.document
+  const { useRoster } = rosterStore({ ready: false, byId: {}, loadError: 'HTTP 404' })
+  const root = createRoot(doc.getElementById('overlay'))
+  await act(async () => {
+    root.render(h(OpenErrorNotice, { useRoster }))
+  })
+  assert.equal(doc.querySelector('[data-open-error="chat"]'), null)
+
+  const late = doc.createElement('div')
+  late.setAttribute('data-conversation-region', 'chat')
+  await act(async () => {
+    doc.body.appendChild(late)
+    await new Promise(resolve => setTimeout(resolve, 30))
+  })
+  assert.equal(late.querySelectorAll('[role=alert]').length, 1)
+  assert.match(late.textContent, /HTTP 404/)
+  assert.match(late.textContent, /Restart DS Bot/)
+
+  const replacement = doc.createElement('div')
+  replacement.setAttribute('data-conversation-region', 'chat')
+  await act(async () => {
+    late.replaceWith(replacement)
+    await new Promise(resolve => setTimeout(resolve, 30))
+  })
+  assert.equal(late.querySelector('[role=alert]'), null, 'detached region keeps no alert')
+  assert.equal(replacement.querySelectorAll('[role=alert]').length, 1, 'replacement region shows the alert')
+  assert.match(replacement.textContent, /Restart DS Bot/)
+  assert.equal(doc.querySelectorAll('[data-open-error="chat"]').length, 1)
+
+  await act(async () => { root.unmount() })
+})
+
+test('a network failure stays on the chat column without restart guidance', async () => {
+  const dom = new JSDOM(BOOT_HTML)
+  installDom(dom)
+  const doc = dom.window.document
+  const { useRoster } = rosterStore({
+    ready: false,
+    byId: {},
+    loadError: 'Could not reach DSH. Check that it is still running. /home/box/.dsh/secret',
+  })
+  const root = createRoot(doc.getElementById('side'))
+  await act(async () => { root.render(h(Side, { useRoster })) })
+  const alert = doc.querySelector('[data-sidebar] [role=alert]')
+  assert.ok(alert)
+  assert.match(alert.textContent, /keep trying/)
+  assert.equal(/Restart DS Bot/.test(alert.textContent), false)
+  assert.equal(alert.textContent.includes('/home/box'), false)
+  await act(async () => { root.unmount() })
 })
 
 function chromeShot(page, png) {

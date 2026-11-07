@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { FishLogo } from './dsh-primitives.js'
 import { isMainOf } from './sources.js'
 import { rosterGate } from './roster-gate.js'
-import { openErrorNode } from './open-error.js'
+import { openErrorView, openRecoveryCopy } from './open-error-copy.js'
 import { currentPart, previewOf, relativeShort } from './text.js'
 import { PlusIcon, SearchIcon, SidebarIcon, GaugeIcon, ClockIcon, GearIcon, PinMarkIcon, ConnectorIcon, SwitchIcon, CloudDownloadIcon, SignOutIcon } from './icons.js'
 import { MAIN_LOOK } from './characters.js'
@@ -294,7 +294,12 @@ function mainBotSlot({ main, roster, rowProps, markedUnread }) {
   switch (gate.kind) {
     case 'team': return null
     case 'setup': return h('div', { className: 'bt-hint' }, t('Setting up your Main Bot…'))
-    case 'error': return openErrorNode(gate.text, 'sidebar')
+    case 'error': {
+      const view = openErrorView(gate.text)
+      return h('div', { className: 'bt-hint bt-open-error', role: 'alert', 'data-open-error': 'sidebar' },
+        h('p', { className: 'bt-open-error-line' }, view.text),
+        view.restart ? h('p', { className: 'bt-open-error-line' }, openRecoveryCopy()) : null)
+    }
     default: {
       const unexpected = gate.kind
       throw new Error(`Unknown roster gate ${String(unexpected)}`)

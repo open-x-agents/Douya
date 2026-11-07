@@ -60,7 +60,10 @@ const ZH = {
   // Sidebar and account menu
   'Bot list': 'Bot 列表',
   'Setting up your Main Bot…': '正在设置你的主 Bot…',
-  'Could not open this chat. {detail}': '这个对话打不开。{detail}',
+  'Could not open this chat.': '这个对话打不开。',
+  'Could not open this chat. The connection failed. This page will keep trying.': '这个对话打不开。网络没有连上。这个页面会继续尝试。',
+  'Could not open this chat. DS Bot did not finish starting.': '这个对话打不开。DS Bot 没有启动完成。',
+  'Could not open this chat. The server returned HTTP {status}.': '这个对话打不开。请求失败（HTTP {status}）。',
   'Restart DS Bot after the session file can be read again. Refreshing this page does not restart the failed startup.': '会话文件恢复可读之后，请重启 DS Bot。刷新这个页面不会重新启动这次失败的进程。',
   'Automation tasks': '自动化任务',
   Connectors: '连接器',

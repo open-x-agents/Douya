@@ -218,46 +218,52 @@ export function rememberPrivateHold(state, input = {}) {
 
 /**
  * Every team snapshot waits out an open private edit. save() copies the live
- * state, so a question dismiss that does not know about the edit would store
- * a bind or a retry that is still being rolled back. The edit's own save runs
- * immediately; every other save waits until that edit has committed or rolled
- * back. Callers still pass the session id for the log.
+ * state, so a question dismiss, a queue ack, or a label save would otherwise
+ * store a bind or a retry that is still being rolled back. The edit's own
+ * commit function is the only snapshot that runs immediately. It is not a
+ * process-wide flag: a caller who was not given that function waits.
+ * Callers still pass the session id for the log.
  */
 export function guardPrivateSaves(rt) {
   if (typeof rt?.save !== 'function' || rt.privateSaveGuarded === true) return
   const save = rt.save.bind(rt)
   rt.privateSaveGuarded = true
   rt.save = (options) => {
-    if (rt.privateCommitSave === true) {
-      rt.privateCommitSave = false
-      return save(options)
+    const token = options?.privateCommit
+    if (token !== undefined && token === rt.privateCommitToken) {
+      rt.privateCommitToken = undefined
+      const rest = { ...options }
+      delete rest.privateCommit
+      return save(rest)
     }
     const gate = rt.privateGateAll ?? Promise.resolve()
     return gate.then(() => save(options), () => save(options))
   }
 }
 
-/** Snapshot the private edit that is already on the live state. Other saves wait. */
-export function commitPrivateSave(rt, options) {
-  guardPrivateSaves(rt)
-  rt.privateCommitSave = true
-  return rt.save(options)
-}
-
 export function serializePrivate(rt, _sessionId, job) {
   guardPrivateSaves(rt)
+  const token = Symbol('private-commit')
+  const commit = (options = {}) => {
+    rt.privateCommitToken = token
+    try {
+      return rt.save({ ...options, privateCommit: token })
+    } catch (error) {
+      if (rt.privateCommitToken === token) rt.privateCommitToken = undefined
+      throw error
+    }
+  }
   const previous = rt.privateGateAll ?? Promise.resolve()
-  const run = previous.then(() => runPrivate(rt, job), () => runPrivate(rt, job))
+  const run = previous.then(() => runJob(job, commit, rt, token), () => runJob(job, commit, rt, token))
   rt.privateGateAll = run.then(() => {}, () => {})
   return run
 }
 
-async function runPrivate(rt, job) {
-  rt.privateGateOwner = true
+async function runJob(job, commit, rt, token) {
   try {
-    return await job()
+    return await job(commit)
   } finally {
-    rt.privateGateOwner = false
+    if (rt.privateCommitToken === token) rt.privateCommitToken = undefined
   }
 }
 

@@ -11,7 +11,7 @@ import { textOf } from './text.js'
 import { reminderText } from './schedules.js'
 import { appendCite, citeCarrier, citeItem, citesOf, mergeCites, visibleRoomCites } from '../shared/cite.js'
 import { lineBySession, listByBot, noteLineLabel } from './work-lines.js'
-import { commitPrivateSave, rememberPrivateHold, routeAck, routeFailureAck, routePrivate, serializePrivate } from './route-private.js'
+import { rememberPrivateHold, routeAck, routeFailureAck, routePrivate, serializePrivate } from './route-private.js'
 
 // A failed turn's `LlmFailure`, kept to what can be shown and logged. Like DSH's own
 // error row, an AUTH failure loses its message: providers may echo part of the key.
@@ -925,7 +925,7 @@ function notePrivateSplice(rt, id, entry, event, inserted) {
     }
     held = true
     const at = event.time ?? Date.now()
-    jobs.push(serializePrivate(rt, id, async () => {
+    jobs.push(serializePrivate(rt, id, async (commit) => {
       rememberPrivateHold(rt.state, {
         sessionId: id,
         messageId: message.id,
@@ -938,7 +938,7 @@ function notePrivateSplice(rt, id, entry, event, inserted) {
         botId,
         at,
       })
-      await persistAck(rt, entry, decision, at)
+      await persistAck(rt, entry, decision, at, commit)
     }))
   }
   const persist = Promise.all(jobs)
@@ -946,17 +946,19 @@ function notePrivateSplice(rt, id, entry, event, inserted) {
   return { held }
 }
 
-function persistTeam(rt) {
-  if (typeof rt.save !== 'function') return Promise.resolve(false)
-  const save = rt.privateGateOwner === true ? commitPrivateSave(rt, { required: true }) : rt.save({ required: true })
+function persistTeam(rt, commit) {
+  if (typeof rt.save !== 'function' && typeof commit !== 'function') return Promise.resolve(false)
+  // commit is the transaction that opened this edit. A queue ack or a label
+  // save does not receive it, so those wait out someone else's open edit.
+  const save = typeof commit === 'function' ? commit({ required: true }) : rt.save({ required: true })
   return save.then(() => true, (error) => {
     rt.warn?.('ds-bot: private work-line label was not saved: %s', error)
     return false
   })
 }
 
-async function persistAck(rt, entry, decision, at) {
-  const saved = await persistTeam(rt)
+async function persistAck(rt, entry, decision, at, commit) {
+  const saved = await persistTeam(rt, commit)
   const text = saved ? routeAck(decision) : routeFailureAck()
   if (text === undefined) return saved
   entry.routeNote = {

@@ -11,7 +11,7 @@ import { resolveSendMode } from '../shared/send-mode.js'
 import { clearDraftIfPosted } from '../shared/room-draft.js'
 import { decideRoomSteer, roomMembers, textNamesMember } from './group-steer.js'
 import { routeTakesEffect } from './route-inbound.js'
-import { bindPrivateHold, commitPrivateSave, guardPrivateSaves, privateHold, serializePrivate } from './route-private.js'
+import { bindPrivateHold, guardPrivateSaves, privateHold, serializePrivate } from './route-private.js'
 import { citedFromLog } from '../shared/cite.js'
 
 const LANGUAGES = { zh: 'Chinese (简体中文)', en: 'English' }
@@ -389,7 +389,7 @@ export function install(rt) {
           await rt.load()
           const sessionId = rt.botOf(body.sessionId) ? rt.chatOf(body.sessionId) : body.sessionId
           if (rt.roomOf(sessionId)) return fail('Not a private chat', 'bot/invalid')
-          return serializePrivate(rt, sessionId, async () => {
+          return serializePrivate(rt, sessionId, async (commit) => {
             const hold = privateHold(rt.state, sessionId)
             if (hold == null || hold.generation !== body.generation) return fail('Stale confirmation', 'bot/stale')
             const already = hold.status === 'bound' && hold.boundTo === body.choiceId
@@ -398,7 +398,7 @@ export function install(rt) {
             if (bound === undefined) return fail('Not a line on this hold', 'bot/invalid')
             if (already) return ok({ bound: true, delivered: false, generation: bound.generation })
             try {
-              await commitPrivateSave(rt, { required: true })
+              await commit({ required: true })
             } catch (error) {
               const current = privateHold(rt.state, sessionId)
               if (current?.generation === body.generation) {
@@ -422,7 +422,7 @@ export function install(rt) {
           await rt.load()
           const sessionId = rt.botOf(body.sessionId) ? rt.chatOf(body.sessionId) : body.sessionId
           if (rt.roomOf(sessionId)) return fail('Not a private chat', 'bot/invalid')
-          return serializePrivate(rt, sessionId, async () => {
+          return serializePrivate(rt, sessionId, async (commit) => {
             const hold = privateHold(rt.state, sessionId)
             if (hold == null) return ok(false)
             const prior = (hold.items ?? []).map(item => item.outcome)
@@ -430,7 +430,7 @@ export function install(rt) {
               if (item.outcome === 'unrecoverable' || item.outcome === 'queue-failed') item.outcome = 'held'
             }
             try {
-              await commitPrivateSave(rt, { required: true })
+              await commit({ required: true })
             } catch (error) {
               ;(hold.items ?? []).forEach((item, index) => { item.outcome = prior[index] })
               rt.warn?.('ds-bot: private hold retry was not saved: %s', error)

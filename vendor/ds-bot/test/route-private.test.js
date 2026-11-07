@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { cpSync, mkdtempSync, rmSync } from 'node:fs'
+import { cpSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import * as JsonlPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -361,19 +361,33 @@ test('the first claim admits only a committed queue id', async (t) => {
   assert.equal(state.privateHolds['sess-loop'].items.find(item => item.messageId === opened.id).action, 'new')
 })
 
-test('a flushed session continues a committed queue without new input', { timeout: 20000 }, async (t) => {
+test('a team file and a flushed session continue a committed queue without new input', { timeout: 20000 }, async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'ds-bot-queue-log-'))
-  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const home = mkdtempSync(join(tmpdir(), 'ds-bot-queue-team-'))
+  t.after(() => {
+    rmSync(root, { recursive: true, force: true })
+    rmSync(home, { recursive: true, force: true })
+  })
   const secret = 'PARKED-QUEUE-SENTENCE'
   const parkedId = 'queued-before-append'
   const waitingId = 'queued-after-append'
   const claimedId = 'queued-after-claim'
-  const state = {}
-  for (const messageId of [parkedId, waitingId, claimedId]) {
-    rememberPrivateHold(state, { sessionId: messageId, messageId, action: 'queue', text: secret, at: 1 })
-    noteHoldOutcome(state, messageId, messageId, 'queued')
+  const seedTeam = async () => {
+    const teamCtx = fakeContext()
+    const rt = createRuntime(teamCtx, { home })
+    await rt.load()
+    for (const messageId of [parkedId, waitingId, claimedId]) {
+      rememberPrivateHold(rt.state, { sessionId: messageId, messageId, action: 'queue', text: secret, at: 1 })
+      noteHoldOutcome(rt.state, messageId, messageId, 'queued')
+    }
+    await rt.save({ required: true })
+    await teamCtx.dispose()
   }
+  await seedTeam()
   const boot = async () => {
+    const teamCtx = fakeContext()
+    const rt = createRuntime(teamCtx, { home })
+    await rt.load()
     const ctx = new Context()
     await ctx.plugin(JsonlPersistence, { root, compression: 'none' })
     for (const plugin of [SessionStore, SessionProjection, LlmRuntime, ToolRuntime, SystemPrompt, Agents, AgentLoop]) {
@@ -394,11 +408,25 @@ test('a flushed session continues a committed queue without new input', { timeou
         }
       },
     })
-    installPrivateHook({ ctx, state, isBotSession: () => true, roomOf: () => undefined, save: async () => {}, warn: () => {} })
-    return ctx
+    installPrivateHook({
+      ctx,
+      state: rt.state,
+      isBotSession: () => true,
+      roomOf: () => undefined,
+      save: (options) => rt.save(options),
+      warn: () => {},
+    })
+    return {
+      ctx,
+      rt,
+      close: async () => {
+        await ctx.fiber.dispose()
+        await teamCtx.dispose()
+      },
+    }
   }
-  // Dispose cancels a live inbox. A crash does not, so the durable prefix is
-  // the flushed log copied before that cancel is written.
+  // Dispose cancels a live inbox. A crash does not, so the durable session
+  // prefix is the flushed log copied before that cancel is written.
   const freeze = () => {
     const snap = mkdtempSync(join(tmpdir(), 'ds-bot-queue-snap-'))
     cpSync(root, snap, { recursive: true })
@@ -419,70 +447,82 @@ test('a flushed session continues a committed queue without new input', { timeou
   }
   const users = (agent, messageId) => agent.session.snapshotEvents().filter(event => event.type === 'user/message' && event.data?.id === messageId)
   const inserts = (agent, messageId) => agent.session.snapshotEvents().filter(event => event.type === 'agent/inbox/spliced' && (event.data?.inserted ?? []).some(message => message?.id === messageId))
+  const held = (session, messageId) => session.rt.state.privateHolds[messageId].items.find(item => item.messageId === messageId)
+  const onDisk = (messageId) => JSON.parse(readFileSync(join(home, 'state.json'), 'utf8')).privateHolds[messageId].items.find(item => item.messageId === messageId)
 
-  let ctx = await boot()
-  let agent = await ctx.agentLoop.create(parkedId, { provider: 'fake', model: 'fake-model' }, { cwd: '/tmp' })
-  assert.equal(await ctx.sessions.flush(agent.session), true)
-  await ctx.fiber.dispose()
-  ctx = await boot()
-  agent = (await ctx.agentLoop.resume(ctx, { resumeSessionId: parkedId, agentOptions: { provider: 'fake', model: 'fake-model' } })).agent
+  let session = await boot()
+  assert.equal(held(session, parkedId).outcome, 'queued')
+  assert.equal(onDisk(parkedId).outcome, 'queued')
+  let agent = await session.ctx.agentLoop.create(parkedId, { provider: 'fake', model: 'fake-model' }, { cwd: '/tmp' })
+  assert.equal(await session.ctx.sessions.flush(agent.session), true)
+  await session.close()
+  session = await boot()
+  assert.equal(onDisk(parkedId).outcome, 'queued')
+  assert.equal(held(session, parkedId).outcome, 'queued')
+  agent = (await session.ctx.agentLoop.resume(session.ctx, { resumeSessionId: parkedId, agentOptions: { provider: 'fake', model: 'fake-model' } })).agent
   await settle(agent)
   assert.equal(users(agent, parkedId).length, 1)
   assert.equal(inserts(agent, parkedId).length, 1)
   const parkedUsers = users(agent, parkedId).length
   const parkedInserts = inserts(agent, parkedId).length
-  assert.equal(await ctx.sessions.flush(agent.session), true)
-  await ctx.fiber.dispose()
-  ctx = await boot()
-  agent = (await ctx.agentLoop.resume(ctx, { resumeSessionId: parkedId, agentOptions: { provider: 'fake', model: 'fake-model' } })).agent
+  assert.equal(await session.ctx.sessions.flush(agent.session), true)
+  await session.close()
+  session = await boot()
+  agent = (await session.ctx.agentLoop.resume(session.ctx, { resumeSessionId: parkedId, agentOptions: { provider: 'fake', model: 'fake-model' } })).agent
   await settle(agent)
   assert.equal(users(agent, parkedId).length, parkedUsers)
   assert.equal(inserts(agent, parkedId).length, parkedInserts)
-  await ctx.fiber.dispose()
+  await session.close()
 
-  ctx = await boot()
-  agent = await ctx.agentLoop.create(waitingId, { provider: 'fake', model: 'fake-model' }, { cwd: '/tmp' })
+  session = await boot()
+  agent = await session.ctx.agentLoop.create(waitingId, { provider: 'fake', model: 'fake-model' }, { cwd: '/tmp' })
   agent.inbox.append('next-turn', { id: waitingId, role: 'user', source: { kind: 'user', dsBotQueue: true }, content: [{ type: 'text', text: secret }] })
-  assert.equal(await ctx.sessions.flush(agent.session), true)
+  assert.equal(await session.ctx.sessions.flush(agent.session), true)
   assert.equal(users(agent, waitingId).length, 0)
   assert.equal(inserts(agent, waitingId).length, 1)
+  assert.equal(onDisk(waitingId).outcome, 'queued')
   const waitingSnap = freeze()
-  await ctx.fiber.dispose()
+  await session.close()
   thaw(waitingSnap)
-  ctx = await boot()
-  agent = (await ctx.agentLoop.resume(ctx, { resumeSessionId: waitingId, agentOptions: { provider: 'fake', model: 'fake-model' } })).agent
+  session = await boot()
+  assert.equal(held(session, waitingId).outcome, 'queued')
+  agent = (await session.ctx.agentLoop.resume(session.ctx, { resumeSessionId: waitingId, agentOptions: { provider: 'fake', model: 'fake-model' } })).agent
   assert.equal(agent.inbox.nextTurn.some(message => message.id === waitingId), true)
   await settle(agent)
   assert.equal(users(agent, waitingId).length, 1)
   assert.equal(inserts(agent, waitingId).length, 1)
-  await ctx.fiber.dispose()
+  await session.close()
 
-  ctx = await boot()
-  agent = await ctx.agentLoop.create(claimedId, { provider: 'fake', model: 'fake-model' }, { cwd: '/tmp' })
+  session = await boot()
+  agent = await session.ctx.agentLoop.create(claimedId, { provider: 'fake', model: 'fake-model' }, { cwd: '/tmp' })
   agent.inbox.append('next-turn', { id: claimedId, role: 'user', source: { kind: 'user', dsBotQueue: true }, content: [{ type: 'text', text: secret }] })
-  assert.equal(await ctx.sessions.flush(agent.session), true)
+  assert.equal(await session.ctx.sessions.flush(agent.session), true)
+  assert.equal(onDisk(claimedId).outcome, 'queued')
   const claimedSnap = freeze()
-  await ctx.fiber.dispose()
+  await session.close()
   thaw(claimedSnap)
-  ctx = await boot()
-  ctx.on('agent/pre-step', async (payload, next) => {
+  session = await boot()
+  session.ctx.on('agent/pre-step', async (payload, next) => {
     if (payload.messages?.some(message => message?.id === claimedId)) {
-      await ctx.sessions.flush(payload.agent.session)
+      await session.ctx.sessions.flush(payload.agent.session)
       return { kind: 'reject' }
     }
     return next()
   }, { prepend: true })
-  agent = (await ctx.agentLoop.resume(ctx, { resumeSessionId: claimedId, agentOptions: { provider: 'fake', model: 'fake-model' } })).agent
+  agent = (await session.ctx.agentLoop.resume(session.ctx, { resumeSessionId: claimedId, agentOptions: { provider: 'fake', model: 'fake-model' } })).agent
   await settle(agent)
   assert.equal(users(agent, claimedId).length, 0)
-  assert.equal(await ctx.sessions.flush(agent.session), true)
-  await ctx.fiber.dispose()
-  ctx = await boot()
-  agent = (await ctx.agentLoop.resume(ctx, { resumeSessionId: claimedId, agentOptions: { provider: 'fake', model: 'fake-model' } })).agent
+  assert.equal(await session.ctx.sessions.flush(agent.session), true)
+  const claimedCut = freeze()
+  await session.close()
+  thaw(claimedCut)
+  session = await boot()
+  assert.equal(held(session, claimedId).outcome, 'queued')
+  agent = (await session.ctx.agentLoop.resume(session.ctx, { resumeSessionId: claimedId, agentOptions: { provider: 'fake', model: 'fake-model' } })).agent
   await settle(agent)
   assert.equal(users(agent, claimedId).length, 1)
   assert.equal(inserts(agent, claimedId).length, 2)
-  await ctx.fiber.dispose()
+  await session.close()
 })
 
 test('a live splice is classified before the step can admit it', async (t) => {
@@ -724,10 +764,10 @@ test('a failed confirm or retry is not published by dismissing a question', { ti
   const startedGate = new Promise(resolve => { started = resolve })
   let failingConfirm = false
   rt.save = (options) => {
-    const commit = rt.privateCommitSave === true
-    rt.privateCommitSave = false
-    if (commit && !failingConfirm && rt.state.privateHolds['a-now']?.status === 'bound') {
+    const privileged = options?.privateCommit !== undefined && options.privateCommit === rt.privateCommitToken
+    if (privileged && !failingConfirm && rt.state.privateHolds['a-now']?.status === 'bound') {
       failingConfirm = true
+      rt.privateCommitToken = undefined
       started()
       return gate.then(() => Promise.reject(new Error('session A could not be saved')))
     }
@@ -773,10 +813,10 @@ test('a failed confirm or retry is not published by dismissing a question', { ti
   let failingRetry = false
   loaded.save = (options) => {
     const outcome = loaded.state.privateHolds['a-now']?.items?.find(item => item.messageId === 'm-a')?.outcome
-    const commit = loaded.privateCommitSave === true
-    loaded.privateCommitSave = false
-    if (commit && !failingRetry && outcome === 'held') {
+    const privileged = options?.privateCommit !== undefined && options.privateCommit === loaded.privateCommitToken
+    if (privileged && !failingRetry && outcome === 'held') {
       failingRetry = true
+      loaded.privateCommitToken = undefined
       startedRetry()
       return retryGate.then(() => Promise.reject(new Error('retry was not saved')))
     }
@@ -801,6 +841,155 @@ test('a failed confirm or retry is not published by dismissing a question', { ti
   assert.equal(again.state.privateHolds['a-now'].status, 'pending')
   assert.equal(again.state.privateHolds['a-now'].items.find(item => item.messageId === 'm-a').outcome, 'unrecoverable')
   assert.equal(again.state.questions['a-now'], undefined)
+})
+
+test('a failed confirm or retry is not published by a queue ack or a label save', { timeout: 8000 }, async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'ds-bot-confirm-ack-'))
+  const ctx = fakeContext()
+  let route
+  const register = ctx.connection.fetch.register
+  ctx.connection.fetch.register = (options) => { route = options; return register(options) }
+  const rt = createRuntime(ctx, { home })
+  t.after(async () => {
+    await ctx.dispose()
+    rmSync(home, { recursive: true, force: true })
+  })
+  await rt.load()
+  rt.state.bots.b = { id: 'b', name: 'Bee', sessionId: 'b-queue' }
+  rt.state.bots.c = { id: 'c', name: 'Cee', sessionId: 'c-label' }
+  createLine(rt.state, { id: 'line-a', botId: 'a', sessionId: 'a-now', label: 'plan the picnic' })
+  createLine(rt.state, { id: 'line-b', botId: 'b', sessionId: 'b-queue', label: 'plan the picnic' })
+  createLine(rt.state, { id: 'line-c', botId: 'c', sessionId: 'c-label' })
+  rememberPrivateHold(rt.state, {
+    sessionId: 'a-now', botId: 'a', messageId: 'm-a', action: 'ask', text: 'sentence A',
+    choices: [{ id: 'line-a', label: 'plan the picnic', sessionId: 'a-now' }], at: 1,
+  })
+  await rt.save({ required: true })
+  const post = async (endpoint, payload) => (await route.fetch(new Request('http://localhost/api/bot', {
+    method: 'POST',
+    body: JSON.stringify({ endpoint, payload }),
+  }))).json()
+  const fire = (sessionId, event) => {
+    for (const listener of ctx.listeners.get('session/event') ?? []) listener({ id: sessionId }, event)
+  }
+  const generation = rt.state.privateHolds['a-now'].generation
+  const guarded = rt.save.bind(rt)
+  let release
+  let started
+  const gate = new Promise(resolve => { release = resolve })
+  const startedGate = new Promise(resolve => { started = resolve })
+  let privilegedWhileBound = 0
+  rt.save = (options) => {
+    const privileged = options?.privateCommit !== undefined && options.privateCommit === rt.privateCommitToken
+    if (privileged && rt.state.privateHolds['a-now']?.status === 'bound') {
+      privilegedWhileBound += 1
+      if (privilegedWhileBound === 1) {
+        rt.privateCommitToken = undefined
+        started()
+        return gate.then(() => Promise.reject(new Error('session A could not be saved')))
+      }
+    }
+    return guarded(options)
+  }
+  const failed = post('confirm-private', { sessionId: 'a-now', choiceId: 'line-a', generation })
+  await startedGate
+  fire('b-queue', { type: 'turn/start', data: { turn: 1 }, time: 1 })
+  fire('b-queue', {
+    type: 'agent/inbox/spliced',
+    time: 2,
+    data: {
+      target: 'next-turn',
+      inserted: [{ id: 'm-q', source: { kind: 'user' }, content: [{ type: 'text', text: 'plan the picnic now' }] }],
+    },
+  })
+  const acked = rt.privateHoldPersist ?? Promise.resolve()
+  await new Promise(resolve => setTimeout(resolve, 40))
+  assert.equal(rt.state.privateHolds['a-now'].status, 'bound')
+  assert.equal(privilegedWhileBound, 1)
+  release()
+  const result = await failed
+  await acked
+  assert.equal(result.ok, false)
+  assert.equal(result.error.code, 'bot/save')
+  assert.equal(rt.state.privateHolds['a-now'].status, 'pending')
+  assert.equal(rt.privateCommitToken, undefined)
+  assert.equal(rt.routeNoteView()['b-queue']?.action, 'queue')
+  assert.equal(rt.routeNoteView()['b-queue']?.saved, true)
+  await ctx.dispose()
+  const ctx2 = fakeContext()
+  let route2
+  const register2 = ctx2.connection.fetch.register
+  ctx2.connection.fetch.register = (options) => { route2 = options; return register2(options) }
+  const loaded = createRuntime(ctx2, { home })
+  t.after(() => ctx2.dispose())
+  await loaded.load()
+  assert.equal(loaded.state.privateHolds['a-now'].status, 'pending')
+  assert.equal(loaded.state.privateHolds['a-now'].boundTo, undefined)
+  const disk = JSON.parse(readFileSync(join(home, 'state.json'), 'utf8'))
+  assert.equal(disk.privateHolds['a-now'].status, 'pending')
+  assert.equal(disk.privateHolds['a-now'].boundTo, undefined)
+
+  noteHoldOutcome(loaded.state, 'a-now', 'm-a', 'unrecoverable')
+  await loaded.save({ required: true })
+  const post2 = async (endpoint, payload) => (await route2.fetch(new Request('http://localhost/api/bot', {
+    method: 'POST',
+    body: JSON.stringify({ endpoint, payload }),
+  }))).json()
+  const fire2 = (sessionId, event) => {
+    for (const listener of ctx2.listeners.get('session/event') ?? []) listener({ id: sessionId }, event)
+  }
+  const guardedRetry = loaded.save.bind(loaded)
+  let releaseRetry
+  let startedRetry
+  const retryGate = new Promise(resolve => { releaseRetry = resolve })
+  const retryStarted = new Promise(resolve => { startedRetry = resolve })
+  let privilegedWhileHeld = 0
+  loaded.save = (options) => {
+    const outcome = loaded.state.privateHolds['a-now']?.items?.find(item => item.messageId === 'm-a')?.outcome
+    const privileged = options?.privateCommit !== undefined && options.privateCommit === loaded.privateCommitToken
+    if (privileged && outcome === 'held') {
+      privilegedWhileHeld += 1
+      if (privilegedWhileHeld === 1) {
+        loaded.privateCommitToken = undefined
+        startedRetry()
+        return retryGate.then(() => Promise.reject(new Error('retry was not saved')))
+      }
+    }
+    return guardedRetry(options)
+  }
+  const retry = post2('retry-private-save', { sessionId: 'a-now' })
+  await retryStarted
+  fire2('c-label', {
+    type: 'agent/inbox/spliced',
+    time: 3,
+    data: {
+      target: 'next-step',
+      inserted: [{ id: 'm-label', source: { kind: 'user' }, content: [{ type: 'text', text: 'hello there' }] }],
+    },
+  })
+  const labeled = loaded.privateHoldPersist ?? Promise.resolve()
+  await new Promise(resolve => setTimeout(resolve, 40))
+  assert.equal(loaded.state.privateHolds['a-now'].items.find(item => item.messageId === 'm-a').outcome, 'held')
+  assert.equal(privilegedWhileHeld, 1)
+  releaseRetry()
+  const retryResult = await retry
+  await labeled
+  assert.equal(retryResult.ok, false)
+  assert.equal(retryResult.error.code, 'bot/save')
+  assert.equal(loaded.state.privateHolds['a-now'].items.find(item => item.messageId === 'm-a').outcome, 'unrecoverable')
+  assert.equal(loaded.privateCommitToken, undefined)
+  assert.equal(loaded.state.workLines['line-c'].label, 'hello there')
+  await ctx2.dispose()
+  const ctx3 = fakeContext()
+  const again = createRuntime(ctx3, { home })
+  t.after(() => ctx3.dispose())
+  await again.load()
+  assert.equal(again.state.privateHolds['a-now'].items.find(item => item.messageId === 'm-a').outcome, 'unrecoverable')
+  assert.equal(again.state.privateHolds['a-now'].status, 'pending')
+  assert.equal(again.state.workLines['line-c'].label, 'hello there')
+  const diskRetry = JSON.parse(readFileSync(join(home, 'state.json'), 'utf8'))
+  assert.equal(diskRetry.privateHolds['a-now'].items.find(item => item.messageId === 'm-a').outcome, 'unrecoverable')
+  assert.equal(diskRetry.workLines['line-c'].label, 'hello there')
 })
 
 test('DSH refuses a second append while a splice is still being published', async (t) => {

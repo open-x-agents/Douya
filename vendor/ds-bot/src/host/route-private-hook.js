@@ -17,7 +17,7 @@
 // An empty step does not wake DSH by itself, so a handoff sets wakeRequested.
 // A resumed agent with a committed queue that is not yet a user message wakes
 // itself; the caller does not have to send another sentence.
-import { commitPrivateSave, noteHoldOutcome, privateHold, serializePrivate, withholdFromStep } from './route-private.js'
+import { noteHoldOutcome, privateHold, serializePrivate, withholdFromStep } from './route-private.js'
 
 export function install(rt) {
   const { ctx } = rt
@@ -39,7 +39,7 @@ export async function applyPrivateWithhold(rt, payload) {
     return { outcomes: [], saved: false }
   }
   if (rt.privateHoldPersist) await rt.privateHoldPersist.catch(() => {})
-  return serializePrivate(rt, sessionId, async () => {
+  return serializePrivate(rt, sessionId, async (commit) => {
     const hold = privateHold(rt.state, sessionId)
     if (recoverDurableQueue(rt, agent, sessionId, payload)) requestWake(agent)
     const split = withholdFromStep(payload.messages, hold)
@@ -50,9 +50,9 @@ export async function applyPrivateWithhold(rt, payload) {
     const kept = payload.messages.filter(message => !dropIds.has(message.id))
     payload.messages.splice(0, payload.messages.length, ...kept)
     let saved = asks.length === 0
-    if (asks.length > 0 && typeof rt.save === 'function') {
+    if (asks.length > 0) {
       try {
-        await commitPrivateSave(rt, { required: true })
+        await commit({ required: true })
         saved = true
       } catch (error) {
         rt.warn?.('ds-bot: private hold was not saved before it left the step: %s', error)
@@ -61,7 +61,7 @@ export async function applyPrivateWithhold(rt, payload) {
     const outcomes = []
     let handedOff = false
     for (const message of queues) {
-      const outcome = await moveQueue(rt, agent, sessionId, message)
+      const outcome = await moveQueue(rt, agent, sessionId, message, commit)
       if (outcome === 'queued') handedOff = true
       outcomes.push({ id: message.id, action: 'queue', outcome })
     }
@@ -76,12 +76,12 @@ export async function applyPrivateWithhold(rt, payload) {
   })
 }
 
-async function moveQueue(rt, agent, sessionId, message) {
+async function moveQueue(rt, agent, sessionId, message, commit) {
   if (typeof agent?.inbox?.append !== 'function') return mark(rt, sessionId, message.id, 'queue-failed')
   if (sitsInNextTurn(agent, message.id)) return 'queued'
   noteHoldOutcome(rt.state, sessionId, message.id, 'queued')
   try {
-    if (typeof rt.save === 'function') await commitPrivateSave(rt, { required: true })
+    await commit({ required: true })
   } catch (error) {
     rt.warn?.('ds-bot: private queue outcome was not saved: %s', error)
     return mark(rt, sessionId, message.id, 'queue-failed')
@@ -93,10 +93,8 @@ async function moveQueue(rt, agent, sessionId, message) {
     if (sitsInNextTurn(agent, message.id)) return 'queued'
     rt.warn?.('ds-bot: private queue could not leave the current step: %s', error)
     noteHoldOutcome(rt.state, sessionId, message.id, 'queue-failed')
-    if (typeof rt.save === 'function') {
-      const reverted = await commitPrivateSave(rt, { required: true }).then(() => true, () => false)
-      if (!reverted) noteHoldOutcome(rt.state, sessionId, message.id, 'queued')
-    }
+    const reverted = await commit({ required: true }).then(() => true, () => false)
+    if (!reverted) noteHoldOutcome(rt.state, sessionId, message.id, 'queued')
     return sitsInNextTurn(agent, message.id) || privateHold(rt.state, sessionId)?.items?.find(item => item.messageId === message.id)?.outcome === 'queued'
       ? 'queued'
       : 'queue-failed'

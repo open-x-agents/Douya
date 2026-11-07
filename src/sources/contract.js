@@ -6,9 +6,11 @@
 
 import { createHash } from 'node:crypto';
 
+import { blockedNote } from './blocked.js';
+
 export const READ_SCOPES = ['metadata', 'body'];
 export const READ_MEMBERS = ['id', 'readScope', 'auth', 'list', 'get'];
-export const SOURCE_ERROR_KINDS = ['auth', 'rate_limit', 'partial', 'timeout', 'http'];
+export const SOURCE_ERROR_KINDS = ['auth', 'rate_limit', 'partial', 'timeout', 'http', 'blocked'];
 export const GITHUB_OBJECTS = ['issue', 'pr'];
 
 // 与 src/core/event.js 的 EXTERNAL_REF 一致：type: 之后的字符集不含 '#'。
@@ -121,6 +123,8 @@ export function describeSourceGap(gap) {
       return `${label} 超时，这一份缺了`;
     case 'http':
       return `${label} 报错（HTTP ${gap.status ?? '?'}）`;
+    case 'blocked':
+      return blockedNote('zh', { site: label });
     case 'partial':
       return `${label} 有一项没取到：${gap.ref || gap.reason || gap.detail || '未知项'}`;
     default:

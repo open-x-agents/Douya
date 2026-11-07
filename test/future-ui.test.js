@@ -34,9 +34,12 @@ test('empty state is friendly, bilingual, and does not invent plans', async () =
   const ui = mount({ ok: true, available: true, plans: [] })
   await ui.window.loadFuture()
   assert.match(ui.root.innerHTML, /What would you like to grow/)
+  assert.match(ui.root.innerHTML, /<div class="future-kicker">Douya \/ Future<\/div>/)
   assert.doesNotMatch(ui.root.innerHTML, /<article/)
   ui.setLocale('zh')
   assert.match(ui.root.innerHTML, /你想慢慢培养什么/)
+  assert.match(ui.root.innerHTML, /<div class="future-kicker">豆芽 \/ 未来<\/div>/)
+  assert.doesNotMatch(ui.root.innerHTML, /Douya \/ Future/)
   ui.click('ask')
   assert.match(ui.calls[0].chat, /真实兴趣/)
 })
@@ -68,4 +71,12 @@ test('unavailable memories do not hide plans and refresh failures show feedback'
   await broken.window.loadFuture()
   assert.match(broken.root.innerHTML, /Could not load or save/)
   assert.match(broken.root.innerHTML, /data-op="refresh"/)
+})
+
+test('sidebar groups product pages before Sources and keeps Today selected', async () => {
+  const html = await readFile(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  const nav = [...html.matchAll(/<div class="nav(?: on)?" data-view="([^"]+)"/g)]
+  assert.deepEqual(nav.map(match => match[1]), ['today', 'future', 'memory', 'sources', 'settings'])
+  assert.match(nav[0][0], /class="nav on"/)
+  assert.equal(nav.filter(match => match[0].includes('nav on')).length, 1)
 })

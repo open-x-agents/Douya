@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 const read = p => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
 
 test('today page: one pinned line above the cards, escaped, with a done button', () => {
-  const src = read('src/client/index.html')
+  const src = read('packages/dsh-muse-ui/static/index.html')
   const list = src.slice(src.indexOf('function renderCardList(cards)'), src.indexOf('function openDock('))
   assert.ok(list.includes('renderDutyLine('), 'renderCardList draws the line')
   assert.ok(list.indexOf('renderDutyLine(') < list.indexOf('renderNextHero('), 'the line is the first block, before the hero')
@@ -43,7 +43,7 @@ test('duty: i18n keys exist in en and zh', async () => {
 })
 
 test('duty: typing a note survives a cards event', () => {
-  const src = read('src/client/index.html')
+  const src = read('packages/dsh-muse-ui/static/index.html')
   const start = src.indexOf('async function applyUiEvent(e)')
   const slice = src.slice(start, src.indexOf('async function applyOpEvent(', start))
   assert.match(slice, /dutyBusy\(\)/, 'the cards branch checks for an unfinished draft')

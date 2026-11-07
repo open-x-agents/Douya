@@ -2023,7 +2023,7 @@ export function createApiRouter(ctx) {
      */
     async serveIndex() {
       const html = await readFile(
-        join(__dirname, '../client/index.html'),
+        join(__dirname, '../../packages/dsh-muse-ui/static/index.html'),
         'utf-8'
       );
       return html;
@@ -2251,7 +2251,7 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
         res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
         res.end(js);
       } else if (url.pathname === '/api/opendigitalmate/ui-renderer.js' && req.method === 'GET') {
-        const js = await readFile(join(__dirname, '../client/ui-renderer.js'), 'utf8');
+        const js = await readFile(join(__dirname, '../../packages/dsh-muse-ui/static/ui-renderer.js'), 'utf8');
         res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
         res.end(js);
       } else if (url.pathname === '/api/opendigitalmate/ui-events' && req.method === 'GET') {
@@ -2300,7 +2300,7 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
           return;
         }
         try {
-          const body = await readFile(join(__dirname, '../client/logos', `${app}.svg`));
+          const body = await readFile(join(__dirname, '../../packages/dsh-muse-ui/static/logos', `${app}.svg`));
           res.writeHead(200, {
             'Content-Type': 'image/svg+xml; charset=utf-8',
             'Cache-Control': 'public, max-age=604800, immutable',

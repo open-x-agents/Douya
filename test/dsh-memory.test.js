@@ -132,7 +132,7 @@ test('forgetDshMemory: deletes one row; invalid id rejected', () => {
 })
 
 test('Memory 一瞥 chrome: nav + view + i18n + sources-only apps', () => {
-  const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
   assert.match(html, /data-view="memory"/)
   assert.match(html, /id="v-memory"/)
   assert.match(html, /Memory 一瞥/)

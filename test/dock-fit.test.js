@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import fs from 'node:fs'
-const html = fs.readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+const html = fs.readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
 
 test('open sheet is capped by the measured dock fit (desktop + phone)', () => {
   assert.match(html, /\.today-chat\.open:not\(\.in-zoom\) \.today-chat-sheet\{max-height:min\(720px,78vh,var\(--dock-fit,78vh\)\)\}/);

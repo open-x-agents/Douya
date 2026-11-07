@@ -1,17 +1,13 @@
-// Register Muse UI + all /api/* routes on the dsh connection (same process as ds-bot).
+// Register /api/* data routes on the dsh connection (same process as ds-bot).
+// Muse static UI (app HTML / ui-renderer / logos) lives in the dsh-muse-ui plugin.
 
 import { CALLBACK_PATH, requestOrigin } from './composio-callback.js'
 import { readFile } from 'node:fs/promises'
-import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { runMuseChatTurn, chatProgress } from './muse-chat-core.js'
 import { createChatLane } from './chat-lane.js'
 import { installUiFeed } from './ui-feed.js'
 import { browserScript, resolveLang, DEFAULT_LOCALE } from '../i18n/index.js'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const CLIENT_HTML = join(__dirname, '../client/index.html')
-const UI_RENDERER = join(__dirname, '../client/ui-renderer.js')
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -67,23 +63,6 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
   // Live UI feed (SSE): durable view events + this turn's text deltas, tool progress and view skeletons.
   let feed = null
   try { feed = installUiFeed(ctx, { uiService: router.uiServiceRef(), effect, log }) } catch (err) { log(`ui-feed install failed: ${err?.message || err}`) }
-
-  // Primary Muse UI (replaces stock dsh frontend via client redirect).
-  effect({
-    path: '/api/opendigitalmate/app',
-    methods: ['GET'],
-    requestBody: 'buffered',
-    fetch: async () => {
-      const html = await readFile(CLIENT_HTML, 'utf8')
-      return new Response(html, {
-        status: 200,
-        headers: {
-          'content-type': 'text/html; charset=utf-8',
-          'cache-control': 'no-store',
-        },
-      })
-    },
-  }, 'opendigitalmate: muse app')
 
   effect({
     path: '/api/today',
@@ -244,14 +223,8 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     fetch: async (request) => json(router.setViewContext(await readJson(request))),
   }, 'opendigitalmate: ui-context')
 
-  // P2 temporary views: the vetted renderer (static file) and the owner's surface ops (get / 保存为卡片 / form submit).
-  effect({
-    path: '/api/opendigitalmate/ui-renderer.js',
-    methods: ['GET'],
-    requestBody: 'buffered',
-    fetch: async () => new Response(await readFile(UI_RENDERER, 'utf8'), { status: 200, headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } }),
-  }, 'opendigitalmate: ui-renderer')
-
+  // P2 temporary views: owner surface ops (get / 保存为卡片 / form submit).
+  // ui-renderer.js is served by the dsh-muse-ui plugin.
   effect({
     path: '/api/opendigitalmate/i18n.js',
     methods: ['GET'],
@@ -330,30 +303,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     },
   }, 'opendigitalmate: chat attachment')
 
-  // Brand logos for Sources cards (same-origin; avoids CDN/onerror letter fallbacks).
-  const LOGOS_DIR = join(__dirname, '../client/logos')
-  effect({
-    path: '/api/opendigitalmate/logo',
-    methods: ['GET'],
-    requestBody: 'buffered',
-    fetch: async (request) => {
-      const app = (new URL(request.url).searchParams.get('app') || '').toLowerCase()
-      if (!/^[a-z0-9_]{1,40}$/.test(app)) return json({ error: 'bad app' }, 400)
-      const file = join(LOGOS_DIR, `${app}.svg`)
-      try {
-        const body = await readFile(file)
-        return new Response(body, {
-          status: 200,
-          headers: {
-            'content-type': 'image/svg+xml; charset=utf-8',
-            'cache-control': 'public, max-age=604800, immutable',
-          },
-        })
-      } catch {
-        return json({ error: 'not found' }, 404)
-      }
-    },
-  }, 'opendigitalmate: source logo')
+  // Brand logos: served by the dsh-muse-ui plugin (/api/opendigitalmate/logo).
 
   effect({
     path: '/api/chat/history',

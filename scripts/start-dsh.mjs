@@ -2,7 +2,7 @@
 /**
  * Boot Open Digital Mate as the primary dsh web UI (replaces stock frontend).
  * One process: dsh --profile odm on PORT (default 7777).
- * Muse lives at /api/opendigitalmate/app (client redirects / → there).
+ * Muse lives at /api/opendigitalmate/app (dsh-muse-ui client redirects / → there).
  */
 import { spawn } from 'node:child_process'
 import { createWriteStream, writeFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs'
@@ -79,6 +79,13 @@ try {
     }
     if (bundles.includes('dsh-memory') || deps['dsh-memory']) {
       console.warn('[start-dsh] legacy dsh-memory still listed — remove after OpenViking is healthy (SQLite is Glimpse fallback only).')
+    }
+    const hasMuse = bundles.includes('dsh-muse-ui') || deps['dsh-muse-ui']
+    if (!hasMuse) {
+      console.warn('[start-dsh] dsh-muse-ui not in odm profile — stock dsh shell stays (no Muse Today page).')
+      console.warn('  Install: dsh plugin --profile odm add link:' + join(ROOT, 'packages/dsh-muse-ui'))
+    } else {
+      console.log('🎨 Muse UI: dsh-muse-ui → /api/opendigitalmate/app')
     }
   }
 } catch (err) { console.warn(`[start-dsh] memory plugin check skipped: ${err?.message || err}`) }

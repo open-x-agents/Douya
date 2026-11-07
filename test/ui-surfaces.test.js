@@ -12,7 +12,7 @@ import { ACTIONS } from '../src/web/actions.js'
 
 // load the browser script exactly as a <script> would run it (no module system), then read what it exported
 const rendererSandbox = { module: { exports: {} } }
-vm.runInNewContext(readFileSync(new URL('../src/client/ui-renderer.js', import.meta.url), 'utf8'), rendererSandbox)
+vm.runInNewContext(readFileSync(new URL('../packages/dsh-muse-ui/static/ui-renderer.js', import.meta.url), 'utf8'), rendererSandbox)
 const { createRenderer } = rendererSandbox.module.exports
 const DAY = '2026-11-04'
 const NOW = Date.parse(`${DAY}T02:00:00Z`)
@@ -231,9 +231,9 @@ test('renderer: data never becomes markup, unsafe links are plain text, unknown 
   assert.ok(!calls.some(([k, v]) => k === 'link' && !/^https:\/\/github\.com/.test(v)))
 })
 test('renderer + host code: no HTML sinks anywhere in the view path', () => {
-  const r = readFileSync(new URL('../src/client/ui-renderer.js', import.meta.url), 'utf8').replace(/^\s*\/\/.*$/gm, '')
+  const r = readFileSync(new URL('../packages/dsh-muse-ui/static/ui-renderer.js', import.meta.url), 'utf8').replace(/^\s*\/\/.*$/gm, '')
   assert.doesNotMatch(r, /innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function|setAttribute\(\s*['"`]on/)
-  const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
   const p2 = html.slice(html.indexOf('Intelligent UI (P2)'), html.indexOf('// Tile zoom modal functions'))
   assert.ok(p2.length > 1000)
   assert.doesNotMatch(p2, /innerHTML|insertAdjacentHTML|确认执行/)
@@ -248,7 +248,10 @@ test('catalog prompt is generated from the catalog; routes + tools are wired', (
   assert.doesNotMatch(p, /\{\{/)
   assert.match(p, /\[\[字段名\]\]/)
   const routes = readFileSync(new URL('../src/web/dsh-host-routes.js', import.meta.url), 'utf8')
-  assert.ok(routes.includes("'/api/opendigitalmate/surface'") && routes.includes("'/api/opendigitalmate/ui-renderer.js'"))
+  const muse = readFileSync(new URL('../packages/dsh-muse-ui/index.js', import.meta.url), 'utf8')
+  assert.ok(routes.includes("'/api/opendigitalmate/surface'"))
+  assert.ok(muse.includes("'/api/opendigitalmate/ui-renderer.js'"), 'ui-renderer is served by dsh-muse-ui')
+  assert.ok(muse.includes("'/api/opendigitalmate/app'"), 'Muse HTML is served by dsh-muse-ui')
   assert.match(routes, /surfacesSince\(timing\.recvAt\)/)
   const tools = readFileSync(new URL('../src/web/dsbot-tools.js', import.meta.url), 'utf8')
   assert.ok(tools.includes("name: 'odm_ui_render'") && tools.includes("name: 'odm_ui_update'"))

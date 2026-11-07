@@ -1,12 +1,4 @@
-# Open Digital Mate: host plugin + replace stock dsh web UI with Muse.
+# Open Digital Mate host plugin (API / digest / bots). Muse UI is the separate dsh-muse-ui plugin.
 - insert:
     - id: opendigitalmate
       name: opendigitalmate
-
-# Surgical replacement of the default web shell (same pattern as dsh-work-shell).
-- id: ui-layout
-  disabled: true
-- id: ui-sidebar
-  disabled: true
-- id: ui-conversation
-  disabled: true

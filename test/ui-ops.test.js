@@ -65,7 +65,7 @@ test('no op can confirm, send or execute anything', () => {
   const tools = readFileSync(new URL('../src/web/dsbot-tools.js', import.meta.url), 'utf8')
   const uiTool = tools.slice(tools.indexOf("name: 'odm_ui_op'"), tools.indexOf("name: 'odm_ui_state'"))
   assert.doesNotMatch(uiTool, /requestAction|actionsOp|confirm\(/)
-  const client = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+  const client = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
   const block = client.slice(client.indexOf('Intelligent UI (P1)'), client.indexOf('// Tile zoom modal functions'))
   assert.doesNotMatch(block, /innerHTML|确认执行|insertAdjacentHTML/, 'bot-driven UI uses textContent only and never shows a confirm button')
 })

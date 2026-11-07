@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
 
-const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
 
 test('motion tokens: soft ease-out + longer sheet duration', () => {
   assert.match(html, /--ease:cubic-bezier\(\.22,\.82,\.24,1\)/)

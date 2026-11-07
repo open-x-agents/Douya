@@ -50,7 +50,7 @@ test('all remaining blocks done → all-done state, not a stale block', () => {
 test('server passes the done-block ledger; route + hero button are wired', () => {
   const api = fs.readFileSync(new URL('../src/web/api.js', import.meta.url), 'utf8')
   const routes = fs.readFileSync(new URL('../src/web/dsh-host-routes.js', import.meta.url), 'utf8')
-  const html = fs.readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+  const html = fs.readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
   assert.match(api, /pickNextThing\(\{ cards: activeCards, itemStatus: state\.itemStatus \|\| \{\}, doneBlocks: state\.timetableDone \|\| \[\], lang: locale \}\)/)
   assert.match(api, /async timetableBlockDone\(/)
   assert.match(routes, /path: '\/api\/opendigitalmate\/timetable-block'/)

@@ -2,7 +2,7 @@
 // Loaded by dsh-client-modules: factory(require) must return the module namespace
 // ({ name, inject, apply }), same shape ds-bot's generated client.js returns.
 window.__ModuleLoader__.load({
-  id: 'opendigitalmate',
+  id: 'dsh-muse-ui',
   factory: (require) => {
     const MUSE = '/api/opendigitalmate/app'
     function toMuse() {
@@ -15,11 +15,11 @@ window.__ModuleLoader__.load({
         const q = params.toString()
         window.location.replace(new URL(MUSE + (q ? '?' + q : ''), window.location.href).href)
       } catch (err) {
-        try { console.error('[opendigitalmate-client]', err) } catch (_) {}
+        try { console.error('[dsh-muse-ui]', err) } catch (_) {}
       }
     }
     const mod = {
-      name: 'opendigitalmate-client',
+      name: 'dsh-muse-ui-client',
       inject: [],
       apply() { toMuse() },
     }

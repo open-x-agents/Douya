@@ -1,0 +1,11 @@
+# Muse UI: mount the static-serve host half, and surgically replace the stock web shell
+# (same pattern as dsh-work-shell / the former opendigitalmate host patch).
+- insert:
+    - id: dsh-muse-ui
+      name: dsh-muse-ui
+- id: ui-layout
+  disabled: true
+- id: ui-sidebar
+  disabled: true
+- id: ui-conversation
+  disabled: true

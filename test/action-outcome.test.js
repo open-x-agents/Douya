@@ -88,7 +88,7 @@ test('next digest: a replied thread stays out, comes back only when the thread m
 })
 
 test('client shows the outcome line after 确认执行 and labels a failed pending send', () => {
-  const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
   assert.match(html, /r\.outcome && r\.outcome\.text/)
   assert.match(html, /fresh\.after\(actSysLine/)
   assert.match(html, /r\.outcome\.cardDone/)

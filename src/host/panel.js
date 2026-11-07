@@ -380,7 +380,7 @@ export function installPanel(ctx, rt) {
     methods: ['GET'],
     requestBody: 'buffered',
     fetch: async () => {
-      const shell = await readFile(new URL('../client/panel.html', import.meta.url), 'utf8')
+      const shell = await readFile(new URL('./panel.html', import.meta.url), 'utf8')
       const state = rt.store.get()
       const data = panelData(state, { today: rt.today(), timeZone: rt.timeZone, sources: state.sources })
       return new Response(renderPage(shell, renderSections(data, snapshotOf(rt))), {

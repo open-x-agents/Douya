@@ -1,12 +1,12 @@
 // Dock push-to-talk: hold the mic, release to send. The state machine and its wiring live in
-// src/client/index.html between marker comments, so this test can slice them out and run them with fakes
+// packages/dsh-muse-ui/static/index.html between marker comments, so this test can slice them out and run them with fakes
 // (CI has no browser, no SpeechRecognition and no microphone).
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { messages } from '../src/i18n/index.js'
 
-const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
 const messagesSrc = readFileSync(new URL('../src/i18n/messages.js', import.meta.url), 'utf8')
 
 const PURE_START = '// ---- push-to-talk (pure; test/dock-push-to-talk.test.js slices this block) ----'

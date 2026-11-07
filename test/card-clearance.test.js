@@ -75,7 +75,7 @@ test('re-digest keeps a finished card done unless genuinely new urls appear', ()
 })
 
 test('client: dock stays closed unless byUser; cardDone leave path present', () => {
-  const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
   assert.match(html, /chatDockWanted/)
   assert.match(html, /openTodayChat\(\{ byUser: true \}\)/)
   assert.match(html, /dockGesture/)

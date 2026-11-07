@@ -82,7 +82,7 @@ test('cross-source merged card: timeline face across channels, one row per item,
 })
 
 test('client: Phase C motion is textContent/escaped, reduced-motion aware, and uses the user arrange op', () => {
-  const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
   const c = html.slice(html.indexOf('Live & motion (Phase C)'), html.indexOf('Focus & actions (Phase A)'))
   assert.ok(c.length > 1000)
   assert.doesNotMatch(c, /innerHTML|insertAdjacentHTML/)
@@ -93,7 +93,7 @@ test('client: Phase C motion is textContent/escaped, reduced-motion aware, and u
 })
 
 test('motion polish: soft ease tokens, zoom close reverse, sheet easing, now-line pulse', () => {
-  const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
   assert.match(html, /--ease-sheet:cubic-bezier/)
   assert.match(html, /--dur-sheet:420ms/)
   assert.match(html, /@keyframes zoomToTile/)

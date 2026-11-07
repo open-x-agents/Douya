@@ -41,7 +41,7 @@ Local-only: binds to `127.0.0.1`.
 ## Requirements
 
 - Node.js (ESM)
-- [`dsh`](https://github.com/deepseek-ai/dsh) on `PATH`, with an `odm` profile that includes ds-bot + this plugin
+- [`dsh`](https://github.com/deepseek-ai/dsh) on `PATH`, with an `odm` profile that includes ds-bot + this host plugin + `dsh-muse-ui`
 - API keys: an LLM provider (DeepSeek recommended) + [Composio](https://app.composio.dev)
 
 ---
@@ -138,6 +138,21 @@ Remove legacy `dsh-memory` from the profile once OpenViking is healthy. While th
 
 ---
 
+
+## Muse UI plugin
+
+The Today page is a separate dsh client plugin: [`dsh-muse-ui`](./packages/dsh-muse-ui) (same spirit as OpenViking memory). The host package keeps APIs / digests / bots; the UI plugin replaces the stock shell and serves Muse at `/api/opendigitalmate/app`.
+
+```bash
+# from this checkout (Mac / Linux):
+dsh plugin --profile odm add link:$(pwd)/packages/dsh-muse-ui
+# package.json dsh.profile.bundles should list both:
+#   "opendigitalmate"
+#   "dsh-muse-ui"
+```
+
+Restart dsh after adding. Without `dsh-muse-ui`, the stock dsh shell stays; host APIs still work.
+
 ## Digests & actions
 
 1. Source bots propose → Chief merges into Today (legacy pipeline is fallback).  
@@ -157,7 +172,7 @@ npm test
 
 | Path | Role |
 | --- | --- |
-| `src/client/index.html` | Muse Today UI |
+| `packages/dsh-muse-ui/` | Muse Today UI (dsh client plugin) |
 | `src/i18n/` | en/zh chrome |
 | `src/web/api.js` | Router / standalone HTTP |
 | `src/web/dsh-host-routes.js` | Routes on the dsh process |
@@ -178,7 +193,7 @@ Restart after pulls: `npm start` or `scripts/.odm-restart.sh`.
 
 ## Status
 
-**Shipped:** multi-bot digests with skip-empty routing, desktop UX, pending-confirm sends, outcome sync, EN/中文 chrome, OpenViking memory, Sources logos & Composio catalog.
+**Shipped:** multi-bot digests with skip-empty routing, desktop UX, pending-confirm sends, outcome sync, EN/中文 chrome, OpenViking memory, Muse UI as `dsh-muse-ui`, Sources logos & Composio catalog.
 
 **Evolving:** denser mobile polish, richer source coverage.
 

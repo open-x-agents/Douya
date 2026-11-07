@@ -93,7 +93,7 @@ test('brief target: PR to review before my own PR; handled items skipped; compos
 test('brief endpoint + UI: hero and card zoom mount it; merged source ticks the item', () => {
   const api = fs.readFileSync(new URL('../src/web/api.js', import.meta.url), 'utf8')
   const routes = fs.readFileSync(new URL('../src/web/dsh-host-routes.js', import.meta.url), 'utf8')
-  const html = fs.readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+  const html = fs.readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
   assert.match(routes, /path: '\/api\/opendigitalmate\/card-brief'/)
   assert.match(api, /brief\.resolved && live && !\(st\.itemStatus \|\| \{\}\)\[target\.url\]/)
   assert.match(html, /mountBrief\(nxEl\.querySelector\('\.nx-slot'\)/); assert.match(html, /mountBrief\(slot, card, \{ live \}\)/)
@@ -108,7 +108,7 @@ test('没用 writes a digest preference naming the kind of thing', () => {
   const api = fs.readFileSync(new URL('../src/web/api.js', import.meta.url), 'utf8')
   assert.match(api, /if \(action === 'not-useful'\)[\s\S]{0,700}botDigest\.store\.addPref\(fb\.text/)
   assert.match(api, /if \(action === 'undo-not-useful'\)[\s\S]{0,300}removePref/)
-  const html = fs.readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+  const html = fs.readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
   assert.match(html, /data-qa="useless"[^>]*>\$\{t\('qa\.useless'\)\}<\/button>/); assert.match(html, /if \(qa === 'useless'\) return runQuickUseless\(card\)/)
 })
 

@@ -6,7 +6,7 @@ import { pickNextThing, cardUrgency, prepareCardActions } from '../src/web/card-
 import { hydrateFace, autoFace } from '../src/ui/face.js'
 import { t } from '../src/i18n/index.js'
 
-const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
 const api = readFileSync(new URL('../src/web/api.js', import.meta.url), 'utf8')
 
 test('waiting-on-you beats a high-priority waiting-on-others for the hero', () => {

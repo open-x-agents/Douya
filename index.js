@@ -328,7 +328,7 @@ export function createRuntime(ctx, config = {}) {
       },
     }), 'opendigitalmate: card callback')
 
-    // Muse UI + full /api surface on this dsh process (replaces stock frontend via client.js).
+    // API surface on this dsh process (Muse UI is the dsh-muse-ui plugin).
     const dshHome = process.env.DSH_HOME || join(process.env.HOME || '', '.dsh')
     registerMuseHostRoutes(ctx, {
       router: rt.apiRouter,

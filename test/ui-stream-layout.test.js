@@ -78,7 +78,7 @@ test('stable: kept within a period, recomputed on a new period or new cards, off
 })
 
 test('page: your pins first, then 豆芽 pins, then Chief order, then the time-of-day order; why-line + undo + off', () => {
-  const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
   assert.match(html, /sort\(\(a, b\) => \(b\.by === 'user'\) - \(a\.by === 'user'\)\)/)
   const arrange = html.slice(html.indexOf('function arrangeWork'), html.indexOf('function filterHidden'))
   assert.ok(arrange.indexOf('pinIdx') < arrange.indexOf('ordIdx') && arrange.includes('autoActive()'))
@@ -178,7 +178,7 @@ test('routes + page wiring: feed installed, turn ids validated, dock views persi
   assert.match(routes, /\/\^t_\[\\w-\]\{4,40\}\$\/\.test\(body\.turn\)/)
   assert.match(routes, /feed\.turns\.unwatch\(t\)/) // every turn of a (possibly merged) batch is unwatched when it ends
   assert.match(routes, /recordDockSurfaces\(result\.text/)
-  const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
   assert.match(html, /new EventSource\(`\/api\/opendigitalmate\/ui-feed\?\$\{q\}`\)/)
   assert.match(html, /feedState\.fails >= 3\) \{ feedState\.mode = 'poll'/)
   assert.match(html, /\(m\.surfaces \|\| \[\]\)\.forEach\(v => body\.appendChild\(renderSurface/)

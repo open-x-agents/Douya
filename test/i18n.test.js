@@ -86,7 +86,7 @@ test('browserScript exposes ODMi18n with locale switch helper', () => {
 })
 
 test('client HTML loads i18n and marks static chrome', () => {
-  const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
   assert.match(html, /\/api\/opendigitalmate\/i18n\.js/)
   assert.match(html, /data-i18n="nav\.today"/)
   assert.match(html, /id="langSwitchSettings"/)
@@ -130,7 +130,7 @@ test('greeting heading / from-line / dock chrome keys localize', () => {
 })
 
 test('client chrome uses ODMi18n for greeting/from/dock/chips', () => {
-  const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
   assert.match(html, /greet\.word_morning/)
   assert.match(html, /stamp\.from/)
   assert.match(html, /data-i18n="dock\.head"/)
@@ -150,7 +150,7 @@ test('Sources catalog + chrome localize; catalog uses i18n keys not ZH literals'
   assert.equal(t('app.github.desc', 'en').includes('PR'), true)
   assert.equal(t('app.googlecalendar.name', 'zh'), 'Google 日历')
   assert.match(t('sources.group_on', 'en', { n: 2, total: 5 }), /2\/5 connected/)
-  const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
   assert.match(html, /sources\.cat\./)
   assert.match(html, /srcCatLabel|srcAppDesc/)
   assert.match(html, /sources\.status_on/)

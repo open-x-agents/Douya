@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { t as i18nT } from '../src/i18n/index.js'
 
-const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
 const from = html.indexOf('  const escMd = ')
 const to = html.indexOf('  // ---- 豆芽 mark')
 assert.ok(from > 0 && to > from, 'renderMd block found')

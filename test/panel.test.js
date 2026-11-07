@@ -90,7 +90,7 @@ import { localClock, localDay } from '../src/host/normalize.js'
 import { panelData, renderPage, renderSections, snapshotOf } from '../src/host/panel.js'
 
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/panel-day.json', import.meta.url), 'utf8'))
-const shell = readFileSync(new URL('../src/client/panel.html', import.meta.url), 'utf8')
+const shell = readFileSync(new URL('../src/host/panel.html', import.meta.url), 'utf8')
 const TODAY = '2026-10-30'
 const ZONE = 'Asia/Shanghai'
 

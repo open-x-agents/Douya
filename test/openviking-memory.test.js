@@ -142,7 +142,7 @@ test('readOpenVikingRecall empty when unhealthy', async () => {
 })
 
 test('chrome + docs mention OpenViking memory', () => {
-  const html = readFileSync(new URL('../src/client/index.html', import.meta.url), 'utf8')
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
   assert.match(html, /OpenViking/)
   assert.match(html, /body: JSON\.stringify\(\{ id \}\)/)
   const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8')

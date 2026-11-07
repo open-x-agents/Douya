@@ -23,7 +23,7 @@ function pull(overrides = {}) {
     body: `Fixes #12\n\nRan: node --test test/*.test.js\ntip ${SHA}`,
     labels: [],
     headSha: SHA,
-    files: ['src/client/panel.html'],
+    files: ['packages/dsh-muse-ui/static/index.html'],
     checks: [
       { name: 'tests', status: 'completed', conclusion: 'success', head_sha: SHA },
       { name: 'merge-tree', status: 'completed', conclusion: 'success', head_sha: SHA },

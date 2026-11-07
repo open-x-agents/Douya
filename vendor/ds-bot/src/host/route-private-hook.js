@@ -3,18 +3,21 @@
 // claim() removes the inbox copy before this listener runs. step() admits
 // whatever is still in the payload as user/message. The team file is the only
 // durability checkpoint: save({ required: true }) resolves after that file is
-// replaced. A session splice is not a restored hold, and this code does not
-// treat one as durable.
+// replaced. A session splice is not a restored hold.
 //
-// A queue is marked queued in the team file before it is appended to next-turn.
-// A crash after that save but before the append leaves a queued hold and no
-// inbox row; the next pass appends that same id once. A crash after the append
-// leaves the row for one claim. Messages already handed off carry
-// source.dsBotQueue and are admitted once, not stripped and appended again.
-// The first step of a turn already claimed next-turn, so a queue row there is
-// the continuation and is not moved again. An empty step does not wake DSH by
-// itself, so a handoff sets the running phase's wakeRequested.
-import { noteHoldOutcome, privateHold, serializePrivate, withholdFromStep } from './route-private.js'
+// A message stays in the payload only when this session's hold has action
+// queue, outcome queued, and the same message id, and that outcome was written
+// by a save that resolved. A dsBotQueue flag, the step number, and matching
+// text do not authorize admission. The first claim takes every next-step row
+// plus one next-turn row, so step 1 is not proof the row was handed off.
+//
+// A queue is marked queued and that save resolves before next-turn append. If
+// the save throws, the row is not appended and the sentence stays stripped.
+// A queued hold whose row never landed is appended once, with the same id.
+// An empty step does not wake DSH by itself, so a handoff sets wakeRequested.
+// A resumed agent with a committed queue that is not yet a user message wakes
+// itself; the caller does not have to send another sentence.
+import { commitPrivateSave, noteHoldOutcome, privateHold, serializePrivate, withholdFromStep } from './route-private.js'
 
 export function install(rt) {
   const { ctx } = rt
@@ -22,6 +25,10 @@ export function install(rt) {
     await applyPrivateWithhold(rt, payload)
     return next()
   }, { prepend: true })
+  ctx.on('agent/created', ({ agent, source } = {}) => {
+    if (source !== 'resume' || agent == null || !needsContinuation(rt, agent)) return
+    wakeWhenIdle(agent)
+  })
 }
 
 /** Strip held private sentences from the payload the step is about to admit. */
@@ -32,48 +39,34 @@ export async function applyPrivateWithhold(rt, payload) {
     return { outcomes: [], saved: false }
   }
   if (rt.privateHoldPersist) await rt.privateHoldPersist.catch(() => {})
-  // The team file is one snapshot. Hold this gate across the outcome edits and
-  // the save so another session cannot store this edit before it commits.
   return serializePrivate(rt, sessionId, async () => {
     const hold = privateHold(rt.state, sessionId)
     if (recoverDurableQueue(rt, agent, sessionId, payload)) requestWake(agent)
     const split = withholdFromStep(payload.messages, hold)
-    const handed = split.withheld.filter(message => message?.source?.dsBotQueue === true)
-    const waiting = split.withheld.filter(message => !handed.includes(message))
-    if (waiting.length === 0) return { outcomes: [], saved: true }
-    let saved = false
-    if (typeof rt.save === 'function') {
+    if (split.withheld.length === 0) return { outcomes: [], saved: true }
+    const asks = split.withheld.filter(message => holdItem(hold, message.id)?.action !== 'queue')
+    const queues = split.withheld.filter(message => holdItem(hold, message.id)?.action === 'queue')
+    const dropIds = new Set(split.withheld.map(message => message.id))
+    const kept = payload.messages.filter(message => !dropIds.has(message.id))
+    payload.messages.splice(0, payload.messages.length, ...kept)
+    let saved = asks.length === 0
+    if (asks.length > 0 && typeof rt.save === 'function') {
       try {
-        await rt.save({ required: true })
+        await commitPrivateSave(rt, { required: true })
         saved = true
       } catch (error) {
         rt.warn?.('ds-bot: private hold was not saved before it left the step: %s', error)
       }
     }
-    // Step 1 already claimed the next-turn row. Stripping it and appending a
-    // second copy makes that step empty, and DSH returns before it wakes.
-    const stepOne = payload.step === 1
-    const deferredQueue = (message) => (hold?.items ?? []).some(item => item.action === 'queue' && item.outcome !== 'queued' && matches(item, message))
-    const queued = stepOne ? [] : waiting.filter(deferredQueue)
-    const admittedQueues = stepOne ? waiting.filter(deferredQueue) : []
-    const asks = waiting.filter(message => !deferredQueue(message))
-    const dropIds = new Set([...queued, ...asks].map(message => message.id))
-    const kept = payload.messages.filter(message => !dropIds.has(message.id))
-    payload.messages.splice(0, payload.messages.length, ...kept)
     const outcomes = []
     let handedOff = false
-    for (const message of admittedQueues) {
-      const outcome = saved ? 'queued' : 'unrecoverable'
-      noteHoldOutcome(rt.state, sessionId, message.id, outcome)
-      outcomes.push({ id: message.id, action: 'queue', outcome })
-    }
-    for (const message of queued) {
-      const outcome = saved ? await moveQueue(rt, agent, sessionId, message) : mark(rt, sessionId, message.id, 'unrecoverable')
+    for (const message of queues) {
+      const outcome = await moveQueue(rt, agent, sessionId, message)
       if (outcome === 'queued') handedOff = true
       outcomes.push({ id: message.id, action: 'queue', outcome })
     }
     for (const message of asks) {
-      const action = (hold?.items ?? []).find(item => matches(item, message))?.action ?? 'ask'
+      const action = holdItem(hold, message.id)?.action ?? 'ask'
       const outcome = saved ? 'held' : 'unrecoverable'
       noteHoldOutcome(rt.state, sessionId, message.id, outcome)
       outcomes.push({ id: message.id, action, outcome })
@@ -88,7 +81,7 @@ async function moveQueue(rt, agent, sessionId, message) {
   if (sitsInNextTurn(agent, message.id)) return 'queued'
   noteHoldOutcome(rt.state, sessionId, message.id, 'queued')
   try {
-    if (typeof rt.save === 'function') await rt.save({ required: true })
+    if (typeof rt.save === 'function') await commitPrivateSave(rt, { required: true })
   } catch (error) {
     rt.warn?.('ds-bot: private queue outcome was not saved: %s', error)
     return mark(rt, sessionId, message.id, 'queue-failed')
@@ -100,8 +93,13 @@ async function moveQueue(rt, agent, sessionId, message) {
     if (sitsInNextTurn(agent, message.id)) return 'queued'
     rt.warn?.('ds-bot: private queue could not leave the current step: %s', error)
     noteHoldOutcome(rt.state, sessionId, message.id, 'queue-failed')
-    if (typeof rt.save === 'function') await rt.save({ required: true }).catch(() => {})
-    return 'queue-failed'
+    if (typeof rt.save === 'function') {
+      const reverted = await commitPrivateSave(rt, { required: true }).then(() => true, () => false)
+      if (!reverted) noteHoldOutcome(rt.state, sessionId, message.id, 'queued')
+    }
+    return sitsInNextTurn(agent, message.id) || privateHold(rt.state, sessionId)?.items?.find(item => item.messageId === message.id)?.outcome === 'queued'
+      ? 'queued'
+      : 'queue-failed'
   }
 }
 
@@ -116,10 +114,29 @@ function requestWake(agent) {
   if (agent?.phase?.kind === 'running') agent.phase.wakeRequested = true
 }
 
+function needsContinuation(rt, agent) {
+  const sessionId = agent?.id
+  if (typeof sessionId !== 'string' || !rt.isBotSession?.(sessionId) || rt.roomOf?.(sessionId)) return false
+  const hold = privateHold(rt.state, sessionId)
+  return (hold?.items ?? []).some(item => item?.action === 'queue' && item?.outcome === 'queued' && typeof item.messageId === 'string' && !alreadyAdmitted(agent, item.messageId))
+}
+
+function wakeWhenIdle(agent) {
+  let tries = 0
+  const attempt = () => {
+    if (agent.phase?.kind === 'idle') {
+      agent.wakeDriver()
+      return
+    }
+    if (tries++ < 20) setTimeout(attempt, 0)
+  }
+  setTimeout(attempt, 0)
+}
+
 /**
- * A queued hold whose next-turn splice never landed (or never flushed) is
- * appended once. A row already pending, already in this step, or already
- * admitted as user/message is left where it is.
+ * A queued hold whose next-turn splice never landed is appended once.
+ * A row already pending, already in this step, or already admitted as
+ * user/message is left where it is.
  */
 function recoverDurableQueue(rt, agent, sessionId, payload) {
   const hold = privateHold(rt.state, sessionId)
@@ -161,13 +178,7 @@ function sitsInNextTurn(agent, messageId) {
   return Array.isArray(pending) && pending.some(message => message?.id === messageId)
 }
 
-function matches(item, message) {
-  if (item == null || message == null) return false
-  if (item.messageId !== undefined && item.messageId === message.id) return true
-  return item.text !== '' && item.text === textOf(message)
-}
-
-function textOf(message) {
-  const blocks = Array.isArray(message?.content) ? message.content : []
-  return blocks.filter(block => block?.type === 'text' && typeof block.text === 'string').map(block => block.text).join('\n')
+function holdItem(hold, messageId) {
+  if (typeof messageId !== 'string' || messageId === '') return undefined
+  return (hold?.items ?? []).find(item => item?.messageId === messageId)
 }

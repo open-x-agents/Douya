@@ -217,15 +217,48 @@ export function rememberPrivateHold(state, input = {}) {
 }
 
 /**
- * One team-file checkpoint at a time. A per-session lock is not enough:
- * save() snapshots the whole team, so session B can store session A's
- * uncommitted bind. Callers still pass the session id for the log.
+ * Every team snapshot waits out an open private edit. save() copies the live
+ * state, so a question dismiss that does not know about the edit would store
+ * a bind or a retry that is still being rolled back. The edit's own save runs
+ * immediately; every other save waits until that edit has committed or rolled
+ * back. Callers still pass the session id for the log.
  */
+export function guardPrivateSaves(rt) {
+  if (typeof rt?.save !== 'function' || rt.privateSaveGuarded === true) return
+  const save = rt.save.bind(rt)
+  rt.privateSaveGuarded = true
+  rt.save = (options) => {
+    if (rt.privateCommitSave === true) {
+      rt.privateCommitSave = false
+      return save(options)
+    }
+    const gate = rt.privateGateAll ?? Promise.resolve()
+    return gate.then(() => save(options), () => save(options))
+  }
+}
+
+/** Snapshot the private edit that is already on the live state. Other saves wait. */
+export function commitPrivateSave(rt, options) {
+  guardPrivateSaves(rt)
+  rt.privateCommitSave = true
+  return rt.save(options)
+}
+
 export function serializePrivate(rt, _sessionId, job) {
+  guardPrivateSaves(rt)
   const previous = rt.privateGateAll ?? Promise.resolve()
-  const run = previous.then(() => job(), () => job())
+  const run = previous.then(() => runPrivate(rt, job), () => runPrivate(rt, job))
   rt.privateGateAll = run.then(() => {}, () => {})
   return run
+}
+
+async function runPrivate(rt, job) {
+  rt.privateGateOwner = true
+  try {
+    return await job()
+  } finally {
+    rt.privateGateOwner = false
+  }
 }
 
 /** Set one item's outcome without dropping its text. */
@@ -275,27 +308,21 @@ export function dropQueuedHold(state, sessionId, messageId) {
   if (hold.items.length === 0 && hold.status !== 'bound') delete holdsOf(state)[sessionId]
 }
 
-function messageText(message) {
-  const blocks = Array.isArray(message?.content) ? message.content : []
-  return blocks.filter(block => block?.type === 'text' && typeof block.text === 'string').map(block => block.text).join('\n')
-}
-
 /**
  * Pull held sentences out of the array the step would admit.
- * Queue is moved by the caller; this only separates the array.
+ * A match is the message id on the hold. The same words on another id are
+ * not this sentence, and a queued outcome is not by itself admission.
  * @param {any[]} messages
- * @param {{ items?: { messageId?: string, text?: string, action?: string }[] }} [hold]
+ * @param {{ items?: { messageId?: string, action?: string, outcome?: string }[] }} [hold]
  */
 export function withholdFromStep(messages, hold) {
-  const items = (hold?.items ?? []).filter(item => item?.outcome !== 'queued' && (item?.action === 'ask' || item?.action === 'new' || item?.action === 'queue'))
+  const items = (hold?.items ?? []).filter(item => item?.outcome !== 'queued' && (item?.action === 'ask' || item?.action === 'new' || item?.action === 'queue') && typeof item.messageId === 'string' && item.messageId !== '')
   if (items.length === 0) return { kept: messages, withheld: [] }
+  const ids = new Set(items.map(item => item.messageId))
   const kept = []
   const withheld = []
   for (const message of messages) {
-    const text = messageText(message)
-    const id = message?.id
-    const hit = items.some(item => (item.messageId !== undefined && item.messageId === id) || (item.text !== '' && item.text === text))
-    if (hit && message?.source?.kind === 'user') withheld.push(message)
+    if (message?.source?.kind === 'user' && ids.has(message?.id)) withheld.push(message)
     else kept.push(message)
   }
   return { kept, withheld }

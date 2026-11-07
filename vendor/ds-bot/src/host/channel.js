@@ -11,7 +11,7 @@ import { resolveSendMode } from '../shared/send-mode.js'
 import { clearDraftIfPosted } from '../shared/room-draft.js'
 import { decideRoomSteer, roomMembers, textNamesMember } from './group-steer.js'
 import { routeTakesEffect } from './route-inbound.js'
-import { bindPrivateHold, privateHold, serializePrivate } from './route-private.js'
+import { bindPrivateHold, commitPrivateSave, guardPrivateSaves, privateHold, serializePrivate } from './route-private.js'
 import { citedFromLog } from '../shared/cite.js'
 
 const LANGUAGES = { zh: 'Chinese (简体中文)', en: 'English' }
@@ -46,6 +46,7 @@ export function errorCode(error) {
 export function install(rt) {
   installBtw(rt)
   installSide(rt)
+  guardPrivateSaves(rt)
   const { ctx, state } = rt
 
   // The DSH interface language of the last browser that asked for the team.
@@ -397,7 +398,7 @@ export function install(rt) {
             if (bound === undefined) return fail('Not a line on this hold', 'bot/invalid')
             if (already) return ok({ bound: true, delivered: false, generation: bound.generation })
             try {
-              await rt.save({ required: true })
+              await commitPrivateSave(rt, { required: true })
             } catch (error) {
               const current = privateHold(rt.state, sessionId)
               if (current?.generation === body.generation) {
@@ -429,7 +430,7 @@ export function install(rt) {
               if (item.outcome === 'unrecoverable' || item.outcome === 'queue-failed') item.outcome = 'held'
             }
             try {
-              await rt.save({ required: true })
+              await commitPrivateSave(rt, { required: true })
             } catch (error) {
               ;(hold.items ?? []).forEach((item, index) => { item.outcome = prior[index] })
               rt.warn?.('ds-bot: private hold retry was not saved: %s', error)

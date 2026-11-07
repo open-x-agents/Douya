@@ -11,7 +11,7 @@ import { textOf } from './text.js'
 import { reminderText } from './schedules.js'
 import { appendCite, citeCarrier, citeItem, citesOf, mergeCites, visibleRoomCites } from '../shared/cite.js'
 import { lineBySession, listByBot, noteLineLabel } from './work-lines.js'
-import { rememberPrivateHold, routeAck, routeFailureAck, routePrivate, serializePrivate } from './route-private.js'
+import { commitPrivateSave, rememberPrivateHold, routeAck, routeFailureAck, routePrivate, serializePrivate } from './route-private.js'
 
 // A failed turn's `LlmFailure`, kept to what can be shown and logged. Like DSH's own
 // error row, an AUTH failure loses its message: providers may echo part of the key.
@@ -948,7 +948,8 @@ function notePrivateSplice(rt, id, entry, event, inserted) {
 
 function persistTeam(rt) {
   if (typeof rt.save !== 'function') return Promise.resolve(false)
-  return rt.save({ required: true }).then(() => true, (error) => {
+  const save = rt.privateGateOwner === true ? commitPrivateSave(rt, { required: true }) : rt.save({ required: true })
+  return save.then(() => true, (error) => {
     rt.warn?.('ds-bot: private work-line label was not saved: %s', error)
     return false
   })

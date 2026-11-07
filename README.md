@@ -194,6 +194,21 @@ Restart dsh after adding. Without `dsh-muse-ui`, the stock dsh shell stays; host
 
 Optional schedule: `DIGEST_SCHEDULE=08:00`, `ENABLE_DIGEST=true`.
 
+### Site blocks
+
+Some sites — Cloudflare-fronted ones in particular — answer automated or personal-assistant traffic with an intercept page instead of the content. When that happens Douya says one plain sentence — “This site blocked this request; I won't try to get around it.” — on the card brief or as the first line in chat, and that is all it does about it.
+
+It does not get around the block:
+
+- no different domain,
+- no mirror or reader proxy (such as `r.jina.ai`),
+- no different User-Agent,
+- no `bash` + `curl` retry.
+
+The intercept page's HTML is not repeated and the body is not guessed; if you need the content, open the link and paste the points back.
+
+This is inferred from the intercept page: it says this one request was blocked, not what the site's policy is.
+
 ---
 
 ## Development

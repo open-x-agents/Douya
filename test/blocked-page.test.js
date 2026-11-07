@@ -8,6 +8,7 @@ import { BLOCK_MARKERS, blockedNote, classifyBlock } from '../src/sources/blocke
 import { SourceError, describeSourceGaps } from '../src/sources/contract.js';
 import { fetchPrBrief } from '../src/web/card-brief.js';
 import { createApiRouter } from '../src/web/api.js';
+import { CARD_WORK_PROMPT } from '../src/web/dsbot-tools.js';
 
 const CLOUDFLARE_PAGE = '<title>Attention Required! | Cloudflare</title>';
 
@@ -120,6 +121,31 @@ test('a blocked PR fetch becomes the one sentence', async () => {
   });
   const answer = await router.cardBrief({ cardId: card.id });
   assert.deepEqual(answer, { success: false, blocked: true, error: blockedNote('zh', { site: 'GitHub' }) });
+});
+
+test('the chat prompt carries the sentence and forbids getting around the block', () => {
+  assert.ok(CARD_WORK_PROMPT.includes(blockedNote('zh')), 'the prompt does not carry the exported sentence');
+
+  const start = CARD_WORK_PROMPT.indexOf('## 信源工具出错时');
+  assert.ok(start >= 0, 'no source-error section');
+  const section = CARD_WORK_PROMPT.slice(start, CARD_WORK_PROMPT.indexOf('## 规矩', start));
+  assert.match(section, /第一行就写/, 'the blocked sentence is not the first line');
+  assert.match(section, /不复述拦截页 HTML/);
+  assert.match(section, /不猜正文/);
+  for (const [label, pattern] of [
+    ['a different domain', /不换域名/],
+    ['a mirror', /不换镜像/],
+    ['a different User-Agent', /不换 User-Agent/],
+    ['a bash + curl retry', /bash \+ curl/],
+  ]) {
+    assert.match(section, pattern, `the prompt does not forbid ${label}`);
+  }
+  assert.match(section, /打开链接/, 'the prompt does not ask the user to open the link');
+
+  // 那句话只定义一次：提示里插值导出的常量，不许手抄。
+  const source = readFileSync(new URL('../src/web/dsbot-tools.js', import.meta.url), 'utf8');
+  assert.match(source, /import \{ blockedNote \} from '\.\.\/sources\/blocked\.js'/);
+  assert.doesNotMatch(source, /挡住了这次访问/, 'the sentence is hand-copied into the prompt');
 });
 
 test('the card face paints the blocked sentence before the empty-brief return', () => {

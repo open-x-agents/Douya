@@ -4564,12 +4564,14 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   let inlineHistoryLoaded = false;
   async function ensureInlineBotHistory() {
     if (inlineHistoryLoaded) return;
-    inlineHistoryLoaded = true;
+    // Only a painted read counts. A dock that is not mounted yet, a live bubble already on it, or a
+    // read that fails must ask again on the next open instead of leaving the page blank for good.
+    const body = $('todayChatMsgs');
+    if (!body) return;
+    if (body.childElementCount) { inlineHistoryLoaded = true; return; }
     try {
       const res = await fetch('/api/chat/history?lang=' + encodeURIComponent(odmLang()), { headers: odmHeaders() });
       const data = await res.json();
-      const body = $('todayChatMsgs');
-      if (!body || body.childElementCount) return;
       (data.messages || []).forEach(m => {
         if (m.role === 'user') {
           const b = document.createElement('div');
@@ -4588,6 +4590,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         }
       });
       stickTodayChat(true);
+      inlineHistoryLoaded = true; // painted: the next open is already on screen
     } catch (e) { console.warn('[bot history]', e); }
   }
 

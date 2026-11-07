@@ -1681,8 +1681,19 @@ export function createApiRouter(ctx) {
     /**
      * GET /api/chat/history — transcript from the real ds-bot Chief.
      */
-    async getChatHistory({ lang = DEFAULT_LOCALE } = {}) {
+    async getChatHistory({ reader = null } = {}) {
       const { loadDsBotHistory, BOT_SESSION_ID } = await import('./dsbot-chat.js');
+      // In the dsh host the transcript is read in process, from the same Session records the turn
+      // reads: the log-file path below only knows the pre-v4 session file name and needs a zstd binary.
+      if (typeof reader === 'function') {
+        try {
+          const hist = await reader();
+          return { sessionId: hist?.sessionId || BOT_SESSION_ID, messages: annotateHistoryWithOutcomes(router.dockSurfacesFor(hist?.messages || []), store.get()?.pendingActions || {}, { lang: resolveLang(DEFAULT_LOCALE) }), botId: hist?.botId || null };
+        } catch (err) {
+          console.error('[getChatHistory] in-process:', err.message);
+          return { sessionId: BOT_SESSION_ID, messages: [], botId: null, error: err.message };
+        }
+      }
       const home = config.home || '.odm-data';
       try {
         const hist = await loadDsBotHistory({
@@ -1691,7 +1702,7 @@ export function createApiRouter(ctx) {
           baseUrl: process.env.DSBOT_URL || 'http://127.0.0.1:7788',
           token: process.env.DSBOT_TOKEN,
         });
-        return { sessionId: hist.sessionId || BOT_SESSION_ID, messages: annotateHistoryWithOutcomes(router.dockSurfacesFor(hist.messages || []), store.get()?.pendingActions || {}, { lang: resolveLang(lang) }), botId: hist.botId || null };
+        return { sessionId: hist.sessionId || BOT_SESSION_ID, messages: annotateHistoryWithOutcomes(router.dockSurfacesFor(hist.messages || []), store.get()?.pendingActions || {}, { lang: resolveLang(DEFAULT_LOCALE) }), botId: hist.botId || null };
       } catch (err) {
         console.error('[getChatHistory] ds-bot:', err.message);
         return { sessionId: BOT_SESSION_ID, messages: [], error: err.message };

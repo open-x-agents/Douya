@@ -2252,6 +2252,7 @@
     if (dock) try { I18N.applyDom(dock); } catch (_) {}
     if (typeof paintChatChips === 'function') try { paintChatChips(); } catch (_) {}
     if (reload && typeof loadToday === 'function') loadToday({ force: true }).catch(() => {});
+    if (reload && typeof loadSources === 'function' && $('v-sources')?.classList.contains('on')) loadSources(false);
   }
   document.querySelectorAll('.lang-switch').forEach(sw => {
     sw.addEventListener('click', (e) => {
@@ -4797,21 +4798,42 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   // Load Composio digest
 
   // Load sources status
+  function srcAppName(a) {
+    if (a.key === 'googlecalendar') return t('app.googlecalendar.name');
+    return a.name || a.key || '?';
+  }
+  function srcAppDesc(a) {
+    const key = a.description || '';
+    if (key.indexOf('app.') === 0) return t(key);
+    return key;
+  }
+  function srcCatLabel(cat) {
+    const key = 'sources.cat.' + (cat || 'other');
+    const label = t(key);
+    return label === key ? t('sources.cat.other') : label;
+  }
   function renderAppTiles(apps) {
     const groups = {};
-    apps.forEach(a => { (groups[a.category || '其他'] = groups[a.category || '其他'] || []).push(a); });
-    const authZh = { OAUTH2: 'OAuth 授权', OAUTH1: 'OAuth 授权', API_KEY: '需 API Key', NO_AUTH: '无需授权' };
+    apps.forEach(a => {
+      const cat = a.category || 'other';
+      (groups[cat] = groups[cat] || []).push(a);
+    });
+    const authLabel = { OAUTH2: t('sources.auth_oauth'), OAUTH1: t('sources.auth_oauth'), API_KEY: t('sources.auth_api_key'), NO_AUTH: t('sources.auth_none') };
     return Object.entries(groups).map(([cat, list]) => {
       const n = list.filter(a => a.connected).length;
-      return `<section class="src-group"><div class="src-group-h"><b>${escapeHtml(cat)}</b><span>${n ? `${n}/${list.length} 已连接` : `${list.length} 个可连接`}</span></div>
+      const count = n
+        ? t('sources.group_on', { n, total: list.length })
+        : t('sources.group_off', { n: list.length });
+      return `<section class="src-group"><div class="src-group-h"><b>${escapeHtml(srcCatLabel(cat))}</b><span>${escapeHtml(count)}</span></div>
       <div class="src-grid">${list.map(a => {
-        const st = a.connected ? ['on', '已连接'] : a.unknown ? ['wait', '状态未知'] : a.pending ? ['wait', '授权中'] : ['off', '未连接'];
+        const st = a.connected ? ['on', t('sources.status_on')] : a.unknown ? ['wait', t('sources.status_unknown')] : a.pending ? ['wait', t('sources.status_pending')] : ['off', t('sources.status_off')];
+        const displayName = srcAppName(a);
         return `<div class="src-tile ${a.connected ? 'is-on' : ''}">
-          <div class="src-top">${(a.key || a.logo) ? `<img src="${escapeHtml(a.key ? ('/api/opendigitalmate/logo?app=' + encodeURIComponent(a.key)) : a.logo)}" alt="" width="36" height="36" decoding="async" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'src-fb',textContent:'${escapeHtml((a.name||'?').charAt(0))}'}))">` : `<span class="src-fb">${escapeHtml((a.name||'?').charAt(0))}</span>`}<span class="src-pill ${st[0]}">${st[1]}</span></div>
-          <h4>${escapeHtml(a.name)}</h4>
-          <p>${escapeHtml(a.description || '')}</p>
-          <div class="src-foot"><span class="src-auth">${authZh[a.authMode] || ''}</span>
-          <button class="src-btn ${a.connected ? 'ghost' : ''}" onclick="handleAppAction('${escapeHtml(a.key)}', ${a.connected ? 'true' : 'false'})">${a.connected ? '断开' : '连接'}</button></div>
+          <div class="src-top">${(a.key || a.logo) ? `<img src="${escapeHtml(a.key ? ('/api/opendigitalmate/logo?app=' + encodeURIComponent(a.key)) : a.logo)}" alt="" width="36" height="36" decoding="async" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'src-fb',textContent:'${escapeHtml((displayName||'?').charAt(0))}'}))">` : `<span class="src-fb">${escapeHtml((displayName||'?').charAt(0))}</span>`}<span class="src-pill ${st[0]}">${escapeHtml(st[1])}</span></div>
+          <h4>${escapeHtml(displayName)}</h4>
+          <p>${escapeHtml(srcAppDesc(a))}</p>
+          <div class="src-foot"><span class="src-auth">${escapeHtml(authLabel[a.authMode] || '')}</span>
+          <button class="src-btn ${a.connected ? 'ghost' : ''}" onclick="handleAppAction('${escapeHtml(a.key)}', ${a.connected ? 'true' : 'false'})">${escapeHtml(a.connected ? t('sources.disconnect') : t('sources.connect'))}</button></div>
         </div>`;
       }).join('')}</div></section>`;
     }).join('');
@@ -4824,9 +4846,10 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function fmtCheckedAt(iso) {
     if (!iso) return '';
     const d = new Date(iso), now = new Date();
-    const hm = d.toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false });
-    const sameDay = d.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }) === now.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' });
-    return sameDay ? `今天 ${hm}` : `${d.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric' })} ${hm}`;
+    const loc = odmLang() === 'zh' ? 'zh-CN' : 'en-GB';
+    const hm = d.toLocaleTimeString(loc, { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false });
+    const sameDay = d.toLocaleDateString(loc, { timeZone: 'Asia/Shanghai' }) === now.toLocaleDateString(loc, { timeZone: 'Asia/Shanghai' });
+    return sameDay ? t('sources.today_at', { hm }) : `${d.toLocaleDateString(loc, { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric' })} ${hm}`;
   }
   function paintSources(data, phase) {
     const content = $('sourcesContent');
@@ -4834,11 +4857,21 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const st = data.status || {};
     const unknown = !!st.unknown;
     const on = apps.filter(a => a.connected).length;
+    const recheckBtn = `<button class="src-recheck" onclick="loadSources(true)">${escapeHtml(t('sources.recheck'))}</button>`;
     let note = '';
-    if (phase === 'checking') note = `<p class="src-note src-checking"><span class="src-spin"></span>正在检查最新连接状态…${st.checkedAt ? `（先显示 ${fmtCheckedAt(st.checkedAt)} 的状态）` : ''}</p>`;
-    else if (st.error) note = `<p class="src-note src-bad">Composio 这次没及时响应：${escapeHtml(st.error)}。${st.checkedAt ? `下面是 ${fmtCheckedAt(st.checkedAt)} 的状态。` : '连接状态暂时未知。'} <button class="src-recheck" onclick="loadSources(true)">重新检查</button></p>`;
-    else if (st.checkedAt) note = `<p class="src-note">状态检查于 ${fmtCheckedAt(st.checkedAt)}${st.probeMs != null && !st.cached ? ` · 用时 ${(st.probeMs / 1000).toFixed(1)} 秒` : ''} <button class="src-recheck" onclick="loadSources(true)">重新检查</button></p>`;
-    content.innerHTML = `<div class="src-summary"><div><b>${unknown ? '–' : on}</b><span>已连接</span></div><div><b>${apps.length}</b><span>可用信源</span></div>${data.configured === false ? '<p class="src-warn">尚未配置 Composio API Key，请先到「配置」页填写后再连接。</p>' : ''}</div>` + note + renderAppTiles(apps.map(a => ({ ...a, unknown: unknown && !a.connected })));
+    if (phase === 'checking') {
+      const cached = st.checkedAt ? escapeHtml(t('sources.checking_cached', { when: fmtCheckedAt(st.checkedAt) })) : '';
+      note = `<p class="src-note src-checking"><span class="src-spin"></span>${escapeHtml(t('sources.checking'))}${cached}</p>`;
+    } else if (st.error) {
+      const tail = st.checkedAt
+        ? escapeHtml(t('sources.error_cached', { when: fmtCheckedAt(st.checkedAt) }))
+        : escapeHtml(t('sources.error_unknown'));
+      note = `<p class="src-note src-bad">${escapeHtml(t('sources.error_timeout', { error: st.error }))}${tail} ${recheckBtn}</p>`;
+    } else if (st.checkedAt) {
+      const ms = st.probeMs != null && !st.cached ? escapeHtml(t('sources.probe_ms', { s: (st.probeMs / 1000).toFixed(1) })) : '';
+      note = `<p class="src-note">${escapeHtml(t('sources.checked_at', { when: fmtCheckedAt(st.checkedAt) }))}${ms} ${recheckBtn}</p>`;
+    }
+    content.innerHTML = `<div class="src-summary"><div><b>${unknown ? '–' : on}</b><span>${escapeHtml(t('sources.connected'))}</span></div><div><b>${apps.length}</b><span>${escapeHtml(t('sources.available'))}</span></div>${data.configured === false ? `<p class="src-warn">${escapeHtml(t('sources.need_key'))}</p>` : ''}</div>` + note + renderAppTiles(apps.map(a => ({ ...a, unknown: unknown && !a.connected })));
   }
   async function loadSources(force = false) {
     loadDigestRun();
@@ -4846,7 +4879,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const seq = ++srcSeq;
     let painted = false;
     try { const c = JSON.parse(localStorage.getItem(SRC_LS) || 'null'); if (c?.apps?.length) { paintSources(c, 'checking'); painted = true; } } catch {}
-    if (!painted) content.innerHTML = '<div class="loading">加载中...</div>';
+    if (!painted) content.innerHTML = `<div class="loading">${escapeHtml(t('sources.loading'))}</div>`;
     const getJson = (u) => fetch(u, { method: u.endsWith('/refresh') ? 'POST' : 'GET' }).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); });
     try {
       let data = force ? null : await getJson('/api/composio/apps');
@@ -4857,7 +4890,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         if (data.status?.checkedAt) localStorage.setItem(SRC_LS, JSON.stringify(data));
         if (!needLive) return;
       } else if (painted || content.querySelector('.src-tile')) {
-        content.querySelector('.src-note')?.replaceWith(Object.assign(document.createElement('p'), { className: 'src-note src-checking', innerHTML: '<span class="src-spin"></span>正在检查最新连接状态…' }));
+        content.querySelector('.src-note')?.replaceWith(Object.assign(document.createElement('p'), { className: 'src-note src-checking', innerHTML: `<span class="src-spin"></span>${escapeHtml(t('sources.checking'))}` }));
       }
       data = await getJson('/api/composio/apps/refresh');
       if (seq !== srcSeq) return;
@@ -4867,8 +4900,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       console.error('Failed to load sources:', err);
       if (seq !== srcSeq) return;
       if (content.querySelector('.src-tile')) {
-        content.querySelector('.src-note')?.replaceWith(Object.assign(document.createElement('p'), { className: 'src-note src-bad', innerHTML: `没连上豆芽服务（${escapeHtml(err.message)}），显示的是上次的状态。 <button class="src-recheck" onclick="loadSources(true)">重新检查</button>` }));
-      } else content.innerHTML = `<div class="error">加载失败：${escapeHtml(err.message)} <button class="src-recheck" onclick="loadSources(true)">重试</button></div>`;
+        content.querySelector('.src-note')?.replaceWith(Object.assign(document.createElement('p'), { className: 'src-note src-bad', innerHTML: `${escapeHtml(t('sources.error_offline', { error: err.message }))} <button class="src-recheck" onclick="loadSources(true)">${escapeHtml(t('sources.recheck'))}</button>` }));
+      } else content.innerHTML = `<div class="error">${escapeHtml(t('sources.load_fail', { error: err.message }))} <button class="src-recheck" onclick="loadSources(true)">${escapeHtml(t('sources.retry'))}</button></div>`;
     }
   }
   async function loadDigestRun() {

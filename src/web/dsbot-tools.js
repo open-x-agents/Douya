@@ -2,6 +2,7 @@
 // Card writes go through Muse HTTP (same process under dsh). Composio stays read-only.
 
 import { validateFace } from '../ui/face.js'
+import { blockedNote } from '../sources/blocked.js'
 import { createRequire } from 'node:module'
 import { createComposioTools } from './agent-tools.js'
 import { fetchIdentityFromSources } from './identity.js'
@@ -100,6 +101,7 @@ export const CARD_WORK_PROMPT = `你是「豆芽」背后的 Main Bot（Chief）
 - 先真的调用一次对应工具（如「看看邮件」→ odm_gmail_fetch_emails），不要凭印象说工具不在。
 - 工具返回 error 时，照实说是哪个信源（Gmail / GitHub / Slack / 日历）出了什么错，并建议到豆芽左侧的「信源状态」页重新连接该信源；可同时用已有卡片里的内容先顶上，并说明那是上次汇聚的数据。
 - 这里的产品叫「豆芽」。不要让用户去 FlyBot、Composio 控制台或其他产品里操作。
+- 站点拦截时（页面是 Cloudflare 的「Attention Required!」「Just a moment...」，或工具报错里写着 blocked）：**第一行就写**「${blockedNote('zh')}」；不复述拦截页 HTML、不猜正文。**不绕过**：不换域名、不换镜像（如 r.jina.ai）、不换 User-Agent、不用 bash + curl 重试。用户要正文，就请他打开链接把要点贴回来。
 
 ## 规矩
 1. 改卡前若只有关键词，先 find/list 确认 id；多张匹配时列出请用户选。

@@ -33,6 +33,8 @@ export function emptyState() {
     uiLog: [],
     // Temporary views Chief generated (odm_ui_render), by id; expire at day end unless saved as a card.
     surfaces: {},
+    // The one standing line pinned on 今天 ("still on you today"); null when nothing is pinned.
+    duty: null,
     lastDigest: null,
   }
 }
@@ -44,6 +46,15 @@ function dedupeItemCompletions(list) {
   const lastIdx = new Map()
   list.forEach((c, i) => { if (c?.kind === 'item' && c.itemUrl) lastIdx.set(c.itemUrl, i) })
   return list.filter((c, i) => !(c?.kind === 'item' && c.itemUrl) || lastIdx.get(c.itemUrl) === i)
+}
+
+/** One pinned line on 今天: short, single-line, and clipped on the way in. */
+export const DUTY_MAX = 120
+export function normalizeDuty(raw) {
+  if (raw === null || typeof raw !== 'object') return null
+  const text = String(raw.text ?? '').replace(/\s+/g, ' ').trim().slice(0, DUTY_MAX)
+  if (!text) return null
+  return { text, by: raw.by === 'bot' ? 'bot' : 'user', at: typeof raw.at === 'string' ? raw.at : new Date().toISOString() }
 }
 
 export function normalizeState(raw) {
@@ -70,6 +81,7 @@ export function normalizeState(raw) {
     ui: isRecord(raw.ui) ? raw.ui : base.ui,
     uiLog: Array.isArray(raw.uiLog) ? raw.uiLog.slice(-200) : [],
     surfaces: isRecord(raw.surfaces) ? raw.surfaces : {},
+    duty: normalizeDuty(raw.duty),
     lastDigest: raw.lastDigest ?? null,
   }
 }

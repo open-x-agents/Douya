@@ -22,6 +22,7 @@ import { briefTarget, fetchPrBrief } from './card-brief.js';
 import { prepareCardActions, pickNextThing, daySummaryLine, tomorrowMorning, snoozeUntilFor } from './card-prep.js';
 import { hydrateFace, autoFace } from '../ui/face.js';
 import { isAfterHours, isWorkish, doneToday, greetingLine, shHour } from './day-pulse.js';
+import { setDuty, doneDuty, restoreDuty, dutyView } from './duty.js';
 import { resolveLang, t as i18nT, DEFAULT_LOCALE } from '../i18n/index.js';
 import { sweepClearedCards, applyClearance, cardClearance, completeClearedCard } from './card-clearance.js';
 import { findTimetableCard, readPlan, applyPlanEdit, todaysCalendarEvents } from './timetable-plan.js';
@@ -35,39 +36,39 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Static list of popular Composio apps
 const COMPOSIO_APPS = [
-  { key: 'github', name: 'GitHub', category: '开发协作', logo: 'https://logos.composio.dev/api/github', description: 'PR、issue 与 review 请求，汇总到每日项目卡片', authMode: 'OAUTH2' },
-  { key: 'gitlab', name: 'GitLab', category: '开发协作', logo: 'https://logos.composio.dev/api/gitlab', description: '合并请求与 issue 动态', authMode: 'OAUTH2' },
-  { key: 'linear', name: 'Linear', category: '开发协作', logo: 'https://logos.composio.dev/api/linear', description: '分配给你的 Linear 任务与进度', authMode: 'OAUTH2' },
-  { key: 'jira', name: 'Jira', category: '开发协作', logo: 'https://logos.composio.dev/api/jira', description: 'Jira 工单、冲刺与指派', authMode: 'OAUTH2' },
-  { key: 'figma', name: 'Figma', category: '开发协作', logo: 'https://logos.composio.dev/api/figma', description: '设计文件评论与更新', authMode: 'OAUTH2' },
-  { key: 'gmail', name: 'Gmail', category: '邮件与消息', logo: 'https://logos.composio.dev/api/gmail', description: '未读与重要邮件，提醒你该回谁', authMode: 'OAUTH2' },
-  { key: 'outlook', name: 'Outlook', category: '邮件与消息', logo: 'https://logos.composio.dev/api/outlook', description: 'Outlook 邮件与日程', authMode: 'OAUTH2' },
-  { key: 'slack', name: 'Slack', category: '邮件与消息', logo: 'https://logos.composio.dev/api/slack', description: '频道 @你 的消息与私信', authMode: 'OAUTH2' },
-  { key: 'microsoft_teams', name: 'Microsoft Teams', category: '邮件与消息', logo: 'https://logos.composio.dev/api/microsoft_teams', description: 'Teams 聊天与频道消息', authMode: 'OAUTH2' },
-  { key: 'discord', name: 'Discord', category: '邮件与消息', logo: 'https://logos.composio.dev/api/discord', description: '服务器频道里提到你的消息', authMode: 'OAUTH2' },
-  { key: 'telegram', name: 'Telegram', category: '邮件与消息', logo: 'https://logos.composio.dev/api/telegram', description: 'Telegram 机器人消息（需 Bot Token）', authMode: 'API_KEY' },
-  { key: 'whatsapp', name: 'WhatsApp', category: '邮件与消息', logo: 'https://logos.composio.dev/api/whatsapp', description: 'WhatsApp Business 消息', authMode: 'OAUTH2' },
-  { key: 'googlecalendar', name: 'Google 日历', category: '日程与会议', logo: 'https://logos.composio.dev/api/googlecalendar', description: '今天的会议，自动排进「我的一天」', authMode: 'OAUTH2' },
-  { key: 'calendly', name: 'Calendly', category: '日程与会议', logo: 'https://logos.composio.dev/api/calendly', description: '别人在你日历上预约的时段', authMode: 'OAUTH2' },
-  { key: 'zoom', name: 'Zoom', category: '日程与会议', logo: 'https://logos.composio.dev/api/zoom', description: '即将开始的 Zoom 会议与录制', authMode: 'OAUTH2' },
-  { key: 'notion', name: 'Notion', category: '文档与知识', logo: 'https://logos.composio.dev/api/notion', description: 'Notion 页面与数据库更新', authMode: 'OAUTH2' },
-  { key: 'googledrive', name: 'Google Drive', category: '文档与知识', logo: 'https://logos.composio.dev/api/googledrive', description: '最近修改与共享给你的文件', authMode: 'OAUTH2' },
-  { key: 'googledocs', name: 'Google Docs', category: '文档与知识', logo: 'https://logos.composio.dev/api/googledocs', description: '文档评论与 @提及', authMode: 'OAUTH2' },
-  { key: 'googlesheets', name: 'Google Sheets', category: '文档与知识', logo: 'https://logos.composio.dev/api/googlesheets', description: '表格数据变化', authMode: 'OAUTH2' },
-  { key: 'confluence', name: 'Confluence', category: '文档与知识', logo: 'https://logos.composio.dev/api/confluence', description: '团队 Wiki 页面更新', authMode: 'OAUTH2' },
-  { key: 'dropbox', name: 'Dropbox', category: '文档与知识', logo: 'https://logos.composio.dev/api/dropbox', description: 'Dropbox 文件变动', authMode: 'OAUTH2' },
-  { key: 'one_drive', name: 'OneDrive', category: '文档与知识', logo: 'https://logos.composio.dev/api/one_drive', description: 'OneDrive 文件变动', authMode: 'OAUTH2' },
-  { key: 'asana', name: 'Asana', category: '任务与项目', logo: 'https://logos.composio.dev/api/asana', description: 'Asana 任务与截止日期', authMode: 'OAUTH2' },
-  { key: 'trello', name: 'Trello', category: '任务与项目', logo: 'https://logos.composio.dev/api/trello', description: 'Trello 看板卡片变动', authMode: 'OAUTH1' },
-  { key: 'clickup', name: 'ClickUp', category: '任务与项目', logo: 'https://logos.composio.dev/api/clickup', description: 'ClickUp 任务与提醒', authMode: 'OAUTH2' },
-  { key: 'todoist', name: 'Todoist', category: '任务与项目', logo: 'https://logos.composio.dev/api/todoist', description: '今天到期的 Todoist 待办', authMode: 'OAUTH2' },
-  { key: 'airtable', name: 'Airtable', category: '任务与项目', logo: 'https://logos.composio.dev/api/airtable', description: 'Airtable 表格记录', authMode: 'OAUTH2' },
-  { key: 'twitter', name: 'X / Twitter', category: '资讯与社区', logo: 'https://logos.composio.dev/api/twitter', description: '提及、私信与关注的动态', authMode: 'OAUTH2' },
-  { key: 'reddit', name: 'Reddit', category: '资讯与社区', logo: 'https://logos.composio.dev/api/reddit', description: '订阅版块的热门帖子', authMode: 'OAUTH2' },
-  { key: 'youtube', name: 'YouTube', category: '资讯与社区', logo: 'https://logos.composio.dev/api/youtube', description: '订阅频道的新视频', authMode: 'OAUTH2' },
-  { key: 'hackernews', name: 'Hacker News', category: '资讯与社区', logo: 'https://logos.composio.dev/api/hackernews', description: 'HN 热门与你关注的话题（无需授权）', authMode: 'NO_AUTH' },
-  { key: 'spotify', name: 'Spotify', category: '生活', logo: 'https://logos.composio.dev/api/spotify', description: '最近播放与歌单', authMode: 'OAUTH2' },
-  { key: 'strava', name: 'Strava', category: '生活', logo: 'https://logos.composio.dev/api/strava', description: '运动记录，用于「我的一天」节奏建议', authMode: 'OAUTH2' },
+  { key: 'github', name: 'GitHub', category: '开发协作', logo: '/api/opendigitalmate/logo?app=github', description: 'PR、issue 与 review 请求，汇总到每日项目卡片', authMode: 'OAUTH2' },
+  { key: 'gitlab', name: 'GitLab', category: '开发协作', logo: '/api/opendigitalmate/logo?app=gitlab', description: '合并请求与 issue 动态', authMode: 'OAUTH2' },
+  { key: 'linear', name: 'Linear', category: '开发协作', logo: '/api/opendigitalmate/logo?app=linear', description: '分配给你的 Linear 任务与进度', authMode: 'OAUTH2' },
+  { key: 'jira', name: 'Jira', category: '开发协作', logo: '/api/opendigitalmate/logo?app=jira', description: 'Jira 工单、冲刺与指派', authMode: 'OAUTH2' },
+  { key: 'figma', name: 'Figma', category: '开发协作', logo: '/api/opendigitalmate/logo?app=figma', description: '设计文件评论与更新', authMode: 'OAUTH2' },
+  { key: 'gmail', name: 'Gmail', category: '邮件与消息', logo: '/api/opendigitalmate/logo?app=gmail', description: '未读与重要邮件，提醒你该回谁', authMode: 'OAUTH2' },
+  { key: 'outlook', name: 'Outlook', category: '邮件与消息', logo: '/api/opendigitalmate/logo?app=outlook', description: 'Outlook 邮件与日程', authMode: 'OAUTH2' },
+  { key: 'slack', name: 'Slack', category: '邮件与消息', logo: '/api/opendigitalmate/logo?app=slack', description: '频道 @你 的消息与私信', authMode: 'OAUTH2' },
+  { key: 'microsoft_teams', name: 'Microsoft Teams', category: '邮件与消息', logo: '/api/opendigitalmate/logo?app=microsoft_teams', description: 'Teams 聊天与频道消息', authMode: 'OAUTH2' },
+  { key: 'discord', name: 'Discord', category: '邮件与消息', logo: '/api/opendigitalmate/logo?app=discord', description: '服务器频道里提到你的消息', authMode: 'OAUTH2' },
+  { key: 'telegram', name: 'Telegram', category: '邮件与消息', logo: '/api/opendigitalmate/logo?app=telegram', description: 'Telegram 机器人消息（需 Bot Token）', authMode: 'API_KEY' },
+  { key: 'whatsapp', name: 'WhatsApp', category: '邮件与消息', logo: '/api/opendigitalmate/logo?app=whatsapp', description: 'WhatsApp Business 消息', authMode: 'OAUTH2' },
+  { key: 'googlecalendar', name: 'Google 日历', category: '日程与会议', logo: '/api/opendigitalmate/logo?app=googlecalendar', description: '今天的会议，自动排进「我的一天」', authMode: 'OAUTH2' },
+  { key: 'calendly', name: 'Calendly', category: '日程与会议', logo: '/api/opendigitalmate/logo?app=calendly', description: '别人在你日历上预约的时段', authMode: 'OAUTH2' },
+  { key: 'zoom', name: 'Zoom', category: '日程与会议', logo: '/api/opendigitalmate/logo?app=zoom', description: '即将开始的 Zoom 会议与录制', authMode: 'OAUTH2' },
+  { key: 'notion', name: 'Notion', category: '文档与知识', logo: '/api/opendigitalmate/logo?app=notion', description: 'Notion 页面与数据库更新', authMode: 'OAUTH2' },
+  { key: 'googledrive', name: 'Google Drive', category: '文档与知识', logo: '/api/opendigitalmate/logo?app=googledrive', description: '最近修改与共享给你的文件', authMode: 'OAUTH2' },
+  { key: 'googledocs', name: 'Google Docs', category: '文档与知识', logo: '/api/opendigitalmate/logo?app=googledocs', description: '文档评论与 @提及', authMode: 'OAUTH2' },
+  { key: 'googlesheets', name: 'Google Sheets', category: '文档与知识', logo: '/api/opendigitalmate/logo?app=googlesheets', description: '表格数据变化', authMode: 'OAUTH2' },
+  { key: 'confluence', name: 'Confluence', category: '文档与知识', logo: '/api/opendigitalmate/logo?app=confluence', description: '团队 Wiki 页面更新', authMode: 'OAUTH2' },
+  { key: 'dropbox', name: 'Dropbox', category: '文档与知识', logo: '/api/opendigitalmate/logo?app=dropbox', description: 'Dropbox 文件变动', authMode: 'OAUTH2' },
+  { key: 'one_drive', name: 'OneDrive', category: '文档与知识', logo: '/api/opendigitalmate/logo?app=one_drive', description: 'OneDrive 文件变动', authMode: 'OAUTH2' },
+  { key: 'asana', name: 'Asana', category: '任务与项目', logo: '/api/opendigitalmate/logo?app=asana', description: 'Asana 任务与截止日期', authMode: 'OAUTH2' },
+  { key: 'trello', name: 'Trello', category: '任务与项目', logo: '/api/opendigitalmate/logo?app=trello', description: 'Trello 看板卡片变动', authMode: 'OAUTH1' },
+  { key: 'clickup', name: 'ClickUp', category: '任务与项目', logo: '/api/opendigitalmate/logo?app=clickup', description: 'ClickUp 任务与提醒', authMode: 'OAUTH2' },
+  { key: 'todoist', name: 'Todoist', category: '任务与项目', logo: '/api/opendigitalmate/logo?app=todoist', description: '今天到期的 Todoist 待办', authMode: 'OAUTH2' },
+  { key: 'airtable', name: 'Airtable', category: '任务与项目', logo: '/api/opendigitalmate/logo?app=airtable', description: 'Airtable 表格记录', authMode: 'OAUTH2' },
+  { key: 'twitter', name: 'X / Twitter', category: '资讯与社区', logo: '/api/opendigitalmate/logo?app=twitter', description: '提及、私信与关注的动态', authMode: 'OAUTH2' },
+  { key: 'reddit', name: 'Reddit', category: '资讯与社区', logo: '/api/opendigitalmate/logo?app=reddit', description: '订阅版块的热门帖子', authMode: 'OAUTH2' },
+  { key: 'youtube', name: 'YouTube', category: '资讯与社区', logo: '/api/opendigitalmate/logo?app=youtube', description: '订阅频道的新视频', authMode: 'OAUTH2' },
+  { key: 'hackernews', name: 'Hacker News', category: '资讯与社区', logo: '/api/opendigitalmate/logo?app=hackernews', description: 'HN 热门与你关注的话题（无需授权）', authMode: 'NO_AUTH' },
+  { key: 'spotify', name: 'Spotify', category: '生活', logo: '/api/opendigitalmate/logo?app=spotify', description: '最近播放与歌单', authMode: 'OAUTH2' },
+  { key: 'strava', name: 'Strava', category: '生活', logo: '/api/opendigitalmate/logo?app=strava', description: '运动记录，用于「我的一天」节奏建议', authMode: 'OAUTH2' },
 ];
 
 // In-memory chat history per session
@@ -731,6 +732,20 @@ export function createApiRouter(ctx) {
       });
     },
     async uiOp(body = {}, { by = 'bot' } = {}) { return uiService.op(body, { by: by === 'user' ? 'user' : 'bot' }); },
+    /** The one standing line on 今天: set | done | restore. Not a card and not a UI op, so it survives digests. */
+    async dutyOp(body = {}, { by = 'user' } = {}) {
+      const op = String(body?.op || 'set')
+      const state = store.get()
+      const res = op === 'set' ? setDuty(state, { text: body.text, by })
+        : op === 'done' ? doneDuty(state, { by })
+          : op === 'restore' ? restoreDuty(state, { text: body.text, by })
+            : { ok: false, error: `unknown op ${op}` }
+      if (!res.ok) return { success: false, error: res.error || 'invalid duty' }
+      await store.save({ duty: state.duty, completions: state.completions })
+      uiService.emit({ kind: 'cards', reason: 'duty' })
+      console.log(`[duty] ${op} by ${by === 'bot' ? 'bot' : 'user'} → ${state.duty ? state.duty.text : 'cleared'}`)
+      return { success: true, duty: dutyView(store.get()) }
+    },
     /** Long-poll for view events: { since, boot, wait }. */
     async uiEvents({ since = 0, boot = null, wait = 25000 } = {}) { return uiService.poll({ since: Number(since) || 0, boot, waitMs: Math.min(Number(wait) || 0, 30000) }); },
     /** The browser reports what it shows (debounced); kept in memory for odm_ui_state. */
@@ -996,6 +1011,7 @@ export function createApiRouter(ctx) {
             return { ...cleared, workish: isWorkish(cleared), prepared, faceView };
           }),
           next: nextThing,
+          duty: dutyView(state),
           summaryLine: daySummaryLine({ cards: activeCards, itemStatus: state.itemStatus || {}, meetings: meetings.length, lang: locale }),
           lang: locale,
           ui: { ...uiView(state), bootId: uiService.bootId, seq: uiService.seq },
@@ -1012,6 +1028,7 @@ export function createApiRouter(ctx) {
           meetingHours: 0,
           waitingCount: 0,
           cards: [],
+          duty: null,
           hasDigest: false,
         };
       }
@@ -2182,6 +2199,20 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
           } catch (err) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid request' }));
+          }
+        });
+        return;
+      } else if (url.pathname === '/api/opendigitalmate/duty' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const response = await router.dutyOp(JSON.parse(body || '{}'), { by: 'user' });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Invalid request' }));
           }
         });
         return;

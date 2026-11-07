@@ -137,6 +137,14 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     },
   }, 'opendigitalmate: timetable')
 
+  effect({
+    path: '/api/opendigitalmate/future', methods: ['GET', 'POST'], requestBody: 'buffered',
+    fetch: async request => {
+      if (request.method === 'GET') return json(await router.futureGet())
+      try { return json(await router.futureApply(await readJson(request), { by: 'user' })) }
+      catch (err) { return json({ ok: false, error: err.message }, 400) }
+    },
+  }, 'opendigitalmate: future')
 
   // Only the signed-in owner's browser reaches this (dsh owner auth); bot tools have no confirm.
   effect({

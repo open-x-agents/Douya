@@ -96,6 +96,23 @@ Source bots never chat with you. Chief never re-fetches a channel during merge.
 
 ---
 
+## Future — long-term plans
+
+Muse’s **Future / 未来** page turns real interests into a goal, a quoted reason it fits,
+step progress, and one concrete action for this week. Ask Chief to plan with you:
+`odm_future_get` reads plans + OpenViking filesystem memories (no semantic embedding
+required); `odm_future_update` proposes, accepts/creates, edits, checks/undoes a step,
+or archives. Suggestions stay inactive until you accept on the page or explicitly agree
+in chat. If interests are missing, Douya asks rather than assuming fitness or study goals.
+
+Plans and progress live in `futurePlans` in the existing host `state.json`
+(`$DSH_HOME/opendigitalmate/state.json`, or the configured host home), independently
+of digest cards; restart and re-digest preserve them. No extra service, scheduler, or
+OpenViking writes. Chrome is EN/ZH; plan text stays in the language you used.
+
+未来页：从真实回忆或你亲口说的兴趣出发；先提建议，同意后再开始。
+可以勾选、撤销、继续加下一步、归档，进度不会被下次汇聚覆盖。
+
 ## Long-term memory
 
 Douya uses **[OpenViking](https://docs.openviking.net/en/agent-integrations/17-dsh)** via [`@openviking/dsh-memory-plugin`](https://www.npmjs.com/package/@openviking/dsh-memory-plugin) (~0.5.33): auto-recall, session capture, and `mcp__openviking__*` tools in chat. **Memories** glimpse + Chief digest read the same server (`viking://~/memories`), ranked achievement-first (experiences / events / decisions above routine prefs). Forget uses the server `DELETE /api/v1/fs` (same as MCP `forget`).

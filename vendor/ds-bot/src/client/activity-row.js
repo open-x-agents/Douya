@@ -36,6 +36,15 @@ export function activityCue({ moving, inputAt, steeredAt, tool }) {
 // Random phrases stay open with an ellipsis. The steer ack is the whole sentence.
 export const phraseText = shown => (shown?.fixed === true ? shown.text : `${shown.text}…`)
 
+// Thinking and tool phrases keep the moving shimmer. The steer ack is a sentence
+// the user has to read, so it paints as solid ink: the shimmer's pale stop is
+// about 2.6:1 on the page, under the 4.5:1 small-text line.
+export function phrasePaint(shown) {
+  const text = phraseText(shown)
+  if (shown?.fixed === true) return { text, className: 'bt-typing-fixed', shimmer: false }
+  return { text, className: 'bt-shimmer', shimmer: true }
+}
+
 // A turn that streams text first and runs a tool after keeps its row once the
 // tool starts: streaming alone hides it, but running work must not.
 export const rowVisible = ({ running, streaming, tools, relaying, bot, room }) =>
@@ -202,9 +211,11 @@ export function ActivityIndicator({ sessionId, useRoster, useSessionStatus, useL
   useRowEntrances(() => leaving.current || Date.now() - endedAt.current < 300)
   const host = useRunningHost(running || moveAt !== 0)
   if (!host || phase === null || !shown) return null
+  const paint = phrasePaint(shown)
   return createPortal(h('div', { className: 'bt-typing', 'data-exiting': phase === 'out' ? '' : undefined, 'aria-hidden': true },
     bot ? h(BotMark, { bot, size: 28, state: markState.current, live: true, pokeable: true }) : h(RoomAvatar, { room, roster, size: 28 }),
     h('span', { className: 'bt-typing-text' },
-      h('span', { key: `${shown.key}:${shown.at}`, className: 'bt-typing-label' }, h(Shimmer, null, phraseText(shown))),
+      h('span', { key: `${shown.key}:${shown.at}`, className: 'bt-typing-label' },
+        paint.shimmer ? h(Shimmer, null, paint.text) : h('span', { className: paint.className }, paint.text)),
       h(Elapsed, { at: moveAt !== 0 ? moveAt : Math.max(turnAt ?? runAt.current, inputAt), className: 'bt-typing-time' }))), host)
 }

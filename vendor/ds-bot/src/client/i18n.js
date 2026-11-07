@@ -60,6 +60,7 @@ const ZH = {
   // Sidebar and account menu
   'Bot list': 'Bot 列表',
   'Setting up your Main Bot…': '正在设置你的主 Bot…',
+  'Could not open this chat. {detail}': '这个对话打不开。{detail}',
   'Automation tasks': '自动化任务',
   Connectors: '连接器',
   'Search connectors': '搜索连接器',

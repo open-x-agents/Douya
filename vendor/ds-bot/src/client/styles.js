@@ -321,6 +321,7 @@ button.bt-q-opt:active{background:var(--bt-active)}
 .bt-option-hint{font-size:11px;color:var(--bt-ink-2);flex:none;animation:bt-veil-in .16s ease-out}
 .bt-option-icon{width:22px;height:22px;border-radius:50%;background:var(--bt-hover);color:var(--bt-ink-2);display:inline-flex;align-items:center;justify-content:center;flex:none}
 .bt-hint{padding:14px;text-align:center;font-size:13px;color:var(--bt-ink-2)}
+.bt-hint.bt-open-error{color:var(--bt-ink);text-align:start}
 .bt-nc-spacer{flex:1}
 .bt-nc-compose{padding:0 16px 14px;display:flex;justify-content:center}
 .bt-nc-card{display:flex;align-items:flex-end;gap:6px;width:100%;max-width:var(--dsh-chat-content-width,748px);min-height:44px;padding:4px 6px;border-radius:22px;border:1px solid var(--bt-line-2);background:var(--bt-main);box-shadow:0 2px 8px -2px rgba(0,0,0,.06);box-sizing:border-box}
@@ -998,6 +999,7 @@ header[class*="_header"] .bt-head{flex:1 1 auto;width:100%}
 .bt-typing-text{display:flex;align-items:center;flex:1 1 auto;min-width:0;animation:bt-typing-label .22s ease-out .2s backwards}
 .bt-typing-label{display:inline-flex;align-items:center;gap:6px;min-width:0;animation:bt-typing-label .22s ease-out backwards}
 .bt-typing-label>.bt-shimmer{font-size:14px;line-height:22px;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-typing-label>.bt-typing-fixed{font-size:14px;line-height:22px;font-weight:400;color:var(--bt-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bt-typing-time{flex-shrink:0;margin-left:6px;font-size:12px;line-height:22px;color:var(--bt-ink-3);font-variant-numeric:tabular-nums;white-space:nowrap}
 @keyframes bt-typing-in{from{opacity:0;transform:scale(.9)}}
 @keyframes bt-typing-out{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.92);filter:blur(3px)}}
@@ -1184,6 +1186,7 @@ div:has(> nav [class*="_marks"]){display:none!important}
 .bt-btw-answer p{margin:0}
 .bt-btw-fail{margin:0 0 6px;color:var(--bt-danger);font-size:13px;line-height:18px}
 @media (prefers-reduced-motion:reduce){.bt-btw-chevron{transition:none}}
+.bt-open-error{box-sizing:border-box;width:min(100% - 32px,calc(var(--dsh-chat-content-width,748px) - 32px));margin:0 auto 8px;padding:12px 14px;border-radius:16px;background:var(--bt-card);color:var(--bt-ink);box-shadow:inset 0 0 0 .5px color-mix(in srgb,var(--bt-danger) 45%,transparent);font-size:14px;line-height:22px}
 .bt-private-stop-dock{display:flex;justify-content:center;width:100%;margin:0 auto 8px}
 .bt-private-stop-dock>button:disabled{opacity:.5;cursor:default}
 .bt-route-dock{width:100%;display:flex;justify-content:center}

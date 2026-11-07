@@ -45,6 +45,7 @@ import { ErrorToast, FEEDBACK_CSS } from './feedback.js'
 import { ABOUT_CSS } from './about.js'
 import { MEMBER_CSS, MemberDock } from './member-status.js'
 import { PrivateStopDock } from './private-stop.js'
+import { OpenErrorDock } from './open-error.js'
 import { USER_MESSAGE_CSS, UserMessageCell, canDrawUserMessages } from './user-message.js'
 import { noticeApprovals } from './approval-notices.js'
 import { listedOpener } from './open-listed.js'
@@ -203,7 +204,18 @@ export function apply(ctx) {
       clearTimeout(timer)
       if (running || stopped) return
       running = true
-      try { await pull() } catch (error) { if (!stopped) console.warn('[ds-bot] state', error) } finally { running = false }
+      try {
+        await pull()
+      } catch (error) {
+        if (!stopped) {
+          console.warn('[ds-bot] state', error)
+          // A team that never arrived must not keep saying it is still being set up.
+          // A team that already loaded keeps its transcript; the next pull retries.
+          const current = roster.getSnapshot()
+          const loadError = error?.message ?? String(error)
+          if (!current.ready && current.loadError !== loadError) roster.set({ ...current, loadError })
+        }
+      } finally { running = false }
       if (!stopped) timer = setTimeout(loop, document.hidden ? 10000 : 1500)
     }
     const wake = () => { if (!document.hidden) void loop() }
@@ -925,6 +937,7 @@ export function apply(ctx) {
       priority: BOT_PRIORITY,
       select: owner => (owner.pendingInteraction?.kind === 'question' ? owner.pendingInteraction : null),
     }, QuestionCard),
+    () => shadow('conversation.input.dock', { id: 'bot-open-error', order: -130, inject: face }, OpenErrorDock),
     () => shadow('conversation.input.dock', { id: 'bot-members', order: -120, inject: face }, MemberDock),
     () => shadow('conversation.input.dock', { id: 'bot-model', order: -110, inject: face }, ModelChoiceDock),
     () => shadow('conversation.input.dock', { id: 'bot-question', order: -100, inject: face }, QuestionDock),

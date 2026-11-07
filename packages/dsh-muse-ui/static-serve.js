@@ -10,6 +10,8 @@ export const STATIC_DIR = STATIC
 export const MUSE_APP_PATH = '/api/opendigitalmate/app'
 export const MUSE_UI_RENDERER_PATH = '/api/opendigitalmate/ui-renderer.js'
 export const MUSE_LOGO_PATH = '/api/opendigitalmate/logo'
+/** The page imports memory-present.js from here, so Recall text rules have one copy. */
+export const MUSE_MEMORY_PRESENT_PATH = '/api/opendigitalmate/memory-present.js'
 
 export async function readIndexHtml() {
   const [html, css, js] = await Promise.all(['index.html', 'future.css', 'future.js'].map(file => readFile(join(STATIC, file), 'utf8')))
@@ -53,6 +55,15 @@ export async function museAppResponse() {
 /** Fetch-API Response for GET /api/opendigitalmate/ui-renderer.js */
 export async function museUiRendererResponse() {
   const js = await readUiRendererJs()
+  return new Response(js, {
+    status: 200,
+    headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' },
+  })
+}
+
+/** Fetch-API Response for GET /api/opendigitalmate/memory-present.js */
+export async function museMemoryPresentResponse() {
+  const js = await readFile(join(dirname(fileURLToPath(import.meta.url)), 'memory-present.js'), 'utf8')
   return new Response(js, {
     status: 200,
     headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' },

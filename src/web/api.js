@@ -31,6 +31,7 @@ import { uiView } from '../ui/ops.js';
 import { createSurfaceService } from '../ui/surfaces.js';
 import { resolveDisplayName, lastGithubIdentity } from './aggregation.js';
 import { listMemories as listMemoriesStore, forgetMemory as forgetMemoryStore, MAX_PREFS } from '../digest/runner.js';
+import { attachMemoryImage, downloadMemoryImage } from '../digest/openviking.js';
 import { recordCompletion, setItemStatus, clearItemStatus, annotateCards, cardItemUrls } from '../host/store.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1965,6 +1966,20 @@ export function createApiRouter(ctx) {
     async forgetMemory({ id } = {}) {
       const dshHome = process.env.DSH_HOME || null;
       return forgetMemoryStore(dshHome, id);
+    },
+
+    /**
+     * POST /api/opendigitalmate/memories/image — attach a photo { id, data, type, name, caption } (stored in OpenViking).
+     */
+    async attachMemoryImage(input = {}) {
+      try { return await attachMemoryImage(input); } catch (err) { return { ok: false, error: err?.message || String(err) }; }
+    },
+
+    /**
+     * GET /api/opendigitalmate/memories/image?ref= — the photo bytes, proxied from OpenViking.
+     */
+    async memoryImage({ ref } = {}) {
+      try { return await downloadMemoryImage(ref); } catch (err) { return { ok: false, status: 502, error: err?.message || String(err) }; }
     },
 
     /**

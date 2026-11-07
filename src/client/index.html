@@ -4494,8 +4494,183 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       r.readAsDataURL(file);
     });
   }
-  function makeComposer({ railId, tipId, inputId, pickId, attachBtnId, micBtnId }) {
-    const state = { items: [], rec: null };
+  // ---- push-to-talk (pure; test/dock-push-to-talk.test.js slices this block) ----
+  // One press = one utterance = at most one message. No DOM and no recogniser here, so CI can slice this
+  // block out of the page and drive it with fakes (there is no browser in CI).
+  function pttIdle() { return { phase: 'idle', heard: [], last: '' }; }
+  function pttCompose(typed, transcript) {
+    const said = String(typed == null ? '' : typed).trim();
+    const heard = String(transcript == null ? '' : transcript).trim();
+    if (said && heard) return `${said} ${heard}`;
+    return said || heard;
+  }
+  function pttReduce(state, event) {
+    const s = state || pttIdle();
+    const ev = event || {};
+    const unchanged = { state: s, send: false, text: '', tip: null };
+    const holding = s.phase === 'held';
+    const waiting = s.phase === 'released';
+
+    if (ev.type === 'press') {
+      if (s.phase !== 'idle') return unchanged;
+      return { state: { phase: 'held', heard: [], last: '' }, send: false, text: '', tip: 'holding' };
+    }
+    if (ev.type === 'interim' || ev.type === 'final') {
+      // Late results from a recogniser that already ended: no hold, no message.
+      if (!holding && !waiting) return unchanged;
+      const text = String(ev.text || '');
+      const next = ev.type === 'interim'
+        ? { phase: s.phase, heard: s.heard.slice(), last: text }
+        : { phase: s.phase, heard: s.heard.concat(text), last: s.last };
+      return { state: next, send: false, text: '', tip: holding ? 'holding' : 'sending' };
+    }
+    if (ev.type === 'release') {
+      if (!holding) return unchanged;
+      return { state: { phase: 'released', heard: s.heard.slice(), last: s.last }, send: false, text: '', tip: 'sending' };
+    }
+    if (ev.type === 'end' || ev.type === 'timeout') {
+      if (!holding && !waiting) return unchanged;
+      if (ev.type === 'timeout' && !waiting) return unchanged;
+      const said = (s.heard.join('') || s.last || '').trim();
+      if (!said) return { state: pttIdle(), send: false, text: '', tip: 'empty' };
+      return { state: pttIdle(), send: true, text: said, tip: null };
+    }
+    if (ev.type === 'error') {
+      const code = String(ev.error || '');
+      const tip = code === 'not-allowed' ? 'blocked' : code === 'no-speech' ? 'empty' : 'failed';
+      return { state: pttIdle(), send: false, text: '', tip };
+    }
+    if (ev.type === 'reset') return { state: pttIdle(), send: false, text: '', tip: null };
+    return unchanged;
+  }
+  // ---- end push-to-talk ----
+
+  // ---- push-to-talk wiring (test/dock-push-to-talk.test.js slices this block) ----
+  // Hold the mic to talk, release to send. A recogniser exists only while the button is held, so voice around a
+  // collapsed dock never creates one and never sends. Everything comes in through deps so CI can pass fakes.
+  function wirePushToTalk({ mic, getInput, setTip, SR, t, onVoiceSend, state, timeoutMs = 1500, setTimer = setTimeout, clearTimer = clearTimeout }) {
+    let cur = state || pttIdle();
+    let rec = null;
+    let timer = null;
+    let prevAria = null;
+
+    const say = (tip, last) => {
+      if (!tip) { setTip(''); return; }
+      const base = t('composer.voice_' + tip);
+      setTip(tip === 'holding' && last ? base + ' ' + last : base);
+    };
+    const clearUI = () => {
+      if (timer != null) { clearTimer(timer); timer = null; }
+      rec = null;
+      if (mic.classList) mic.classList.remove('rec');
+      if (prevAria == null) { if (mic.removeAttribute) mic.removeAttribute('aria-label'); }
+      else if (mic.setAttribute) mic.setAttribute('aria-label', prevAria);
+    };
+    const dispatch = (event) => {
+      const out = pttReduce(cur, event);
+      cur = out.state;
+      if (out.send) {
+        const el = typeof getInput === 'function' ? getInput() : null;
+        if (el) el.value = pttCompose(el.value, out.text);
+        if (onVoiceSend) onVoiceSend(out.text);
+        setTip('');
+      } else {
+        say(out.tip, cur.phase === 'held' ? cur.last : '');
+      }
+      if (cur.phase === 'idle') clearUI();
+    };
+    const stopRec = () => { if (rec && rec.stop) { try { rec.stop(); } catch (_) {} } };
+
+    const onPress = (ev) => {
+      if (ev && ev.button != null && ev.button !== 0) return;
+      if (ev && ev.preventDefault) ev.preventDefault();
+      if (!SR) { setTip(t('composer.voice_unsupported')); return; }
+      if (cur.phase !== 'idle') return;
+      const out = pttReduce(cur, { type: 'press' });
+      if (out.state.phase !== 'held') return;
+      cur = out.state;
+      prevAria = mic.getAttribute ? mic.getAttribute('aria-label') : null;
+      say('holding', '');
+      if (mic.classList) mic.classList.add('rec');
+      if (mic.setAttribute) mic.setAttribute('aria-label', t('composer.voice_holding'));
+      if (mic.setPointerCapture && ev && ev.pointerId != null) { try { mic.setPointerCapture(ev.pointerId); } catch (_) {} }
+      let instance = null;
+      try { instance = new SR(); } catch (_) { instance = null; }
+      if (!instance) { cur = pttIdle(); clearUI(); say('failed', ''); return; }
+      rec = instance;
+      instance.lang = 'zh-CN';
+      instance.interimResults = true;
+      instance.continuous = false;
+      instance.onresult = (re) => {
+        if (cur.phase === 'idle') return;
+        for (let i = re.resultIndex || 0; i < re.results.length; i++) {
+          const alt = re.results[i] && re.results[i][0];
+          dispatch({ type: re.results[i].isFinal ? 'final' : 'interim', text: alt ? alt.transcript : '' });
+        }
+      };
+      instance.onerror = (re) => {
+        if (cur.phase === 'idle') return;
+        dispatch({ type: 'error', error: re && re.error });
+      };
+      instance.onend = () => { if (cur.phase !== 'idle') dispatch({ type: 'end' }); };
+      try { instance.start(); } catch (_) { dispatch({ type: 'error', error: 'failed' }); }
+    };
+
+    const onRelease = () => {
+      if (cur.phase !== 'held') return;
+      const out = pttReduce(cur, { type: 'release' });
+      cur = out.state;
+      say(out.tip, '');
+      stopRec();
+      if (timer != null) clearTimer(timer);
+      // iOS Safari sometimes swallows onend; the timeout flushes what was heard and the state machine keeps it to one message.
+      timer = setTimer(() => { timer = null; if (cur.phase === 'released') dispatch({ type: 'timeout' }); }, timeoutMs);
+    };
+    const onKeyDown = (ev) => {
+      if (!ev || ev.repeat) return;
+      if (ev.key !== ' ' && ev.key !== 'Spacebar' && ev.key !== 'Enter') return;
+      onPress(ev);
+    };
+    const onKeyUp = (ev) => {
+      if (!ev) return;
+      if (ev.key === ' ' || ev.key === 'Spacebar' || ev.key === 'Enter') onRelease();
+    };
+    const onReset = () => { stopRec(); dispatch({ type: 'reset' }); };
+
+    mic.addEventListener('pointerdown', onPress);
+    mic.addEventListener('pointerup', onRelease);
+    mic.addEventListener('pointercancel', onRelease);
+    mic.addEventListener('lostpointercapture', onRelease);
+    mic.addEventListener('keydown', onKeyDown);
+    mic.addEventListener('keyup', onKeyUp);
+    mic.addEventListener('blur', onRelease);
+    const win = mic.ownerDocument && mic.ownerDocument.defaultView;
+    if (win && win.addEventListener) {
+      win.addEventListener('blur', onRelease);
+      win.addEventListener('pagehide', onReset);
+    }
+
+    return {
+      isHeld: () => cur.phase === 'held',
+      detach() {
+        mic.removeEventListener('pointerdown', onPress);
+        mic.removeEventListener('pointerup', onRelease);
+        mic.removeEventListener('pointercancel', onRelease);
+        mic.removeEventListener('lostpointercapture', onRelease);
+        mic.removeEventListener('keydown', onKeyDown);
+        mic.removeEventListener('keyup', onKeyUp);
+        mic.removeEventListener('blur', onRelease);
+        if (win && win.removeEventListener) {
+          win.removeEventListener('blur', onRelease);
+          win.removeEventListener('pagehide', onReset);
+        }
+      },
+    };
+  }
+  // ---- end push-to-talk wiring ----
+
+  function makeComposer({ railId, tipId, inputId, pickId, attachBtnId, micBtnId, onVoiceSend }) {
+    const state = { items: [] };
     const rail = () => $(railId), tip = () => $(tipId), input = () => $(inputId);
     const showTip = (t) => { const el = tip(); if (!el) return; el.hidden = !t; el.textContent = t || ''; };
     const render = () => {
@@ -4561,32 +4736,15 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       });
       const mic = $(micBtnId);
       if (mic) {
-        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-        mic.onclick = () => {
-          if (!SR) { showTip('当前浏览器不支持语音输入（iPhone 请用 Safari；桌面可用 Chrome）。可改用键盘或系统听写。'); return; }
-          if (state.rec) { try { state.rec.stop(); } catch (_) {} state.rec = null; mic.classList.remove('rec'); return; }
-          const rec = new SR();
-          rec.lang = 'zh-CN'; rec.interimResults = true; rec.continuous = false;
-          let finalText = '';
-          rec.onresult = (ev) => {
-            let interim = '';
-            for (let i = ev.resultIndex; i < ev.results.length; i++) {
-              const t = ev.results[i][0].transcript;
-              if (ev.results[i].isFinal) finalText += t; else interim += t;
-            }
-            const base = (input().dataset.voiceBase != null ? input().dataset.voiceBase : input().value);
-            input().value = (base + finalText + interim).trimStart();
-          };
-          rec.onerror = (ev) => {
-            mic.classList.remove('rec'); state.rec = null;
-            const map = { 'not-allowed': '没有麦克风权限，请在系统设置里允许。', 'no-speech': '没有听清，再试一次。', 'network': '语音识别需要网络。', 'service-not-allowed': '系统拒绝了语音识别。' };
-            showTip(map[ev.error] || `语音输入失败：${ev.error || 'unknown'}`);
-          };
-          rec.onend = () => { mic.classList.remove('rec'); state.rec = null; delete input().dataset.voiceBase; };
-          input().dataset.voiceBase = input().value;
-          try { rec.start(); state.rec = rec; mic.classList.add('rec'); showTip('正在听… 说完会自动填入输入框，确认后再发送'); }
-          catch (e) { showTip(`无法启动语音：${e.message}`); }
-        };
+        wirePushToTalk({
+          mic,
+          getInput: input,
+          setTip: showTip,
+          SR: window.SpeechRecognition || window.webkitSpeechRecognition,
+          t,
+          onVoiceSend,
+          state: pttIdle(),
+        });
       }
     }
     return { addFiles, payload, clear, render, showTip, wire, get items() { return state.items; } };
@@ -4657,7 +4815,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const input = $('todayChatInput');
     const sendBtn = $('todayChatSend');
     if (!input || !sendBtn) return;
-    const todayComposer = makeComposer({ railId: 'todayAttachRail', tipId: 'todayComposerTip', inputId: 'todayChatInput', pickId: 'todayFilePick', attachBtnId: 'todayAttachBtn', micBtnId: 'todayMicBtn' });
+    const todayComposer = makeComposer({ railId: 'todayAttachRail', tipId: 'todayComposerTip', inputId: 'todayChatInput', pickId: 'todayFilePick', attachBtnId: 'todayAttachBtn', micBtnId: 'todayMicBtn', onVoiceSend: () => { send(); } });
     todayComposer.wire();
     window.__odmTodayComposer = todayComposer;
     const syncType = () => syncComposerTyping();

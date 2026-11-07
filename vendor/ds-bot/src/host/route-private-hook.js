@@ -23,6 +23,14 @@ export function install(rt) {
   const { ctx } = rt
   ctx.on('agent/pre-step', async (payload, next) => {
     await applyPrivateWithhold(rt, payload)
+    const sessionId = payload?.agent?.id
+    const privateStep = typeof sessionId === 'string' && rt.isBotSession?.(sessionId) === true && !rt.roomOf?.(sessionId)
+    // Reject before next() so a clock hook wrapped outside this one also sees
+    // the rejection and does not add a context-only message. A queued handoff
+    // has already asked the driver to wake for the row it appended.
+    if (privateStep && Array.isArray(payload.messages) && !payload.messages.some(isSubstantive)) {
+      return { kind: 'reject', messages: [] }
+    }
     return next()
   }, { prepend: true })
   ctx.on('agent/created', ({ agent, source } = {}) => {
@@ -99,6 +107,12 @@ async function moveQueue(rt, agent, sessionId, message, commit) {
       ? 'queued'
       : 'queue-failed'
   }
+}
+
+const CONTEXT_KINDS = new Set(['runtime-context', 'time-context', 'ds-bot-time-context'])
+
+function isSubstantive(message) {
+  return !CONTEXT_KINDS.has(message?.source?.kind)
 }
 
 function queuedCopy(message) {

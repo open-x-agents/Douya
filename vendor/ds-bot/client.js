@@ -1584,6 +1584,14 @@ function countCards(state, sessionId, callIds, delta) {
   return { ...state, [sessionId]: own };
 }
 
+// src/client/hold-action.js
+function settleHoldAction(action) {
+  return Promise.resolve().then(() => action()).then(() => ({ ok: true, message: "" }), (error) => ({
+    ok: false,
+    message: typeof error?.message === "string" && error.message !== "" ? error.message : "Could not save"
+  }));
+}
+
 // src/client/route-dock.js
 var import_react = require("react");
 var routeMiss = createSource({});
@@ -1629,6 +1637,7 @@ function choiceBotName(choice, roster) {
 function PrivateHoldDock({ sessionId, useRoster, actions }) {
   const hold = useRoster((value) => value.privateHolds?.[sessionId]);
   const [sending, setSending] = (0, import_react.useState)(false);
+  const [fault, setFault] = (0, import_react.useState)("");
   if (hold == null) return null;
   const latest = Array.isArray(hold.items) ? hold.items[hold.items.length - 1] : void 0;
   const text = typeof latest?.text === "string" ? latest.text : "";
@@ -1640,12 +1649,16 @@ function PrivateHoldDock({ sessionId, useRoster, actions }) {
   const choose = (id) => {
     if (sending || bound2 || typeof id !== "string" || id === "" || typeof generation !== "number" || typeof actions.confirmPrivate !== "function") return;
     setSending(true);
-    void Promise.resolve(actions.confirmPrivate(sessionId, id, generation)).finally(() => setSending(false));
+    void settleHoldAction(() => actions.confirmPrivate(sessionId, id, generation)).then((result) => {
+      setFault(result.ok ? "" : result.message);
+    }).finally(() => setSending(false));
   };
   const retry = () => {
     if (sending || typeof actions.retryPrivateSave !== "function") return;
     setSending(true);
-    void Promise.resolve(actions.retryPrivateSave(sessionId)).finally(() => setSending(false));
+    void settleHoldAction(() => actions.retryPrivateSave(sessionId)).then((result) => {
+      setFault(result.ok ? "" : result.message);
+    }).finally(() => setSending(false));
   };
   return (0, import_react.createElement)(
     "div",
@@ -1655,6 +1668,7 @@ function PrivateHoldDock({ sessionId, useRoster, actions }) {
       { className: "bt-route", role: "group", "aria-label": t("Which line should this go on?") },
       (0, import_react.createElement)("p", { className: "bt-route-text" }, text),
       unsaved ? (0, import_react.createElement)("p", { className: "bt-route-miss", "data-private-unsaved-note": "" }, t("Not saved. Copy this sentence and send it again if you still want it.")) : null,
+      fault !== "" ? (0, import_react.createElement)("p", { className: "bt-route-miss", "data-private-save-error": "" }, fault) : null,
       unsaved ? (0, import_react.createElement)("button", { type: "button", className: "bt-route-choice", disabled: sending, onClick: retry }, t("Save this hold again")) : null,
       bound2 ? (0, import_react.createElement)("p", { className: "bt-route-miss" }, `${t("Bound. The model has not been given this sentence.")} ${t("Opening another chat is not part of this step.")}`) : (0, import_react.createElement)("div", { className: "bt-route-list" }, choices.map((choice) => {
         const id = typeof choice?.id === "string" ? choice.id : "";

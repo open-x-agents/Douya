@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
+import { createRequire } from 'node:module'
 import { cpSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { pathToFileURL } from 'node:url'
 import * as JsonlPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -359,6 +361,97 @@ test('the first claim admits only a committed queue id', async (t) => {
   assert.equal(state.privateHolds['sess-loop'].items.find(item => item.messageId === pending.id).outcome, 'queue-failed')
   assert.equal(state.privateHolds['sess-loop'].items.find(item => item.messageId === ask.id).outcome === 'queued', false)
   assert.equal(state.privateHolds['sess-loop'].items.find(item => item.messageId === opened.id).action, 'new')
+})
+
+test('a fully held turn records no model payload, including after the later save', async (t) => {
+  const secret = 'FAIL3_141 unrelated pending confirmation only'
+  const bundle = join(process.env.DSH_HARNESS, 'packages/bundle/web-app/package.json')
+  const { apply: nativeClock } = await import(pathToFileURL(createRequire(bundle).resolve('@deepseek-ai/dsh-time-context')).href)
+  const boot = async (save, { clockOuter }) => {
+    const ctx = new Context()
+    for (const plugin of [SessionStore, SessionProjection, LlmRuntime, ToolRuntime, SystemPrompt, Agents, AgentLoop]) {
+      await ctx.plugin(plugin)
+    }
+    const calls = []
+    ctx.llm.registerAdapter(['fake'], {
+      providerInfo: (id) => ({ id, name: 'Fake' }),
+      providerRetryPolicy: () => undefined,
+      async prepareCall() {
+        return {
+          model: { id: 'fake-model', name: 'Fake', provider: 'fake' },
+          stream(options) {
+            calls.push(JSON.stringify(options))
+            return (async function* () {
+              yield { type: 'text-delta', index: 0, text: 'ok' }
+              yield { type: 'finish', reason: 'stop' }
+            })()
+          },
+        }
+      },
+    })
+    const state = {}
+    const rt = {
+      ctx,
+      state,
+      config: { timeZone: 'Asia/Shanghai' },
+      isBotSession: () => true,
+      roomOf: () => undefined,
+      load: async () => {},
+      save,
+      warn: () => {},
+      async* eventsBackwards() {},
+    }
+    // clockOuter matches a profile that registers the native clock after this hook.
+    if (clockOuter) { installPrivateHook(rt); nativeClock(ctx, { timeZone: 'Asia/Shanghai' }) }
+    else { nativeClock(ctx, { timeZone: 'Asia/Shanghai' }); installPrivateHook(rt) }
+    const agent = await ctx.agentLoop.create('sess-loop', { provider: 'fake', model: 'fake-model' }, { cwd: '/tmp' })
+    const trace = (phase, messageId) => ({
+      phase,
+      calls: calls.map(body => ({
+        heldId: messageId !== undefined && body.includes(messageId),
+        heldText: body.includes(secret),
+        timeContext: body.includes('Time sampled while preparing'),
+      })),
+      admitted: agent.session.snapshotEvents().filter(event => event.type === 'user/message').map(event => ({
+        id: event.data?.id,
+        kind: event.data?.source?.kind,
+      })),
+    })
+    return { ctx, state, calls, agent, save, trace }
+  }
+  for (const clockOuter of [false, true]) {
+    const held = await boot(async () => { throw new Error('read only') }, { clockOuter })
+    t.after(() => held.ctx.fiber.dispose())
+    const hidden = createUserMessage({ content: [{ type: 'text', text: secret }], source: { kind: 'user' } })
+    const heldId = hidden.id
+    rememberPrivateHold(held.state, { sessionId: 'sess-loop', messageId: heldId, action: 'ask', text: secret, at: 1 })
+    held.agent.steer(hidden)
+    await held.agent.whenIdle()
+    const beforeRetry = held.trace('held-send', heldId)
+    assert.deepEqual(beforeRetry.calls, [], beforeRetry)
+    assert.equal(beforeRetry.admitted.some(entry => entry.kind === 'time-context' || entry.id === heldId), false, beforeRetry)
+    assert.equal(held.agent.session.snapshotEvents().some(event => event.type === 'assistant/message'), false)
+    assert.equal(held.state.privateHolds['sess-loop'].items[0].outcome, 'unrecoverable')
+    const eventsBeforeRetry = held.agent.session.snapshotEvents().length
+    await held.save({ required: true }).catch(() => {})
+    await new Promise(resolve => setTimeout(resolve, 30))
+    await held.agent.whenIdle()
+    const afterRetry = held.trace('after-retry', heldId)
+    assert.deepEqual(afterRetry.calls, [], afterRetry)
+    assert.equal(held.agent.session.snapshotEvents().length, eventsBeforeRetry)
+    assert.equal(afterRetry.admitted.some(entry => entry.kind === 'time-context' || entry.id === heldId), false)
+  }
+
+  const queued = await boot(async () => {}, { clockOuter: true })
+  t.after(() => queued.ctx.fiber.dispose())
+  const parked = createUserMessage({ content: [{ type: 'text', text: secret }], source: { kind: 'user' } })
+  rememberPrivateHold(queued.state, { sessionId: 'sess-loop', messageId: parked.id, action: 'queue', text: secret, at: 2 })
+  queued.agent.steer(parked)
+  await queued.agent.whenIdle()
+  const continued = queued.trace('queue-continuation', parked.id)
+  assert.equal(continued.calls.length, 1, continued)
+  assert.equal(continued.calls[0].heldText, true)
+  assert.equal(continued.admitted.filter(entry => entry.id === parked.id).length, 1)
 })
 
 test('a team file and a flushed session continue a committed queue without new input', { timeout: 20000 }, async (t) => {

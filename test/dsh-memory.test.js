@@ -97,6 +97,19 @@ test('listDshMemories: pinned first, tags split, total counted', () => {
   rmSync(home, { recursive: true, force: true })
 })
 
+test('listDshMemories: achievements outrank pinned timezone prefs', () => {
+  const home = mkdtempSync(join(tmpdir(), 'odm-mem-rank-'))
+  seed(home, [
+    { text: 'User timezone is Asia/Shanghai', tags: 'preference', pinned: true },
+    { text: 'Shipped Memory glimpse glass cards', tags: 'achievement', pinned: false, skew: 2 },
+    { text: 'Prefer English UI', tags: 'preference', pinned: false, skew: 1 },
+  ])
+  const { memories } = listDshMemories(home)
+  assert.equal(memories[0].text, 'Shipped Memory glimpse glass cards')
+  assert.ok(memories.find(m => m.text.includes('Asia/Shanghai')))
+  rmSync(home, { recursive: true, force: true })
+})
+
 test('forgetDshMemory: deletes one row; invalid id rejected', () => {
   const home = mkdtempSync(join(tmpdir(), 'odm-mem-forget-'))
   seed(home, [
@@ -132,6 +145,10 @@ test('Memory 一瞥 chrome: nav + view + i18n + sources-only apps', () => {
   assert.match(msgs, /'nav\.memory': 'Memories'/)
   assert.match(msgs, /'nav\.memory': '回忆'/)
   assert.match(msgs, /'memory\.empty_cta'/)
+  assert.match(msgs, /'memory\.section_highlights'/)
+  assert.match(msgs, /'memory\.tag_achievement'/)
+  assert.match(html, /memIsHighlight/)
+  assert.match(html, /mem-sections/)
   const ops = readFileSync(new URL('../src/ui/ops.js', import.meta.url), 'utf8')
   assert.match(ops, /memory: '回忆'/)
   const api = readFileSync(new URL('../src/web/api.js', import.meta.url), 'utf8')

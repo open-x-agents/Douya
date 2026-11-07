@@ -653,6 +653,12 @@
   .mem-count b{color:var(--ink);font-weight:650}
   .mem-refresh{border:0;cursor:pointer;font:600 12.5px/1 inherit;color:var(--violet);background:var(--violet-soft);padding:8px 14px;border-radius:999px;transition:.2s var(--ease)}
   .mem-refresh:hover{transform:translateY(-1px);box-shadow:0 6px 14px -8px rgba(138,116,208,.55)}
+  .mem-sections{display:flex;flex-direction:column;gap:28px}
+  .mem-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 12px}
+  .mem-section-head h2{margin:0;font-size:13px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2)}
+  .mem-section-head .mem-section-n{font-size:12px;color:var(--ink3);font-variant-numeric:tabular-nums}
+  .mem-section.is-everyday .mem-card{opacity:.92}
+  .mem-section.is-everyday .mem-section-head h2{color:var(--ink3);font-weight:600}
   .mem-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
   .mem-card{position:relative;background:rgba(255,255,255,.78);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.95);border-radius:20px;padding:18px 18px 14px;box-shadow:var(--shadow);transition:.28s var(--ease);animation:memIn .55s var(--ease-out) both;overflow:hidden;min-height:132px;display:flex;flex-direction:column}
   .mem-card::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--mem-accent,#8a74d0);opacity:.85;border-radius:20px 0 0 20px}
@@ -2014,7 +2020,7 @@
             <div>
               <div class="eyebrow" data-i18n="memory.eyebrow">Memory glimpse</div>
               <h1 data-i18n="memory.title">What Douya remembers</h1>
-              <p data-i18n="memory.sub">Moments Douya keeps across chats — pinned ones stay close.</p>
+              <p data-i18n="memory.sub">Wins, decisions, and moments that matter — everyday prefs stay quieter.</p>
             </div>
             <div class="mem-hero-side">
               <div class="mem-count" id="memCount"><b>–</b></div>
@@ -2246,6 +2252,7 @@
     if (dock) try { I18N.applyDom(dock); } catch (_) {}
     if (typeof paintChatChips === 'function') try { paintChatChips(); } catch (_) {}
     if (reload && typeof loadToday === 'function') loadToday({ force: true }).catch(() => {});
+    if (reload && typeof loadSources === 'function' && $('v-sources')?.classList.contains('on')) loadSources(false);
   }
   document.querySelectorAll('.lang-switch').forEach(sw => {
     sw.addEventListener('click', (e) => {
@@ -4949,21 +4956,42 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   // Load Composio digest
 
   // Load sources status
+  function srcAppName(a) {
+    if (a.key === 'googlecalendar') return t('app.googlecalendar.name');
+    return a.name || a.key || '?';
+  }
+  function srcAppDesc(a) {
+    const key = a.description || '';
+    if (key.indexOf('app.') === 0) return t(key);
+    return key;
+  }
+  function srcCatLabel(cat) {
+    const key = 'sources.cat.' + (cat || 'other');
+    const label = t(key);
+    return label === key ? t('sources.cat.other') : label;
+  }
   function renderAppTiles(apps) {
     const groups = {};
-    apps.forEach(a => { (groups[a.category || '其他'] = groups[a.category || '其他'] || []).push(a); });
-    const authZh = { OAUTH2: 'OAuth 授权', OAUTH1: 'OAuth 授权', API_KEY: '需 API Key', NO_AUTH: '无需授权' };
+    apps.forEach(a => {
+      const cat = a.category || 'other';
+      (groups[cat] = groups[cat] || []).push(a);
+    });
+    const authLabel = { OAUTH2: t('sources.auth_oauth'), OAUTH1: t('sources.auth_oauth'), API_KEY: t('sources.auth_api_key'), NO_AUTH: t('sources.auth_none') };
     return Object.entries(groups).map(([cat, list]) => {
       const n = list.filter(a => a.connected).length;
-      return `<section class="src-group"><div class="src-group-h"><b>${escapeHtml(cat)}</b><span>${n ? `${n}/${list.length} 已连接` : `${list.length} 个可连接`}</span></div>
+      const count = n
+        ? t('sources.group_on', { n, total: list.length })
+        : t('sources.group_off', { n: list.length });
+      return `<section class="src-group"><div class="src-group-h"><b>${escapeHtml(srcCatLabel(cat))}</b><span>${escapeHtml(count)}</span></div>
       <div class="src-grid">${list.map(a => {
-        const st = a.connected ? ['on', '已连接'] : a.unknown ? ['wait', '状态未知'] : a.pending ? ['wait', '授权中'] : ['off', '未连接'];
+        const st = a.connected ? ['on', t('sources.status_on')] : a.unknown ? ['wait', t('sources.status_unknown')] : a.pending ? ['wait', t('sources.status_pending')] : ['off', t('sources.status_off')];
+        const displayName = srcAppName(a);
         return `<div class="src-tile ${a.connected ? 'is-on' : ''}">
-          <div class="src-top">${(a.key || a.logo) ? `<img src="${escapeHtml(a.key ? ('/api/opendigitalmate/logo?app=' + encodeURIComponent(a.key)) : a.logo)}" alt="" width="36" height="36" decoding="async" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'src-fb',textContent:'${escapeHtml((a.name||'?').charAt(0))}'}))">` : `<span class="src-fb">${escapeHtml((a.name||'?').charAt(0))}</span>`}<span class="src-pill ${st[0]}">${st[1]}</span></div>
-          <h4>${escapeHtml(a.name)}</h4>
-          <p>${escapeHtml(a.description || '')}</p>
-          <div class="src-foot"><span class="src-auth">${authZh[a.authMode] || ''}</span>
-          <button class="src-btn ${a.connected ? 'ghost' : ''}" onclick="handleAppAction('${escapeHtml(a.key)}', ${a.connected ? 'true' : 'false'})">${a.connected ? '断开' : '连接'}</button></div>
+          <div class="src-top">${(a.key || a.logo) ? `<img src="${escapeHtml(a.key ? ('/api/opendigitalmate/logo?app=' + encodeURIComponent(a.key)) : a.logo)}" alt="" width="36" height="36" decoding="async" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'src-fb',textContent:'${escapeHtml((displayName||'?').charAt(0))}'}))">` : `<span class="src-fb">${escapeHtml((displayName||'?').charAt(0))}</span>`}<span class="src-pill ${st[0]}">${escapeHtml(st[1])}</span></div>
+          <h4>${escapeHtml(displayName)}</h4>
+          <p>${escapeHtml(srcAppDesc(a))}</p>
+          <div class="src-foot"><span class="src-auth">${escapeHtml(authLabel[a.authMode] || '')}</span>
+          <button class="src-btn ${a.connected ? 'ghost' : ''}" onclick="handleAppAction('${escapeHtml(a.key)}', ${a.connected ? 'true' : 'false'})">${escapeHtml(a.connected ? t('sources.disconnect') : t('sources.connect'))}</button></div>
         </div>`;
       }).join('')}</div></section>`;
     }).join('');
@@ -4976,9 +5004,10 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function fmtCheckedAt(iso) {
     if (!iso) return '';
     const d = new Date(iso), now = new Date();
-    const hm = d.toLocaleTimeString('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false });
-    const sameDay = d.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }) === now.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' });
-    return sameDay ? `今天 ${hm}` : `${d.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric' })} ${hm}`;
+    const loc = odmLang() === 'zh' ? 'zh-CN' : 'en-GB';
+    const hm = d.toLocaleTimeString(loc, { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false });
+    const sameDay = d.toLocaleDateString(loc, { timeZone: 'Asia/Shanghai' }) === now.toLocaleDateString(loc, { timeZone: 'Asia/Shanghai' });
+    return sameDay ? t('sources.today_at', { hm }) : `${d.toLocaleDateString(loc, { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric' })} ${hm}`;
   }
   function paintSources(data, phase) {
     const content = $('sourcesContent');
@@ -4986,11 +5015,21 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const st = data.status || {};
     const unknown = !!st.unknown;
     const on = apps.filter(a => a.connected).length;
+    const recheckBtn = `<button class="src-recheck" onclick="loadSources(true)">${escapeHtml(t('sources.recheck'))}</button>`;
     let note = '';
-    if (phase === 'checking') note = `<p class="src-note src-checking"><span class="src-spin"></span>正在检查最新连接状态…${st.checkedAt ? `（先显示 ${fmtCheckedAt(st.checkedAt)} 的状态）` : ''}</p>`;
-    else if (st.error) note = `<p class="src-note src-bad">Composio 这次没及时响应：${escapeHtml(st.error)}。${st.checkedAt ? `下面是 ${fmtCheckedAt(st.checkedAt)} 的状态。` : '连接状态暂时未知。'} <button class="src-recheck" onclick="loadSources(true)">重新检查</button></p>`;
-    else if (st.checkedAt) note = `<p class="src-note">状态检查于 ${fmtCheckedAt(st.checkedAt)}${st.probeMs != null && !st.cached ? ` · 用时 ${(st.probeMs / 1000).toFixed(1)} 秒` : ''} <button class="src-recheck" onclick="loadSources(true)">重新检查</button></p>`;
-    content.innerHTML = `<div class="src-summary"><div><b>${unknown ? '–' : on}</b><span>已连接</span></div><div><b>${apps.length}</b><span>可用信源</span></div>${data.configured === false ? '<p class="src-warn">尚未配置 Composio API Key，请先到「配置」页填写后再连接。</p>' : ''}</div>` + note + renderAppTiles(apps.map(a => ({ ...a, unknown: unknown && !a.connected })));
+    if (phase === 'checking') {
+      const cached = st.checkedAt ? escapeHtml(t('sources.checking_cached', { when: fmtCheckedAt(st.checkedAt) })) : '';
+      note = `<p class="src-note src-checking"><span class="src-spin"></span>${escapeHtml(t('sources.checking'))}${cached}</p>`;
+    } else if (st.error) {
+      const tail = st.checkedAt
+        ? escapeHtml(t('sources.error_cached', { when: fmtCheckedAt(st.checkedAt) }))
+        : escapeHtml(t('sources.error_unknown'));
+      note = `<p class="src-note src-bad">${escapeHtml(t('sources.error_timeout', { error: st.error }))}${tail} ${recheckBtn}</p>`;
+    } else if (st.checkedAt) {
+      const ms = st.probeMs != null && !st.cached ? escapeHtml(t('sources.probe_ms', { s: (st.probeMs / 1000).toFixed(1) })) : '';
+      note = `<p class="src-note">${escapeHtml(t('sources.checked_at', { when: fmtCheckedAt(st.checkedAt) }))}${ms} ${recheckBtn}</p>`;
+    }
+    content.innerHTML = `<div class="src-summary"><div><b>${unknown ? '–' : on}</b><span>${escapeHtml(t('sources.connected'))}</span></div><div><b>${apps.length}</b><span>${escapeHtml(t('sources.available'))}</span></div>${data.configured === false ? `<p class="src-warn">${escapeHtml(t('sources.need_key'))}</p>` : ''}</div>` + note + renderAppTiles(apps.map(a => ({ ...a, unknown: unknown && !a.connected })));
   }
   async function loadSources(force = false) {
     loadDigestRun();
@@ -4998,7 +5037,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const seq = ++srcSeq;
     let painted = false;
     try { const c = JSON.parse(localStorage.getItem(SRC_LS) || 'null'); if (c?.apps?.length) { paintSources(c, 'checking'); painted = true; } } catch {}
-    if (!painted) content.innerHTML = '<div class="loading">加载中...</div>';
+    if (!painted) content.innerHTML = `<div class="loading">${escapeHtml(t('sources.loading'))}</div>`;
     const getJson = (u) => fetch(u, { method: u.endsWith('/refresh') ? 'POST' : 'GET' }).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); });
     try {
       let data = force ? null : await getJson('/api/composio/apps');
@@ -5009,7 +5048,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         if (data.status?.checkedAt) localStorage.setItem(SRC_LS, JSON.stringify(data));
         if (!needLive) return;
       } else if (painted || content.querySelector('.src-tile')) {
-        content.querySelector('.src-note')?.replaceWith(Object.assign(document.createElement('p'), { className: 'src-note src-checking', innerHTML: '<span class="src-spin"></span>正在检查最新连接状态…' }));
+        content.querySelector('.src-note')?.replaceWith(Object.assign(document.createElement('p'), { className: 'src-note src-checking', innerHTML: `<span class="src-spin"></span>${escapeHtml(t('sources.checking'))}` }));
       }
       data = await getJson('/api/composio/apps/refresh');
       if (seq !== srcSeq) return;
@@ -5019,8 +5058,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       console.error('Failed to load sources:', err);
       if (seq !== srcSeq) return;
       if (content.querySelector('.src-tile')) {
-        content.querySelector('.src-note')?.replaceWith(Object.assign(document.createElement('p'), { className: 'src-note src-bad', innerHTML: `没连上豆芽服务（${escapeHtml(err.message)}），显示的是上次的状态。 <button class="src-recheck" onclick="loadSources(true)">重新检查</button>` }));
-      } else content.innerHTML = `<div class="error">加载失败：${escapeHtml(err.message)} <button class="src-recheck" onclick="loadSources(true)">重试</button></div>`;
+        content.querySelector('.src-note')?.replaceWith(Object.assign(document.createElement('p'), { className: 'src-note src-bad', innerHTML: `${escapeHtml(t('sources.error_offline', { error: err.message }))} <button class="src-recheck" onclick="loadSources(true)">${escapeHtml(t('sources.recheck'))}</button>` }));
+      } else content.innerHTML = `<div class="error">${escapeHtml(t('sources.load_fail', { error: err.message }))} <button class="src-recheck" onclick="loadSources(true)">${escapeHtml(t('sources.retry'))}</button></div>`;
     }
   }
   async function loadDigestRun() {
@@ -5519,6 +5558,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   // ===== Memory 一瞥 (dsh-memory SQLite) =====
   const MEM_MARKS = ['🌱', '✨', '📌', '🫧', '🌙', '🫖', '📎', '💫', '🪄', '🍃'];
   const MEM_ACCENTS = {
+    achievement: '#d4a017', milestone: '#d4a017', win: '#d4a017',
     preference: '#22a898', decision: '#8a74d0', project: '#4f9de8', person: '#e2667a',
     habit: '#f0a35e', fact: '#5b6275', default: '#8a74d0',
   };
@@ -5529,7 +5569,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const palette = ['#22a898', '#8a74d0', '#4f9de8', '#e2667a', '#f0a35e', '#6450a8'];
     return palette[h % palette.length];
   }
-  function memMark(id) { return MEM_MARKS[Math.abs(Number(id) || 0) % MEM_MARKS.length]; }
+  function memMark(id, tags) {
+    const t0 = (tags && tags[0] || '').toLowerCase();
+    if (t0 === 'achievement' || t0 === 'milestone' || t0 === 'win') return '🏆';
+    if (t0 === 'decision') return '📌';
+    return MEM_MARKS[Math.abs(Number(id) || 0) % MEM_MARKS.length];
+  }
   function memAgo(ts) {
     if (!ts) return '';
     const seconds = Math.max(0, Math.round((Date.now() - Number(ts)) / 1000));
@@ -5551,6 +5596,36 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const k = 'memory.tag_' + tag;
     const v = t(k);
     return v === k ? tag : v;
+  }
+  const MEM_HIGH_TAGS = new Set(['achievement', 'milestone', 'win', 'decision', 'project']);
+  const MEM_MID_TAGS = new Set(['person', 'habit', 'fact']);
+  const MEM_ROUTINE_RE = /timezone|time\s*zone|\blocale\b|ui\s*language|interface\s*language|asia\/shanghai|\butc\s*[+-]?\s*\d|\bdark\s*mode\b|\bfont\s*size\b|\bdisplay\s*language\b/i;
+  function memIsRoutine(m, tags) {
+    const text = String(m.text || '');
+    if (!MEM_ROUTINE_RE.test(text)) return false;
+    return !tags.length || tags.includes('preference') || tags.every(tg => !MEM_HIGH_TAGS.has(tg) && !MEM_MID_TAGS.has(tg));
+  }
+  function memIsHighlight(m, tags) {
+    if (memIsRoutine(m, tags)) return false;
+    if (tags.some(tg => MEM_HIGH_TAGS.has(tg))) return true;
+    if (m.pinned) return true;
+    if (tags.some(tg => MEM_MID_TAGS.has(tg))) return true;
+    return false;
+  }
+  function memCardHtml(m, i) {
+    const tags = Array.isArray(m.tags) ? m.tags : String(m.tags || '').split(/\s+/).filter(Boolean);
+    const accent = memAccent(tags);
+    const pills = [
+      m.pinned ? `<span class="mem-pill pin">${escapeHtml(t('memory.pinned'))}</span>` : '',
+      ...tags.slice(0, 3).map(tg => `<span class="mem-pill tag">${escapeHtml(memTagLabel(tg))}</span>`),
+    ].join('');
+    return `<article class="mem-card${m.pinned ? ' is-pinned' : ''}" data-id="${escapeHtml(String(m.id))}" style="--mem-accent:${accent};animation-delay:${Math.min(i, 12) * 45}ms">
+        <div class="mem-mark" aria-hidden="true">${memMark(m.id, tags)}</div>
+        <div class="mem-text">${escapeHtml(m.text || '')}</div>
+        <div class="mem-meta">${pills}<span class="mem-when">${escapeHtml(memAgo(m.updatedAt || m.createdAt))}</span>
+          <button type="button" class="mem-forget" data-id="${escapeHtml(String(m.id))}" aria-label="${escapeHtml(t('memory.forget'))}">${escapeHtml(t('memory.forget'))}</button>
+        </div>
+      </article>`;
   }
   function paintMemories(data) {
     const box = $('memContent');
@@ -5579,22 +5654,23 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       });
       return;
     }
-    box.className = 'mem-grid';
-    box.innerHTML = rows.map((m, i) => {
-      const tags = Array.isArray(m.tags) ? m.tags : String(m.tags || '').split(/\s+/).filter(Boolean);
-      const accent = memAccent(tags);
-      const pills = [
-        m.pinned ? `<span class="mem-pill pin">${escapeHtml(t('memory.pinned'))}</span>` : '',
-        ...tags.slice(0, 3).map(tg => `<span class="mem-pill tag">${escapeHtml(memTagLabel(tg))}</span>`),
-      ].join('');
-      return `<article class="mem-card${m.pinned ? ' is-pinned' : ''}" data-id="${escapeHtml(String(m.id))}" style="--mem-accent:${accent};animation-delay:${Math.min(i, 12) * 45}ms">
-        <div class="mem-mark" aria-hidden="true">${memMark(m.id)}</div>
-        <div class="mem-text">${escapeHtml(m.text || '')}</div>
-        <div class="mem-meta">${pills}<span class="mem-when">${escapeHtml(memAgo(m.updatedAt || m.createdAt))}</span>
-          <button type="button" class="mem-forget" data-id="${escapeHtml(String(m.id))}" aria-label="${escapeHtml(t('memory.forget'))}">${escapeHtml(t('memory.forget'))}</button>
-        </div>
-      </article>`;
-    }).join('');
+    const highlights = [];
+    const everyday = [];
+    for (const m of rows) {
+      const tags = Array.isArray(m.tags) ? m.tags.map(x => String(x).toLowerCase()) : String(m.tags || '').split(/\s+/).map(x => x.toLowerCase()).filter(Boolean);
+      if (memIsHighlight(m, tags)) highlights.push(m);
+      else everyday.push(m);
+    }
+    const sections = [];
+    let anim = 0;
+    if (highlights.length) {
+      sections.push(`<section class="mem-section is-highlights"><div class="mem-section-head"><h2>${escapeHtml(t('memory.section_highlights'))}</h2><span class="mem-section-n">${highlights.length}</span></div><div class="mem-grid">${highlights.map(m => memCardHtml(m, anim++)).join('')}</div></section>`);
+    }
+    if (everyday.length) {
+      sections.push(`<section class="mem-section is-everyday"><div class="mem-section-head"><h2>${escapeHtml(t('memory.section_everyday'))}</h2><span class="mem-section-n">${everyday.length}</span></div><div class="mem-grid">${everyday.map(m => memCardHtml(m, anim++)).join('')}</div></section>`);
+    }
+    box.className = 'mem-sections';
+    box.innerHTML = sections.join('');
     box.querySelectorAll('.mem-forget').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();

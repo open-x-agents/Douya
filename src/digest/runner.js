@@ -10,6 +10,8 @@ import { CHANNELS, channelOfToolkit } from './channels.js'
 import { buildSnapshot } from './snapshot.js'
 import { validateCandidates, validatePlan, buildCards, invalidLinks, seenEntities } from './build.js'
 import { stableKey, linkUrls } from '../host/reconcile.js'
+import { rankMemories } from './memory-rank.js'
+export { rankMemories, isMemoryHighlight, isRoutinePreference, partitionMemories, memorySignal } from './memory-rank.js'
 
 const clip = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n - 1) + '…' : s }
 const shNow = (t = Date.now()) => new Date(t + 8 * 3600e3).toISOString().slice(0, 16).replace('T', ' ')
@@ -406,7 +408,10 @@ export function readDshMemoryRecall(dshHome, { recentCount = 10, maxChars = 2000
     db = new DatabaseSync(dbPath, { readOnly: true })
     const pinned = db.prepare('SELECT id, text, tags, pinned FROM memories WHERE pinned = 1 ORDER BY updated_at DESC, id DESC').all()
     const recent = db.prepare('SELECT id, text, tags, pinned FROM memories WHERE pinned = 0 ORDER BY updated_at DESC, id DESC LIMIT ?').all(recentCount)
-    const rows = [...pinned, ...recent]
+    const rows = rankMemories([...pinned, ...recent].map(r => ({
+      id: r.id, text: r.text, tags: r.tags, pinned: r.pinned,
+      updatedAt: r.updated_at, updated_at: r.updated_at,
+    })))
     if (!rows.length) return ''
     const header = 'Memories you previously stored (use memory_search for anything not listed):\n'
     const lines = []
@@ -429,7 +434,7 @@ export function readDshMemoryRecall(dshHome, { recentCount = 10, maxChars = 2000
   }
 }
 
-/** Structured rows for Memory 一瞥 UI (pinned first, then recent). */
+/** Structured rows for Memory 一瞥 UI (ranked: achievements / high-signal before routine prefs). */
 export function listDshMemories(dshHome, { limit = 40 } = {}) {
   const dbPath = join(dshHome || '', 'memory', 'memory.db')
   if (!dbPath || !existsSync(dbPath)) return { memories: [], total: 0, path: dbPath || null }
@@ -456,7 +461,8 @@ export function listDshMemories(dshHome, { limit = 40 } = {}) {
       seen.add(r.id)
       memories.push(toRow(r))
     }
-    return { memories, total, path: dbPath }
+    // Achievements / high-signal first; routine prefs (timezone, UI) sink.
+    return { memories: rankMemories(memories), total, path: dbPath }
   } catch {
     return { memories: [], total: 0, path: dbPath }
   } finally {

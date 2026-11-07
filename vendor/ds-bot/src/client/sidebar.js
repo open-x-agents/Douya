@@ -2,6 +2,8 @@ import { createElement as h, Fragment, useEffect, useLayoutEffect, useMemo, useR
 import { createPortal } from 'react-dom'
 import { FishLogo } from './dsh-primitives.js'
 import { isMainOf } from './sources.js'
+import { rosterGate } from './roster-gate.js'
+import { openErrorView, openRecoveryCopy } from './open-error-copy.js'
 import { currentPart, previewOf, relativeShort } from './text.js'
 import { PlusIcon, SearchIcon, SidebarIcon, GaugeIcon, ClockIcon, GearIcon, PinMarkIcon, ConnectorIcon, SwitchIcon, CloudDownloadIcon, SignOutIcon } from './icons.js'
 import { MAIN_LOOK } from './characters.js'
@@ -286,6 +288,25 @@ function TitleToggle({ hidden, onToggle }) {
   }, h(SidebarIcon)), document.body)
 }
 
+function mainBotSlot({ main, roster, rowProps, markedUnread }) {
+  if (main) return h(BotRow, { ...rowProps, bot: main, marked: markedUnread[main.id] === true })
+  const gate = rosterGate({ ready: roster.ready === true, hasMain: false, loadError: roster.loadError })
+  switch (gate.kind) {
+    case 'team': return null
+    case 'setup': return h('div', { className: 'bt-hint' }, t('Setting up your Main Bot…'))
+    case 'error': {
+      const view = openErrorView(gate.text)
+      return h('div', { className: 'bt-hint bt-open-error', role: 'alert', 'data-open-error': 'sidebar' },
+        h('p', { className: 'bt-open-error-line' }, view.text),
+        view.restart ? h('p', { className: 'bt-open-error-line' }, openRecoveryCopy()) : null)
+    }
+    default: {
+      const unexpected = gate.kind
+      throw new Error(`Unknown roster gate ${String(unexpected)}`)
+    }
+  }
+}
+
 export function TeamSidebar(props) {
   const { wide, useRoster, useUi, useSessions, actions } = props
   const listRef = useRef(null)
@@ -483,7 +504,7 @@ export function TeamSidebar(props) {
     : h('div', { className: 'bt-rail-top' },
         h(UpdateButton, { useUpdate: props.useUpdate, actions }),
         h('button', { type: 'button', className: 'bt-round bt-side-collapse', 'aria-label': t('Collapse sidebar'), title: t('Collapse sidebar'), onClick: onToggle }, h(SidebarIcon)),
-        main ? h(BotRow, { ...rowProps, bot: main, marked: markedUnread[main.id] === true }) : roster.ready ? null : h('div', { className: 'bt-hint' }, t('Setting up your Main Bot…')),
+        mainBotSlot({ main, roster, rowProps, markedUnread }),
         h('span', { className: 'bt-rail-sep', 'aria-hidden': true }))
   // The foot stands in for the shell's hidden footer: the account avatar, and on
   // the rail the new-chat button above it.
@@ -496,7 +517,7 @@ export function TeamSidebar(props) {
     top,
     wideContent && roster.readOnly ? h('div', { className: 'bt-hint bt-read-only', role: 'status' }, hostText(roster.readOnly)) : null,
     h('div', { ref: listRef, className: 'bt-list', role: 'region', 'aria-label': t('Bot list') },
-      wideContent ? (main ? h(BotRow, { ...rowProps, bot: main, marked: markedUnread[main.id] === true }) : roster.ready ? null : h('div', { className: 'bt-hint' }, t('Setting up your Main Bot…'))) : null,
+      wideContent ? mainBotSlot({ main, roster, rowProps, markedUnread }) : null,
       order.map(entry => (entry.kind === 'bot'
         ? h(BotRow, { key: entry.item.id, ...rowProps, bot: entry.item, marked: markedUnread[entry.item.id] === true })
         : entry.kind === 'room'

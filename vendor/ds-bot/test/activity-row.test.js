@@ -1,9 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { DICTIONARY } from '../src/client/i18n.js'
-import { createRequire } from 'node:module'
+import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { DICTIONARY } from '../src/client/i18n.js'
+import { createRequire } from 'node:module'
 import { runInNewContext } from 'node:vm'
 import { build } from 'esbuild'
 
@@ -16,7 +17,7 @@ const { JSDOM } = createRequire(join(process.env.DSH_HARNESS ?? join(PLUGIN, '..
 const { outputFiles } = await build({
   stdin: {
     contents: [
-      "export { findHost, rowVisible, freshInputAt, activityCue, phraseText } from './src/client/activity-row.js'",
+      "export { findHost, rowVisible, freshInputAt, activityCue, phraseText, phrasePaint } from './src/client/activity-row.js'",
       "export { clientErrors } from './src/client/diagnostics.js'",
     ].join('\n'),
     resolveDir: PLUGIN,
@@ -44,7 +45,7 @@ runInNewContext(outputFiles[0].text, {
   cancelAnimationFrame: id => clearTimeout(id),
   require: name => (name === 'react' ? react : name === 'react-dom' ? { createPortal: node => node } : {}),
 })
-const { findHost, rowVisible, freshInputAt, activityCue, phraseText, clientErrors } = module.exports
+const { findHost, rowVisible, freshInputAt, activityCue, phraseText, phrasePaint, clientErrors } = module.exports
 
 test('the activity row mounts at the running slot even under an extra wrapper', () => {
   dom.window.document.body.innerHTML = '<div data-chat-flow><div class="wrap"><div data-chat-running id="slot"></div></div></div>'
@@ -154,4 +155,43 @@ test('a folder move wins over a steer ack', () => {
   assert.equal(cue.key, 'move')
   assert.equal(cue.label, 'Switching working folder')
   assert.equal(cue.fixed, undefined)
+})
+
+// sRGB relative luminance, then WCAG contrast. The shimmer's pale stop is the
+// 40% ink composited on the page background; the fixed ack must clear 4.5:1.
+const linear = (channel) => {
+  const value = channel / 255
+  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+}
+const luminance = (rgb) => 0.2126 * linear(rgb[0]) + 0.7152 * linear(rgb[1]) + 0.0722 * linear(rgb[2])
+const contrast = (fg, bg) => {
+  const lighter = Math.max(luminance(fg), luminance(bg))
+  const darker = Math.min(luminance(fg), luminance(bg))
+  return (lighter + 0.05) / (darker + 0.05)
+}
+const composite = (fg, bg, alpha) => fg.map((channel, index) => channel * alpha + bg[index] * (1 - alpha))
+
+test('the fixed ack paints solid ink above 4.5:1 and not the pale shimmer', () => {
+  const cue = activityCue({ moving: false, inputAt: 500, steeredAt: 400, tool: tool(100) })
+  const paint = phrasePaint({ text: cue.label, fixed: true })
+  assert.equal(paint.shimmer, false)
+  assert.equal(paint.className, 'bt-typing-fixed')
+  assert.equal(paint.text, ACK)
+  const thinking = phrasePaint({ text: 'Thinking about it', fixed: false })
+  assert.equal(thinking.shimmer, true)
+  assert.equal(thinking.className, 'bt-shimmer')
+  assert.equal(thinking.text, 'Thinking about it…')
+  const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../src/client/styles.js'), 'utf8')
+  const rule = css.match(/\.bt-typing-label>\.bt-typing-fixed\{[^}]+\}/)
+  assert.ok(rule, 'fixed receipt rule')
+  assert.match(rule[0], /color:var\(--bt-ink\)/)
+  assert.match(rule[0], /font-size:14px/)
+  assert.doesNotMatch(rule[0], /transparent|background-clip|animation:bt-shimmer/)
+  const ink = [20, 20, 20]
+  const page = [252, 252, 252]
+  const pale = composite(ink, page, 0.4)
+  const paleContrast = contrast(pale, page)
+  const solidContrast = contrast(ink, page)
+  assert.ok(paleContrast < 4.5 && paleContrast > 2.5 && paleContrast < 2.7, `pale shimmer ${paleContrast}`)
+  assert.ok(solidContrast >= 4.5, `solid ink ${solidContrast}`)
 })

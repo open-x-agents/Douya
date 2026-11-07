@@ -45,6 +45,7 @@ import { ErrorToast, FEEDBACK_CSS } from './feedback.js'
 import { ABOUT_CSS } from './about.js'
 import { MEMBER_CSS, MemberDock } from './member-status.js'
 import { PrivateStopDock } from './private-stop.js'
+import { OpenErrorNotice } from './open-error.js'
 import { USER_MESSAGE_CSS, UserMessageCell, canDrawUserMessages } from './user-message.js'
 import { noticeApprovals } from './approval-notices.js'
 import { listedOpener } from './open-listed.js'
@@ -203,7 +204,19 @@ export function apply(ctx) {
       clearTimeout(timer)
       if (running || stopped) return
       running = true
-      try { await pull() } catch (error) { if (!stopped) console.warn('[ds-bot] state', error) } finally { running = false }
+      try {
+        await pull()
+      } catch (error) {
+        if (!stopped) {
+          console.warn('[ds-bot] state', error)
+          // The page keeps asking. A process whose workspace activation already
+          // failed stays pending until that process is started again; a later
+          // successful answer clears the alert. Reloading the page does not.
+          const current = roster.getSnapshot()
+          const loadError = error?.message ?? String(error)
+          if (!current.ready && current.loadError !== loadError) roster.set({ ...current, loadError })
+        }
+      } finally { running = false }
       if (!stopped) timer = setTimeout(loop, document.hidden ? 10000 : 1500)
     }
     const wake = () => { if (!document.hidden) void loop() }
@@ -886,6 +899,10 @@ export function apply(ctx) {
     () => shadow('shell.overlay', { id: 'bot', order: 50, inject: face }, Overlays),
     () => shadow('shell.overlay', { id: 'bot-signin', order: 55, inject: face }, DeepSeekSignIn),
     () => shadow('shell.overlay', { id: 'bot-toast', order: 60, inject: face }, ErrorToast),
+    // The chat column's open-error. The shell overlay is up with the sidebar.
+    // conversation.input.dock is not: the host skips that list until a Session
+    // and its input exist, and an EACCES boot has neither.
+    () => shadow('shell.overlay', { id: 'bot-open-error', order: 40, inject: face }, OpenErrorNotice),
   ]
   const installConversation = () => [
     () => installCompiledStyles(CONVERSATION_CSS, 'conversation'),

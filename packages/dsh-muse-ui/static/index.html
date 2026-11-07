@@ -2843,7 +2843,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const name = data.userName || '';
       const hello = greetingWord();
       $('conclText').textContent = name ? t('greet.hello_named', { hello, name }) : hello;
-      $('stamp').textContent = `${data.date || ''}${data.sources ? t('stamp.from', { sources: data.sources }) : ''}`;
+      $('stamp').textContent = `${data.date || ''}${!data.sources ? '' : data.sources === t('stamp.none') ? ` · ${data.sources}` : t('stamp.from', { sources: data.sources })}`;
       $('nOpen').textContent = data.openCount || 0;
       $('nUrgent').textContent = data.urgentCount || 0;
       $('nMeet').textContent = data.meetingCount || 0;
@@ -2928,8 +2928,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     }
     const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
     const parts = [];
-    if (pr) parts.push(`${pr} 个 PR 待推进`);
-    if (iss) parts.push(`${iss} 个 issue 待处理`);
+    if (pr) parts.push(t('today.head_pr', { n: pr }));
+    if (iss) parts.push(t('today.head_issue', { n: iss }));
     return parts.length ? parts.join(' · ') : (card.title || '');
   }
   function zhBody(card) {
@@ -3363,11 +3363,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const focus = [...work].sort((a, b) => (b.priority === 'high') - (a.priority === 'high') || (statOf(b, 'PR') + statOf(b, 'issue')) - (statOf(a, 'PR') + statOf(a, 'issue'))).slice(0, 3);
     const rings = (blockOf(hero || {}, 'achievement-rings') || {}).rings || [];
     const lead = work.length
-      ? `${work.length} 个项目在推进，其中 ${urgent.length} 个需要优先关注。按下面的顺序来，一件件收掉。`
-      : '今天没有待推进的事项，点「立即汇聚」拉取最新动态。';
+      ? t('today.hero_lead', { n: work.length, u: urgent.length })
+      : t('today.hero_lead_empty');
     return `
       <div class="tile hero2 size-hero" data-sys="hero">
-        <div class="eyebrow c-violet">今日焦点 · 豆芽建议</div>
+        <div class="eyebrow c-violet">${escapeHtml(t('today.hero_eyebrow'))}</div>
         <p class="hero-lead">${escapeHtml(lead)}</p>
         <ol class="focus">
           ${focus.map((c, i) => {
@@ -3376,8 +3376,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
           }).join('')}
         </ol>
         <div class="hero-foot">
-          <div class="hero-kpi"><b>${totPR}</b><span>PR 待推进</span></div>
-          <div class="hero-kpi"><b>${totIss}</b><span>issue 待处理</span></div>
+          <div class="hero-kpi"><b>${totPR}</b><span>${escapeHtml(t('today.kpi_pr'))}</span></div>
+          <div class="hero-kpi"><b>${totIss}</b><span>${escapeHtml(t('today.kpi_issue'))}</span></div>
           ${rings.map(r => { const has = Number(r.max) > 0; return `<div class="hero-ring" title="${escapeHtml(r.label)} ${r.value}${has ? '/' + r.max : ''}">${ringSvg(r.value, has ? r.max : Math.max(1, r.value), r.color, 44, 5)}<div><b>${r.value}${has ? `<small>/${r.max}</small>` : ''}</b><span>${escapeHtml(r.label)}</span></div></div>`; }).join('')}
         </div>
       </div>`;
@@ -6538,13 +6538,13 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const a = autoShown;
     if (!a) { el.style.display = 'none'; return; }
     el.style.display = '';
-    const t = document.createElement('span'); t.className = 'tod-text';
+    const tx = document.createElement('span'); tx.className = 'tod-text';
     const undone = autoUndone();
-    t.textContent = !a.enabled ? '时段排序已关闭，按优先级排列' : undone ? `已恢复原顺序（本次打开有效）· ${a.periodLabel}的建议顺序可随时再用` : `🕘 ${a.note} · ${a.rationale}`;
-    el.appendChild(t);
+    tx.textContent = !a.enabled ? t('today.tod_off') : undone ? t('today.tod_undone', { p: a.periodLabel }) : `🕘 ${a.note} · ${a.rationale}`;
+    el.appendChild(tx);
     const mk = (label, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'tod-btn'; b.textContent = label; b.addEventListener('click', fn); el.appendChild(b); return b; };
-    if (a.enabled) mk(undone ? '按时段排序' : '恢复原顺序', () => { try { sessionStorage.setItem('odm.autoUndone', undone ? '0' : '1'); } catch (_) {} rerenderToday(); });
-    mk(a.enabled ? '关闭' : '开启时段排序', async () => {
+    if (a.enabled) mk(undone ? t('today.tod_apply') : t('today.tod_undo'), () => { try { sessionStorage.setItem('odm.autoUndone', undone ? '0' : '1'); } catch (_) {} rerenderToday(); });
+    mk(a.enabled ? t('today.tod_close') : t('today.tod_enable'), async () => {
       await fetch('/api/opendigitalmate/layout-pref', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: !a.enabled }) }).catch(() => {});
       autoShown = null; await loadToday();
     });

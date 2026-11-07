@@ -162,3 +162,13 @@ test('Sources catalog + chrome localize; catalog uses i18n keys not ZH literals'
   assert.doesNotMatch(api, /category: '开发协作'/)
   assert.doesNotMatch(api, /description: 'PR、issue/)
 })
+
+test('Today hero, headline counts and time-of-day strip have EN copy (no hardcoded Chinese)', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of ['今日焦点 · 豆芽建议', '<span>PR 待推进</span>', '个 issue 待处理`', "'恢复原顺序'", "'时段排序已关闭，按优先级排列'"]) {
+    assert.ok(!html.includes(s), `hardcoded zh copy left in Today: ${s}`)
+  }
+  assert.equal(t('today.hero_eyebrow', 'en'), 'Today’s focus · Douya suggests')
+  assert.match(t('today.head_pr', 'en', { n: 2 }), /^2 PRs/)
+  assert.match(t('today.hero_lead', 'zh', { n: 3, u: 1 }), /3 个项目.*1 个/)
+})

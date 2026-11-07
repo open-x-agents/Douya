@@ -3,7 +3,7 @@
 
 import { CALLBACK_PATH, requestOrigin } from './composio-callback.js'
 import { readFile } from 'node:fs/promises'
-import { runMuseChatTurn, chatProgress } from './muse-chat-core.js'
+import { runMuseChatTurn, chatProgress, loadMuseHistory } from './muse-chat-core.js'
 import { createChatLane } from './chat-lane.js'
 import { installUiFeed } from './ui-feed.js'
 import { browserScript, resolveLang, DEFAULT_LOCALE } from '../i18n/index.js'
@@ -337,7 +337,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     path: '/api/chat/history',
     methods: ['GET'],
     requestBody: 'buffered',
-    fetch: async () => json(await router.getChatHistory()),
+    fetch: async () => json(await router.getChatHistory({ reader: () => loadMuseHistory(ctx, { dshHome }) })),
   }, 'opendigitalmate: /api/chat/history')
 
   // One lane per Chief: turns never overlap, and quick follow-ups merge into one turn (see chat-lane.js).

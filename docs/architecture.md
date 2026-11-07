@@ -320,7 +320,7 @@ node scripts/source-probe.mjs --fixture test/fixtures/github/ok --dir /tmp/p  # 
 | `src/web/api.js` | HTTP 路由（`/api/today`、`/api/digest/generate`、`/api/chat`、`/api/sources`、`/api/config/*`、`/api/composio/*`）；`mountApiRoutes(server, router, { extraRoutes })` 先分发 ds-bot 形状的路由（`installPanel` 注册的 `/api/opendigitalmate*` 原样可用） |
 | `src/web/aggregation.js` | 汇聚流水线：拉取（GitHub / Gmail / Slack / 日历，经 Composio）→ 归一 → 去重（按完整 URL）→ 按项目 / 发件人 / 频道聚类 → 分类 → 卡片；英文标题 + 中文摘要、每卡 3 个追问由模型生成，数字只来自真实数据 |
 | `src/web/composio.js`、`agent-tools.js`、`chat-groups.js` | Composio v3 客户端；只读工具（PR / issue / 邮件 / Slack 搜索 / 日历）及其预聚合分组 |
-| `src/web/dsbot-chat.js` | Muse 对话框唯一入口：经 DSH `/api/bot` 把消息发给 ds-bot Chief（`send`），再读回 `chat` 页 |
+| `src/web/dsbot-chat.js` | 独立服务器（`npm start`）里的 ds-bot 回退：经 DSH `/api/bot` 把消息发给 ds-bot Chief（`send`），再读回 `chat` 页；Muse 的对话与历史都走进程内（`muse-chat-core.js` 直接读 Chief 的 Session，不读日志文件） |
 | `src/web/dsbot-tools.js` | 把 Composio / identity / today / `ask.js` cite 注册成 ds-bot 可调用的 `odm_*` 工具 |
 | `src/web/bot-chat.js` | 废弃 shim，指向 `dsbot-chat.js` |
 | `src/web/llm-client.js`、`config-store.js`、`profile.js` | 模型客户端、`.odm-data/config.json`、显示名（运行时从 GitHub 身份推出，不写死） |

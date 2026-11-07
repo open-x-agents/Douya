@@ -4561,16 +4561,24 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     return b;
   }
 
-  let inlineHistoryLoaded = false;
+  let inlineHistoryLoaded = false;   // a painted transcript, or a live turn already on the dock
+  let inlineHistoryReading = false;  // one read at a time: one dock click fires pointerdown, then focus
   async function ensureInlineBotHistory() {
-    if (inlineHistoryLoaded) return;
-    inlineHistoryLoaded = true;
+    if (inlineHistoryLoaded || inlineHistoryReading) return;
+    // Only a painted read counts. A dock that is not mounted yet, a live bubble already on it, or a
+    // read that fails must ask again on the next open instead of leaving the page blank for good.
+    const body = $('todayChatMsgs');
+    if (!body) return;
+    if (body.childElementCount) { inlineHistoryLoaded = true; return; }
+    inlineHistoryReading = true;
     try {
       const res = await fetch('/api/chat/history?lang=' + encodeURIComponent(odmLang()), { headers: odmHeaders() });
       const data = await res.json();
-      const body = $('todayChatMsgs');
-      if (!body || body.childElementCount) return;
-      (data.messages || []).forEach(m => {
+      // A live turn may have started while this read was in flight; painting the transcript under it
+      // would show that prompt twice, so the live turn stands.
+      if (body.childElementCount) { inlineHistoryLoaded = true; return; }
+      const messages = data.messages || [];
+      messages.forEach(m => {
         if (m.role === 'user') {
           const b = document.createElement('div');
           b.className = 'bubble me';
@@ -4588,7 +4596,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         }
       });
       stickTodayChat(true);
+      // An empty answer is not a transcript: the session may simply not be hydrated yet, so the next
+      // open reads again instead of pinning a blank dock for the rest of the page load.
+      if (messages.length) inlineHistoryLoaded = true;
     } catch (e) { console.warn('[bot history]', e); }
+    finally { inlineHistoryReading = false; }
   }
 
 

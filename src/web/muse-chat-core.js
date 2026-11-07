@@ -537,3 +537,96 @@ export async function chatProgress(ctx, { dshHome, botId = null } = {}) {
   }
   return { running: true, label, tools }
 }
+
+// ---- Dock transcript after a reload (issue #109) -------------------------------------------
+// The Muse dock used to rebuild its transcript from the session log file (dsbot-chat.js), which
+// only knows the pre-v4 file name. Read the same records the turn reads, in process.
+
+const HISTORY_INJECTED = /^(\[Handoff · part \d+\]|Current runtime context\.|<system-reminder>|Current time: \d{4}-)/
+const HISTORY_CTX = /^【(当前视图|当前卡片|cardId=)/
+
+/** The owner's own words: peel off the view/card context the turn prepends, keep the rest whole. */
+function ownerText(raw) {
+  const text = String(raw || '').trim()
+  if (!HISTORY_CTX.test(text)) return cleanBlock(text)
+  const paras = text.split(/\n\s*\n/)
+  while (paras.length > 1 && HISTORY_CTX.test(paras[0].trim())) paras.shift()
+  if (paras.length === 1 && HISTORY_CTX.test(paras[0].trim())) return ''
+  return cleanBlock(paras.join('\n\n'))
+}
+
+/**
+ * Session records → the transcript the dock shows: one bubble per owner prompt, and one per turn's
+ * last assistant text (what the live bubble showed). Team relays, runtime context and clock
+ * injections are not the owner's words, so they stay out.
+ */
+export function historyFromRecords(records, { limit = 40 } = {}) {
+  const out = []
+  let open = null      // the owner prompt whose turn is still the current one
+  let replyIdx = -1    // index in `out` of this turn's assistant bubble
+  for (const record of Array.isArray(records) ? records : []) {
+    const ev = eventOf(record)
+    if (ev.type === 'user/message') {
+      const source = messageSource(ev)
+      const text = messageText(ev)
+      open = null; replyIdx = -1
+      if (source?.kind !== 'user') continue
+      const content = ownerText(text)
+      if (!clean(content) || HISTORY_INJECTED.test(content)) continue
+      out.push({ role: 'user', content, ...(Number.isFinite(ev.time) ? { at: new Date(ev.time).toISOString() } : {}) })
+      open = content
+      continue
+    }
+    if (ev.type === 'assistant/message' && open) {
+      const text = messageText(ev)
+      if (!clean(text)) continue
+      const at = Number.isFinite(ev.time) ? { at: new Date(ev.time).toISOString() } : {}
+      if (replyIdx >= 0) out[replyIdx] = { role: 'assistant', content: text, ...at }
+      else { out.push({ role: 'assistant', content: text, ...at }); replyIdx = out.length - 1 }
+    }
+    // A completed turn closes the bubble; an interrupted / blocked one is resumed, so its later
+    // assistant text is still this turn's answer (the same rule ownReplyFromRecords uses).
+    if (ev.type === 'turn/end' && endsReply(ev.data?.reason)) { open = null; replyIdx = -1 }
+  }
+  return out.slice(-limit)
+}
+
+/** The tail of one Session's records, newest page first, oldest-first when returned. */
+async function pageTail(ctx, sessionId, { maxMessages = 80, pages = 2 } = {}) {
+  const chunks = []
+  let beforeSeq
+  for (let n = 0; n < pages; n++) {
+    let throughSeq = -1
+    try {
+      const seq = Number((await liveAgent(ctx, sessionId))?.session?.seq)
+      if (Number.isInteger(seq) && seq > 0) throughSeq = seq - 1
+    } catch { /* fall back to the tail */ }
+    const page = await ctx.sessionController.page({
+      address: { kind: 'session', sessionId },
+      throughSeq,
+      ...(beforeSeq === undefined ? {} : { beforeSeq }),
+      maxMessages,
+    }, AbortSignal.timeout(10_000))
+    const records = page?.records || page?.items || []
+    chunks.unshift(records)
+    if (!page?.hasMore || records.length === 0) break
+    const oldest = eventSeq(records[0])
+    if (oldest == null || oldest === beforeSeq) break
+    beforeSeq = oldest
+  }
+  return chunks.flat()
+}
+
+/** GET /api/chat/history for the Muse host: the Chief's transcript, read in this process. */
+export async function loadMuseHistory(ctx, { dshHome, botId = null, limit = 40 } = {}) {
+  const chief = await resolveChief(dshHome, botId)
+  const parts = (chief.parts?.length ? chief.parts : [chief.botId]).filter(Boolean)
+  if (!parts.length || !ctx?.sessionController?.page) return { sessionId: chief.sessionId || null, botId: chief.botId || null, messages: [] }
+  const messages = []
+  for (const part of parts.slice(-2)) {
+    try {
+      messages.push(...historyFromRecords(await pageTail(ctx, part), { limit }))
+    } catch { /* one unreadable part (a retired Session) must not empty the transcript */ }
+  }
+  return { sessionId: chief.sessionId || null, botId: chief.botId || null, messages: messages.slice(-limit) }
+}

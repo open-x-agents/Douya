@@ -4595,6 +4595,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
           (m.surfaces || []).forEach(v => body.appendChild(renderSurface(v, { container: body, sendPrompt: dockPrompt }, 'chat')));
         }
       });
+      paintFailedTurns(body, messages);
       stickTodayChat(true);
       // An empty answer is not a transcript: the session may simply not be hydrated yet, so the next
       // open reads again instead of pinning a blank dock for the rest of the page load.
@@ -4992,7 +4993,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         live.finish();
         // Merged: this message rode along in the next message's turn — that one bubble carries the single reply.
         if (data.status === 'merged') { typing.remove(); return; }
-        if (data.status === 'error' || data.error) { typing.remove(); appendInlineBubble('bot', data.text || data.error); return; }
+        if (data.status === 'error' || data.error) { typing.remove(); rememberFailed(msg, data.text || data.error); appendInlineBubble('bot', data.text || data.error); return; }
+        forgetFailed(msg);
         const b = appendInlineBubble('bot', data.text || '……', data.citations);
         typing.replaceWith(b); // the final Markdown reply takes the streaming bubble's place (views stay below it)
         (data.cards || []).filter(c => c.type === 'group').slice(0, 3).forEach(c => {
@@ -5016,7 +5018,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         const d = document.createElement('div');
         d.className = 'bubble bot fail';
         d.innerHTML = failBubbleHtml(err instanceof ChatFail ? err.message : t('chat.send_fail_short'));
-        d.querySelector('.chat-retry').onclick = () => { d.remove(); const box = $('todayChatMsgs'); const mine = [...box.querySelectorAll('.bubble.me')].pop(); if (mine && mine.textContent.includes(msg)) mine.remove(); input.value = msg; send(); };
+        rememberFailed(msg, err instanceof ChatFail ? err.message : '');
+        d.querySelector('.chat-retry').onclick = () => { d.remove(); forgetFailed(msg); const box = $('todayChatMsgs'); const mine = [...box.querySelectorAll('.bubble.me')].pop(); if (mine && mine.textContent.includes(msg)) mine.remove(); input.value = msg; send(); };
         $('todayChatMsgs').appendChild(d);
         stickTodayChat(false);
       }
@@ -5778,6 +5781,23 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     }
   }
   // Error bubble with a 重试 button; `retry` re-runs the same send.
+  // A message whose turn failed never reaches Chief's session, so a reload would drop it.
+  // Keep it locally (last 5, 2 days) and show it again with its error + Retry until a send succeeds.
+  const FAILED_KEY = 'odm.failedTurns';
+  function failedTurns() { try { const a = JSON.parse(localStorage.getItem(FAILED_KEY) || '[]'); return Array.isArray(a) ? a.filter(x => x && x.text && Date.now() - x.at < 2 * 864e5) : []; } catch (_) { return []; } }
+  function rememberFailed(text, error) { try { const a = failedTurns().filter(x => x.text !== text); a.push({ text, error: String(error || ''), at: Date.now() }); localStorage.setItem(FAILED_KEY, JSON.stringify(a.slice(-5))); } catch (_) {} }
+  function forgetFailed(text) { try { localStorage.setItem(FAILED_KEY, JSON.stringify(failedTurns().filter(x => x.text !== text))); } catch (_) {} }
+  function paintFailedTurns(body, messages) {
+    for (const f of failedTurns()) {
+      if ((messages || []).some(m => m.role === 'user' && String(m.content || '').trim() === f.text && (!m.at || new Date(m.at).getTime() >= f.at - 60e3))) { forgetFailed(f.text); continue; }
+      const me = document.createElement('div'); me.className = 'bubble me failed';
+      me.innerHTML = `${escapeHtml(f.text)}<small>${chatTime(new Date(f.at).toISOString())}</small>`;
+      const d = document.createElement('div'); d.className = 'bubble bot fail';
+      d.innerHTML = failBubbleHtml(f.error || t('chat.send_fail_short'));
+      d.querySelector('.chat-retry').onclick = () => { d.remove(); me.remove(); forgetFailed(f.text); dockPrompt(f.text); };
+      body.appendChild(me); body.appendChild(d);
+    }
+  }
   function failBubbleHtml(text) {
     return `<div class="chat-fail"><span>${escMd(text)}</span><button class="chat-retry" type="button">${t('chat.retry')}</button></div>`;
   }

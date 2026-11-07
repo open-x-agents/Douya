@@ -17,8 +17,7 @@ One product. Three pages. Shared memory underneath.
 | --- | --- | --- |
 | Long-term plans grown from your interests — fitness, study, craft. Propose first; **consent before work**. | Current affairs from mail, PRs, Slack, calendar. Finish something and the state writes back everywhere. | Readable memories & achievements — human sentences, photos welcome. Achievements surface first. |
 
-**Shipped today:** Today, Sources, Settings, Memories / Recall (readable tiles + photos), dock chat with Chief, Confirm-gated sends.  
-**Coming next:** consent-first Future plans (#137) — same Muse shell, same OpenViking store.
+**Shipped today:** Today, Sources, Future / 未来 (propose, accept, then step or archive), Settings, Memories / Recall (readable tiles + photos), dock chat with Chief, Confirm-gated sends.
 
 ```
   Muse UI  ──▶  Chief / source bots  ──▶  OpenViking  ──▶  Sources
@@ -103,9 +102,9 @@ Default UI is **English**. Switch to 中文 in Settings or the sidebar control (
                       └─────────────┘
 ```
 
-- **Muse UI** (`packages/dsh-muse-ui`) — desktop-first shell: Today, Memories, Sources, Settings (Future landing next).
+- **Muse UI** (`packages/dsh-muse-ui`) — desktop-first shell: Future, Today, Memories, Sources, Settings.
 - **Chief / source bots** — channel bots propose when accounts are ACTIVE and snapshots are non-empty; Chief merges, ranks, and owns dock chat. Empty snapshots skip the bot. Calendar is aux fetch only.
-- **OpenViking** — durable memory for chat recall, Memories glimpse, and (soon) Future progress context.
+- **OpenViking** — durable memory for chat recall, Memories glimpse, and the memories Future plans are grounded in.
 - **Sources** — live connectors via Composio; nothing outbound without Confirm.
 
 ### Bot routing — who does what
@@ -137,8 +136,9 @@ Plans and progress live in `futurePlans` in the existing host `state.json`
 of digest cards; restart and re-digest preserve them. No extra service, scheduler, or
 OpenViking writes. Chrome is EN/ZH; plan text stays in the language you used.
 
-未来页：从真实回忆或你亲口说的兴趣出发；先提建议，同意后再开始。
-可以勾选、撤销、继续加下一步、归档，进度不会被下次汇聚覆盖。
+On the page a plan starts from a real memory (回忆) or an interest you say out loud: propose
+first, work only after you agree. Tick a step off, undo it, add the next one, or archive (归档)
+the plan — progress survives the next digest.
 
 ## Long-term memory
 
@@ -258,9 +258,9 @@ Restart after pulls: `npm start` or `scripts/.odm-restart.sh`.
 
 ## Status
 
-**Shipped:** multi-bot digests with skip-empty routing, desktop Muse UX, pending-confirm sends, outcome sync, EN/中文 chrome, OpenViking memory + Memories/Recall (readable tiles + photos), Muse UI as `dsh-muse-ui`, Sources logos & Composio catalog.
+**Shipped:** multi-bot digests with skip-empty routing, desktop Muse UX, pending-confirm sends, outcome sync, EN/中文 chrome, OpenViking memory + Memories/Recall (readable tiles + photos), Muse UI as `dsh-muse-ui`, Sources logos & Composio catalog, consent-first Future plans (#137).
 
-**Evolving:** consent-first Future plans, denser mobile polish, richer source coverage.
+**Evolving:** denser mobile polish, richer source coverage.
 
 ---
 

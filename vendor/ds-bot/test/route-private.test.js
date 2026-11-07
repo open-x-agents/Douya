@@ -13,8 +13,8 @@ import Agents from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { createRuntime } from '../index.js'
 import { fakeContext } from './fake-ctx.js'
-import { HOLD_RECORD, applyPrivateWithhold, install as installPrivateHook } from '../src/host/route-private-hook.js'
-import { bindPrivateHold, privateHold, rememberPrivateHold, routeAck, routePrivate } from '../src/host/route-private.js'
+import { applyPrivateWithhold, install as installPrivateHook } from '../src/host/route-private-hook.js'
+import { bindPrivateHold, privateHold, rememberPrivateHold, routeAck, routePrivate, serializePrivate } from '../src/host/route-private.js'
 import { createLine, indexOnly, labelFromText, noteLineLabel } from '../src/host/work-lines.js'
 
 const current = { id: 'line-now', sessionId: 'sess-now', label: 'plan the picnic', busy: true, current: true }
@@ -36,6 +36,8 @@ test('a clear continuation of the busy line steers, and uncertainty asks', () =>
   const only = routePrivate({ text: 'what is the weather tomorrow', busy: true, lines: [current] })
   assert.equal(only.action, 'ask')
   assert.equal(only.steer, false)
+  const busyUnlabeled = routePrivate({ text: '还没好吗', busy: true, lines: [{ id: 'line-now', sessionId: 'sess-now', current: true }] })
+  assert.equal(busyUnlabeled.action, 'ask')
   assert.equal(miss.steer, false)
   assert.match(routeAck(miss), /will not read this/)
 
@@ -149,28 +151,31 @@ test('a binding must name an open work line of this bot and is not delivered', (
     choices: [{ id: 'line-now', label: 'plan the picnic', sessionId: 'sess-now' }], at: 1,
   })
   const before = structuredClone(state.privateHolds)
-  assert.equal(bindPrivateHold(state, 'sess-now', 'missing', 9), undefined)
-  assert.equal(bindPrivateHold(state, 'sess-now', 'line-now-closed', 9), undefined)
+  const generation = privateHold(state, 'sess-now').generation
+  assert.equal(bindPrivateHold(state, 'sess-now', 'missing', generation, 9), undefined)
   assert.deepEqual(state.privateHolds, before)
   state.workLines['line-old'] = { id: 'line-old', botId: 'bot', sessionId: 'sess-old', label: 'old', closedAt: 1 }
   state.privateHolds['sess-now'].choices.push({ id: 'line-old', label: 'old', sessionId: 'sess-old' })
-  assert.equal(bindPrivateHold(state, 'sess-now', 'line-old', 9), undefined)
+  assert.equal(bindPrivateHold(state, 'sess-now', 'line-old', generation, 9), undefined)
   assert.equal(state.privateHolds['sess-now'].status, 'pending')
-  const bound = bindPrivateHold(state, 'sess-now', 'line-now', 9)
+  const bound = bindPrivateHold(state, 'sess-now', 'line-now', generation, 9)
   assert.equal(bound.status, 'bound')
   assert.equal(bound.boundTo, 'line-now')
   assert.equal(bound.delivered, false)
   assert.equal(bound.label, 'plan the picnic')
+  rememberPrivateHold(state, { sessionId: 'sess-now', botId: 'bot', messageId: 'm-b', action: 'ask', text: 'a different sentence', at: 10 })
+  const next = privateHold(state, 'sess-now')
+  assert.equal(next.status, 'pending')
+  assert.equal(next.boundTo, undefined)
+  assert.notEqual(next.generation, generation)
+  assert.equal(bindPrivateHold(state, 'sess-now', 'line-now', generation, 11), undefined)
+  assert.equal(privateHold(state, 'sess-now').status, 'pending')
 })
 
-test('a failed team-file save still keeps the sentence out and recoverable on the session', async (t) => {
-  const ctx = new Context()
-  await ctx.plugin(SessionStore)
-  t.after(() => ctx.fiber.dispose())
-  const session = ctx.sessions.create('sess-now', { meta: { cwd: '/tmp' } })
+test('a failed team-file save is unrecoverable and is not called durable', async () => {
   const state = {}
   rememberPrivateHold(state, { sessionId: 'sess-now', botId: 'bot', messageId: 'm-ask', action: 'ask', text: 'which one', at: 1 })
-  const payload = { agent: { id: 'sess-now', session }, messages: [user('m-ask', 'which one')] }
+  const payload = { agent: { id: 'sess-now', inbox: { append() { throw new Error('should not queue') } } }, messages: [user('m-ask', 'which one')] }
   const result = await applyPrivateWithhold({
     state,
     isBotSession: () => true,
@@ -180,11 +185,39 @@ test('a failed team-file save still keeps the sentence out and recoverable on th
   }, payload)
   assert.deepEqual(payload.messages, [])
   assert.equal(result.saved, false)
-  assert.equal(result.outcomes[0].outcome, 'held-unsaved')
-  const record = session.snapshotEvents().find(event => event.type === HOLD_RECORD)
-  assert.equal(record.ignorable, true)
-  assert.equal(record.data.text, 'which one')
+  assert.equal(result.outcomes[0].outcome, 'unrecoverable')
   assert.equal(privateHold(state, 'sess-now').items[0].text, 'which one')
+  assert.equal(privateHold(state, 'sess-now').items[0].outcome, 'unrecoverable')
+})
+
+test('a queue outcome that fails to save is taken back out of next-turn', async () => {
+  const state = {}
+  rememberPrivateHold(state, { sessionId: 'sess-now', messageId: 'm-q', action: 'queue', text: 'later', at: 1 })
+  let writes = 0
+  const inbox = {
+    nextTurn: [],
+    append(_target, message) { this.nextTurn.push(message) },
+    remove(id) {
+      const at = this.nextTurn.findIndex(message => message.id === id)
+      if (at === -1) return false
+      this.nextTurn.splice(at, 1)
+      return true
+    },
+  }
+  const result = await applyPrivateWithhold({
+    state,
+    isBotSession: () => true,
+    roomOf: () => undefined,
+    save: async () => {
+      writes += 1
+      if (writes > 1) throw new Error('outcome write failed')
+    },
+    warn: () => {},
+  }, { agent: { id: 'sess-now', inbox }, messages: [user('m-q', 'later')] })
+  assert.deepEqual(result.outcomes.map(item => item.outcome), ['queue-failed'])
+  assert.deepEqual(inbox.nextTurn, [])
+  assert.equal(privateHold(state, 'sess-now').items[0].outcome, 'queue-failed')
+  assert.equal(privateHold(state, 'sess-now').items[0].text, 'later')
 })
 
 test('a saved label and hold reload, and a failed save does not keep a binding', async (t) => {
@@ -207,23 +240,10 @@ test('a saved label and hold reload, and a failed save does not keep a binding',
   assert.equal(again.state.workLines['line-now'].label, 'plan the picnic')
   assert.equal(again.state.privateHolds['a-now'].items[0].text, 'which one')
   assert.equal(Object.hasOwn(again.state.workLines['line-now'], 'text'), false)
-  const before = structuredClone(again.state.privateHolds)
-  assert.equal(bindPrivateHold(again.state, 'a-now', 'not-a-line', 9), undefined)
-  assert.deepEqual(again.state.privateHolds, before)
-  const snapshot = structuredClone(again.state.privateHolds)
-  const bound = bindPrivateHold(again.state, 'a-now', 'line-now', 9)
-  assert.equal(bound.delivered, false)
-  again.save = async () => { throw new Error('read only') }
-  try {
-    await again.save({ required: true })
-  } catch {
-    again.state.privateHolds = snapshot
-  }
   assert.equal(again.state.privateHolds['a-now'].status, 'pending')
-  assert.equal(again.state.privateHolds['a-now'].boundTo, undefined)
 })
 
-test('the real agent loop does not admit or send a held sentence', async (t) => {
+async function withLoop(t, { save, state }, run) {
   const ctx = new Context()
   for (const plugin of [SessionStore, SessionProjection, LlmRuntime, ToolRuntime, SystemPrompt, Agents, AgentLoop]) {
     await ctx.plugin(plugin)
@@ -249,24 +269,110 @@ test('the real agent loop does not admit or send a held sentence', async (t) => 
       }
     },
   })
-  const state = {}
-  installPrivateHook({ ctx, state, isBotSession: () => true, roomOf: () => undefined, save: async () => {}, warn: () => {} })
+  installPrivateHook({ ctx, state, isBotSession: () => true, roomOf: () => undefined, save, warn: () => {} })
   const agent = await ctx.agentLoop.create('sess-loop', { provider: 'fake', model: 'fake-model' }, { cwd: '/tmp' })
   const keep = 'plan the picnic now'
   const secret = 'WEATHER-SECRET-SENTENCE'
-  const hidden = createUserMessage({ content: [{ type: 'text', text: secret }], source: { kind: 'user' } })
-  rememberPrivateHold(state, { sessionId: 'sess-loop', botId: 'bot', messageId: hidden.id, action: 'new', text: secret, at: 1 })
   agent.steer(createUserMessage({ content: [{ type: 'text', text: keep }], source: { kind: 'user' } }))
   for (let attempt = 0; attempt < 50 && seen.length === 0; attempt += 1) await new Promise(resolve => setTimeout(resolve, 10))
-  agent.steer(hidden)
+  await run({ agent, seen, keep, secret, release })
   release()
   await agent.whenIdle()
   const admitted = agent.session.snapshotEvents().filter(event => event.type === 'user/message').map(event => JSON.stringify(event.data))
-  assert.equal(admitted.some(row => row.includes(keep)), true)
-  assert.equal(admitted.some(row => row.includes(secret)), false)
-  assert.equal(seen.some(row => row.includes(keep)), true)
-  assert.equal(seen.some(row => row.includes(secret)), false)
-  assert.equal(state.privateHolds['sess-loop'].items[0].text, secret)
+  return { admitted, seen, keep, secret, state }
+}
+
+test('the real agent loop does not admit ask, new, or an unsaved queue', async (t) => {
+  const state = {}
+  const hidden = createUserMessage({ content: [{ type: 'text', text: 'WEATHER-SECRET-SENTENCE' }], source: { kind: 'user' } })
+  rememberPrivateHold(state, { sessionId: 'sess-loop', botId: 'bot', messageId: hidden.id, action: 'ask', text: 'WEATHER-SECRET-SENTENCE', at: 1 })
+  const asked = await withLoop(t, { state, save: async () => {} }, async ({ agent }) => { agent.steer(hidden) })
+  assert.equal(asked.admitted.some(row => row.includes(asked.secret)), false)
+  assert.equal(asked.seen.some(row => row.includes(asked.secret)), false)
+  assert.equal(asked.admitted.some(row => row.includes(asked.keep)), true)
+  assert.equal(state.privateHolds['sess-loop'].items.find(item => item.messageId === hidden.id).outcome, 'held')
+
+  const queued = {}
+  const queueMessage = createUserMessage({ content: [{ type: 'text', text: 'WEATHER-SECRET-SENTENCE' }], source: { kind: 'user' } })
+  rememberPrivateHold(queued, { sessionId: 'sess-loop', messageId: queueMessage.id, action: 'queue', text: 'WEATHER-SECRET-SENTENCE', at: 2 })
+  const queueResult = await withLoop(t, {
+    state: queued,
+    save: async () => { throw new Error('read only') },
+  }, async ({ agent }) => { agent.steer(queueMessage) })
+  assert.equal(queueResult.admitted.some(row => row.includes(queueResult.secret)), false)
+  assert.equal(queueResult.seen.some(row => row.includes(queueResult.secret)), false)
+  assert.equal(queued.privateHolds['sess-loop'].items.find(item => item.messageId === queueMessage.id).outcome, 'unrecoverable')
+  assert.equal(queued.privateHolds['sess-loop'].items.find(item => item.messageId === queueMessage.id).text, 'WEATHER-SECRET-SENTENCE')
+})
+
+test('confirm-private keeps one generation and rejects a stale card', { timeout: 8000 }, async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'ds-bot-confirm-private-'))
+  const ctx = fakeContext()
+  let route
+  const register = ctx.connection.fetch.register
+  ctx.connection.fetch.register = (options) => { route = options; return register(options) }
+  const rt = createRuntime(ctx, { home })
+  t.after(async () => {
+    await ctx.dispose()
+    rmSync(home, { recursive: true, force: true })
+  })
+  await rt.load()
+  createLine(rt.state, { id: 'line-now', botId: 'a', sessionId: 'a-now', label: 'plan the picnic' })
+  createLine(rt.state, { id: 'line-other', botId: 'a', sessionId: 'a-other', label: 'budget review' })
+  rememberPrivateHold(rt.state, {
+    sessionId: 'a-now', botId: 'a', messageId: 'm-a', action: 'ask', text: 'sentence A',
+    choices: [
+      { id: 'line-now', label: 'plan the picnic', sessionId: 'a-now' },
+      { id: 'line-other', label: 'budget review', sessionId: 'a-other' },
+    ],
+    at: 1,
+  })
+  await rt.save({ required: true })
+  const call = async (payload) => (await route.fetch(new Request('http://localhost/api/bot', {
+    method: 'POST',
+    body: JSON.stringify({ endpoint: 'confirm-private', payload }),
+  }))).json()
+  const generation = rt.state.privateHolds['a-now'].generation
+  const realSave = rt.save.bind(rt)
+  let release
+  let started
+  const gate = new Promise(resolve => { release = resolve })
+  const startedGate = new Promise(resolve => { started = resolve })
+  rt.save = async (options) => {
+    started()
+    await gate
+    return realSave(options)
+  }
+  const first = call({ sessionId: 'a-now', choiceId: 'line-now', generation })
+  const second = call({ sessionId: 'a-now', choiceId: 'line-other', generation })
+  await startedGate
+  const incoming = serializePrivate(rt, 'a-now', async () => {
+    rememberPrivateHold(rt.state, {
+      sessionId: 'a-now', botId: 'a', messageId: 'm-b', action: 'ask', text: 'sentence B',
+      choices: [{ id: 'line-now', label: 'plan the picnic', sessionId: 'a-now' }],
+      at: 2,
+    })
+  })
+  release()
+  const [left, right] = await Promise.all([first, second])
+  await incoming
+  const winners = [left, right].filter(result => result.ok === true)
+  assert.equal(winners.length, 1)
+  assert.equal(winners[0].value.delivered, false)
+  const hold = rt.state.privateHolds['a-now']
+  assert.equal(hold.status, 'pending')
+  assert.equal(hold.items.at(-1).text, 'sentence B')
+  assert.equal(hold.boundTo, undefined)
+  const replay = await call({ sessionId: 'a-now', choiceId: 'line-now', generation })
+  assert.equal(replay.ok, false)
+  assert.equal(replay.error.code, 'bot/stale')
+  assert.equal(rt.state.privateHolds['a-now'].items.at(-1).text, 'sentence B')
+  rt.save = async () => { throw new Error('read only') }
+  const failed = await call({ sessionId: 'a-now', choiceId: 'line-now', generation: hold.generation })
+  assert.equal(failed.ok, false)
+  assert.equal(failed.error.code, 'bot/save')
+  assert.equal(rt.state.privateHolds['a-now'].status, 'pending')
+  assert.equal(rt.state.privateHolds['a-now'].items.at(-1).text, 'sentence B')
 })
 
 test('DSH refuses a second append while a splice is still being published', async (t) => {

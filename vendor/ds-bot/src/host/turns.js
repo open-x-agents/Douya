@@ -11,7 +11,7 @@ import { textOf } from './text.js'
 import { reminderText } from './schedules.js'
 import { appendCite, citeCarrier, citeItem, citesOf, mergeCites, visibleRoomCites } from '../shared/cite.js'
 import { lineBySession, listByBot, noteLineLabel } from './work-lines.js'
-import { rememberPrivateHold, routeAck, routeFailureAck, routePrivate } from './route-private.js'
+import { rememberPrivateHold, routeAck, routeFailureAck, routePrivate, serializePrivate } from './route-private.js'
 
 // A failed turn's `LlmFailure`, kept to what can be shown and logged. Like DSH's own
 // error row, an AUTH failure loses its message: providers may echo part of the key.
@@ -924,19 +924,22 @@ function notePrivateSplice(rt, id, entry, event, inserted) {
       continue
     }
     held = true
-    rememberPrivateHold(rt.state, {
-      sessionId: id,
-      messageId: message.id,
-      action: decision.action,
-      text,
-      label: decision.label,
-      workLineId: decision.workLineId,
-      choices: decision.choices,
-      highlight: decision.highlight,
-      botId,
-      at: event.time ?? Date.now(),
-    })
-    jobs.push(persistAck(rt, entry, decision, event.time ?? Date.now()))
+    const at = event.time ?? Date.now()
+    jobs.push(serializePrivate(rt, id, async () => {
+      rememberPrivateHold(rt.state, {
+        sessionId: id,
+        messageId: message.id,
+        action: decision.action,
+        text,
+        label: decision.label,
+        workLineId: decision.workLineId,
+        choices: decision.choices,
+        highlight: decision.highlight,
+        botId,
+        at,
+      })
+      await persistAck(rt, entry, decision, at)
+    }))
   }
   const persist = Promise.all(jobs)
   rt.privateHoldPersist = Promise.resolve(rt.privateHoldPersist).then(() => persist, () => persist)

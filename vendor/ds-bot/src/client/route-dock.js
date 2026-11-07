@@ -62,10 +62,11 @@ function PrivateHoldDock({ sessionId, useRoster, actions }) {
   if (text === '') return null
   const choices = Array.isArray(hold.choices) ? hold.choices : []
   const bound = hold.status === 'bound'
+  const generation = hold.generation
   const choose = (id) => {
-    if (sending || bound || typeof id !== 'string' || id === '' || typeof actions.confirmPrivate !== 'function') return
+    if (sending || bound || typeof id !== 'string' || id === '' || typeof generation !== 'number' || typeof actions.confirmPrivate !== 'function') return
     setSending(true)
-    void Promise.resolve(actions.confirmPrivate(sessionId, id)).finally(() => setSending(false))
+    void Promise.resolve(actions.confirmPrivate(sessionId, id, generation)).finally(() => setSending(false))
   }
   return h('div', { className: 'bt-route-dock', 'data-route-dock': 'private', 'data-private-hold': hold.status ?? 'pending' },
     h('div', { className: 'bt-route', role: 'group', 'aria-label': t('Which line should this go on?') },

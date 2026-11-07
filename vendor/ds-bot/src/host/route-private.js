@@ -140,17 +140,16 @@ export function routePrivate({ text = '', busy = false, lines = [], explicitQueu
     return bound('steer', marks.hits[0], body)
   }
   if (marks.hits.length === 1 && marks.unsures.length === 0) return ask(open, body, marks.hits[0].id)
-  // No labeled line yet: this sentence is the opening, not a guess between lines.
+  // Only an idle chat with no labeled line yet is an opening. A busy sentence
+  // that does not clearly continue a label is uncertainty, even with no rival.
   const labeled = open.filter(line => lineLabel(line) !== undefined)
-  if (labeled.length === 0) return bound('steer', current, body)
-  // A labeled line that this sentence does not clearly continue is uncertainty,
-  // including when it is the only line.
+  if (!busy && labeled.length === 0) return bound('steer', current, body)
   return ask(open, body)
 }
 
 /** Shown when the sentence stayed out of the model but the team file did not keep it. */
 export function routeFailureAck() {
-  return 'This sentence stayed out of the model, but the hold could not be saved.'
+  return 'This sentence stayed out of the model, but it could not be saved and will not survive a restart.'
 }
 
 /** Activity-row copy. Not an assistant message. A success ack is only for a saved hold. */
@@ -188,7 +187,7 @@ function itemOf(input) {
     ...(typeof input.workLineId === 'string' && input.workLineId !== '' ? { workLineId: input.workLineId } : {}),
     ...(typeof input.sessionId === 'string' && input.sessionId !== '' ? { sessionId: input.sessionId } : {}),
     ...(typeof input.botId === 'string' && input.botId !== '' ? { botId: input.botId } : {}),
-    ...(input.outcome === 'queued' || input.outcome === 'queue-failed' || input.outcome === 'held' || input.outcome === 'held-unsaved' ? { outcome: input.outcome } : {}),
+    ...(input.outcome === 'queued' || input.outcome === 'queue-failed' || input.outcome === 'held' || input.outcome === 'unrecoverable' ? { outcome: input.outcome } : {}),
     at: typeof input.at === 'number' ? input.at : Date.now(),
   }
 }
@@ -202,17 +201,28 @@ export function rememberPrivateHold(state, input = {}) {
   const items = Array.isArray(previous?.items) ? previous.items.filter(item => item?.action !== 'steer') : []
   const next = itemOf(input)
   const without = items.filter(item => item.messageId === undefined || item.messageId !== next.messageId)
+  // A new sentence is its own confirmation. It does not inherit an older binding.
   table[sessionId] = {
     sessionId,
+    generation: (previous?.generation ?? 0) + 1,
     items: [...without, next],
     ...(Array.isArray(input.choices) ? { choices: input.choices } : (Array.isArray(previous?.choices) ? { choices: previous.choices } : {})),
     ...(typeof input.highlight === 'string' && input.highlight !== '' ? { highlight: input.highlight } : (typeof previous?.highlight === 'string' ? { highlight: previous.highlight } : {})),
     ...(typeof input.botId === 'string' && input.botId !== '' ? { botId: input.botId } : (typeof previous?.botId === 'string' ? { botId: previous.botId } : {})),
-    status: previous?.status === 'bound' ? 'bound' : 'pending',
-    ...(typeof previous?.boundTo === 'string' ? { boundTo: previous.boundTo, boundAt: previous.boundAt, delivered: false } : { delivered: false }),
+    status: 'pending',
+    delivered: false,
     at: next.at,
   }
   return table[sessionId]
+}
+
+/** One private-chat mutation at a time, so a confirm cannot roll back a newer sentence. */
+export function serializePrivate(rt, sessionId, job) {
+  if (rt.privateGate == null) rt.privateGate = new Map()
+  const previous = rt.privateGate.get(sessionId) ?? Promise.resolve()
+  const run = previous.then(() => job(), () => job())
+  rt.privateGate.set(sessionId, run.then(() => {}, () => {}))
+  return run
 }
 
 /** Set one item's outcome without dropping its text. */
@@ -234,9 +244,11 @@ export function privateHold(state, sessionId) {
  * Record which open work line the user picked. Does not put the sentence back
  * in an inbox. An unknown, closed, or other-bot choice leaves the hold unchanged.
  */
-export function bindPrivateHold(state, sessionId, choiceId, now = Date.now()) {
+export function bindPrivateHold(state, sessionId, choiceId, generation, now = Date.now()) {
   const hold = privateHold(state, sessionId)
   if (hold == null || typeof choiceId !== 'string' || choiceId === '') return undefined
+  if (typeof generation !== 'number' || hold.generation !== generation) return undefined
+  if (hold.status === 'bound') return hold.boundTo === choiceId ? hold : undefined
   const choice = (hold.choices ?? []).find(item => item?.id === choiceId)
   if (choice == null) return undefined
   const lines = state.workLines

@@ -25,6 +25,15 @@ function flattenContent(content) {
  * a fresh "part" Session (bots[id].sessionId); prompts to the bot id are routed there, but replies have to be
  * read from the current part. parts = earlier part Sessions, oldest first, then the current one.
  */
+// Turn ds-bot failures that mean "the Chief's saved session is gone or unreadable" into a next step.
+export function chatErrorHint(err) {
+  const s = String(err || '')
+  if (/could not be read \(saved by a newer DS Bot/i.test(s)) return '豆芽的 Bot 团队文件（.dsh-odm/bot/state.json）是更新版本的 DS Bot 写的，当前只能只读。请先备份并移走这个文件再重启，Chief 会被重新创建。'
+  if (/no Main Bot/i.test(s)) return '还没有 Chief。刷新页面会重新创建；如果还不行，检查 .dsh-odm/bot/state.json 能否被读取。'
+  if (/session "[^"]+" not found|v0 artifact|cannot safely transform/i.test(s)) return 'Chief 的旧对话找不到或格式太旧，无法继续。请备份并移走 .dsh-odm/bot/state.json 后重启，会新建一个 Chief。'
+  return ''
+}
+
 export async function resolveChief(dshHome, botId = null) {
   try {
     const state = JSON.parse(await readFile(join(dshHome, 'bot', 'state.json'), 'utf8'))

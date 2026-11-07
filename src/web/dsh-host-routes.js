@@ -3,7 +3,7 @@
 
 import { CALLBACK_PATH, requestOrigin } from './composio-callback.js'
 import { readFile } from 'node:fs/promises'
-import { runMuseChatTurn, chatProgress, loadMuseHistory } from './muse-chat-core.js'
+import { runMuseChatTurn, chatProgress, loadMuseHistory, chatErrorHint } from './muse-chat-core.js'
 import { createChatLane } from './chat-lane.js'
 import { installUiFeed } from './ui-feed.js'
 import { browserScript, resolveLang, DEFAULT_LOCALE } from '../i18n/index.js'
@@ -410,7 +410,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
         const noModel = /No model is available|没有可用的模型/i.test(err)
         const text = noModel
           ? '还没有可用的模型。请打开「配置」→ AI 模型，选择 DeepSeek 并保存 API Key（会写入 DEEPSEEK_API_KEY）。若刚保存仍不行，重启 npm start 后再用 .odm-data/dsh-web.url 里的登录链接打开。'
-          : `没法完成对话：${err}`
+          : (chatErrorHint(err) ? `没法完成对话：${chatErrorHint(err)}` : `没法完成对话：${err}`)
         return json({
           text,
           status: 'error',

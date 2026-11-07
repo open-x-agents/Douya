@@ -70,6 +70,16 @@ const COMPOSIO_APPS = [
   { key: 'hackernews', name: 'Hacker News', category: 'news', logo: '/api/opendigitalmate/logo?app=hackernews', description: 'app.hackernews.desc', authMode: 'NO_AUTH' },
   { key: 'spotify', name: 'Spotify', category: 'life', logo: '/api/opendigitalmate/logo?app=spotify', description: 'app.spotify.desc', authMode: 'OAUTH2' },
   { key: 'strava', name: 'Strava', category: 'life', logo: '/api/opendigitalmate/logo?app=strava', description: 'app.strava.desc', authMode: 'OAUTH2' },
+  { key: 'linkedin', name: 'LinkedIn', category: 'news', logo: '/api/opendigitalmate/logo?app=linkedin', description: 'app.linkedin.desc', authMode: 'OAUTH2' },
+  { key: 'instagram', name: 'Instagram', category: 'news', logo: '/api/opendigitalmate/logo?app=instagram', description: 'app.instagram.desc', authMode: 'OAUTH2' },
+  { key: 'hubspot', name: 'HubSpot', category: 'other', logo: '/api/opendigitalmate/logo?app=hubspot', description: 'app.hubspot.desc', authMode: 'OAUTH2' },
+  { key: 'googletasks', name: 'Google Tasks', category: 'tasks', logo: '/api/opendigitalmate/logo?app=googletasks', description: 'app.googletasks.desc', authMode: 'OAUTH2' },
+  { key: 'monday', name: 'Monday.com', category: 'tasks', logo: '/api/opendigitalmate/logo?app=monday', description: 'app.monday.desc', authMode: 'OAUTH2' },
+  { key: 'basecamp', name: 'Basecamp', category: 'tasks', logo: '/api/opendigitalmate/logo?app=basecamp', description: 'app.basecamp.desc', authMode: 'OAUTH2' },
+  { key: 'coda', name: 'Coda', category: 'docs', logo: '/api/opendigitalmate/logo?app=coda', description: 'app.coda.desc', authMode: 'API_KEY' },
+  { key: 'miro', name: 'Miro', category: 'docs', logo: '/api/opendigitalmate/logo?app=miro', description: 'app.miro.desc', authMode: 'OAUTH2' },
+  { key: 'box', name: 'Box', category: 'docs', logo: '/api/opendigitalmate/logo?app=box', description: 'app.box.desc', authMode: 'OAUTH2' },
+  { key: 'onenote', name: 'OneNote', category: 'docs', logo: '/api/opendigitalmate/logo?app=onenote', description: 'app.onenote.desc', authMode: 'OAUTH2' },
 ];
 
 // In-memory chat history per session

@@ -23,6 +23,7 @@ function loader() {
   const factory = new Function('$', 'document', 'odmLang', 'odmHeaders', 'fillUserBubble', 'renderMd', 'chatTime', 'citesEl', 'renderSurface', 'dockPrompt', 'shapeReply', 'stickTodayChat', 'fetch', `${src}; return ensureInlineBotHistory`)
   return {
     appended,
+    body,
     run: (fetchImpl) => factory(
       $, { createElement: makeEl }, () => 'zh', () => ({}),
       (el, text) => { el.innerHTML = String(text) },
@@ -42,4 +43,49 @@ test('a failed first history read is retried when the dock is opened again', asy
   assert.equal(appended.length, 0)
   await load()
   assert.deepEqual(appended.map(b => b.className), ['bubble me', 'bubble bot'])
+})
+
+// One dock click fires pointerdown and then focus, and both open the dock. With the load flag only set
+// after the paint, both would read and paint the same transcript twice.
+test('two opens during the first read paint the transcript once', async () => {
+  const { appended, run } = loader()
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  const load = run(async () => { await gate; return { ok: true, json: async () => payload } })
+  const first = load()
+  const second = load()
+  release()
+  await Promise.all([first, second])
+  assert.deepEqual(appended.map(b => b.className), ['bubble me', 'bubble bot'])
+})
+
+// The session may not be hydrated yet when the page reloads, and that read answers with an empty list.
+// Caching that answer is the original symptom: the dock stays blank for the rest of the page load.
+test('an empty first read is read again on the next open instead of pinning a blank dock', async () => {
+  const { appended, run } = loader()
+  let reads = 0
+  const emptyThenHistory = async () => {
+    reads += 1
+    return { ok: true, json: async () => (reads === 1 ? { messages: [] } : payload) }
+  }
+  const load = run(emptyThenHistory)
+  await load()
+  assert.equal(appended.length, 0)
+  await load()
+  assert.equal(reads, 2)
+  assert.deepEqual(appended.map(b => b.className), ['bubble me', 'bubble bot'])
+})
+
+// The owner may send while the read is in flight: the live bubble is already the transcript, so the
+// restored one must not be painted under it (that would show the prompt twice).
+test('a live turn that starts during the read is not duplicated by history', async () => {
+  const { appended, body, run } = loader()
+  let release
+  const gate = new Promise(resolve => { release = resolve })
+  const load = run(async () => { await gate; return { ok: true, json: async () => payload } })
+  const read = load()
+  body.appendChild({ className: 'bubble me' })
+  release()
+  await read
+  assert.deepEqual(appended.map(b => b.className), ['bubble me'])
 })

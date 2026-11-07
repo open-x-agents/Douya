@@ -1,8 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { BLOCK_MARKERS, blockedNote, classifyBlock } from '../src/sources/blocked.js';
 import { SourceError, describeSourceGaps } from '../src/sources/contract.js';
+import { fetchPrBrief } from '../src/web/card-brief.js';
+import { createApiRouter } from '../src/web/api.js';
 
 const CLOUDFLARE_PAGE = '<title>Attention Required! | Cloudflare</title>';
 
@@ -78,4 +83,51 @@ test('a blocked source gap says the sentence', () => {
   assert.doesNotThrow(() => new SourceError('blocked', 'GitHub served a block page', { status: 403 }));
   // 别的来源没有专名时仍是一句完整的话。
   assert.equal(describeSourceGaps([{ source: 'blog', kind: 'blocked' }]), 'blog 挡住了这次访问，我不会绕过它。');
+});
+
+test('a blocked PR fetch becomes the one sentence', async () => {
+  const target = { owner: 'open-x-agents', repo: 'openDigitalMate', number: 117 };
+  const blockedClient = {
+    executeAction: async () => {
+      throw new Error(`Composio 403: Sorry, you have been blocked ${CLOUDFLARE_PAGE}`);
+    },
+  };
+
+  // 卡片链路只剩一句 message：它也必须认出来，并换成那句导出的常量。
+  const brief = await fetchPrBrief(blockedClient, target);
+  assert.equal(brief.blocked, true);
+  assert.equal(brief.error, blockedNote('zh', { site: 'GitHub' }));
+
+  // 普通失败照旧，不冒充站点拦截。
+  const plainClient = { executeAction: async () => { throw new Error('Composio 500: upstream error'); } };
+  const plain = await fetchPrBrief(plainClient, target);
+  assert.equal(plain.error, 'Composio 500: upstream error');
+  assert.equal(plain.blocked, undefined);
+
+  // 端点把 blocked 一起透传，UI 的 blocked 分支才看得到。
+  const home = mkdtempSync(join(tmpdir(), 'odm-blocked-'));
+  const card = {
+    id: 'c1',
+    source: 'github',
+    blocks: [{ type: 'link-list', links: [{ url: 'https://github.com/open-x-agents/openDigitalMate/pull/117', type: 'pr' }] }],
+  };
+  const state = { cards: [card], itemStatus: {} };
+  const router = createApiRouter({
+    store: { get: () => state, save: async (s) => Object.assign(state, s) },
+    config: { home, dataDir: home },
+    configStore: { get: () => ({}), set() {} },
+    composioClient: blockedClient,
+  });
+  const answer = await router.cardBrief({ cardId: card.id });
+  assert.deepEqual(answer, { success: false, blocked: true, error: blockedNote('zh', { site: 'GitHub' }) });
+});
+
+test('the card face paints the blocked sentence before the empty-brief return', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8');
+  const branch = html.match(/if \(m\.r && m\.r\.blocked\)[\s\S]{0,400}?return;/);
+  assert.ok(branch, 'no blocked branch');
+  assert.ok(branch[0].includes('brief-note'), 'the branch does not paint .brief-note');
+  assert.ok(branch[0].includes('m.r.error'), 'the branch does not paint the server sentence');
+  assert.ok(html.indexOf(branch[0]) < html.indexOf('if (!b ||'), 'the blocked branch sits after the empty-brief return, so it never runs');
+  assert.ok(/\.brief-note\{/.test(html), 'no .brief-note style');
 });

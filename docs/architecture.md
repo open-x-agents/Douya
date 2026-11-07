@@ -35,6 +35,7 @@ DSH（DeepSeek Harness）
 | `sources` | `{ [源]: { connected, last_read_at, detail, error } }` —— 每个信源最后读到了什么；`connected` 三态：`true` 读了、`false` 没连上、`null`/缺失 = 还不知道 |
 | `week` | `[{ day, closed, dropped }]` —— 周结算用的每日减法，只放真有记录的本地日 |
 | `prefs` | `{ brevity{level, since_day}, weekend_send }` —— 长短与周末偏好；`state.prefs` 改一次立刻生效 |
+| `duty` | `{ text, by, at } \| null` —— 今天页最上面那一句常驻的「仍归你管」，只有一句，后写覆盖前写；不是卡片、不进 digest、不受布局筛选影响；`by` 是 `user` 或 `bot`，点 ✓ 后清空并写进 `completions`（`cardId: duty`） |
 
 day 的形状（本仓库的中间契约；#9 合入后由事件派生，只改 `panelData()` 的映射，渲染函数不动）：
 
@@ -360,5 +361,6 @@ node scripts/source-probe.mjs --fixture test/fixtures/github/ok --dir /tmp/p  # 
 - `client.js`（`dsh.client.platform: web`, `immediately: true`）把 `/` 重定向到 `/api/opendigitalmate/app`
 - Host 在同一进程注册 Muse HTML 与全部 `/api/*`；对话走进程内 `sessionController`（ds-bot Chief）
 - 卡片完成写入 `state.completions` 持久账本；digest 合并带 `{ digest: true }`，不抹掉 done/dismissed
+- 今天页最上面那一行是 `state.duty` 的一句常驻话，不是卡片：刷新、重新汇聚和布局筛选都不动它，点 ✓ 才进 `completions`，撤销再放回来
 
 启动：`npm start` → 单进程 `dsh --profile odm --port 7777`。登录后打开 Muse。

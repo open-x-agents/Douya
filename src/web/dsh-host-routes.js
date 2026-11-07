@@ -189,6 +189,14 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     fetch: async (request) => json(await router.uiOp(await readJson(request), { by: 'user' })),
   }, 'opendigitalmate: ui-op')
 
+  // The one standing line on 今天 (browser writes are always the user; 豆芽 goes through its own tool later).
+  effect({
+    path: '/api/opendigitalmate/duty',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request) => json(await router.dutyOp(await readJson(request), { by: 'user' })),
+  }, 'opendigitalmate: duty')
+
   // 今天 time-of-day order on / off (the user's switch on the page).
   effect({
     path: '/api/opendigitalmate/layout-pref',

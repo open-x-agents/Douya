@@ -22,6 +22,7 @@ import { briefTarget, fetchPrBrief } from './card-brief.js';
 import { prepareCardActions, pickNextThing, daySummaryLine, tomorrowMorning, snoozeUntilFor } from './card-prep.js';
 import { hydrateFace, autoFace } from '../ui/face.js';
 import { isAfterHours, isWorkish, doneToday, greetingLine, shHour } from './day-pulse.js';
+import { setDuty, doneDuty, restoreDuty, dutyView } from './duty.js';
 import { resolveLang, t as i18nT, DEFAULT_LOCALE } from '../i18n/index.js';
 import { sweepClearedCards, applyClearance, cardClearance, completeClearedCard } from './card-clearance.js';
 import { findTimetableCard, readPlan, applyPlanEdit, todaysCalendarEvents } from './timetable-plan.js';
@@ -731,6 +732,20 @@ export function createApiRouter(ctx) {
       });
     },
     async uiOp(body = {}, { by = 'bot' } = {}) { return uiService.op(body, { by: by === 'user' ? 'user' : 'bot' }); },
+    /** The one standing line on 今天: set | done | restore. Not a card and not a UI op, so it survives digests. */
+    async dutyOp(body = {}, { by = 'user' } = {}) {
+      const op = String(body?.op || 'set')
+      const state = store.get()
+      const res = op === 'set' ? setDuty(state, { text: body.text, by })
+        : op === 'done' ? doneDuty(state, { by })
+          : op === 'restore' ? restoreDuty(state, { text: body.text, by })
+            : { ok: false, error: `unknown op ${op}` }
+      if (!res.ok) return { success: false, error: res.error || 'invalid duty' }
+      await store.save({ duty: state.duty, completions: state.completions })
+      uiService.emit({ kind: 'cards', reason: 'duty' })
+      console.log(`[duty] ${op} by ${by === 'bot' ? 'bot' : 'user'} → ${state.duty ? state.duty.text : 'cleared'}`)
+      return { success: true, duty: dutyView(store.get()) }
+    },
     /** Long-poll for view events: { since, boot, wait }. */
     async uiEvents({ since = 0, boot = null, wait = 25000 } = {}) { return uiService.poll({ since: Number(since) || 0, boot, waitMs: Math.min(Number(wait) || 0, 30000) }); },
     /** The browser reports what it shows (debounced); kept in memory for odm_ui_state. */
@@ -996,6 +1011,7 @@ export function createApiRouter(ctx) {
             return { ...cleared, workish: isWorkish(cleared), prepared, faceView };
           }),
           next: nextThing,
+          duty: dutyView(state),
           summaryLine: daySummaryLine({ cards: activeCards, itemStatus: state.itemStatus || {}, meetings: meetings.length, lang: locale }),
           lang: locale,
           ui: { ...uiView(state), bootId: uiService.bootId, seq: uiService.seq },
@@ -1012,6 +1028,7 @@ export function createApiRouter(ctx) {
           meetingHours: 0,
           waitingCount: 0,
           cards: [],
+          duty: null,
           hasDigest: false,
         };
       }
@@ -2182,6 +2199,20 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
           } catch (err) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid request' }));
+          }
+        });
+        return;
+      } else if (url.pathname === '/api/opendigitalmate/duty' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const response = await router.dutyOp(JSON.parse(body || '{}'), { by: 'user' });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Invalid request' }));
           }
         });
         return;

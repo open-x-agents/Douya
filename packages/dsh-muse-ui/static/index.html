@@ -4378,7 +4378,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const nx = lastToday && lastToday.next;
     const more = dayMoreOpen();
     let html = renderDutyLine(lastToday && lastToday.duty);
-    html += renderNextHero(nx);
+    // Empty first run: the quiet tile below is the one empty state (no second "No todos yet" card).
+    if (!(nx && nx.kind === 'none' && !work.length && !(nx.upcoming && nx.upcoming.length))) html += renderNextHero(nx);
     html += renderDayLine(lastToday || {});
     html += `<div class="daymore${more ? ' open' : ''}" id="dayMore"><div class="daymore-in">`;
     html += tt ? renderTimetable(tt) : '';
@@ -4394,7 +4395,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const doneN = lastToday && lastToday.doneToday && lastToday.doneToday.count;
       html += doneN
         ? `<div class="tile empty size-wide all-done">${douyaSvg({ size: 56, state: 'idle', id: 'te' })}<div class="eyebrow">${t('today.empty_done_eyebrow')}</div><p class="w-desc">${t('today.empty_done_body', { n: doneN })}</p><div class="empty-ctas"><button type="button" class="step primary" data-empty-act="review">${t('today.empty_review')}</button><button type="button" class="step" data-empty-act="chat">${t('today.empty_chat')}</button></div></div>`
-        : `<div class="tile empty size-wide first-run">${douyaSvg({ size: 56, state: 'idle', id: 'te' })}<div class="eyebrow">${t('today.empty_quiet_eyebrow')}</div><p class="w-desc">${t('today.empty_quiet_body')}</p><div class="empty-ctas"><button type="button" class="step primary" data-empty-act="digest">${t('today.digest_now')}</button><button type="button" class="step" data-empty-act="chat">${t('today.empty_quiet_chat')}</button></div></div>`;
+        : `<div class="tile empty size-wide first-run">${douyaSvg({ size: 56, state: 'idle', id: 'te' })}<div class="eyebrow">${t('today.empty_quiet_eyebrow')}</div><p class="w-desc">${t('today.empty_quiet_body')}</p><div class="empty-ctas"><button type="button" class="step" data-empty-act="chat">${t('today.empty_quiet_chat')}</button></div></div>`;
     }
     html += '</div>';
     html += renderOffHours(offCards, cards);

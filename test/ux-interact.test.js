@@ -46,7 +46,9 @@ test('progressive disclosure: hide 下一步 when primary CTA exists', () => {
 test('empty / all-done invitations + dock contextual cue', () => {
   assert.match(html, /data-empty-act="review"/)
   assert.match(html, /data-empty-act="chat"/)
-  assert.match(html, /data-empty-act="digest"/)
+  // One empty state, one Refresh: the first-run tile has no second Refresh button and the idle Now card is skipped.
+  assert.doesNotMatch(html, /data-empty-act="digest"/)
+  assert.match(html, /nx\.kind === 'none' && !work\.length/)
   assert.match(html, /function paintDockCue/)
   assert.match(html, /function bindEmptyCtas/)
   assert.match(html, /chip-act/)

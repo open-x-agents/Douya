@@ -12,6 +12,7 @@ git pull origin cursor/redesign-card-ui-e793
 ### 2. 確認依賴已安裝
 ```bash
 npm install
+npm install --prefix vendor/ds-bot   # deep-view for link:ds-bot (also auto on npm start)
 ```
 
 ### 3. 配置環境變量

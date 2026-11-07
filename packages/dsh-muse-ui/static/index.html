@@ -515,6 +515,8 @@
   .btn:hover{border-color:#cfd3db}
   .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
   .btn.primary:hover{background:#3d5ce8}
+  .btn:disabled,.btn.primary:disabled{opacity:.45;cursor:default}
+  .pref-msg{color:var(--ink3)} .pref-msg.ok{color:var(--green)} .pref-msg.err{color:var(--rose)}
 
   ul.work{list-style:none;margin:0;padding:0}
   ul.work li{display:grid;grid-template-columns:22px 1fr;gap:11px;padding:12px 0;border-top:1px solid var(--line)}
@@ -2150,10 +2152,10 @@
             <div id="digestPrefsList" style="display:grid;gap:6px;margin:8px 0"></div>
             <div style="display:flex;gap:8px">
               <input id="digestPrefInput" placeholder="e.g. promo mail never gets its own card" data-i18n="settings.prefs_ph" data-i18n-attr="placeholder" maxlength="160" style="flex:1;border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px">
-              <button id="digestPrefAdd" data-i18n="settings.prefs_add">Add</button>
-              <button id="digestPrefClear" data-i18n="settings.prefs_clear">Clear all</button>
+              <button type="button" class="btn primary" id="digestPrefAdd" data-i18n="settings.prefs_add" disabled>Add</button>
+              <button type="button" class="btn" id="digestPrefClear" data-i18n="settings.prefs_clear" disabled>Clear all</button>
             </div>
-            <div id="digestPrefsMsg" style="font-size:12px;color:var(--ink3);margin-top:6px"></div>
+            <div id="digestPrefsMsg" class="pref-msg" role="status" aria-live="polite" style="font-size:12px;margin-top:6px"></div>
           </div>
 
           <!-- Model Configuration -->
@@ -5200,8 +5202,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   window.loadDigestRun = loadDigestRun;
   async function loadDigestMode() {
     const sel = $('digestModeSelect'); if (!sel) return;
-    try { const st = await (await fetch('/api/opendigitalmate/digest-status')).json(); sel.value = st.mode; $('digestModeNote').textContent = st.botAvailable ? '' : '（Bot 汇聚当前不可用，会使用旧流水线）'; } catch (_) {}
-    sel.onchange = async () => { const r = await (await fetch('/api/opendigitalmate/digest-mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: sel.value }) })).json().catch(() => ({})); $('digestModeNote').textContent = r.success ? '已保存' : '保存失败'; };
+    try { const st = await (await fetch('/api/opendigitalmate/digest-status')).json(); sel.value = st.mode; $('digestModeNote').textContent = st.botAvailable ? '' : t('settings.digest_mode_unavailable'); } catch (_) {}
+    sel.onchange = async () => { const r = await (await fetch('/api/opendigitalmate/digest-mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: sel.value }) })).json().catch(() => ({})); $('digestModeNote').textContent = r.success ? '✓ ' + t('settings.digest_mode_saved') : t('settings.digest_mode_failed'); };
   }
   // ---- Standing digest preferences: list, edit one line, delete one line, clear all ----
   const postDigestPref = async (body) => {
@@ -5213,8 +5215,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     return `<div style="display:flex;gap:6px;align-items:center">
       <input value="${escapeHtml(p.text)}" data-pref-id="${escapeHtml(p.id)}" maxlength="160" style="flex:1;border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12.5px">
       <span style="font-size:11px;color:var(--ink3);white-space:nowrap">${escapeHtml(by)}</span>
-      <button data-pref-save="${escapeHtml(p.id)}">${escapeHtml(t('settings.prefs_save'))}</button>
-      <button data-pref-del="${escapeHtml(p.id)}">${escapeHtml(t('settings.prefs_delete'))}</button>
+      <button type="button" class="btn" data-pref-save="${escapeHtml(p.id)}">${escapeHtml(t('settings.prefs_save'))}</button>
+      <button type="button" class="btn" data-pref-del="${escapeHtml(p.id)}">${escapeHtml(t('settings.prefs_delete'))}</button>
     </div>`;
   }
   function paintPrefs(r) {
@@ -5225,12 +5227,20 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if ($('digestPrefsCount')) $('digestPrefsCount').textContent = unavailable ? t('settings.prefs_unavailable') : t('settings.prefs_count', { n: prefs.length, max });
     // Pref text is the owner's own words: never inserted as HTML (this page's rule), and no data-i18n here — applyDom sets textContent and would wipe the rows.
     list.innerHTML = prefs.length ? prefs.map(prefRow).join('') : `<div style="font-size:12px;color:var(--ink3)">${escapeHtml(unavailable ? t('settings.prefs_unavailable') : t('settings.prefs_empty'))}</div>`;
-    ['digestPrefInput', 'digestPrefAdd', 'digestPrefClear'].forEach(id => { const el = $(id); if (el) el.disabled = unavailable; });
-    if ($('digestPrefsMsg') && !unavailable) $('digestPrefsMsg').textContent = '';
+    // Nothing to clear → Clear all is off; Add only lights up once there is text to add.
+    if ($('digestPrefInput')) $('digestPrefInput').disabled = unavailable;
+    if ($('digestPrefClear')) $('digestPrefClear').disabled = unavailable || !prefs.length;
+    syncPrefAdd(unavailable);
+    if ($('digestPrefsMsg') && !unavailable) { $('digestPrefsMsg').textContent = ''; $('digestPrefsMsg').className = 'pref-msg'; }
+  }
+  function syncPrefAdd(unavailable) {
+    const inp = $('digestPrefInput'), add = $('digestPrefAdd'); if (!add) return;
+    add.disabled = !!unavailable || !(inp && inp.value.trim());
   }
   function prefMessage(r) {
     const msg = $('digestPrefsMsg'); if (!msg) return;
-    if (r?.success) { msg.textContent = t('settings.prefs_saved'); return; }
+    msg.className = 'pref-msg ' + (r?.success ? 'ok' : 'err');
+    if (r?.success) { msg.textContent = '✓ ' + t('settings.prefs_saved'); return; }
     msg.textContent = r?.error === 'duplicate' ? t('settings.prefs_dup') : t('settings.prefs_failed');
   }
   async function loadDigestPrefs() {
@@ -5250,11 +5260,18 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const r = saveId ? await postDigestPref({ edit: { id: saveId, text: inp ? inp.value : '' } }) : await postDigestPref({ remove: b.getAttribute('data-pref-del') });
       paintPrefs(r); prefMessage(r);
     });
-    if (add) add.addEventListener('click', async () => {
-      const inp = $('digestPrefInput'); const text = inp ? inp.value.trim() : ''; if (!text) return;
+    const addPref = async () => {
+      const inp = $('digestPrefInput'); const text = inp ? inp.value.trim() : ''; if (!text || (add && add.disabled)) return;
+      if (add) add.disabled = true;
       const r = await postDigestPref({ text }); if (r?.success && inp) inp.value = '';
       paintPrefs(r); prefMessage(r);
-    });
+    };
+    if (add) add.addEventListener('click', addPref);
+    const prefInput = $('digestPrefInput');
+    if (prefInput) {
+      prefInput.addEventListener('input', () => syncPrefAdd(prefInput.disabled));
+      prefInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); addPref(); } });
+    }
     if (clear) clear.addEventListener('click', async () => {
       if (!confirm(t('settings.prefs_clear_confirm'))) return;
       const r = await postDigestPref({ clear: true }); paintPrefs(r); prefMessage(r);

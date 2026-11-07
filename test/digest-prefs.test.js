@@ -248,3 +248,21 @@ test('rapid addPref calls get distinct ids and removePref removes exactly one', 
   assert.equal(ds3.editPref('pmw5qx844', '老偏好改过').text, '老偏好改过')
   assert.ok(ds3.removePref('pmw5qx844'))
 })
+
+test('Settings prefs card uses Muse buttons, Enter adds, and empty states disable Add / Clear all', () => {
+  assert.match(html, /class="btn primary" id="digestPrefAdd"[^>]*disabled/, 'Add is a styled primary button, off until there is text')
+  assert.match(html, /class="btn" id="digestPrefClear"[^>]*disabled/, 'Clear all is a styled button, off with nothing to clear')
+  assert.match(html, /class="btn" data-pref-save=/)
+  assert.match(html, /class="btn" data-pref-del=/)
+  assert.match(html, /\.btn:disabled/)
+  assert.match(html, /digestPrefClear'\)\.disabled = unavailable \|\| !prefs\.length/)
+  assert.match(html, /e\.key === 'Enter' && !e\.isComposing/, 'Enter adds a line, but not mid-IME composition')
+  assert.match(html, /id="digestPrefsMsg" class="pref-msg" role="status"/)
+})
+
+test('Settings digest-mode note and page title are bilingual, not hard-coded Chinese', () => {
+  const mode = html.slice(html.indexOf('async function loadDigestMode'), html.indexOf('// ---- Standing digest preferences'))
+  assert.doesNotMatch(mode, /[\u4e00-\u9fff]/, 'no hard-coded CJK in the digest-mode note')
+  assert.match(mode, /settings\.digest_mode_saved/)
+  assert.match(mode, /settings\.digest_mode_unavailable/)
+})

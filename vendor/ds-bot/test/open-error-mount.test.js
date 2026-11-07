@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { createServer as createNetServer } from 'node:net'
@@ -364,6 +365,7 @@ async function runCaptured(child, life, work, limits = {}) {
     await stopChild(child, life, limits)
   } catch (error) {
     if (!failure) failure = error
+    else if (!String(failure.message).includes(error.message)) failure.message += `; ${error.message}`
   }
   if (failure) throw failure
   return value
@@ -569,10 +571,15 @@ function withPage(wsUrl, url, run, options = {}) {
       if (settled) return
       opened = true
       clearTimeout(handshakeTimer)
-      send('Page.enable').then(() => send('Runtime.enable')).then(() => {
+      // Both commands are observed before either can reject. Waiting to
+      // attach the load promise until navigate resolves leaves that rejection
+      // unhandled when navigate fails or the socket closes.
+      const openedPage = send('Page.enable').then(() => send('Runtime.enable')).then(() => {
+        const navigated = send('Page.navigate', { url })
         const loaded = once('Page.loadEventFired')
-        return send('Page.navigate', { url }).then(() => loaded)
-      }).then(() => run(send)).then((value) => {
+        return Promise.all([navigated, loaded])
+      })
+      openedPage.then(() => run(send)).then((value) => {
         finish(resolve, value)
       }).catch((error) => {
         finish(reject, error?.phase ? error : captureFault('screenshot', error?.message ?? 'capture failed'))
@@ -600,7 +607,7 @@ test('capture cleanup observes a signal exit and still reaps an ignored SIGTERM'
     assert.equal(ended.code, null)
     assert.ok(elapsed < 200, `a signal exit was treated as still running (${elapsed}ms)`)
   } finally {
-    if (!signaledLife.closed) signaled.kill('SIGKILL')
+    if (!signaledLife.closed) await stopChild(signaled, signaledLife, { termGraceMs: 200, killGraceMs: 1000 })
   }
 
   const stubborn = await spawnIgnoringTerm()
@@ -614,7 +621,7 @@ test('capture cleanup observes a signal exit and still reaps an ignored SIGTERM'
     assert.ok(elapsed >= 150, `SIGKILL escalated too early (${elapsed}ms)`)
     assert.ok(elapsed < 3000, `cleanup was not bounded (${elapsed}ms)`)
   } finally {
-    if (!stubborn.life.closed) stubborn.child.kill('SIGKILL')
+    if (!stubborn.life.closed) await stopChild(stubborn.child, stubborn.life, { termGraceMs: 200, killGraceMs: 1000 })
   }
 })
 
@@ -695,29 +702,219 @@ test('capture fetch, handshake, and budget each stop and the browser is still re
     assert.ok(elapsed >= 350, `budget cleanup skipped the SIGTERM grace (${elapsed}ms)`)
     assert.ok(elapsed < 3000, `budget cleanup was not bounded (${elapsed}ms)`)
   } finally {
-    if (!stubborn.life.closed) stubborn.child.kill('SIGKILL')
+    if (!stubborn.life.closed) await stopChild(stubborn.child, stubborn.life, { termGraceMs: 200, killGraceMs: 1000 })
   }
 })
 
-async function spawnIgnoringTerm() {
-  const child = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); console.log("ready"); setInterval(() => {}, 1000)'], {
-    stdio: ['ignore', 'pipe', 'ignore'],
-  })
-  const life = trackChild(child)
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('stubborn child did not start')), 2000)
-    const fail = () => {
-      clearTimeout(timer)
-      reject(new Error('stubborn child exited before it could ignore SIGTERM'))
+test('a refused or timed-out navigation rejects without an unhandled load wait', { timeout: 8000 }, async () => {
+  const unhandled = []
+  const onUnhandled = (reason) => unhandled.push(reason)
+  const refused = openCdpStub((socket, message) => {
+    if (message.method === 'Page.enable' || message.method === 'Runtime.enable') {
+      writeWsText(socket, JSON.stringify({ id: message.id, result: {} }))
+      return
     }
-    child.once('close', fail)
-    child.stdout.on('data', (chunk) => {
-      if (!String(chunk).includes('ready')) return
-      clearTimeout(timer)
-      child.removeListener('close', fail)
-      resolve()
+    if (message.method === 'Page.navigate') {
+      writeWsText(socket, JSON.stringify({ id: message.id, error: { message: 'navigate refused' } }))
+    }
+  })
+  const silentNav = openCdpStub((socket, message) => {
+    if (message.method === 'Page.enable' || message.method === 'Runtime.enable') {
+      writeWsText(socket, JSON.stringify({ id: message.id, result: {} }))
+    }
+  })
+  process.on('unhandledRejection', onUnhandled)
+  try {
+    await listen(refused.server)
+    await listen(silentNav.server)
+    await assert.rejects(
+      withPage(wsUrl(refused.server), 'file:///tmp/boot.html', async () => {
+        throw new Error('screenshot ran after a refused navigation')
+      }, { handshakeMs: 1000, stepMs: 1000 }),
+      (error) => {
+        assert.match(error.message, /navigate refused/)
+        assert.equal(/screenshot ran/.test(error.message), false)
+        return true
+      },
+    )
+    const timeoutBegan = Date.now()
+    await assert.rejects(
+      withPage(wsUrl(silentNav.server), 'file:///tmp/boot.html', async () => {
+        throw new Error('screenshot ran after a navigation timeout')
+      }, { handshakeMs: 1000, stepMs: 200 }),
+      (error) => {
+        assert.match(error.message, /Page\.navigate timed out/)
+        assert.equal(/screenshot ran/.test(error.message), false)
+        return true
+      },
+    )
+    const timeoutElapsed = Date.now() - timeoutBegan
+    assert.ok(timeoutElapsed >= 150, `navigation timeout fired too early (${timeoutElapsed}ms)`)
+    assert.ok(timeoutElapsed < 1000, `navigation timeout was not bounded (${timeoutElapsed}ms)`)
+    await wait(50)
+    assert.equal(unhandled.length, 0, `unhandled rejection: ${unhandled.map(String).join('; ')}`)
+  } finally {
+    process.off('unhandledRejection', onUnhandled)
+    await closeCdpStub(refused)
+    await closeCdpStub(silentNav)
+  }
+})
+
+test('a child that never becomes ready is reaped before the helper returns', { timeout: 8000 }, async () => {
+  const slowBegan = Date.now()
+  await assert.rejects(
+    spawnIgnoringTerm({
+      script: 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)',
+      readyMs: 400,
+      termGraceMs: 200,
+      killGraceMs: 2000,
+    }),
+    (error) => {
+      assert.match(error.message, /did not start/)
+      assert.equal(error.life.closed, true)
+      assert.equal(error.life.exitCode, null)
+      assert.equal(error.life.signal, 'SIGKILL')
+      assert.equal(processAlive(error.pid), false)
+      return true
+    },
+  )
+  const slowElapsed = Date.now() - slowBegan
+  assert.ok(slowElapsed >= 550, `ready failure skipped the SIGTERM grace (${slowElapsed}ms)`)
+  assert.ok(slowElapsed < 3000, `ready failure was not bounded (${slowElapsed}ms)`)
+
+  const earlyBegan = Date.now()
+  await assert.rejects(
+    spawnIgnoringTerm({ script: 'process.exit(0)', readyMs: 2000 }),
+    (error) => {
+      assert.match(error.message, /exited before it could ignore SIGTERM/)
+      assert.equal(error.life.closed, true)
+      assert.equal(processAlive(error.pid), false)
+      return true
+    },
+  )
+  const earlyElapsed = Date.now() - earlyBegan
+  assert.ok(earlyElapsed < 1000, `an already closed child waited out the ready timer (${earlyElapsed}ms)`)
+})
+
+function listen(server) {
+  return new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+}
+
+function wsUrl(server) {
+  return `ws://127.0.0.1:${server.address().port}`
+}
+
+function wsAccept(key) {
+  return createHash('sha1').update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64')
+}
+
+function writeWsText(socket, text) {
+  const payload = Buffer.from(text)
+  const header = payload.length < 126
+    ? Buffer.from([0x81, payload.length])
+    : Buffer.from([0x81, 126, (payload.length >> 8) & 255, payload.length & 255])
+  socket.write(Buffer.concat([header, payload]))
+}
+
+function readWsText(socket, onText) {
+  let buf = Buffer.alloc(0)
+  socket.on('data', (chunk) => {
+    buf = Buffer.concat([buf, chunk])
+    while (buf.length >= 2) {
+      const opcode = buf[0] & 0x0f
+      const length = buf[1] & 0x7f
+      const masked = (buf[1] & 0x80) !== 0
+      let offset = 2
+      let size = length
+      if (length === 126) {
+        if (buf.length < 4) return
+        size = buf.readUInt16BE(2)
+        offset = 4
+      } else if (length === 127) return
+      if (buf.length < offset + (masked ? 4 : 0) + size) return
+      const mask = masked ? buf.subarray(offset, offset + 4) : null
+      offset += masked ? 4 : 0
+      const payload = Buffer.from(buf.subarray(offset, offset + size))
+      if (mask) for (let index = 0; index < payload.length; index += 1) payload[index] ^= mask[index % 4]
+      buf = buf.subarray(offset + size)
+      if (opcode === 0x1) onText(payload.toString())
+    }
+  })
+}
+
+function openCdpStub(onCommand) {
+  const sockets = new Set()
+  const server = createServer()
+  server.on('upgrade', (request, socket) => {
+    sockets.add(socket)
+    socket.on('error', () => {})
+    socket.on('close', () => sockets.delete(socket))
+    const key = request.headers['sec-websocket-key']
+    socket.write(
+      'HTTP/1.1 101 Switching Protocols\r\n'
+      + 'Upgrade: websocket\r\n'
+      + 'Connection: Upgrade\r\n'
+      + `Sec-WebSocket-Accept: ${wsAccept(key)}\r\n\r\n`,
+    )
+    readWsText(socket, (text) => {
+      let message
+      try { message = JSON.parse(text) } catch { return }
+      onCommand(socket, message)
     })
   })
+  return { server, sockets }
+}
+
+async function closeCdpStub(stub) {
+  for (const socket of stub.sockets) socket.destroy()
+  if (!stub.server.listening) return
+  await new Promise((resolve) => stub.server.close(resolve))
+}
+
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function spawnIgnoringTerm(options = {}) {
+  const readyMs = options.readyMs ?? 2000
+  const script = options.script ?? 'process.on("SIGTERM", () => {}); console.log("ready"); setInterval(() => {}, 1000)'
+  const child = spawn(process.execPath, ['-e', script], { stdio: ['ignore', 'pipe', 'ignore'] })
+  const life = trackChild(child)
+  const fail = (message) => Object.assign(new Error(message), { pid: child.pid, life })
+  try {
+    await new Promise((resolve, reject) => {
+      let settled = false
+      let timer
+      const settle = (fn, value) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        child.removeListener('close', onClose)
+        fn(value)
+      }
+      const onClose = () => settle(reject, fail('stubborn child exited before it could ignore SIGTERM'))
+      timer = setTimeout(() => settle(reject, fail('stubborn child did not start')), readyMs)
+      child.once('close', onClose)
+      child.stdout.on('data', (chunk) => {
+        if (String(chunk).includes('ready')) settle(resolve)
+      })
+    })
+  } catch (error) {
+    try {
+      await stopChild(child, life, {
+        termGraceMs: options.termGraceMs ?? 200,
+        killGraceMs: options.killGraceMs ?? 2000,
+      })
+    } catch (cleanup) {
+      if (!String(error.message).includes(cleanup.message)) error.message += `; ${cleanup.message}`
+    }
+    throw error
+  }
   return { child, life }
 }
 

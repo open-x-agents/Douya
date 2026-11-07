@@ -454,6 +454,90 @@ test('a fully held turn records no model payload, including after the later save
   assert.equal(continued.admitted.filter(entry => entry.id === parked.id).length, 1)
 })
 
+test('a tool step continues and the queued next turn is admitted once', async (t) => {
+  const ctx = new Context()
+  for (const plugin of [SessionStore, SessionProjection, LlmRuntime, ToolRuntime, SystemPrompt, Agents, AgentLoop]) {
+    await ctx.plugin(plugin)
+  }
+  t.after(() => ctx.fiber.dispose())
+  const calls = []
+  let round = 0
+  ctx.llm.registerAdapter(['fake'], {
+    providerInfo: (id) => ({ id, name: 'Fake' }),
+    providerRetryPolicy: () => undefined,
+    async prepareCall() {
+      return {
+        model: { id: 'fake-model', name: 'Fake', provider: 'fake' },
+        stream(options) {
+          const body = JSON.stringify(options)
+          calls.push(body)
+          round += 1
+          const current = round
+          return (async function* () {
+            if (current === 1) {
+              yield { type: 'tool-call-delta', index: 0, id: 'qtool-1', name: 'qtool', argumentsDelta: '{}' }
+              yield { type: 'finish', reason: { kind: 'tool-calls' } }
+              return
+            }
+            const text = body.includes('QUEUE_CONT_141') ? 'QUEUE_ACK_141' : 'TOOLONLY_POST'
+            yield { type: 'text-delta', index: 0, text }
+            yield { type: 'finish', reason: { kind: 'stop' } }
+          })()
+        },
+      }
+    },
+  })
+  const bundle = join(process.env.DSH_HARNESS, 'packages/bundle/web-app/package.json')
+  const { apply: nativeClock } = await import(pathToFileURL(createRequire(bundle).resolve('@deepseek-ai/dsh-time-context')).href)
+  const state = {}
+  const rt = {
+    ctx,
+    state,
+    config: { timeZone: 'Asia/Shanghai' },
+    isBotSession: () => true,
+    roomOf: () => undefined,
+    load: async () => {},
+    save: async () => {},
+    warn: () => {},
+    async* eventsBackwards() {},
+  }
+  installPrivateHook(rt)
+  nativeClock(ctx, { timeZone: 'Asia/Shanghai' })
+  const agent = await ctx.agentLoop.create('sess-loop', { provider: 'fake', model: 'fake-model' }, { cwd: '/tmp' })
+  const ask = createUserMessage({ content: [{ type: 'text', text: 'ASK_SECRET_141' }], source: { kind: 'user' } })
+  const queued = createUserMessage({ content: [{ type: 'text', text: 'QUEUE_CONT_141 please reply QUEUE_ACK_141' }], source: { kind: 'user' } })
+  rememberPrivateHold(state, { sessionId: 'sess-loop', messageId: ask.id, action: 'ask', text: 'ASK_SECRET_141', at: 1 })
+  ctx.tools.register({
+    name: 'qtool',
+    description: 'Finish the tool step',
+    parameters: {},
+    async execute() {
+      agent.inbox.append('next-step', ask)
+      agent.inbox.append('next-turn', queued)
+      return 'QTOOL_DONE'
+    },
+    output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: String(value) }] },
+  })
+  agent.steer(createUserMessage({ content: [{ type: 'text', text: 'TOOLONLY call the tool' }], source: { kind: 'user' } }))
+  await agent.whenIdle()
+  const events = agent.session.snapshotEvents()
+  const ends = events.filter(event => event.type === 'turn/end').map(event => event.data?.reason?.kind)
+  const admitted = events.filter(event => event.type === 'user/message').map(event => ({
+    id: event.data?.id,
+    kind: event.data?.source?.kind,
+    text: JSON.stringify(event.data?.content ?? ''),
+  }))
+  assert.equal(events.some(event => event.type === 'tool/result' && JSON.stringify(event.data).includes('QTOOL_DONE')), true)
+  assert.equal(ends.includes('blocked'), false, ends)
+  assert.equal(calls.some(body => body.includes('QTOOL_DONE')), true)
+  assert.equal(calls.some(body => body.includes('ASK_SECRET_141')), false)
+  assert.equal(admitted.some(entry => entry.id === ask.id), false)
+  assert.equal(calls.filter(body => body.includes('QUEUE_CONT_141')).length, 1)
+  assert.equal(admitted.filter(entry => entry.id === queued.id).length, 1)
+  assert.equal(events.some(event => event.type === 'assistant/message' && JSON.stringify(event.data).includes('QUEUE_ACK_141')), true)
+  assert.equal(events.some(event => event.type === 'assistant/message' && JSON.stringify(event.data).includes('TOOLONLY_POST')), true)
+})
+
 test('a team file and a flushed session continue a committed queue without new input', { timeout: 20000 }, async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'ds-bot-queue-log-'))
   const home = mkdtempSync(join(tmpdir(), 'ds-bot-queue-team-'))

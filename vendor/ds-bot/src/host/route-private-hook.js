@@ -25,10 +25,15 @@ export function install(rt) {
     await applyPrivateWithhold(rt, payload)
     const sessionId = payload?.agent?.id
     const privateStep = typeof sessionId === 'string' && rt.isBotSession?.(sessionId) === true && !rt.roomOf?.(sessionId)
-    // Reject before next() so a clock hook wrapped outside this one also sees
-    // the rejection and does not add a context-only message. A queued handoff
-    // has already asked the driver to wake for the row it appended.
-    if (privateStep && Array.isArray(payload.messages) && !payload.messages.some(isSubstantive)) {
+    // Only the first step of a private turn is rejected when nothing real
+    // remains. DSH turn() returns immediately on kind "reject", before the
+    // pending-driver check, so rejecting a later step ends the turn blocked
+    // and never claims next-turn. A post-tool step is one of those later
+    // steps: its claim is often empty because the tool result is already in
+    // the session. A clock hook outside this listener still sees the
+    // rejection and does not add a context-only message.
+    if (privateStep && payload.step === 1 && Array.isArray(payload.messages) && !payload.messages.some(isSubstantive)) {
+      if (payload.agent?.inbox?.hasPending) requestWake(payload.agent)
       return { kind: 'reject', messages: [] }
     }
     return next()

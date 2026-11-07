@@ -2101,6 +2101,19 @@
             <div id="digestModeNote" style="font-size:12px;color:var(--ink3);margin-top:6px"></div>
           </div>
 
+          <div class="card a in" id="digestPrefsCard">
+            <h3>📌 <span data-i18n="settings.prefs_title">Standing preferences</span></h3>
+            <p style="font-size:12.5px;color:var(--ink2);margin:8px 0" data-i18n="settings.prefs_help">Rules every digest must follow.</p>
+            <div id="digestPrefsCount" style="font-size:12px;color:var(--ink3)"></div>
+            <div id="digestPrefsList" style="display:grid;gap:6px;margin:8px 0"></div>
+            <div style="display:flex;gap:8px">
+              <input id="digestPrefInput" placeholder="e.g. promo mail never gets its own card" data-i18n="settings.prefs_ph" data-i18n-attr="placeholder" maxlength="160" style="flex:1;border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px">
+              <button id="digestPrefAdd" data-i18n="settings.prefs_add">Add</button>
+              <button id="digestPrefClear" data-i18n="settings.prefs_clear">Clear all</button>
+            </div>
+            <div id="digestPrefsMsg" style="font-size:12px;color:var(--ink3);margin-top:6px"></div>
+          </div>
+
           <!-- Model Configuration -->
           <div class="card a in" id="modelCard">
             <h3>🤖 <span data-i18n="settings.ai_title">AI model</span></h3>
@@ -2300,6 +2313,7 @@
     if (typeof paintChatChips === 'function') try { paintChatChips(); } catch (_) {}
     if (reload && typeof loadToday === 'function') loadToday({ force: true }).catch(() => {});
     if (reload && typeof loadSources === 'function' && $('v-sources')?.classList.contains('on')) loadSources(false);
+    if (reload && typeof loadDigestPrefs === 'function' && $('v-settings')?.classList.contains('on')) loadDigestPrefs();
   }
   document.querySelectorAll('.lang-switch').forEach(sw => {
     sw.addEventListener('click', (e) => {
@@ -5146,6 +5160,63 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     try { const st = await (await fetch('/api/opendigitalmate/digest-status')).json(); sel.value = st.mode; $('digestModeNote').textContent = st.botAvailable ? '' : '（Bot 汇聚当前不可用，会使用旧流水线）'; } catch (_) {}
     sel.onchange = async () => { const r = await (await fetch('/api/opendigitalmate/digest-mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: sel.value }) })).json().catch(() => ({})); $('digestModeNote').textContent = r.success ? '已保存' : '保存失败'; };
   }
+  // ---- Standing digest preferences: list, edit one line, delete one line, clear all ----
+  const postDigestPref = async (body) => {
+    try { return await (await fetch('/api/opendigitalmate/digest-pref', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json(); }
+    catch (_) { return { success: false, error: 'failed' }; }
+  };
+  function prefRow(p) {
+    const by = p.by === 'user' ? t('settings.prefs_from_you') : t('settings.prefs_from_chief');
+    return `<div style="display:flex;gap:6px;align-items:center">
+      <input value="${escapeHtml(p.text)}" data-pref-id="${escapeHtml(p.id)}" maxlength="160" style="flex:1;border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12.5px">
+      <span style="font-size:11px;color:var(--ink3);white-space:nowrap">${escapeHtml(by)}</span>
+      <button data-pref-save="${escapeHtml(p.id)}">${escapeHtml(t('settings.prefs_save'))}</button>
+      <button data-pref-del="${escapeHtml(p.id)}">${escapeHtml(t('settings.prefs_delete'))}</button>
+    </div>`;
+  }
+  function paintPrefs(r) {
+    const list = $('digestPrefsList'); if (!list) return;
+    const prefs = Array.isArray(r?.prefs) ? r.prefs : [];
+    const max = Number(r?.max) || 20;
+    const unavailable = !r?.success && r?.error === 'bot digest unavailable';
+    if ($('digestPrefsCount')) $('digestPrefsCount').textContent = unavailable ? t('settings.prefs_unavailable') : t('settings.prefs_count', { n: prefs.length, max });
+    // Pref text is the owner's own words: never inserted as HTML (this page's rule), and no data-i18n here — applyDom sets textContent and would wipe the rows.
+    list.innerHTML = prefs.length ? prefs.map(prefRow).join('') : `<div style="font-size:12px;color:var(--ink3)">${escapeHtml(unavailable ? t('settings.prefs_unavailable') : t('settings.prefs_empty'))}</div>`;
+    ['digestPrefInput', 'digestPrefAdd', 'digestPrefClear'].forEach(id => { const el = $(id); if (el) el.disabled = unavailable; });
+    if ($('digestPrefsMsg') && !unavailable) $('digestPrefsMsg').textContent = '';
+  }
+  function prefMessage(r) {
+    const msg = $('digestPrefsMsg'); if (!msg) return;
+    if (r?.success) { msg.textContent = t('settings.prefs_saved'); return; }
+    msg.textContent = r?.error === 'duplicate' ? t('settings.prefs_dup') : t('settings.prefs_failed');
+  }
+  async function loadDigestPrefs() {
+    if (!$('digestPrefsList')) return;
+    try { paintPrefs(await (await fetch('/api/opendigitalmate/digest-pref')).json()); }
+    catch (_) { paintPrefs({ success: false, error: 'failed' }); }
+  }
+  window.loadDigestPrefs = loadDigestPrefs;
+  (function bindDigestPrefs() {
+    const list = $('digestPrefsList'), add = $('digestPrefAdd'), clear = $('digestPrefClear');
+    if (!list || list.__bound) return;
+    list.__bound = true;
+    list.addEventListener('click', async (e) => {
+      const b = e.target && e.target.closest ? e.target.closest('button[data-pref-save],button[data-pref-del]') : null; if (!b) return;
+      const saveId = b.getAttribute('data-pref-save');
+      const inp = b.closest('div')?.querySelector('input[data-pref-id]');
+      const r = saveId ? await postDigestPref({ edit: { id: saveId, text: inp ? inp.value : '' } }) : await postDigestPref({ remove: b.getAttribute('data-pref-del') });
+      paintPrefs(r); prefMessage(r);
+    });
+    if (add) add.addEventListener('click', async () => {
+      const inp = $('digestPrefInput'); const text = inp ? inp.value.trim() : ''; if (!text) return;
+      const r = await postDigestPref({ text }); if (r?.success && inp) inp.value = '';
+      paintPrefs(r); prefMessage(r);
+    });
+    if (clear) clear.addEventListener('click', async () => {
+      if (!confirm(t('settings.prefs_clear_confirm'))) return;
+      const r = await postDigestPref({ clear: true }); paintPrefs(r); prefMessage(r);
+    });
+  })();
   window.loadSources = loadSources;
   const srcRefreshBtn = $('srcRefresh');
   if (srcRefreshBtn && !srcRefreshBtn.__bound) { srcRefreshBtn.__bound = true; srcRefreshBtn.addEventListener('click', () => loadSources(true)); }
@@ -5822,7 +5893,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     Object.keys(views).forEach(k => views[k].classList.toggle('on', k === view));
     if (view === 'sources') loadSources();
     if (view === 'memory') loadMemories();
-    if (view === 'settings') { checkConfig(); loadLLMSettings(); loadComposioSettings(); }
+    if (view === 'settings') { checkConfig(); loadLLMSettings(); loadComposioSettings(); loadDigestPrefs(); }
     reportView();
   }
   function closeAllViews() { if (currentZoomCard) closeTileZoom(); }

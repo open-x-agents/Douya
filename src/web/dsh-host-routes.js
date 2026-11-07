@@ -206,13 +206,17 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
 
   effect({
     path: '/api/opendigitalmate/digest-pref',
-    methods: ['POST'],
+    methods: ['GET', 'POST'],
     requestBody: 'buffered',
     fetch: async (request) => {
-      const b = await readJson(request); const st = router.botDigestRef()?.store
-      if (!st) return json({ success: false, error: 'bot digest unavailable' })
-      if (b?.remove) return json({ success: st.removePref(String(b.remove)) })
-      return json({ success: !!st.addPref(b?.text, { channel: b?.channel || null, by: 'user' }) })
+      if (request.method === 'GET') return json(router.digestPrefs())
+      const b = await readJson(request)
+      try {
+        if (b?.edit) return json(router.editDigestPref(b.edit))
+        if (b?.clear) return json(router.clearDigestPrefs())
+        if (b?.remove) return json(router.removeDigestPref(String(b.remove)))
+        return json(router.addDigestPref({ text: b?.text, channel: b?.channel }))
+      } catch (err) { return json({ success: false, error: err.message }) }
     },
   }, 'opendigitalmate: digest-pref')
 

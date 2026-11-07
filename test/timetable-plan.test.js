@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { applyPlanEdit, readPlan, mergeDigestTimetable, findTimetableCard, hhmm, localDay, snapMin, suggestMeetingBuffers } from '../src/web/timetable-plan.js'
 import { reconcileCards } from '../src/host/reconcile.js'
 
-const NOW = new Date(2026, 10, 4, 14, 55)
+const NOW = new Date('2026-11-04T14:55:00+08:00')
 const card = (extra = {}) => ({
   id: 'card_timetable_1', type: 'timetable', sourceId: 'timetable', status: 'active', updatedAt: '2026-11-04T06:00:00Z',
   blocks: [{ type: 'timetable', fixedBlocks: [{ start: '2026-11-04T16:00:00+08:00', end: '2026-11-04T16:30:00+08:00', title: '站会' }],
@@ -17,7 +17,9 @@ const card = (extra = {}) => ({
 test('hhmm normalizes times', () => {
   assert.equal(hhmm('9:5'), '09:05')
   assert.equal(hhmm('25:00'), null)
-  assert.equal(hhmm(new Date(2026, 10, 4, 7, 30).toISOString()), '07:30')
+  assert.equal(hhmm('2026-11-04T07:30:00+08:00'), '07:30')
+  assert.equal(hhmm('2026-11-04T00:30:00.000Z'), '08:30')
+  assert.equal(hhmm('2026-11-04T16:00:00+08:00'), '16:00')
 })
 
 test('readPlan: fixed events, blocks, next follows now', () => {
@@ -78,7 +80,7 @@ test('re-digest keeps today\'s edited plan, takes new calendar events, drops col
   assert.equal(tt.suggestedBlocks.some(b => b.title === '回 Fledge 邮件'), false) // collides with 新会议
   assert.ok(tt.suggestedBlocks.some(b => b.title === '修 tests'))
   // a different day / reset -> the digest's plan
-  assert.equal(mergeDigestTimetable(edited, inc, { now: new Date(2026, 10, 5, 9) }), inc)
+  assert.equal(mergeDigestTimetable(edited, inc, { now: new Date('2026-11-05T09:00:00+08:00') }), inc)
   const reset = applyPlanEdit(edited, { mode: 'reset' }, { now: NOW }).card
   assert.equal(mergeDigestTimetable(reset, inc, { now: NOW }), inc)
 })

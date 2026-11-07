@@ -641,6 +641,54 @@
   .size-normal .metrics .m b{font-size:22px}
   .w-links .lk:nth-child(n+4){display:none}
 
+
+  /* ===== Memory 一瞥 ===== */
+  #v-memory{padding:36px 44px 80px;max-width:980px}
+  .mem-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:28px}
+  .mem-hero .eyebrow{color:var(--violet);letter-spacing:.1em}
+  .mem-hero h1{font-size:32px;line-height:1.15;font-weight:650;letter-spacing:-.025em;margin:6px 0 0;background:linear-gradient(120deg,#3a3558 10%,#8a74d0 55%,#22a898 120%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .mem-hero p{margin:10px 0 0;font-size:14px;color:var(--ink2);max-width:42ch;line-height:1.5}
+  .mem-hero-side{display:flex;flex-direction:column;align-items:flex-end;gap:10px;flex-shrink:0}
+  .mem-count{font-size:12.5px;color:var(--ink3);background:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.9);border-radius:999px;padding:6px 12px;box-shadow:var(--shadow)}
+  .mem-count b{color:var(--ink);font-weight:650}
+  .mem-refresh{border:0;cursor:pointer;font:600 12.5px/1 inherit;color:var(--violet);background:var(--violet-soft);padding:8px 14px;border-radius:999px;transition:.2s var(--ease)}
+  .mem-refresh:hover{transform:translateY(-1px);box-shadow:0 6px 14px -8px rgba(138,116,208,.55)}
+  .mem-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+  .mem-card{position:relative;background:rgba(255,255,255,.78);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.95);border-radius:20px;padding:18px 18px 14px;box-shadow:var(--shadow);transition:.28s var(--ease);animation:memIn .55s var(--ease-out) both;overflow:hidden;min-height:132px;display:flex;flex-direction:column}
+  .mem-card::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--mem-accent,#8a74d0);opacity:.85;border-radius:20px 0 0 20px}
+  .mem-card:hover{transform:translateY(-3px) rotate(-.2deg);box-shadow:var(--shadow-hi)}
+  .mem-card.is-pinned{background:linear-gradient(155deg,rgba(255,255,255,.92),rgba(239,235,250,.88))}
+  .mem-card.is-leaving{opacity:0;transform:scale(.94) translateY(8px);pointer-events:none}
+  .mem-card .mem-mark{font-size:22px;line-height:1;margin-bottom:8px;filter:saturate(1.05)}
+  .mem-card .mem-text{font-size:14.5px;line-height:1.55;font-weight:550;color:var(--ink);flex:1;letter-spacing:-.01em}
+  .mem-card .mem-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .mem-card .mem-when{font-size:11.5px;color:var(--ink3);font-variant-numeric:tabular-nums}
+  .mem-pill{font-size:11px;font-weight:600;border-radius:999px;padding:2px 8px;background:rgba(30,40,80,.05);color:var(--ink2)}
+  .mem-pill.pin{background:var(--violet-soft);color:#6450a8}
+  .mem-pill.tag{background:color-mix(in srgb, var(--mem-accent,#8a74d0) 14%, #fff);color:color-mix(in srgb, var(--mem-accent,#8a74d0) 70%, #1c1d21)}
+  .mem-forget{margin-left:auto;border:0;cursor:pointer;font:600 11.5px/1 inherit;color:var(--ink3);background:transparent;padding:5px 8px;border-radius:8px;opacity:0;transition:.2s var(--ease)}
+  .mem-card:hover .mem-forget,.mem-forget[data-confirm]{opacity:1}
+  .mem-forget:hover{background:var(--rose-soft);color:var(--rose)}
+  .mem-forget[data-confirm]{background:var(--rose);color:#fff;opacity:1}
+  @keyframes memIn{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
+  .mem-empty{margin-top:8px;background:linear-gradient(160deg,rgba(255,255,255,.88),rgba(239,235,250,.75) 55%,rgba(227,246,243,.7));backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.95);border-radius:24px;padding:42px 36px;box-shadow:var(--shadow);text-align:center;animation:memIn .6s var(--ease-out) both}
+  .mem-empty .mem-empty-mark{width:72px;height:72px;margin:0 auto 14px;display:grid;place-items:center;border-radius:22px;background:rgba(255,255,255,.8);box-shadow:var(--shadow)}
+  .mem-empty h2{margin:0;font-size:22px;font-weight:650;letter-spacing:-.02em}
+  .mem-empty p{margin:10px auto 0;max-width:38ch;font-size:14px;color:var(--ink2);line-height:1.55}
+  .mem-empty .step{margin-top:18px}
+  .settings-apps-moved{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .settings-apps-moved p{margin:0;font-size:13.5px;color:var(--ink2);line-height:1.5;max-width:48ch}
+  @media (max-width:820px){
+    #v-memory{padding:24px 18px 70px}
+    .mem-hero{flex-direction:column;align-items:flex-start}
+    .mem-hero-side{align-items:flex-start}
+    .mem-hero h1{font-size:26px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .mem-card,.mem-empty{animation:none!important}
+    .mem-card:hover{transform:none}
+  }
+
   /* ===== v2 visual system (Muse / Today inspired) ===== */
   :root{
     --ink:#1c1d21; --ink2:#5a5e68; --ink3:#9296a0; --line:rgba(28,29,33,.07);
@@ -1329,6 +1377,14 @@
   .nx-mark{padding-top:2px}
   .nx-eyebrow{font-size:11.5px;font-weight:700;letter-spacing:.08em;color:var(--violet)}
   .nx-meeting .nx-eyebrow{color:var(--rose)}
+  .nx.nx-none{background:linear-gradient(160deg,rgba(255,255,255,.94) 0%,rgba(246,248,252,.9) 100%);box-shadow:var(--shadow)}
+  .nx.nx-none::after{opacity:.35}
+  .nx.nx-none .nx-eyebrow{color:var(--ink3);letter-spacing:.06em}
+  .nx.nx-none .nx-title{font-size:20px;font-weight:650;color:var(--ink2)}
+  .tile.work.waiting-only{background:rgba(255,255,255,.58);box-shadow:0 2px 10px rgba(40,44,90,.04);border-style:dashed;border-color:rgba(30,40,80,.08);opacity:.9}
+  .grid2 .tile.work.waiting-only:hover{transform:none;box-shadow:0 4px 14px rgba(40,44,90,.06);opacity:1}
+  .dayline{backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.7)}
+
   .nx-title{margin:6px 0 4px;font-size:24px;line-height:1.3;font-weight:720;letter-spacing:-.015em;color:var(--ink)}
   .nx-next{margin:0 0 6px;font-size:14.5px;line-height:1.55;color:var(--ink2)}
   .nx-why{font-size:12.5px;color:var(--ink3)}
@@ -1892,6 +1948,7 @@
     </div>
     <div class="nav on" data-view="today" data-i18n="nav.today">Today</div>
     <div class="nav" data-view="sources" data-i18n="nav.sources">Sources</div>
+    <div class="nav" data-view="memory" data-i18n="nav.memory">Memories</div>
     <div class="grp" data-i18n="nav.settings_group">Settings</div>
     <div class="nav" data-view="settings" data-i18n="nav.settings">Settings</div>
     <div class="lang-row"><span data-i18n="lang.label">Language</span>
@@ -1934,6 +1991,22 @@
 
           <div id="digestRunBox" class="digest-run-box"></div>
           <div id="sourcesContent"></div>
+        </section>
+
+        <!-- 回忆一瞥 -->
+        <section class="view" id="v-memory">
+          <header class="mem-hero">
+            <div>
+              <div class="eyebrow" data-i18n="memory.eyebrow">Memory glimpse</div>
+              <h1 data-i18n="memory.title">What Douya remembers</h1>
+              <p data-i18n="memory.sub">Moments Douya keeps across chats — pinned ones stay close.</p>
+            </div>
+            <div class="mem-hero-side">
+              <div class="mem-count" id="memCount"><b>–</b></div>
+              <button type="button" class="mem-refresh" id="memRefresh" data-i18n="memory.refresh">Refresh</button>
+            </div>
+          </header>
+          <div id="memContent" class="mem-grid" aria-live="polite"></div>
         </section>
 
         <!-- 设置 -->
@@ -1995,7 +2068,7 @@
               </div>
 
               <div>
-                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:4px">模型</label>
+                <label style="font-size:12px;color:var(--ink3);display:block;margin-bottom:4px" data-i18n="settings.model">Model</label>
                 <input type="text" id="llmModelInput" placeholder="gpt-4o" 
                   style="width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 12px;font-size:13px" />
               </div>
@@ -2036,12 +2109,11 @@
             </div>
           </div>
 
-          <!-- Available Apps Grid -->
-          <div style="margin-top:24px">
-            <h4 style="font-size:15px;font-weight:600;margin:0 0 12px" data-i18n="settings.apps">Connectable apps</h4>
-            <div id="appsGrid" class="apps-grid">
-              <!-- Apps will be loaded here -->
-            </div>
+          <!-- Apps live on Sources (less is more — one place for connection status) -->
+          <div class="card a in settings-apps-moved" id="appsMovedCard" style="margin-top:24px">
+            <p data-i18n="settings.apps_moved">Connect and disconnect apps on the Sources page — one place for connection status.</p>
+            <button type="button" class="btn primary" id="goSourcesBtn" data-i18n="settings.apps_cta">Go to Sources</button>
+            <div id="appsGrid" hidden></div>
           </div>
 
           <!-- Digest Settings -->
@@ -2169,7 +2241,7 @@
   });
   try { I18N.applyDom(); syncLangSwitch(); } catch (_) {}
 
-  const views = { today: $('v-today'), sources: $('v-sources'), settings: $('v-settings') };
+  const views = { today: $('v-today'), sources: $('v-sources'), memory: $('v-memory'), settings: $('v-settings') };
   
   // View navigation
   document.querySelectorAll('.nav[data-view]').forEach(nav => {
@@ -2282,15 +2354,15 @@
 
   function renderGroupCard(card) {
     const el = document.createElement('div');
-    const w = card.waiting === 'you' ? ['you', '等你处理'] : card.waiting === 'others' ? ['others', '等别人'] : ['fyi', '仅供参考'];
+    const w = card.waiting === 'you' ? ['you', t('chat.wait_you')] : card.waiting === 'others' ? ['others', t('chat.wait_others')] : ['fyi', t('chat.wait_fyi')];
     const links = (card.links || []).filter(l => l && /^https?:/.test(l.url)).slice(0, 3);
     el.className = `gcard g-${w[0]}`;
     el.innerHTML = `
       <div class="gc-top"><span class="gc-count">${Number(card.count) || 0}</span>
-        <div class="gc-h"><b>${escapeHtml(card.title || card.label || '')}</b><span class="gc-w ${w[0]}">${w[1]}</span></div></div>
+        <div class="gc-h"><b>${escapeHtml(card.title || card.label || '')}</b><span class="gc-w ${w[0]}">${escapeHtml(w[1])}</span></div></div>
       ${card.why || card.description ? `<p class="gc-why">${escapeHtml(card.why || card.description)}</p>` : ''}
       ${Array.isArray(card.breakdown) && card.breakdown.length > 1 ? `<div class="gc-bd">${card.breakdown.slice(0, 4).map(b => `<span>${escapeHtml(String(b.label).split('/').pop())} <b>×${b.count}</b></span>`).join('')}</div>` : ''}
-      ${card.nextAction && !VAGUE_NEXT.test(card.nextAction) ? `<div class="gc-next"><span>下一步</span>${escapeHtml(card.nextAction)}</div>` : ''}
+      ${card.nextAction && !VAGUE_NEXT.test(card.nextAction) ? `<div class="gc-next"><span>${escapeHtml(t('chat.next'))}</span>${escapeHtml(card.nextAction)}</div>` : ''}
       ${links.length ? `<div class="gc-links">${links.map(l => `<a href="${escapeHtml(l.url)}" target="_blank" rel="noopener" title="${escapeHtml(l.title || '')}">${escapeHtml(l.title || l.url)}</a>`).join('')}</div>` : ''}`;
     return el;
   }
@@ -2300,7 +2372,7 @@
     if (!list.length) return null;
     const el = document.createElement('div');
     el.className = 'cites';
-    el.innerHTML = `<span class="cites-h">依据</span>` + list.slice(0, 6).map((c, i) => `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" title="${escapeHtml(c.title || c.url)}"><i>${i + 1}</i>${escapeHtml(c.label || '')}${c.title ? ' · ' + escapeHtml(clip(c.title, 26)) : ''}</a>`).join('');
+    el.innerHTML = `<span class="cites-h">${escapeHtml(t('chat.cites'))}</span>` + list.slice(0, 6).map((c, i) => `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener" title="${escapeHtml(c.title || c.url)}"><i>${i + 1}</i>${escapeHtml(c.label || '')}${c.title ? ' · ' + escapeHtml(clip(c.title, 26)) : ''}</a>`).join('');
     return el;
   }
 
@@ -2661,7 +2733,9 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   let lastCards = [];
   let lastToday = {};
   const CAT_ZH = { meal: '用餐', focus: '专注', work: '工作', break: '休息', exercise: '运动', meeting: '会议', review: '评审', admin: '杂务', learning: '学习', personal: '个人', winddown: '收尾' };
-  const TAG_ZH = { 'In Progress': '进行中', Active: '活跃', 'Needs Review': '待你审', Waiting: '等待中', Done: '已完成' };
+  const TAG_KEY = { 'In Progress': 'tag.in_progress', '进行中': 'tag.in_progress', Active: 'tag.active', '活跃': 'tag.active', 'Needs Review': 'tag.needs_review', '待你审': 'tag.needs_review', Waiting: 'tag.waiting', '等待中': 'tag.waiting', Done: 'tag.done', '已完成': 'tag.done', '等你': 'tag.waiting_you', '优先': 'tag.priority', '等别人': 'tag.waiting_others', Priority: 'tag.priority', 'Waiting on you': 'tag.waiting_you', 'Waiting on others': 'tag.waiting_others' };
+  const tagLabel = (text) => { const k = TAG_KEY[String(text || '')]; return k ? t(k) : String(text || ''); };
+  const TAG_ZH = { 'In Progress': '进行中', Active: '活跃', 'Needs Review': '待你审', Waiting: '等待中', Done: '已完成' }; // legacy alias
   const TITLE_ZH = { 'Lunch break': '午餐休息', 'Focus time': '专注时段', Breakfast: '早餐', Dinner: '晚餐', 'Evening walk': '晚间散步' };
   const SRC_ZH = { github: 'GitHub · 代码协作', gmail: 'Gmail · 邮件', googlecalendar: '日历 · 日程', slack: 'Slack · 消息', manual: '手动 · 待办' };
 
@@ -3205,39 +3279,39 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const links = deepLinks(card);
     const spark = blockOf(card, 'sparkline');
     const hasSpark = spark && (spark.data || []).some(v => v > 0);
-    const SRC_SHORT = { github: 'GitHub', gmail: 'Gmail', googlecalendar: '日历', slack: 'Slack', manual: '待办' };
-    const label = isMailGroup(card) ? '邮件' : (SRC_SHORT[card.source] || SRC_ZH[card.source] || (card.source || '动态'));
+    const SRC_SHORT = { github: t('src.github'), gmail: t('src.gmail'), googlecalendar: t('src.calendar'), slack: t('src.slack'), manual: t('src.manual') };
+    const label = isMailGroup(card) ? t('src.mail') : (SRC_SHORT[card.source] || SRC_ZH[card.source] || (card.source || t('src.misc')));
     const srcClass = 'src-' + String(card.source === 'googlecalendar' ? 'calendar' : (isMailGroup(card) ? 'mail' : (card.source || 'misc'))).replace(/[^a-z]/gi, '');
     const avLetter = r ? r.owner.slice(0, 1).toUpperCase() : (label.slice(0, 1) || '?');
     const av = r ? `<img class="av" src="https://github.com/${encodeURIComponent(r.owner)}.png?size=80" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'av av-f ${srcClass}',textContent:'${escapeHtml(avLetter)}'}))">` : `<span class="av av-f ${srcClass}">${escapeHtml(avLetter)}</span>`;
-    const review = statOf(card, '待你审') || statOf(card, '审');
+    const review = statOf(card, '待你审') || statOf(card, '审') || statOf(card, 'Needs Review') || statOf(card, 'review');
     const mine = statOf(card, '你开的') || pr;
     let metrics = '';
     if (review || mine || iss) {
       metrics = `<div class="metrics">
-        ${review ? `<div class="m"><b class="c-rose">${review}</b><span>待你审</span></div>` : ''}
-        ${mine ? `<div class="m"><b class="c-teal">${mine}</b><span>你开的 PR</span></div>` : ''}
-        ${iss ? `<div class="m"><b class="c-violet">${iss}</b><span>待处理 issue</span></div>` : ''}
+        ${review ? `<div class="m"><b class="c-rose">${review}</b><span>${escapeHtml(t('metric.review_you'))}</span></div>` : ''}
+        ${mine ? `<div class="m"><b class="c-teal">${mine}</b><span>${escapeHtml(t('metric.your_prs'))}</span></div>` : ''}
+        ${iss ? `<div class="m"><b class="c-violet">${iss}</b><span>${escapeHtml(t('metric.open_issues'))}</span></div>` : ''}
         <div class="m-bar"><i class="b-pr" style="flex:${Math.max(mine||pr,0)}"></i><i class="b-iss" style="flex:${Math.max(iss,0)}"></i></div>
       </div>`;
     }
     if (isMailGroup(card)) {
       const total = linksOf(card).length, open = openItemCount(card), you = card.waiting === 'you';
       metrics = `<div class="metrics mail-m">
-        <div class="m"><b class="${you ? 'c-rose' : 'c-teal'}">${open}</b><span>封待看</span></div>
-        ${total - open ? `<div class="m"><b class="c-violet">${total - open}</b><span>已处理</span></div>` : ''}
-        <span class="pill ${you ? 'pill-hot' : 'pill-gray'} need-pill">${you ? '需要你处理' : '无需处理'}</span>
+        <div class="m"><b class="${you ? 'c-rose' : 'c-teal'}">${open}</b><span>${escapeHtml(t('metric.mail_open'))}</span></div>
+        ${total - open ? `<div class="m"><b class="c-violet">${total - open}</b><span>${escapeHtml(t('metric.mail_done'))}</span></div>` : ''}
+        <span class="pill ${you ? 'pill-hot' : 'pill-gray'} need-pill">${escapeHtml(you ? t('metric.need_you') : t('metric.no_action'))}</span>
       </div>`;
     }
     const bar = (card.blocks || []).find(b => b.type === 'chart' && b.chartType === 'bar');
     if (bar && (bar.data || []).some(v => v > 0)) {
       const mx = Math.max(...bar.data, 1);
-      metrics += `<div class="mini-bars" title="等你 vs 等别人">${(bar.data||[]).map((v,i)=>`<div class="mb"><i style="height:${Math.max(8,(v/mx)*36)}px" class="${i===0?'b-pr':'b-iss'}"></i><span>${escapeHtml((bar.labels||[])[i]||'')}<b>${v}</b></span></div>`).join('')}</div>`;
+      metrics += `<div class="mini-bars" title="${escapeHtml(t('metric.wait_vs'))}">${(bar.data||[]).map((v,i)=>`<div class="mb"><i style="height:${Math.max(8,(v/mx)*36)}px" class="${i===0?'b-pr':'b-iss'}"></i><span>${escapeHtml((bar.labels||[])[i]||'')}<b>${v}</b></span></div>`).join('')}</div>`;
     }
     const tags = ((card.blocks || []).find(b => b.type === 'tags') || {}).tags || [];
     const avatars = (blockOf(card, 'avatars') || {}).urls || [];
     const avRow = avatars.length ? `<div class="av-row">${avatars.slice(0,5).map(u=>`<img class="av sm" src="${escapeHtml(u)}" alt="" loading="lazy" onerror="this.style.display='none'"/>`).join('')}</div>` : '';
-    const tagHtml = tags.length ? `<div class="w-tags">${tags.map(t=>{const tx=TAG_ZH[t.text]||t.text; return `<span class="pill pill-${escapeHtml(t.color||'gray')}">${escapeHtml(tx)}</span>`;}).join('')}</div>` : '';
+    const tagHtml = tags.length ? `<div class="w-tags">${tags.map(tg=>{const tx=tagLabel(tg.text); return `<span class="pill pill-${escapeHtml(tg.color||'gray')}">${escapeHtml(tx)}</span>`;}).join('')}</div>` : '';
     if (hasSpark) {
       const d = spark.data, mx = Math.max(...d, 1);
       const pts = d.map((v, i) => `${(i / (d.length - 1)) * 100},${30 - (v / mx) * 26}`).join(' ');
@@ -3246,10 +3320,14 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const waitingOnly = !!card.waitingOnly || card.clearance === 'waiting';
     const na = waitingOnly ? '' : nextAction(card);
     const hasFace = !!(card.faceView && !waitingOnly);
-    // With a live face, drop redundant status pills (进行中/你开的); keep 等你 / 优先 only.
-    const slimTags = (tags || []).filter(t => /等你|待你审|优先/.test(String(t.text || '')) || TAG_ZH[t.text] === '待你审');
+    // With a live face, drop redundant status pills; keep waiting-on-you / needs-review / priority only.
+    const slimTags = (tags || []).filter(tg => {
+      const raw = String(tg.text || '');
+      const key = TAG_KEY[raw];
+      return key === 'tag.waiting_you' || key === 'tag.needs_review' || key === 'tag.priority' || /等你|待你审|优先|Needs Review|Waiting on you|Priority/i.test(raw);
+    });
     const liveTags = waitingOnly || hasFace
-      ? (slimTags.length ? `<div class="w-tags">${slimTags.map(t => { const tx = TAG_ZH[t.text] || t.text; return `<span class="pill pill-${escapeHtml(t.color || 'gray')}">${escapeHtml(tx)}</span>`; }).join('')}</div>` : '')
+      ? (slimTags.length ? `<div class="w-tags">${slimTags.map(tg => { const tx = tagLabel(tg.text); return `<span class="pill pill-${escapeHtml(tg.color || 'gray')}">${escapeHtml(tx)}</span>`; }).join('')}</div>` : '')
       : tagHtml;
     const prep = waitingOnly ? [] : (card.prepared || []);
     const primary = prep.find(p => p.kind !== 'snooze') || null;
@@ -3257,7 +3335,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     // Progressive disclosure: one insight on the face. If a primary CTA already says the next step, drop the duplicate 下一步 bar.
     const showNext = !!(na && !primary);
     const actsHtml = primary
-      ? `<div class="w-acts">${stepBtnHtml(primary, 0, 'primary')}${secondary.length ? `<details class="w-more"><summary>更多</summary>${secondary.map((p, i) => stepBtnHtml(p, i + 1, '')).join('')}</details>` : ''}</div>`
+      ? `<div class="w-acts">${stepBtnHtml(primary, 0, 'primary')}${secondary.length ? `<details class="w-more"><summary>${escapeHtml(t('today.more'))}</summary>${secondary.map((p, i) => stepBtnHtml(p, i + 1, '')).join('')}</details>` : ''}</div>`
       : '';
     const qa = waitingOnly ? '' : `<div class="qa-bar" aria-label="${t('qa.aria')}"><button type="button" data-qa="done" title="${t('qa.done_title')}">${t('qa.done')}<span class="kbd">C</span></button><button type="button" data-qa="snooze" title="${t('qa.snooze_title')}">${t('qa.snooze')}<span class="kbd">S</span></button><button type="button" data-qa="ask" title="${t('qa.ask_title')}">${t('qa.ask')}</button><button type="button" data-qa="useless" class="qa-useless" title="${t('qa.useless_title')}">${t('qa.useless')}</button></div>`;
     const rails = waitingOnly ? '' : `<div class="swipe-rails" role="group" aria-label="${escapeHtml(t('qa.swipe_aria'))}"><div class="swipe-rail left"><button type="button" data-qa="done" aria-label="${escapeHtml(t('qa.done_aria'))}">${escapeHtml(t('qa.done'))}</button><button type="button" data-qa="snooze" aria-label="${escapeHtml(t('qa.snooze_aria'))}">${escapeHtml(t('qa.snooze'))}</button></div><div class="swipe-rail right"><button type="button" data-qa="ask" aria-label="${escapeHtml(t('qa.ask_aria'))}">${escapeHtml(t('qa.ask'))}</button></div></div>`;
@@ -3267,14 +3345,14 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         <div class="swipe-face">
         <header class="w-top">
           ${av}
-          <div class="w-src"><span class="w-label">${escapeHtml(label)}</span><span class="w-repo">${escapeHtml(r ? `${r.owner} / ${r.name}` : (card.subtitle || (card.source === 'slack' ? '频道消息' : '') || ''))}</span></div>
-          ${waitingOnly ? `<span class="pill pill-gray">等别人${card.waitingCount ? ' · ' + card.waitingCount : ''}</span>` : (big ? '<span class="pill pill-hot">优先</span>' : '')}${isMailGroup(card) ? '' : liveTags}
+          <div class="w-src"><span class="w-label">${escapeHtml(label)}</span><span class="w-repo">${escapeHtml(r ? `${r.owner} / ${r.name}` : (card.subtitle || (card.source === 'slack' ? t('today.channel_msgs') : '') || ''))}</span></div>
+          ${waitingOnly ? `<span class="pill pill-gray">${escapeHtml(t('today.waiting_others'))}${card.waitingCount ? ' · ' + card.waitingCount : ''}</span>` : (big ? `<span class="pill pill-hot">${escapeHtml(t('today.priority_pill'))}</span>` : '')}${isMailGroup(card) ? '' : liveTags}
         </header>
         <h3 class="w-head">${escapeHtml(waitingOnly ? (r ? r.name : headline(card)) : headline(card))}</h3>
         ${isMailGroup(card) && tags.length ? `<div class="w-senders">${tags.map(t => `<span title="${escapeHtml(t.text)}">${escapeHtml(t.text)}</span>`).join('')}</div>` : ''}
         ${!waitingOnly && desc && !hasFace ? `<p class="w-desc">${escapeHtml(desc)}</p>` : ''}
         ${waitingOnly ? '' : (card.faceView ? renderFace(card.faceView) || (metrics + avRow) : metrics + avRow)}
-        ${showNext ? `<div class="w-next"><span class="w-next-k">下一步</span><span class="w-next-v">${escapeHtml(na)}</span></div>` : ''}
+        ${showNext ? `<div class="w-next"><span class="w-next-k">${escapeHtml(t('today.next_step'))}</span><span class="w-next-v">${escapeHtml(na)}</span></div>` : ''}
         ${actsHtml}
         ${qa}
         <div class="w-slot"></div>
@@ -3297,11 +3375,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const out = [];
     for (const p of fv.parts) {
       if (p.type === 'stats' && p.pairs && p.pairs.length) out.push(`<div class="f-stats">${p.pairs.map(x => `<div class="f-stat t-${escapeHtml(x.tone || 'cool')}"><b>${escapeHtml(x.value)}</b><span>${escapeHtml(x.label)}</span></div>`).join('')}</div>`);
-      else if (p.type === 'people' && p.people && p.people.length) out.push(`<div class="f-people"><span class="f-pl">${escapeHtml(p.label)}</span><span class="f-avs">${p.people.map(x => `<span class="f-av" style="--h:${avHue(x.name)}" title="${escapeHtml(x.name)}">${escapeHtml(initial(x.name))}</span>`).join('')}${p.more ? `<span class="f-av more">+${p.more}</span>` : ''}</span><em>${escapeHtml(p.people.slice(0, 2).map(x => x.name).join('、'))}${p.people.length > 2 ? ' 等' : ''}</em></div>`);
+      else if (p.type === 'people' && p.people && p.people.length) out.push(`<div class="f-people"><span class="f-pl">${escapeHtml(p.label)}</span><span class="f-avs">${p.people.map(x => `<span class="f-av" style="--h:${avHue(x.name)}" title="${escapeHtml(x.name)}">${escapeHtml(initial(x.name))}</span>`).join('')}${p.more ? `<span class="f-av more">+${p.more}</span>` : ''}</span><em>${escapeHtml(p.people.slice(0, 2).map(x => x.name).join(ODMi18n && ODMi18n.getLocale() === 'zh' ? '、' : ', '))}${p.people.length > 2 ? escapeHtml(t('face.people_etc')) : ''}</em></div>`);
       else if (p.type === 'stage') out.push(`<div class="f-stage"><div class="f-bar"><i style="width:${p.total ? Math.round((p.done / p.total) * 100) : 0}%"></i></div><span>${escapeHtml(p.label)}</span></div>`);
       else if (p.type === 'checklist') {
-        if (p.done && !(p.items || []).length) out.push('<div class="f-alldone"><span class="f-sprout">🌱</span>都处理完了</div>');
-        else out.push(`<ul class="f-check">${(p.items || []).map(it => `<li class="${it.done ? 'done' : ''}${it.needsYou ? ' need' : ''}"><button type="button" class="f-box" aria-label="${escapeHtml(t('item.mark_local'))}" title="${escapeHtml(t('item.mark_local_title'))}" data-item-url="${escapeHtml(it.url)}" data-item-title="${escapeHtml(it.title)}"></button><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</a><span class="f-meta">${escapeHtml(it.from || it.kindZh || '')}</span></li>`).join('')}</ul>${p.more ? `<div class="f-more">还有 ${p.more} 条</div>` : ''}`);
+        if (p.done && !(p.items || []).length) out.push('<div class="f-alldone"><span class="f-sprout">🌱</span>' + escapeHtml(t('face.all_done')) + '</div>');
+        else out.push(`<ul class="f-check">${(p.items || []).map(it => `<li class="${it.done ? 'done' : ''}${it.needsYou ? ' need' : ''}"><button type="button" class="f-box" aria-label="${escapeHtml(t('item.mark_local'))}" title="${escapeHtml(t('item.mark_local_title'))}" data-item-url="${escapeHtml(it.url)}" data-item-title="${escapeHtml(it.title)}"></button><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" title="${escapeHtml(it.title)}">${escapeHtml(it.title)}</a><span class="f-meta">${escapeHtml(it.from || it.kindZh || '')}</span></li>`).join('')}</ul>${p.more ? `<div class="f-more">${escapeHtml(t('face.more_n', { n: p.more }))}</div>` : ''}`);
       }
       else if (p.type === 'quote') {
         const who = p.from ? `<span class="f-av" style="--h:${avHue(p.from)}">${escapeHtml(initial(p.from))}</span><span class="f-quote-who">${escapeHtml(p.from)}</span>` : '';
@@ -3666,7 +3744,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function renderOffHours(offCards, cards) {
     if (!offCards.length) return '';
     const open = offOpen();
-    return `<div class="offhours${open ? ' open' : ''}"><button type="button" class="off-toggle" id="offToggle" aria-expanded="${open}">🌙 下班时间 · ${offCards.length} 张工作卡先收起来了 <i>${open ? '收起 ▴' : '展开 ▾'}</i></button>${open ? `<div class="grid2 grid-off">${offCards.map(c => renderWorkTile(c, cards.indexOf(c))).join('')}</div>` : ''}</div>`;
+    return `<div class="offhours${open ? ' open' : ''}"><button type="button" class="off-toggle" id="offToggle" aria-expanded="${open}">🌙 ${escapeHtml(t('today.offhours', { n: offCards.length }))} <i>${open ? escapeHtml(t('today.offhours_collapse')) : escapeHtml(t('today.offhours_expand'))}</i></button>${open ? `<div class="grid2 grid-off">${offCards.map(c => renderWorkTile(c, cards.indexOf(c))).join('')}</div>` : ''}</div>`;
   }
   function bindOffHours(container) {
     const b = container.querySelector('#offToggle'); if (!b) return;
@@ -3679,7 +3757,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const r = repoOf(c);
       const name = r ? r.name : clip(c.title, 18);
       const n = c.waitingCount || 0;
-      return `<button type="button" class="wait-chip" data-wait-id="${escapeHtml(c.id)}" title="打开看看，需要的话可以催一下"><span class="wc-n">${n ? n + ' 件' : '等候'}</span><b>${escapeHtml(name)}</b></button>`;
+      return `<button type="button" class="wait-chip" data-wait-id="${escapeHtml(c.id)}" title="${escapeHtml(t('today.wait_chip_title'))}"><span class="wc-n">${n ? escapeHtml(t('today.wait_n', { n })) : escapeHtml(t('today.wait_idle'))}</span><b>${escapeHtml(name)}</b></button>`;
     }).join('');
     return `<div class="wait-strip" id="waitStrip" data-label="${escapeHtml(t('today.wait_strip'))}">${chips}</div>`;
   }
@@ -3737,9 +3815,9 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   }
   function countdownText(ms) {
     const m = Math.round((ms - Date.now()) / 60000);
-    if (m <= 0) return '进行中';
-    if (m < 60) return `${m} 分钟后`;
-    return `${Math.floor(m / 60)} 小时 ${m % 60} 分后`;
+    if (m <= 0) return t('hero.countdown_live');
+    if (m < 60) return t('hero.countdown_mins', { n: m });
+    return t('hero.countdown_hours', { h: Math.floor(m / 60), m: m % 60 });
   }
   function renderNextHero(nx) {
     if (!nx) return '';
@@ -4941,7 +5019,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   }
   window.odmWatchComposio = odmWatchComposio;
   // Deep link: the callback page (no opener) redirects to …/app#sources.
-  const hashView = () => { const v = (location.hash || '').slice(1); if (v === 'sources' || v === 'settings') showView(v); };
+  const hashView = () => { const v = (location.hash || '').slice(1); if (v === 'sources' || v === 'settings' || v === 'memory') showView(v); };
   setTimeout(hashView, 0); window.addEventListener('hashchange', hashView);
   window.__reloadSources = () => { if ($('v-sources').classList.contains('on')) loadSources(true); };
 
@@ -5093,13 +5171,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         $('entityIdInput').value = cfg.entityId;
       }
 
-      // Load apps
-      const appsRes = await fetch('/api/composio/apps');
-      const appsData = await appsRes.json();
-      
-      const grid = $('appsGrid');
-      grid.className = '';
-      grid.innerHTML = (appsData.apps && appsData.apps.length) ? renderAppTiles(appsData.apps) : '<p style="color:var(--ink3);padding:20px;text-align:center">暂无可用应用</p>';
+      // Apps / connection status live on Sources only (less is more).
+      const go = $('goSourcesBtn');
+      if (go && !go._bound) {
+        go._bound = true;
+        go.addEventListener('click', () => showView('sources'));
+      }
     } catch (error) {
       console.error('Failed to load Composio settings:', error);
     }
@@ -5377,6 +5454,142 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function failBubbleHtml(text) {
     return `<div class="chat-fail"><span>${escMd(text)}</span><button class="chat-retry" type="button">${t('chat.retry')}</button></div>`;
   }
+
+  // ===== Memory 一瞥 (dsh-memory SQLite) =====
+  const MEM_MARKS = ['🌱', '✨', '📌', '🫧', '🌙', '🫖', '📎', '💫', '🪄', '🍃'];
+  const MEM_ACCENTS = {
+    preference: '#22a898', decision: '#8a74d0', project: '#4f9de8', person: '#e2667a',
+    habit: '#f0a35e', fact: '#5b6275', default: '#8a74d0',
+  };
+  function memAccent(tags) {
+    const t0 = (tags && tags[0] || '').toLowerCase();
+    if (MEM_ACCENTS[t0]) return MEM_ACCENTS[t0];
+    let h = 0; for (const c of t0 || 'm') h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    const palette = ['#22a898', '#8a74d0', '#4f9de8', '#e2667a', '#f0a35e', '#6450a8'];
+    return palette[h % palette.length];
+  }
+  function memMark(id) { return MEM_MARKS[Math.abs(Number(id) || 0) % MEM_MARKS.length]; }
+  function memAgo(ts) {
+    if (!ts) return '';
+    const seconds = Math.max(0, Math.round((Date.now() - Number(ts)) / 1000));
+    if (seconds < 60) return t('memory.ago_just');
+    try {
+      const format = new Intl.RelativeTimeFormat(odmLang() === 'zh' ? 'zh-CN' : 'en', { numeric: 'auto' });
+      const minutes = Math.round(seconds / 60);
+      if (minutes < 60) return format.format(-minutes, 'minute');
+      const hours = Math.round(minutes / 60);
+      if (hours < 24) return format.format(-hours, 'hour');
+      const days = Math.round(hours / 24);
+      if (days < 30) return format.format(-days, 'day');
+      return format.format(-Math.round(days / 30), 'month');
+    } catch (_) {
+      return new Date(ts).toLocaleString(odmLang() === 'zh' ? 'zh-CN' : 'en', { month: 'short', day: 'numeric' });
+    }
+  }
+  function memTagLabel(tag) {
+    const k = 'memory.tag_' + tag;
+    const v = t(k);
+    return v === k ? tag : v;
+  }
+  function paintMemories(data) {
+    const box = $('memContent');
+    const countEl = $('memCount');
+    if (!box) return;
+    const rows = (data && data.memories) || [];
+    const total = (data && data.total) != null ? data.total : rows.length;
+    if (countEl) {
+      countEl.innerHTML = total === 1
+        ? `<b>${escapeHtml(t('memory.count_one'))}</b>`
+        : `<b>${escapeHtml(t('memory.count', { n: total }))}</b>`;
+    }
+    if (!rows.length) {
+      box.className = '';
+      box.innerHTML = `<div class="mem-empty">
+        <div class="mem-empty-mark">${typeof douyaSvg === 'function' ? douyaSvg({ size: 56, state: 'idle', id: 'mem' }) : '🌱'}</div>
+        <h2>${escapeHtml(t('memory.empty_title'))}</h2>
+        <p>${escapeHtml(t('memory.empty_body'))}</p>
+        <button type="button" class="step primary" id="memEmptyCta">${escapeHtml(t('memory.empty_cta'))}</button>
+      </div>`;
+      $('memEmptyCta')?.addEventListener('click', () => {
+        showView('today');
+        openTodayChat({ byUser: true });
+        const i = $('todayChatInput');
+        if (i) { i.value = t('memory.prompt'); i.focus(); }
+      });
+      return;
+    }
+    box.className = 'mem-grid';
+    box.innerHTML = rows.map((m, i) => {
+      const tags = Array.isArray(m.tags) ? m.tags : String(m.tags || '').split(/\s+/).filter(Boolean);
+      const accent = memAccent(tags);
+      const pills = [
+        m.pinned ? `<span class="mem-pill pin">${escapeHtml(t('memory.pinned'))}</span>` : '',
+        ...tags.slice(0, 3).map(tg => `<span class="mem-pill tag">${escapeHtml(memTagLabel(tg))}</span>`),
+      ].join('');
+      return `<article class="mem-card${m.pinned ? ' is-pinned' : ''}" data-id="${escapeHtml(String(m.id))}" style="--mem-accent:${accent};animation-delay:${Math.min(i, 12) * 45}ms">
+        <div class="mem-mark" aria-hidden="true">${memMark(m.id)}</div>
+        <div class="mem-text">${escapeHtml(m.text || '')}</div>
+        <div class="mem-meta">${pills}<span class="mem-when">${escapeHtml(memAgo(m.updatedAt || m.createdAt))}</span>
+          <button type="button" class="mem-forget" data-id="${escapeHtml(String(m.id))}" aria-label="${escapeHtml(t('memory.forget'))}">${escapeHtml(t('memory.forget'))}</button>
+        </div>
+      </article>`;
+    }).join('');
+    box.querySelectorAll('.mem-forget').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-id');
+        if (!btn.hasAttribute('data-confirm')) {
+          btn.setAttribute('data-confirm', '1');
+          btn.textContent = t('memory.forget_confirm');
+          setTimeout(() => { if (btn.isConnected && btn.hasAttribute('data-confirm')) { btn.removeAttribute('data-confirm'); btn.textContent = t('memory.forget'); } }, 3500);
+          return;
+        }
+        btn.disabled = true;
+        try {
+          const r = await fetch('/api/opendigitalmate/memories/forget', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: Number(id) }) }).then(x => x.json());
+          if (r && (r.forgotten || r.ok)) {
+            const card = box.querySelector(`.mem-card[data-id="${CSS.escape(String(id))}"]`);
+            if (card) {
+              card.classList.add('is-leaving');
+              setTimeout(() => loadMemories({ force: true }), 280);
+            } else loadMemories({ force: true });
+            try { showUiToast(t('memory.forgotten')); } catch (_) {}
+          } else {
+            btn.disabled = false;
+            btn.removeAttribute('data-confirm');
+            btn.textContent = t('memory.forget');
+          }
+        } catch (_) {
+          btn.disabled = false;
+          btn.removeAttribute('data-confirm');
+          btn.textContent = t('memory.forget');
+        }
+      });
+    });
+  }
+  let memSeq = 0;
+  async function loadMemories() {
+    const seq = ++memSeq;
+    const box = $('memContent');
+    if (box && !box.querySelector('.mem-card') && !box.querySelector('.mem-empty')) {
+      box.className = '';
+      box.innerHTML = `<div class="loading">${escapeHtml(t('today.loading'))}</div>`;
+    }
+    try {
+      const data = await fetch('/api/opendigitalmate/memories?limit=40', { cache: 'no-store' }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+      if (seq !== memSeq) return;
+      paintMemories(data);
+    } catch (err) {
+      if (seq !== memSeq) return;
+      if (box) {
+        box.className = '';
+        box.innerHTML = `<div class="error">${escapeHtml(err.message || String(err))}</div>`;
+      }
+    }
+  }
+  window.loadMemories = loadMemories;
+  $('memRefresh')?.addEventListener('click', () => loadMemories());
+
   // ===== 豆芽 Intelligent UI (P1): view ops from Chief + 当前视图 context =====
   // Ops arrive as plain data (op name + card / item ids + short text) and are applied with the existing
   // components; nothing from the server is ever inserted as HTML. Text goes through textContent.
@@ -5389,6 +5602,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     document.querySelectorAll('.nav').forEach(n => n.classList.toggle('on', n.getAttribute('data-view') === view));
     Object.keys(views).forEach(k => views[k].classList.toggle('on', k === view));
     if (view === 'sources') loadSources();
+    if (view === 'memory') loadMemories();
     if (view === 'settings') { checkConfig(); loadLLMSettings(); loadComposioSettings(); }
     reportView();
   }
@@ -5401,7 +5615,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const pinIdx = new Map(pins.map((p, i) => [p.cardId, i]));
     const ordIdx = new Map((uiLayout.order || []).map((id, i) => [id, i]));
     const auto = autoActive() ? new Map(autoShown.order.map((id, i) => [id, i])) : null;
-    const prio = [...work].sort((a, b) => ((b.priority === 'high') - (a.priority === 'high')));
+    // Needs-you before mere high priority so the grid matches the hero's next-thing sense.
+    const prio = [...work].sort((a, b) => ((b.waiting === 'you') - (a.waiting === 'you')) || ((b.priority === 'high' || b.priority === 'urgent') - (a.priority === 'high' || a.priority === 'urgent')));
     const prioPos = new Map(prio.map((c, i) => [c.id, i]));
     const base = auto ? [...work].sort((a, b) => (auto.has(a.id) ? auto.get(a.id) : 1e4 + prioPos.get(a.id)) - (auto.has(b.id) ? auto.get(b.id) : 1e4 + prioPos.get(b.id))) : prio;
     const pos = new Map(base.map((c, i) => [c.id, i]));
@@ -5429,10 +5644,10 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       tile.setAttribute('data-id', card.id);
       const p = pins.get(card.id);
       const why = !p && autoActive() && autoShown.reasons ? autoShown.reasons[card.id] : '';
-      if (why) { const w = document.createElement('div'); w.className = 'why-line'; w.textContent = `为什么在这里：${why}`; tile.appendChild(w); }
+      if (why) { const w = document.createElement('div'); w.className = 'why-line'; w.textContent = t('today.why_here', { why }); tile.appendChild(w); }
       const btn = document.createElement('button');
       btn.type = 'button'; btn.className = 'pin-btn' + (p ? ' on' : '');
-      btn.title = p ? (p.by === 'user' ? '取消固定' : '取消豆芽的置顶') : '固定到最前';
+      btn.title = p ? (p.by === 'user' ? t('today.unpin') : t('today.unpin_bot')) : t('today.pin');
       btn.textContent = p ? '📌' : '📍';
       btn.addEventListener('click', e => { e.stopPropagation(); userPin(card, !!p); });
       tile.appendChild(btn);
@@ -5896,11 +6111,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
       if (pr || iss) html += `<div class="z-kpis">${pr ? `<div><b class="c-teal">${pr}</b><span>待推进 PR</span></div>` : ''}${iss ? `<div><b class="c-violet">${iss}</b><span>待处理 issue</span></div>` : ''}</div>`;
       const dl = deepLinks(card);
-      html += `<div class="z-next"><div><span class="w-next-k">下一步</span><b>${escapeHtml(nextAction(card))}</b></div>${dl[0] ? `<a class="z-btn" href="${escapeHtml(dl[0].url)}" target="_blank" rel="noopener">${isMailGroup(card) ? '打开第一封 ↗' : '去处理 ↗'}</a>` : ''}</div>`;
+      html += `<div class="z-next"><div><span class="w-next-k">${escapeHtml(t('today.next_step'))}</span><b>${escapeHtml(nextAction(card))}</b></div>${dl[0] ? `<a class="z-btn" href="${escapeHtml(dl[0].url)}" target="_blank" rel="noopener">${isMailGroup(card) ? '打开第一封 ↗' : '去处理 ↗'}</a>` : ''}</div>`;
       if (linksOf(card).length) html += `<div class="z-sec" id="zItemsSec">${zoomItemsHtml(card)}</div>`;
     }
     const name = r ? r.name : (isTT ? '今天的安排' : clip(card.title, 20));
-    if (!isTT && (card.prepared || []).length) html = html.replace('<div class="z-next">', `<div class="w-acts z-acts-row"><span class="w-acts-k">豆芽备好了</span>${card.prepared.map((p, i) => stepBtnHtml(p, i, i === 0 && p.kind !== 'snooze' ? 'primary' : '')).join('')}</div><div class="w-slot z-slot"></div><div class="z-next">`);
+    if (!isTT && (card.prepared || []).length) html = html.replace('<div class="z-next">', `<div class="w-acts z-acts-row"><span class="w-acts-k">${escapeHtml(t('today.ready_steps'))}</span>${card.prepared.map((p, i) => stepBtnHtml(p, i, i === 0 && p.kind !== 'snooze' ? 'primary' : '')).join('')}</div><div class="w-slot z-slot"></div><div class="z-next">`);
     html += '<details class="z-hist" id="zHist" hidden><summary></summary><div class="z-hist-b" id="zHistB"></div></details>';
     const modal = overlay.querySelector('.tile-zoom-modal');
     const hdr = modal.querySelector('.tile-zoom-header');

@@ -11,9 +11,10 @@ const gh = (over = {}) => ({ id: 'g1', type: 'project-cluster', source: 'github'
   blocks: [{ type: 'link-list', links: [{ title: 'Fix x', url: 'https://github.com/o/r/pull/17', type: 'pr-mine' }] }], ...over })
 
 test('fyi mail group: archive-all with only the open items, then 明天再看', () => {
-  const steps = prepareCardActions(mail(), { itemStatus: { 'https://mail.google.com/mail/u/0/#inbox/bbb222': { status: 'done' } } })
+  const steps = prepareCardActions(mail(), { itemStatus: { 'https://mail.google.com/mail/u/0/#inbox/bbb222': { status: 'done' } }, lang: 'zh' })
   assert.deepEqual(steps.map(s => s.id), ['archive-all', 'snooze'])
   assert.equal(steps[0].label, '归档这封')
+  assert.equal(prepareCardActions(mail(), { itemStatus: { 'https://mail.google.com/mail/u/0/#inbox/bbb222': { status: 'done' } }, lang: 'en' })[0].label, 'Archive this')
   assert.deepEqual(steps[0].input.items.map(i => i.url), ['https://mail.google.com/mail/u/0/#inbox/aaa111'])
 })
 
@@ -25,12 +26,13 @@ test('needs-you mail: a reply draft request naming the real mail; no archive off
 })
 
 test('my PR waiting on others: nudge comment prepared; waiting on me: ask where it is stuck', () => {
-  const a = prepareCardActions(gh())
+  const a = prepareCardActions(gh(), { lang: 'zh' })
   assert.equal(a[0].action, 'github_comment'); assert.equal(a[0].input.url, 'https://github.com/o/r/pull/17')
   assert.match(a[0].label, /催一下 #17/)
+  assert.match(prepareCardActions(gh(), { lang: 'en' })[0].label, /Nudge #17/)
   assert.match(a[0].input.body, /叮一下：#17/)
   assert.match(a[0].input.body, /[一-龥]/) // Chinese, not the old English template
-  const b = prepareCardActions(gh({ waiting: 'you' }))
+  const b = prepareCardActions(gh({ waiting: 'you' }), { lang: 'zh' })
   assert.equal(b[0].kind, 'ask'); assert.match(b[0].label, /#17/)
 })
 
@@ -45,7 +47,11 @@ test('next thing: meeting within 15 min wins; else top needs-you card; else none
   const m = pickNextThing({ cards: [tt, gh({ waiting: 'you' })], now, lang: 'zh' })
   assert.equal(m.kind, 'meeting'); assert.equal(m.buttons[0].url, 'https://meet.google.com/x'); assert.match(m.why, /10 分钟后/)
   const later = pickNextThing({ cards: [tt, gh({ waiting: 'you' })], now: new Date('2026-11-04T09:00:00+08:00'), lang: 'zh' })
-  assert.equal(later.kind, 'card'); assert.deepEqual(later.buttons.map(b => b.label), ['开始', '推迟', '交给豆芽'])  // zh labels
+  assert.equal(later.kind, 'card')
+  // Ready CTA first (keeps prepared label), then Start, then Snooze — not a generic Ask overwrite.
+  assert.equal(later.buttons[0].kind, 'ask')
+  assert.match(later.buttons[0].label, /#17/)
+  assert.deepEqual(later.buttons.slice(1).map(b => b.label), ['开始', '推迟'])
   assert.equal(later.upcoming.title, '周会')
   assert.equal(pickNextThing({ cards: [], now, lang: 'zh' }).kind, 'none')
 })
@@ -105,4 +111,30 @@ test('snoozeUntilFor: 1h / tomorrow / week presets', () => {
   const local = new Date(now.getTime() + 8 * 3600e3)
   assert.equal(wk.getUTCHours() + 8 === 9 || ((wk.getUTCHours() + 8) % 24) === 9, true)
   assert.ok(wk.getTime() > now.getTime() + 6 * 86400e3)
+})
+
+
+test('low-priority waiting-on-you still becomes the next thing', () => {
+  const now = new Date('2026-11-04T10:00:00+08:00')
+  const mail = { id: 'm', type: 'email-action', source: 'gmail', title: 'Please reply', priority: 'low', waiting: 'you', status: 'active',
+    why: 'Alice needs an answer today',
+    blocks: [{ type: 'link-list', links: [{ title: 'Hello', url: 'https://mail.google.com/mail/u/0/#inbox/x1', type: 'email', from: 'Alice' }] }] }
+  const nx = pickNextThing({ cards: [mail], now, lang: 'en' })
+  assert.equal(nx.kind, 'card')
+  assert.equal(nx.title, 'Please reply')
+  assert.match(nx.why, /Waiting on you/)
+  assert.match(nx.why, /Alice needs/)
+  assert.equal(nx.buttons[0].kind, 'ask')
+  assert.match(nx.buttons[0].label, /起草回复|Alice|Hello|reply/i)
+  assert.equal(nx.buttons[1].label, 'Start')
+  assert.equal(nx.buttons[2].label, 'Snooze')
+})
+
+test('idle none state offers Start on the top ranked card when work remains', () => {
+  const now = new Date('2026-11-04T10:00:00+08:00')
+  const fy = { id: 'f', type: 'email-group', source: 'gmail', title: 'FYI digests', priority: 'low', waiting: 'fyi', status: 'active',
+    blocks: [{ type: 'link-list', links: [{ title: 'A', url: 'https://mail.google.com/mail/u/0/#inbox/a', type: 'email' }] }] }
+  const nx = pickNextThing({ cards: [fy], now, lang: 'en' })
+  assert.equal(nx.kind, 'none')
+  assert.ok(nx.buttons.some(b => b.kind === 'open' && b.cardId === 'f'))
 })

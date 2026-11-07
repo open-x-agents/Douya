@@ -283,6 +283,24 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
   }, 'opendigitalmate: /api/sources')
 
   effect({
+    path: '/api/opendigitalmate/memories',
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async (request) => {
+      const lim = Number(new URL(request.url).searchParams.get('limit') || 40)
+      return json(await router.listMemories({ limit: Number.isFinite(lim) ? lim : 40 }))
+    },
+  }, 'opendigitalmate: memories')
+
+  effect({
+    path: '/api/opendigitalmate/memories/forget',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request) => json(await router.forgetMemory(await readJson(request))),
+  }, 'opendigitalmate: memories forget')
+
+
+  effect({
     path: '/api/config/check',
     methods: ['GET'],
     requestBody: 'buffered',

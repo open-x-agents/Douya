@@ -28,6 +28,7 @@ import { findTimetableCard, readPlan, applyPlanEdit, todaysCalendarEvents } from
 import { uiView } from '../ui/ops.js';
 import { createSurfaceService } from '../ui/surfaces.js';
 import { resolveDisplayName, lastGithubIdentity } from './aggregation.js';
+import { listDshMemories, forgetDshMemory } from '../digest/runner.js';
 import { recordCompletion, setItemStatus, clearItemStatus, annotateCards, cardItemUrls } from '../host/store.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -891,8 +892,8 @@ export function createApiRouter(ctx) {
     },
 
     async getToday({ hour = null, lang = DEFAULT_LOCALE } = {}) {
+      const locale = resolveLang(lang)
       try {
-        const locale = resolveLang(lang)
         const dateLocale = locale === 'zh' ? 'zh-CN' : 'en-US'
         const today = new Date().toLocaleDateString(dateLocale, {
           year: 'numeric',
@@ -989,8 +990,9 @@ export function createApiRouter(ctx) {
           cards: annotateCards(activeCards, state.itemStatus).map(c => {
             if (c.type === 'view') return { ...c, view: surfaceService.cardView(c) };
             const cleared = applyClearance(c, state.itemStatus || {});
-            const prepared = cleared.clearance === 'cleared' ? [] : prepareCardActions(cleared, { itemStatus: state.itemStatus || {} });
-            const faceView = hydrateFace(cleared, cleared.face || autoFace(cleared), { itemStatus: state.itemStatus || {}, events: calToday }) || (cleared.face ? hydrateFace(cleared, autoFace(cleared), { itemStatus: state.itemStatus || {}, events: calToday }) : null);
+            const prepared = cleared.clearance === 'cleared' ? [] : prepareCardActions(cleared, { itemStatus: state.itemStatus || {}, lang: locale });
+            const faceOpts = { itemStatus: state.itemStatus || {}, events: calToday, lang: locale };
+            const faceView = hydrateFace(cleared, cleared.face || autoFace(cleared), faceOpts) || (cleared.face ? hydrateFace(cleared, autoFace(cleared), faceOpts) : null);
             return { ...cleared, workish: isWorkish(cleared), prepared, faceView };
           }),
           next: nextThing,
@@ -1004,8 +1006,8 @@ export function createApiRouter(ctx) {
         console.error('API /today error:', err);
         return {
           error: err.message,
-          summary: '加载失败',
-          date: new Date().toLocaleDateString('zh-CN'),
+          summary: locale === 'zh' ? '加载失败' : 'Failed to load',
+          date: new Date().toLocaleDateString(locale === 'zh' ? 'zh-CN' : 'en-US'),
           openCount: 0,
           meetingHours: 0,
           waitingCount: 0,
@@ -1861,6 +1863,23 @@ export function createApiRouter(ctx) {
     },
 
     /**
+     * GET /api/opendigitalmate/memories — Memory 一瞥 list from dsh-memory SQLite.
+     */
+    async listMemories({ limit = 40 } = {}) {
+      const dshHome = process.env.DSH_HOME || null;
+      const data = listDshMemories(dshHome, { limit });
+      return { success: true, ...data, home: dshHome };
+    },
+
+    /**
+     * POST /api/opendigitalmate/memories/forget — forget one memory by id.
+     */
+    async forgetMemory({ id } = {}) {
+      const dshHome = process.env.DSH_HOME || null;
+      return forgetDshMemory(dshHome, id);
+    },
+
+    /**
      * GET /api/llm/config - Get LLM configuration
      */
     async getLLMConfig() {
@@ -2322,6 +2341,26 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
         const { html } = await router.composioCallback({ status: url.searchParams.get('status') || '', connectedAccountId: url.searchParams.get('connected_account_id') || '', error: url.searchParams.get('error') || '' });
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
         res.end(html);
+      } else if (url.pathname === '/api/opendigitalmate/memories' && req.method === 'GET') {
+        const lim = Number(url.searchParams.get('limit') || 40);
+        const data = await router.listMemories({ limit: Number.isFinite(lim) ? lim : 40 });
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(data));
+      } else if (url.pathname === '/api/opendigitalmate/memories/forget' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+          try {
+            const data = body ? JSON.parse(body) : {};
+            const response = await router.forgetMemory(data);
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+            res.end(JSON.stringify(response));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: err.message || 'Invalid request' }));
+          }
+        });
+        return;
       } else if (url.pathname === '/api/llm/config' && req.method === 'GET') {
         const data = await router.getLLMConfig();
         res.writeHead(200, { 'Content-Type': 'application/json' });

@@ -5,6 +5,8 @@
 // from the card's CURRENT data every time /api/today is read, so a face is always live and every link / number
 // comes from the store. An invalid spec is dropped (the card falls back to a rule-picked face or the template).
 
+import { t as tr, resolveLang, DEFAULT_LOCALE } from '../i18n/index.js'
+
 export const FACE_COMPONENTS = {
   stage: '进度条：已处理 / 总数，分段显示',
   countdown: '倒计时到一个真实时间（日历 / 截止）',
@@ -99,10 +101,15 @@ const linksOf = c => {
   return [...((ll && ll.links) || []), ...(Array.isArray(c?.links) ? c.links : [])].filter(l => l && typeof l.url === 'string' && /^https:\/\//.test(l.url))
 }
 const kindOf = l => { const t = String(l.type || ''), u = l.url; if (t === 'slack' || /\.slack\.com\//.test(u)) return 'slack'; if (t.startsWith('email') || /mail\.google\.com/.test(u)) return 'email'; if (/\/pull\/\d+/.test(u)) return 'pr'; if (/\/issues\/\d+/.test(u)) return 'issue'; return 'link' }
-const KIND_ZH = { slack: '消息', email: '邮件', pr: 'PR', issue: 'Issue', link: '链接' }
+const KIND_KEYS = { slack: 'face.kind_slack', email: 'face.kind_email', pr: 'face.kind_pr', issue: 'face.kind_issue', link: 'face.kind_link' }
 const tsOf = l => { const t = Date.parse(l.at || l.updatedAt || l.createdAt || ''); return Number.isFinite(t) && t > Date.UTC(2000, 0, 1) ? t : null }
 const fromOf = l => cut(String(l.from || l.author || l.user || '').replace(/<[^>]*>/g, '').replace(/\s*[（(][^）)]*[）)]\s*$/, ''), 24)
-const ago = (ms, now) => { const d = Math.max(0, now - ms); const h = d / 3600e3; return h < 1 ? `${Math.max(1, Math.round(d / 60e3))} 分钟` : h < 48 ? `${Math.round(h)} 小时` : `${Math.round(h / 24)} 天` }
+const ago = (ms, now, locale) => {
+  const d = Math.max(0, now - ms); const h = d / 3600e3
+  if (h < 1) return tr('face.ago_min', locale, { n: Math.max(1, Math.round(d / 60e3)) })
+  if (h < 48) return tr('face.ago_hour', locale, { n: Math.round(h) })
+  return tr('face.ago_day', locale, { n: Math.round(h / 24) })
+}
 const shTime = ms => { const d = new Date(ms + 8 * 3600e3); return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}` }
 
 /** Rule-picked layout from the card's own data (used when no bot picked one). */
@@ -122,7 +129,8 @@ export function autoFace(card) {
  * Build the face's components from the live card. Never throws; returns null when there is nothing honest to show.
  * @returns {{layout, by, note, parts:[{type,...}]}|null}
  */
-export function hydrateFace(card, spec, { itemStatus = {}, now = Date.now(), events = [] } = {}) {
+export function hydrateFace(card, spec, { itemStatus = {}, now = Date.now(), events = [], lang = DEFAULT_LOCALE } = {}) {
+  const locale = resolveLang(lang)
   const f = spec && FACE_LAYOUTS[spec.layout] ? spec : null
   if (!f) return null
   const st = { ...(card.itemStatus || {}), ...itemStatus }
@@ -131,29 +139,30 @@ export function hydrateFace(card, spec, { itemStatus = {}, now = Date.now(), eve
   const status = l => (st[l.url]?.status === 'done' ? 'done' : st[l.url]?.status === 'dismissed' ? 'dismissed' : 'open')
   const open = all.filter(l => status(l) === 'open'), handled = all.length - open.length
   const pick = (list, n) => { const fx = (f.focus || []).map(u => list.find(l => l.url === u)).filter(Boolean); return [...fx, ...list.filter(l => !fx.includes(l))].slice(0, n) }
-  const item = l => ({ title: cut(l.title, 80), url: l.url, src: l.mergedFrom || card.source || null, kind: kindOf(l), kindZh: KIND_ZH[kindOf(l)], from: fromOf(l) || null, at: tsOf(l), done: status(l) !== 'open', needsYou: !!l.needsYou })
+  const kindLabel = k => tr(KIND_KEYS[k] || 'face.kind_link', locale)
+  const item = l => ({ title: cut(l.title, 80), url: l.url, src: l.mergedFrom || card.source || null, kind: kindOf(l), kindZh: kindLabel(kindOf(l)), from: fromOf(l) || null, at: tsOf(l), done: status(l) !== 'open', needsYou: !!l.needsYou })
   const parts = []
   for (const p of FACE_LAYOUTS[f.layout].parts) {
     if (p === 'people') {
       const src = (f.layout === 'waiting' ? open.filter(l => l.needsYou).concat(open) : open)
       const seen = new Map()
       for (const l of src) { const n = fromOf(l); if (n && !seen.has(n)) seen.set(n, { name: n }) }
-      if (seen.size) parts.push({ type: 'people', label: f.layout === 'waiting' ? '在等你' : '谁说的', people: [...seen.values()].slice(0, 5), more: Math.max(0, seen.size - 5) })
+      if (seen.size) parts.push({ type: 'people', label: tr(f.layout === 'waiting' ? 'face.waiting_you' : 'face.who', locale), people: [...seen.values()].slice(0, 5), more: Math.max(0, seen.size - 5) })
     } else if (p === 'stats') {
       const pairs = []
       if (f.layout === 'waiting') {
         const oldest = open.map(tsOf).filter(Boolean).sort((a, b) => a - b)[0]
-        if (oldest) pairs.push({ label: '已经等了', value: ago(oldest, now), tone: now - oldest > 24 * 3600e3 ? 'hot' : 'warm' })
-        pairs.push({ label: '待回', value: String(open.length), tone: 'warm' })
+        if (oldest) pairs.push({ label: tr('face.waited', locale), value: ago(oldest, now, locale), tone: now - oldest > 24 * 3600e3 ? 'hot' : 'warm' })
+        pairs.push({ label: tr('face.pending_reply', locale), value: String(open.length), tone: 'warm' })
       } else {
-        pairs.push({ label: card.type === 'email-group' ? '封待看' : '待处理', value: String(open.length), tone: card.waiting === 'you' && open.length ? 'hot' : 'cool' })
+        pairs.push({ label: tr(card.type === 'email-group' ? 'face.mail_open' : 'face.open_count', locale), value: String(open.length), tone: card.waiting === 'you' && open.length ? 'hot' : 'cool' })
         const need = open.filter(l => l.needsYou).length
-        if (need) pairs.push({ label: '要你回', value: String(need), tone: 'hot' })
-        if (handled) pairs.push({ label: '已处理', value: String(handled), tone: 'done' })
+        if (need) pairs.push({ label: tr('face.need_you', locale), value: String(need), tone: 'hot' })
+        if (handled) pairs.push({ label: tr('face.handled', locale), value: String(handled), tone: 'done' })
       }
       parts.push({ type: 'stats', pairs: pairs.slice(0, 3) })
     } else if (p === 'stage') {
-      if (all.length >= 2) parts.push({ type: 'stage', done: handled, total: all.length, label: handled ? `已处理 ${handled} / ${all.length}` : `${all.length} 条都还没处理` })
+      if (all.length >= 2) parts.push({ type: 'stage', done: handled, total: all.length, label: handled ? tr('face.stage_done', locale, { done: handled, total: all.length }) : tr('face.stage_none', locale, { n: all.length }) })
     } else if (p === 'checklist') {
       const rows = f.layout === 'meeting' ? pick(open, 4) : pick(open, 4)
       if (rows.length) parts.push({ type: 'checklist', items: rows.map(item), more: Math.max(0, open.length - rows.length) })
@@ -179,7 +188,7 @@ export function hydrateFace(card, spec, { itemStatus = {}, now = Date.now(), eve
   const meaningful = parts.filter(x => x.type !== 'cta')
   if (!meaningful.length) return null
   const merged = (card.metadata?.mergedFrom || []).length && f.layout === 'timeline'
-  const SRC = { gmail: '邮件', github: 'GitHub', slack: 'Slack' }
+  const SRC = { gmail: tr('face.src_mail', locale), github: 'GitHub', slack: 'Slack' }
   const chans = merged ? [...new Set([card.source, ...card.metadata.mergedFrom].map(x => SRC[x] || x).filter(Boolean))] : []
-  return { layout: f.layout, by: f.by || 'bot', note: f.note || (chans.length >= 2 ? `同一件事 · ${chans.join(' + ')}` : ''), parts }
+  return { layout: f.layout, by: f.by || 'bot', note: f.note || (chans.length >= 2 ? tr('face.same_thing', locale, { chans: chans.join(' + ') }) : ''), parts }
 }

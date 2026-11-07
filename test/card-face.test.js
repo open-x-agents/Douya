@@ -29,7 +29,7 @@ test('validateFace: unknown layout rejected, foreign refs dropped, html note str
 })
 
 test('waiting face: real people, how long, the original words', () => {
-  const v = hydrateFace(slackCard(), autoFace(slackCard()), { now: NOW })
+  const v = hydrateFace(slackCard(), autoFace(slackCard()), { now: NOW, lang: 'zh' })
   assert.equal(v.layout, 'waiting')
   const people = v.parts.find(p => p.type === 'people').people.map(p => p.name)
   assert.deepEqual(people, ['王小明', 'bkp.yuan'])
@@ -42,21 +42,21 @@ test('waiting face: real people, how long, the original words', () => {
 test('progress + checklist follow live item status; focus orders rows', () => {
   const card = slackCard()
   const spec = { layout: 'progress', focus: [U(2)], by: 'bot' }
-  let v = hydrateFace(card, spec, { now: NOW })
+  let v = hydrateFace(card, spec, { now: NOW, lang: 'zh' })
   assert.equal(v.parts.find(p => p.type === 'stage').done, 0)
   assert.equal(v.parts.find(p => p.type === 'checklist').items[0].url, U(2), 'focused item first')
-  v = hydrateFace(card, spec, { now: NOW, itemStatus: { [U(2)]: { status: 'done' } } })
+  v = hydrateFace(card, spec, { now: NOW, lang: 'zh', itemStatus: { [U(2)]: { status: 'done' } } })
   assert.equal(v.parts.find(p => p.type === 'stage').label, '已处理 1 / 2')
   assert.deepEqual(v.parts.find(p => p.type === 'checklist').items.map(i => i.url), [U(1)])
-  v = hydrateFace(card, spec, { now: NOW, itemStatus: { [U(1)]: { status: 'done' }, [U(2)]: { status: 'dismissed' } } })
+  v = hydrateFace(card, spec, { now: NOW, lang: 'zh', itemStatus: { [U(1)]: { status: 'done' }, [U(2)]: { status: 'dismissed' } } })
   assert.equal(v.parts.find(p => p.type === 'checklist').done, true)
 })
 
 test('honest empty: no links → no face; meeting without a future event → no face', () => {
   assert.equal(hydrateFace({ id: 'x', type: 'task' }, { layout: 'checklist' }), null)
   assert.equal(autoFace({ id: 'x', type: 'hero', blocks: [] }), null)
-  assert.equal(hydrateFace({ id: 'm', type: 'task' }, { layout: 'meeting' }, { now: NOW, events: [{ title: 'old', start: '2026-11-04T07:00:00.000Z' }] }), null)
-  const m = hydrateFace({ id: 'm', type: 'task' }, { layout: 'meeting' }, { now: NOW, events: [{ title: '周会', start: '2026-11-04T08:10:00.000Z', url: 'https://meet.google.com/abc' }] })
+  assert.equal(hydrateFace({ id: 'm', type: 'task' }, { layout: 'meeting' }, { now: NOW, lang: 'zh', events: [{ title: 'old', start: '2026-11-04T07:00:00.000Z' }] }), null)
+  const m = hydrateFace({ id: 'm', type: 'task' }, { layout: 'meeting' }, { now: NOW, lang: 'zh', events: [{ title: '周会', start: '2026-11-04T08:10:00.000Z', url: 'https://meet.google.com/abc' }] })
   assert.equal(m.parts[0].type, 'countdown'); assert.equal(m.parts[0].url, 'https://meet.google.com/abc')
 })
 
@@ -95,7 +95,7 @@ test('quote face: author in quote part, link chip for bare URL, no 谁说的 peo
       text: 'https://github.com/D4Vinci/Scrapling', at: '2026-11-04T01:51:00.000Z',
     }] }],
   }
-  const v = hydrateFace(card, { layout: 'quote', by: 'auto' }, { now: NOW })
+  const v = hydrateFace(card, { layout: 'quote', by: 'auto' }, { now: NOW, lang: 'zh' })
   assert.equal(v.layout, 'quote')
   assert.equal(v.parts.some(p => p.type === 'people'), false)
   const q = v.parts.find(p => p.type === 'quote')
@@ -117,4 +117,15 @@ test('quote face: prose kept, trailing URL becomes chip', () => {
   const q = hydrateFace(card, { layout: 'quote' }, { now: NOW }).parts.find(p => p.type === 'quote')
   assert.match(q.text, /合同看一下/)
   assert.equal(q.link.label, 'acme/repo')
+})
+
+
+test('face chrome localizes to English when lang=en', () => {
+  const v = hydrateFace(slackCard(), autoFace(slackCard()), { now: NOW, lang: 'en' })
+  assert.equal(v.layout, 'waiting')
+  assert.equal(v.parts.find(p => p.type === 'people').label, 'Waiting on you')
+  const stats = v.parts.find(p => p.type === 'stats').pairs
+  assert.equal(stats[0].label, 'Waiting')
+  assert.equal(stats[0].value, '25h')
+  assert.equal(stats[1].label, 'To reply')
 })

@@ -220,7 +220,7 @@ export async function registerBotTools(ctx, opts = {}) {
   if (router?.uiOp) {
     register(() => defineTool({
       name: 'odm_ui_op',
-      description: '操作用户眼前的豆芽面板（只改视图，不发送任何东西）：openCard 打开卡片放大页、closeCard 关闭、highlight 高亮卡片或其中一条、filter 筛选今天页、clearFilter 清除筛选、arrange 置顶/取消置顶/重排（必须写 reason）、navigate 切页（today/sources/settings）、undo 撤销最近的布局改动。card 必须是卡片 id，item 必须是该卡条目的 url。只在用户这轮明确要求时调用。',
+      description: '操作用户眼前的豆芽面板（只改视图，不发送任何东西）：openCard 打开卡片放大页、closeCard 关闭、highlight 高亮卡片或其中一条、filter 筛选今天页、clearFilter 清除筛选、arrange 置顶/取消置顶/重排（必须写 reason）、navigate 切页（today/sources/memory/settings）、undo 撤销最近的布局改动。card 必须是卡片 id，item 必须是该卡条目的 url。只在用户这轮明确要求时调用。',
       parameters: {
         op: { type: 'string', enum: ['openCard', 'closeCard', 'highlight', 'filter', 'clearFilter', 'arrange', 'navigate', 'undo'], required: true, description: '操作' },
         card: { type: 'string', description: 'openCard / highlight：卡片 id' },
@@ -234,7 +234,7 @@ export async function registerBotTools(ctx, opts = {}) {
         order: { type: 'string', description: 'arrange：希望的顺序（卡片 id，逗号分隔）' },
         reason: { type: 'string', description: '给用户看的一句理由（arrange 必填，highlight 建议填）' },
         ttl: { type: 'string', description: 'highlight 持续时间，如 10m、1h（默认 10m）' },
-        page: { type: 'string', enum: ['today', 'sources', 'settings'], description: 'navigate：目标页' },
+        page: { type: 'string', enum: ['today', 'sources', 'memory', 'settings'], description: 'navigate：目标页' },
         id: { type: 'string', description: 'undo：要撤销的操作 id（默认最近一次）' },
         requested: { type: 'boolean', description: '用户这轮明确要求了这个改动吗？没要求、是你主动想调整布局时填 false：面板不会变，只给用户显示「豆芽建议 · 应用 / 忽略」' },
       },

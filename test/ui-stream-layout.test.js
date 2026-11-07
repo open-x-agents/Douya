@@ -82,7 +82,7 @@ test('page: your pins first, then 豆芽 pins, then Chief order, then the time-o
   assert.match(html, /sort\(\(a, b\) => \(b\.by === 'user'\) - \(a\.by === 'user'\)\)/)
   const arrange = html.slice(html.indexOf('function arrangeWork'), html.indexOf('function filterHidden'))
   assert.ok(arrange.indexOf('pinIdx') < arrange.indexOf('ordIdx') && arrange.includes('autoActive()'))
-  assert.match(html, /为什么在这里：\$\{why\}/)
+  assert.match(html, /t\('today\.why_here'/)
   assert.match(html, /恢复原顺序/); assert.match(html, /layout-pref/)
   assert.match(html, /豆芽建议：已到\$\{a\.periodLabel\}/, 'a new period is offered, not applied under the user')
   const p4 = html.slice(html.indexOf('Intelligent UI (P4)'), html.indexOf('// Hold layout changes'))

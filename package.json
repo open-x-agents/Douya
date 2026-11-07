@@ -1,7 +1,7 @@
 {
   "name": "opendigitalmate",
   "version": "0.1.0",
-  "description": "Open Digital Mate: Feishu-native teammate on ds-bot \u2014 digests, calendar, actions; Muse UI is the separate dsh-muse-ui plugin",
+  "description": "Douya / 豆芽 — Muse-style coworker on dsh: Today · Memories · (Future next). Host digests + Confirm-gated actions; UI is packages/dsh-muse-ui.",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -29,9 +29,12 @@
   "keywords": [
     "dsh-plugin",
     "deepseek-harness",
-    "feishu",
-    "daily-report",
-    "reminder"
+    "muse",
+    "douya",
+    "today",
+    "memories",
+    "openviking",
+    "composio"
   ],
   "peerDependencies": {
     "ds-bot": ">=0.2.4",

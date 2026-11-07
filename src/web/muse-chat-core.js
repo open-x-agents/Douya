@@ -63,7 +63,13 @@ async function cursorSeq(ctx, sessionId) {
 }
 
 const REPLY_PAGE = 80
-const REPLY_PAGES = 8
+// A turn's record count has no useful upper bound: dsh writes one `assistant/chunk` record per streamed
+// delta (ui-feed.js), so one long reply is thousands of them. The reply wait therefore reads the whole
+// turn — from the newest page back to the cursor taken before the prompt — instead of a fixed window.
+// Pages and time bound one poll only; hitting either ends that poll, and the caller asks again.
+const REPLY_TAIL_PAGES = 2
+const REPLY_TURN_PAGES = 600
+const REPLY_TURN_MS = 8000
 
 function eventOf(record) {
   if (record?.event && typeof record.event === 'object') return record.event
@@ -180,13 +186,15 @@ export function ownReplyFromRecords(records, { afterSeq = -1, requestId = '', ou
 }
 
 // Newest page first, then older pages until this prompt's cursor is on the page. One huge tool turn
-// would otherwise push the user message out of the tail the reply is read from.
+// or one long streamed reply would otherwise push the user message out of the tail the reply is read from.
+// `afterSeq < 0` is an unread cursor (a fresh part after a handoff): read that tail only.
 async function pageEvents(ctx, sessionId, afterSeq) {
   const live = Number((await liveAgent(ctx, sessionId))?.session?.seq)
   const throughSeq = Number.isInteger(live) && live > 0 ? live - 1 : -1
   const chunks = []
+  const startedAt = Date.now()
   let beforeSeq
-  const cap = afterSeq >= 0 ? REPLY_PAGES : 2
+  const cap = afterSeq >= 0 ? REPLY_TURN_PAGES : REPLY_TAIL_PAGES
   for (let n = 0; n < cap; n++) {
     const page = await ctx.sessionController.page({
       address: { kind: 'session', sessionId },
@@ -200,6 +208,7 @@ async function pageEvents(ctx, sessionId, afterSeq) {
     const oldest = eventSeq(records[0])
     if (oldest == null || oldest === beforeSeq) break
     if (afterSeq >= 0 && oldest <= afterSeq) break
+    if (Date.now() - startedAt >= REPLY_TURN_MS) break
     beforeSeq = oldest
   }
   return chunks.flat()

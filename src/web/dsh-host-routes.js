@@ -3,7 +3,7 @@
 
 import { CALLBACK_PATH, requestOrigin } from './composio-callback.js'
 import { readFile } from 'node:fs/promises'
-import { runMuseChatTurn, chatProgress, loadMuseHistory, chatErrorHint } from './muse-chat-core.js'
+import { runMuseChatTurn, chatProgress, loadMuseHistory, chatErrorHint, bootstrapMainBot } from './muse-chat-core.js'
 import { createChatLane } from './chat-lane.js'
 import { installUiFeed } from './ui-feed.js'
 import { browserScript, resolveLang, DEFAULT_LOCALE } from '../i18n/index.js'
@@ -391,7 +391,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
       timing.contextAt = Date.now()
       // The page names its turn so streamed text / skeletons land in the right bubble.
       const turn = typeof body.turn === 'string' && /^t_[\w-]{4,40}$/.test(body.turn) ? body.turn : null
-      const result = await chatLane.submit({
+      const submit = () => chatLane.submit({
         message: body.message || body.text,
         cardId: body.cardId,
         cardContext,
@@ -401,6 +401,12 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
         turn,
         timing,
       })
+      let result = await submit()
+      if (!result.ok && /no Main Bot/i.test(String(result.error || ''))
+        && await bootstrapMainBot({ origin: requestOrigin(request), cookie: request.headers.get('cookie') })) {
+        log('muse-chat: no Main Bot — bootstrapped the team, retrying once')
+        result = await submit()
+      }
       if (result.status === 'merged') {
         // This message joined a later request's turn; that request carries the one reply.
         return json({ text: '', status: 'merged', mergedInto: result.mergedInto, turn, sessionId: 'dsbot-chief', time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
@@ -410,7 +416,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
         const noModel = /No model is available|没有可用的模型/i.test(err)
         const text = noModel
           ? '还没有可用的模型。请打开「配置」→ AI 模型，选择 DeepSeek 并保存 API Key（会写入 DEEPSEEK_API_KEY）。若刚保存仍不行，重启 npm start 后再用 .odm-data/dsh-web.url 里的登录链接打开。'
-          : (chatErrorHint(err) ? `没法完成对话：${chatErrorHint(err)}` : `没法完成对话：${err}`)
+          : (() => { const lang = langParam(request); const hint = chatErrorHint(err, lang); return `${lang === 'en' ? 'Couldn’t finish the chat: ' : '没法完成对话：'}${hint || err}` })()
         return json({
           text,
           status: 'error',

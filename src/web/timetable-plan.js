@@ -7,17 +7,29 @@
 export const PLAN_KINDS = ['focus', 'work', 'review', 'meeting', 'break', 'meal', 'admin', 'exercise', 'learning', 'personal', 'winddown']
 const KIND_ALIAS = { lunch: 'meal', dinner: 'meal', breakfast: 'meal', eat: 'meal', rest: 'break', buffer: 'break', task: 'work', chore: 'admin', '专注': 'focus', '休息': 'break', '缓冲': 'break', '用餐': 'meal', '吃饭': 'meal', '杂务': 'admin', '评审': 'review', '会议': 'meeting', '运动': 'exercise' }
 
-export function localDay(now = new Date()) {
-  const d = new Date(now)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+// Wall clock for 豆芽 is always Asia/Shanghai (UTC+8, no DST), matching day-pulse / ops / aggregation.
+const SH = 8 * 3600e3
+const shParts = (now = new Date()) => {
+  const d = new Date(+new Date(now) + SH)
+  return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, day: d.getUTCDate(), h: d.getUTCHours(), mi: d.getUTCMinutes() }
 }
 
-// "9:5" / "09:05" / "2026-11-04T09:05:00+08:00" -> "09:05" in local time; null when unreadable.
+export function localDay(now = new Date()) {
+  const p = shParts(now)
+  return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`
+}
+
+// "9:5" / "09:05" / "2026-11-04T09:05:00+08:00" -> "09:05" in Asia/Shanghai; plain HH:MM kept as written.
 export function hhmm(v) {
   if (v == null) return null
   const s = String(v).trim()
   if (!s) return null
-  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) { const d = new Date(s); if (isNaN(d)) return null; return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+    const d = new Date(s)
+    if (isNaN(d)) return null
+    const p = shParts(d)
+    return `${String(p.h).padStart(2, '0')}:${String(p.mi).padStart(2, '0')}`
+  }
   const m = s.match(/^(\d{1,2})[:：](\d{1,2})$/)
   if (!m) return null
   const h = +m[1], mi = +m[2]
@@ -66,7 +78,8 @@ function overlaps(a, b) { return toMin(a.start) < toMin(b.end) && toMin(b.start)
 /** Compact read model for Chief (and tests). */
 export function readPlan(card, { now = new Date() } = {}) {
   const tt = timetableBlock(card) || {}
-  const nowM = new Date(now).getHours() * 60 + new Date(now).getMinutes()
+  const pNow = shParts(now)
+  const nowM = pNow.h * 60 + pNow.mi
   const fixed = (tt.fixedBlocks || []).map(b => ({ start: hhmm(b.start), end: hhmm(b.end), title: b.title, fixed: true })).filter(b => b.start && b.end)
   const blocks = (tt.suggestedBlocks || []).map(b => ({ start: hhmm(b.start), end: hhmm(b.end), title: b.title, kind: b.category || 'focus', ...(b.cardIds?.length ? { cardIds: b.cardIds } : {}) })).filter(b => b.start && b.end)
   const all = sortBlocks([...fixed, ...blocks])

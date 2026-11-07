@@ -573,6 +573,7 @@ const ZH = {
   'Making headway': '有进展了',
   'Moving to a fresh conversation': '整理记忆，换到新对话',
   'Switching working folder': '正在切换工作文件夹',
+  'Folded into this step. Continuing when it finishes.': '已并进当前这条，这一步做完再继续',
   'Searching online': '上网搜索',
   'Reading a page': '阅读网页',
   'Running shell commands': '运行命令',

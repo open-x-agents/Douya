@@ -5636,7 +5636,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     return `<div class="chat-fail"><span>${escMd(text)}</span><button class="chat-retry" type="button">${t('chat.retry')}</button></div>`;
   }
 
-  // ===== Memory 一瞥 (dsh-memory SQLite) =====
+  // ===== Memory 一瞥 (OpenViking; SQLite fallback) =====
   const MEM_MARKS = ['🌱', '✨', '📌', '🫧', '🌙', '🫖', '📎', '💫', '🪄', '🍃'];
   const MEM_ACCENTS = {
     achievement: '#d4a017', milestone: '#d4a017', win: '#d4a017',
@@ -5654,7 +5654,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const t0 = (tags && tags[0] || '').toLowerCase();
     if (t0 === 'achievement' || t0 === 'milestone' || t0 === 'win') return '🏆';
     if (t0 === 'decision') return '📌';
-    return MEM_MARKS[Math.abs(Number(id) || 0) % MEM_MARKS.length];
+    let h = 0; const s = String(id || ''); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return MEM_MARKS[h % MEM_MARKS.length];
   }
   function memAgo(ts) {
     if (!ts) return '';
@@ -5764,7 +5765,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         }
         btn.disabled = true;
         try {
-          const r = await fetch('/api/opendigitalmate/memories/forget', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: Number(id) }) }).then(x => x.json());
+          const r = await fetch('/api/opendigitalmate/memories/forget', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }).then(x => x.json());
           if (r && (r.forgotten || r.ok)) {
             const card = box.querySelector(`.mem-card[data-id="${CSS.escape(String(id))}"]`);
             if (card) {

@@ -59,21 +59,26 @@ try {
   }
 } catch (err) { console.warn(`[start-dsh] profile catalog update skipped: ${err?.message || err}`) }
 
-// Long-term memory: community plugin `dsh-memory` (SQLite FTS5). Chat tools + prompt
-// section come from the plugin; Muse digest reads the same $DSH_HOME/memory/memory.db.
+// Long-term memory: OpenViking (`@openviking/dsh-memory-plugin`). Needs a reachable
+// OpenViking server (default http://127.0.0.1:1933) + ~/.openviking/ovcli.conf.
 try {
   const profilePkg = join(userProfile, 'package.json')
   if (existsSync(profilePkg)) {
     const pkg = JSON.parse(readFileSync(profilePkg, 'utf8'))
     const bundles = pkg?.dsh?.profile?.bundles || []
     const deps = pkg?.dependencies || {}
-    if (!bundles.includes('dsh-memory') || !deps['dsh-memory']) {
-      console.warn('[start-dsh] dsh-memory not in odm profile — chat long-term memory off.')
-      console.warn('  Install: dsh plugin --profile odm allow-version dsh-memory@0.1.0 --dsh-version 0.2.1-rc.5 --accept-risk')
-      console.warn('           dsh plugin --profile odm add dsh-memory@0.1.0')
-      console.warn('  Then add "dsh-memory" to dsh.profile.bundles in ~/.dsh/profiles/odm/package.json')
+    const hasOv = bundles.includes('@openviking/dsh-memory-plugin') || deps['@openviking/dsh-memory-plugin']
+    if (!hasOv) {
+      console.warn('[start-dsh] @openviking/dsh-memory-plugin not in odm profile — chat long-term memory off.')
+      console.warn('  Install: dsh plugin --profile odm add @openviking/dsh-memory-plugin@0.5.33')
+      console.warn('  Server:  openviking-server   (local default http://127.0.0.1:1933)')
+      console.warn('  Config:  ~/.openviking/ovcli.conf  → { "url": "http://127.0.0.1:1933" }')
     } else {
-      console.log(`🧠 Long-term memory: dsh-memory → ${join(DSH_HOME, 'memory', 'memory.db')}`)
+      const ovUrl = process.env.OPENVIKING_URL || process.env.OPENVIKING_BASE_URL || 'http://127.0.0.1:1933'
+      console.log(`🧠 Long-term memory: OpenViking → ${ovUrl} (Muse Glimpse reads viking://~/memories)`)
+    }
+    if (bundles.includes('dsh-memory') || deps['dsh-memory']) {
+      console.warn('[start-dsh] legacy dsh-memory still listed — remove after OpenViking is healthy (SQLite is Glimpse fallback only).')
     }
   }
 } catch (err) { console.warn(`[start-dsh] memory plugin check skipped: ${err?.message || err}`) }

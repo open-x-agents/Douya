@@ -11,6 +11,13 @@ import { buildSnapshot } from './snapshot.js'
 import { validateCandidates, validatePlan, buildCards, invalidLinks, seenEntities } from './build.js'
 import { stableKey, linkUrls } from '../host/reconcile.js'
 import { rankMemories } from './memory-rank.js'
+import {
+  listOpenVikingMemories,
+  forgetOpenVikingMemory,
+  readOpenVikingRecall,
+  openVikingHealth,
+  resolveOpenVikingConfig,
+} from './openviking.js'
 export { rankMemories, isMemoryHighlight, isRoutinePreference, partitionMemories, memorySignal } from './memory-rank.js'
 
 const clip = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n - 1) + '…' : s }
@@ -422,7 +429,7 @@ export function createBotDigest(deps) {
   return { store: digestStore, lastRun: () => lastRun, live: () => (liveRun?.status === 'running' ? liveRun.progress : null), run, toolSnapshot, toolPropose, toolNote, toolCommit, get running() { return !!running }, current: () => running, summarize, roleOf }
 }
 
-/** Read the dsh-memory SQLite recall block (plugin store at $DSH_HOME/memory/memory.db). */
+/** Legacy dsh-memory SQLite recall (fallback while OpenViking is offline). */
 export function readDshMemoryRecall(dshHome, { recentCount = 10, maxChars = 2000 } = {}) {
   const dbPath = join(dshHome || '', 'memory', 'memory.db')
   if (!dbPath || !existsSync(dbPath)) return ''
@@ -458,7 +465,7 @@ export function readDshMemoryRecall(dshHome, { recentCount = 10, maxChars = 2000
   }
 }
 
-/** Structured rows for Memory 一瞥 UI (ranked: achievements / high-signal before routine prefs). */
+/** Legacy SQLite rows for Memory 一瞥 (fallback). Prefer listMemories(). */
 export function listDshMemories(dshHome, { limit = 40 } = {}) {
   const dbPath = join(dshHome || '', 'memory', 'memory.db')
   if (!dbPath || !existsSync(dbPath)) return { memories: [], total: 0, path: dbPath || null }
@@ -494,7 +501,7 @@ export function listDshMemories(dshHome, { limit = 40 } = {}) {
   }
 }
 
-/** Forget one memory by id (same store the dsh-memory plugin uses). */
+/** Legacy SQLite forget by numeric id. Prefer forgetMemory(). */
 export function forgetDshMemory(dshHome, id) {
   const n = Number(id)
   if (!Number.isInteger(n) || n < 1) return { ok: false, forgotten: false, error: 'invalid id' }
@@ -513,13 +520,52 @@ export function forgetDshMemory(dshHome, id) {
   }
 }
 
-/** Chief brief memory: dsh-memory recall first, then ds-bot MEMORY.md if present. */
+/** Unified Memory 一瞥: OpenViking first, SQLite dsh-memory fallback while migrating. */
+export async function listMemories(dshHome, { limit = 40 } = {}) {
+  try {
+    const ov = await listOpenVikingMemories({ limit })
+    if (ov.available) return { ...ov, home: dshHome || null }
+    // Server missing / unhealthy → keep old SQLite glimpse so UI is not blank mid-migrate.
+    const sqlite = listDshMemories(dshHome, { limit })
+    return {
+      ...sqlite,
+      backend: sqlite.total ? 'dsh-memory' : 'openviking',
+      available: ov.available,
+      openviking: { url: ov.url, error: ov.error },
+      home: dshHome || null,
+    }
+  } catch (err) {
+    const sqlite = listDshMemories(dshHome, { limit })
+    return {
+      ...sqlite,
+      backend: sqlite.total ? 'dsh-memory' : 'openviking',
+      available: false,
+      openviking: { error: err?.message || String(err) },
+      home: dshHome || null,
+    }
+  }
+}
+
+/** Forget by viking:// URI (OpenViking) or numeric id (legacy SQLite). */
+export async function forgetMemory(dshHome, id) {
+  const key = id == null ? '' : String(id).trim()
+  if (key.startsWith('viking://')) return forgetOpenVikingMemory(key)
+  return forgetDshMemory(dshHome, key)
+}
+
+/** Chief brief memory: OpenViking recall first, then legacy dsh-memory, then MEMORY.md. */
 export async function readChiefMemory(dshHome) {
   const parts = []
   try {
-    const recall = readDshMemoryRecall(dshHome)
-    if (recall) parts.push(recall)
+    const ov = await readOpenVikingRecall()
+    if (ov) parts.push(ov)
   } catch {}
+  if (!parts.length) {
+    try {
+      const recall = readDshMemoryRecall(dshHome)
+      if (recall) parts.push(recall)
+    } catch {}
+  }
   try {
     const { loadMainBotId } = await import('../web/muse-chat-core.js')
     const id = await loadMainBotId(dshHome)
@@ -531,3 +577,5 @@ export async function readChiefMemory(dshHome) {
   } catch {}
   return parts.join('\n\n')
 }
+
+export { openVikingHealth, resolveOpenVikingConfig }

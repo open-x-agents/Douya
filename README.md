@@ -16,7 +16,7 @@ Not a dashboard. Douya pulls live work from tools you already use, turns it into
   └─────────────┘     └──────────────┘     └────────────┘
          ▲                   ▲
          │                   │
-   Composio live        dsh-memory recall
+   Composio live        OpenViking recall
 ```
 
 **Repo:** [open-x-agents/openDigitalMate](https://github.com/open-x-agents/openDigitalMate) · **License:** Apache-2.0
@@ -96,17 +96,45 @@ Source bots never chat with you. Chief never re-fetches a channel during merge.
 
 ## Long-term memory
 
-Douya uses community **[dsh-memory](https://www.npmjs.com/package/dsh-memory)** (local SQLite FTS5 — no embeddings, no sidecar): `memory_write` / `memory_search` / `memory_forget` + recall prompt section. Memories glimpse and Chief digest read the same store.
+Douya uses **[OpenViking](https://docs.openviking.net/en/agent-integrations/17-dsh)** via [`@openviking/dsh-memory-plugin`](https://www.npmjs.com/package/@openviking/dsh-memory-plugin) (~0.5.33): auto-recall, session capture, and `mcp__openviking__*` tools in chat. **Memories** glimpse + Chief digest read the same server (`viking://~/memories`), ranked achievement-first (experiences / events / decisions above routine prefs). Forget uses the server `DELETE /api/v1/fs` (same as MCP `forget`).
+
+### 1. OpenViking server (minimal local)
 
 ```bash
-dsh plugin --profile odm allow-version dsh-memory@0.1.0 --dsh-version 0.2.1-rc.5 --accept-risk
-dsh plugin --profile odm add dsh-memory@0.1.0
-# ensure package.json dsh.profile.bundles includes "dsh-memory", then restart
+# needs uv + embedding/VLM models configured by the wizard — see OpenViking quickstart
+uv tool install openviking --upgrade
+openviking-server init
+openviking-server doctor
+openviking-server
+# → http://127.0.0.1:1933   curl http://127.0.0.1:1933/health
 ```
 
-Store: `$DSH_HOME/memory/memory.db` (with `npm start` → `.dsh-odm/memory/memory.db`).
+### 2. CLI connection (`ovcli.conf`)
 
-> Want something more advanced? Ready-made options: **OpenViking** (`@openviking/dsh-memory-plugin`, needs an OpenViking server) or **dsh-ltm** (`@tr1v3r/dsh-ltm`, drop-in SQLite upgrade with CJK search + migration). Pick one before we swap.
+```bash
+npm install -g @openviking/cli
+# or write the file directly for local no-auth mode:
+mkdir -p ~/.openviking
+cat > ~/.openviking/ovcli.conf <<'JSON'
+{ "url": "http://127.0.0.1:1933" }
+JSON
+```
+
+Remote / managed: set `api_key` (and optional `account` / `user`), or export `OPENVIKING_URL` + `OPENVIKING_API_KEY`.
+
+### 3. dsh odm profile plugin
+
+```bash
+dsh plugin --profile odm add @openviking/dsh-memory-plugin@0.5.33
+# package.json dsh.profile.bundles should list "@openviking/dsh-memory-plugin"
+# optional cordis.patch.yml knobs:
+# - id: openviking-memory-runtime
+#   config: { recallMaxTokens: 2000, scoreThreshold: 0.35, captureToolResults: true }
+```
+
+Remove legacy `dsh-memory` from the profile once OpenViking is healthy. While the server is down, Muse still falls back to the old SQLite `memory.db` for Glimpse only (chat auto-recall needs the server).
+
+`openviking-server doctor` may warn that embedding / VLM are missing. **Memories list + forget** still work over the filesystem API; semantic auto-recall / search need a working embedding (local GGUF via `openviking[local-embed]`, Ollama, or a cloud key).
 
 ---
 
@@ -150,9 +178,9 @@ Restart after pulls: `npm start` or `scripts/.odm-restart.sh`.
 
 ## Status
 
-**Shipped:** multi-bot digests with skip-empty routing, desktop UX, pending-confirm sends, outcome sync, EN/中文 chrome, dsh-memory, Sources logos & Composio catalog.
+**Shipped:** multi-bot digests with skip-empty routing, desktop UX, pending-confirm sends, outcome sync, EN/中文 chrome, OpenViking memory, Sources logos & Composio catalog.
 
-**Evolving:** denser mobile polish, richer source coverage, memory backend upgrade (owner pick).
+**Evolving:** denser mobile polish, richer source coverage.
 
 ---
 

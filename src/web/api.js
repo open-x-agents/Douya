@@ -29,7 +29,7 @@ import { findTimetableCard, readPlan, applyPlanEdit, todaysCalendarEvents } from
 import { uiView } from '../ui/ops.js';
 import { createSurfaceService } from '../ui/surfaces.js';
 import { resolveDisplayName, lastGithubIdentity } from './aggregation.js';
-import { listDshMemories, forgetDshMemory } from '../digest/runner.js';
+import { listMemories as listMemoriesStore, forgetMemory as forgetMemoryStore } from '../digest/runner.js';
 import { recordCompletion, setItemStatus, clearItemStatus, annotateCards, cardItemUrls } from '../host/store.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1891,20 +1891,20 @@ export function createApiRouter(ctx) {
     },
 
     /**
-     * GET /api/opendigitalmate/memories — Memory 一瞥 list from dsh-memory SQLite.
+     * GET /api/opendigitalmate/memories — Memory 一瞥 from OpenViking (SQLite fallback).
      */
     async listMemories({ limit = 40 } = {}) {
       const dshHome = process.env.DSH_HOME || null;
-      const data = listDshMemories(dshHome, { limit });
+      const data = await listMemoriesStore(dshHome, { limit });
       return { success: true, ...data, home: dshHome };
     },
 
     /**
-     * POST /api/opendigitalmate/memories/forget — forget one memory by id.
+     * POST /api/opendigitalmate/memories/forget — forget by viking:// URI or legacy numeric id.
      */
     async forgetMemory({ id } = {}) {
       const dshHome = process.env.DSH_HOME || null;
-      return forgetDshMemory(dshHome, id);
+      return forgetMemoryStore(dshHome, id);
     },
 
     /**

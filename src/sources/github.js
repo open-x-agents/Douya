@@ -3,6 +3,7 @@
 // 这一层只做三件事：拼只读请求、把响应收成 RawEvent、把失败分类成 SourceError。
 // 它不写事件、不写账本、不读环境变量；token 只从调用方传入。
 
+import { classifyBlock } from './blocked.js';
 import { SourceError, githubRef, parseGithubRef } from './contract.js';
 
 const API_BASE = 'https://api.github.com';
@@ -130,6 +131,16 @@ export function createGithubSource({
       try {
         const response = await fetchImpl(target, { method: 'GET', headers: headers() });
         const status = response.status;
+
+        // 只读 cf-mitigated 头、不读正文；位置必须在 401/403 分支之前，否则拦截页会被说成权限问题。
+        const block = classifyBlock({ headers: response.headers });
+        if (block.blocked) {
+          throw new SourceError('blocked', 'GitHub served a block page', {
+            reason: block.reason,
+            status,
+            url: target,
+          });
+        }
 
         if (status === 401) {
           throw new SourceError('auth', 'GitHub rejected the token', {

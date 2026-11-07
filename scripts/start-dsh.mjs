@@ -4,7 +4,7 @@
  * One process: dsh --profile odm on PORT (default 7777).
  * Muse lives at /api/opendigitalmate/app (dsh-muse-ui client redirects / → there).
  */
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { createWriteStream, writeFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -26,6 +26,34 @@ const URL_FILE = join(HOME, 'dsh-web.url')
 mkdirSync(HOME, { recursive: true })
 mkdirSync(DSH_HOME, { recursive: true })
 mkdirSync(join(DSH_HOME, 'profiles'), { recursive: true })
+
+// link:ds-bot resolves imports from vendor/ds-bot's real path, so deep-view must
+// live under vendor/ds-bot/node_modules (profile node_modules alone is not enough).
+function ensureVendorDsBotDeps() {
+  const vendor = join(ROOT, 'vendor/ds-bot')
+  const marker = join(vendor, 'node_modules/deep-view/package.json')
+  if (existsSync(marker)) return
+  console.log('[start-dsh] installing vendor/ds-bot deps (deep-view)…')
+  const result = spawnSync('npm', ['install', '--no-fund', '--no-audit'], {
+    cwd: vendor,
+    encoding: 'utf8',
+    env: process.env,
+  })
+  if (result.status !== 0) {
+    console.warn('[start-dsh] vendor/ds-bot npm install failed — ds-bot may not activate:')
+    if (result.stderr) process.stderr.write(result.stderr)
+    if (result.stdout) process.stdout.write(result.stdout)
+    console.warn('  Manual: npm install --prefix vendor/ds-bot')
+    return
+  }
+  if (!existsSync(marker)) {
+    console.warn('[start-dsh] deep-view still missing after install — ds-bot may not activate')
+    console.warn('  Manual: npm install --prefix vendor/ds-bot')
+  } else {
+    console.log('[start-dsh] vendor/ds-bot deps ready (deep-view)')
+  }
+}
+ensureVendorDsBotDeps()
 
 // Link user odm profile + shared node_modules if present (Mac layout).
 const userProfile = join(process.env.HOME || '', '.dsh/profiles/odm')

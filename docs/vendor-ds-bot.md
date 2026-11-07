@@ -27,6 +27,27 @@ This vendored tree carries fixes made in this repository on top of the commit ab
   `stopRoomWork`. Spec and regression cases: issue #56,
   `acceptance-cases/group-stop/`, `test/group-stop.test.js`.
 
+
+## Dependencies of the vendored package
+
+`ds-bot` depends on `deep-view`. When a DSH profile uses
+`"ds-bot": "link:…/vendor/ds-bot"`, Node resolves that import from the **real**
+path of `vendor/ds-bot`, not from the profile's `node_modules`. Listing
+`deep-view` only in the profile is not enough on its own.
+
+After clone (and whenever `vendor/ds-bot/node_modules/deep-view` is missing):
+
+```bash
+npm install --prefix vendor/ds-bot
+```
+
+`npm start` / `scripts/start-dsh.mjs` runs the same install automatically when
+the marker package is absent. `vendor/ds-bot/node_modules/` stays gitignored.
+
+Without this step the host logs `bot (ds-bot): failed to import` /
+`Cannot find package 'deep-view'` and the live UI is a bare DeepSeek Harness
+shell without the ds-bot team chrome.
+
 ## How DSH should depend on it
 
 In a DSH profile `package.json`:

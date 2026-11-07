@@ -10,6 +10,12 @@ import { rankMemories } from './memory-rank.js'
 
 const DEFAULT_URL = 'http://127.0.0.1:1933'
 const MEMORIES_URI = 'viking://~/memories/'
+/** Memory photos live in OpenViking as resources (memories reject binary writes). */
+const RECALL_IMAGES_URI = 'viking://resources/recall/'
+const MEMORY_IMAGE_ROUTE = '/api/opendigitalmate/memories/image'
+const IMAGE_TYPES = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' }
+const EXT_TYPES = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' }
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 /** Map OpenViking memory folders → Glimpse tags (achievement-first ranking). */
 const CATEGORY_TAGS = {
@@ -178,6 +184,39 @@ function isMemoryFile(entry) {
   return true
 }
 
+/**
+ * A memory body may carry `![caption](viking://resources/recall/…)` lines (written by attach).
+ * Split them out so the card text stays human and the UI gets same-origin image srcs.
+ */
+export function splitMemoryImages(text) {
+  const images = []
+  const rest = String(text || '').replace(/^[ \t]*!\[([^\]\n]*)\]\((viking:\/\/resources\/recall\/[^)\s]+)\)[ \t]*$/gm, (_m, caption, uri) => {
+    images.push({ uri, caption: caption.trim(), src: memoryImageSrc(uri) })
+    return ''
+  })
+  return { text: rest.replace(/\n{3,}/g, '\n\n').trim(), images }
+}
+
+/** Opaque same-origin src for a stored memory image (the viking:// URI is never shown). */
+export function memoryImageSrc(uri) {
+  return `${MEMORY_IMAGE_ROUTE}?ref=${Buffer.from(String(uri)).toString('base64url')}`
+}
+
+/** ref → viking:// URI, only inside viking://resources/recall/ (no proxying anything else). */
+export function decodeMemoryImageRef(ref) {
+  let uri = ''
+  try { uri = Buffer.from(String(ref || ''), 'base64url').toString('utf8') } catch { return '' }
+  if (!uri.startsWith(RECALL_IMAGES_URI) || uri.includes('..') || /[\s?#]/.test(uri)) return ''
+  return uri
+}
+
+/** viking://…/memories/experiences/x.md → "experiences--x" (folder for that memory's photos). */
+export function recallSlug(memoryUri) {
+  const m = String(memoryUri || '').match(/\/memories\/(.+?)(?:\.md)?$/i)
+  const raw = m ? m[1] : String(memoryUri || '')
+  return raw.replace(/\//g, '--').replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'memory'
+}
+
 function toRow(entry) {
   const uri = String(entry.uri || '')
   const tags = tagsForEntry(entry)
@@ -186,6 +225,7 @@ function toRow(entry) {
     id: uri,
     uri,
     text: textFromEntry(entry),
+    images: [],
     tags,
     pinned: false,
     createdAt: updatedAt,
@@ -222,12 +262,16 @@ export async function listOpenVikingMemories({ limit = 40, cfg = resolveOpenViki
   })
   const entries = Array.isArray(json?.result) ? json.result : (Array.isArray(json) ? json : [])
   const files = entries.filter(isMemoryFile).map(toRow)
-  // Prefer real file bodies when L0 abstract is empty (common right after write).
-  const needBody = files.filter(r => !r.text).slice(0, Math.max(12, Number(limit) || 40))
+  // Prefer the real file body (what the person wrote, plus any photos) over the L0 machine abstract.
+  const needBody = files.slice(0, Math.max(40, Number(limit) || 40))
   await Promise.all(needBody.map(async (row) => {
     try {
       const body = await readOpenVikingContent(row.uri, cfg)
-      if (body) row.text = body.slice(0, 600).trim()
+      if (body) {
+        const split = splitMemoryImages(body)
+        row.images = split.images
+        if (split.text) row.text = split.text.slice(0, 1200).trim()
+      }
     } catch { /* ignore */ }
     if (!row.text) row.text = fallbackName({ name: row.uri.split('/').pop(), uri: row.uri })
   }))
@@ -270,6 +314,10 @@ export async function forgetOpenVikingMemory(idOrUri, cfg = resolveOpenVikingCon
       query: { uri, recursive: false },
       timeoutMs: 10_000,
     })
+    // Its photos go with it (best effort; most memories have none).
+    try {
+      await ovFetch(cfg, '/api/v1/fs', { method: 'DELETE', query: { uri: RECALL_IMAGES_URI + recallSlug(uri), recursive: true }, timeoutMs: 10_000 })
+    } catch { /* no photos */ }
     return { ok: true, forgotten: true, id: uri, uri, backend: 'openviking' }
   } catch (err) {
     return { ok: false, forgotten: false, error: err?.message || String(err), id: uri, backend: 'openviking' }
@@ -315,4 +363,72 @@ export async function readOpenVikingRecall({ query = 'important achievements dec
   return lines.length ? header + lines.join('\n') : ''
 }
 
-export { MEMORIES_URI, CATEGORY_TAGS }
+/** GET a stored memory photo as bytes (OpenViking content/download). */
+export async function downloadMemoryImage(ref, cfg = resolveOpenVikingConfig()) {
+  const uri = decodeMemoryImageRef(ref)
+  if (!uri) return { ok: false, status: 400, error: 'bad image ref' }
+  const u = new URL(cfg.url + '/api/v1/content/download')
+  u.searchParams.set('uri', uri)
+  const res = await fetch(u, { headers: { ...authHeaders(cfg), Accept: '*/*' }, signal: AbortSignal.timeout(10_000) })
+  if (!res.ok) return { ok: false, status: res.status === 404 ? 404 : 502, error: `OpenViking HTTP ${res.status}` }
+  const ext = (uri.split('.').pop() || '').toLowerCase()
+  return { ok: true, body: new Uint8Array(await res.arrayBuffer()), type: EXT_TYPES[ext] || 'application/octet-stream' }
+}
+
+/**
+ * Attach a photo to a memory: upload it to OpenViking as a resource under
+ * viking://resources/recall/<memory>/<stamp>/, then append `![caption](uri)` to the memory body
+ * so the agent and every reader see the same link.
+ * @param {{ id: string, data: string (base64 or data: URL), type?: string, name?: string, caption?: string }} input
+ */
+export async function attachMemoryImage({ id, data, type, name, caption } = {}, cfg = resolveOpenVikingConfig()) {
+  const memoryUri = String(id || '').trim()
+  if (!memoryUri.startsWith('viking://') || !/\/memories\//.test(memoryUri)) return { ok: false, error: 'invalid memory id' }
+  let b64 = String(data || '')
+  const dataUrl = b64.match(/^data:([^;,]+);base64,(.*)$/s)
+  if (dataUrl) { type = type || dataUrl[1]; b64 = dataUrl[2] }
+  const mime = String(type || '').toLowerCase()
+  const ext = IMAGE_TYPES[mime]
+  if (!ext) return { ok: false, error: 'only png, jpeg, gif or webp images' }
+  const bytes = Buffer.from(b64, 'base64')
+  if (!bytes.length) return { ok: false, error: 'empty image' }
+  if (bytes.length > MAX_IMAGE_BYTES) return { ok: false, error: 'image is larger than 5 MB' }
+
+  const stamp = Date.now().toString(36)
+  const base = String(name || 'photo').replace(/\.[a-z0-9]+$/i, '').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'photo'
+  const fileName = `${base}.${ext}`
+  const form = new FormData()
+  form.append('file', new Blob([bytes], { type: mime }), fileName)
+  const up = await fetch(cfg.url + '/api/v1/resources/temp_upload', { method: 'POST', headers: authHeaders(cfg), body: form, signal: AbortSignal.timeout(20_000) })
+  const upJson = await up.json().catch(() => null)
+  const tempId = upJson?.result?.temp_file_id
+  if (!up.ok || !tempId) return { ok: false, error: upJson?.error?.message || `upload failed (HTTP ${up.status})` }
+
+  const dir = `${RECALL_IMAGES_URI}${recallSlug(memoryUri)}/${stamp}/`
+  // wait:false — the bytes land immediately; embedding/VLM runs async (and may be off on this box).
+  await ovFetch(cfg, '/api/v1/resources', {
+    method: 'POST',
+    body: { temp_file_id: tempId, to: dir, create_parent: true, wait: false, directly_upload_media: true, reason: 'Photo attached to a memory in Douya Recall' },
+    timeoutMs: 20_000,
+  })
+  let imageUri = ''
+  for (let i = 0; i < 20 && !imageUri; i++) {
+    try {
+      const ls = await ovFetch(cfg, '/api/v1/fs/ls', { query: { uri: dir, recursive: true, output: 'original' }, timeoutMs: 5_000 })
+      const file = (Array.isArray(ls?.result) ? ls.result : []).find(e => !e.isDir && /\.(png|jpe?g|gif|webp)$/i.test(String(e.uri || '')))
+      if (file) imageUri = String(file.uri)
+    } catch { /* not there yet */ }
+    if (!imageUri) await new Promise(r => setTimeout(r, 250))
+  }
+  if (!imageUri) return { ok: false, error: 'OpenViking could not read that image' }
+
+  const cap = String(caption || '').replace(/[\[\]\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120)
+  await ovFetch(cfg, '/api/v1/content/write', {
+    method: 'POST',
+    body: { uri: memoryUri, content: `\n\n![${cap}](${imageUri})\n`, mode: 'append', wait: false },
+    timeoutMs: 10_000,
+  })
+  return { ok: true, id: memoryUri, image: { uri: imageUri, caption: cap, src: memoryImageSrc(imageUri) } }
+}
+
+export { MEMORIES_URI, CATEGORY_TAGS, RECALL_IMAGES_URI, MEMORY_IMAGE_ROUTE }

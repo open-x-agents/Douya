@@ -154,6 +154,23 @@ test('a 403 without a rate-limit header is an auth failure with reason scope', a
   );
 });
 
+test('a cf-mitigated page is a block, not a missing permission', async () => {
+  const { source, fake } = makeSource(
+    listFailing({ status: 403, headers: { 'cf-mitigated': 'block', 'content-type': 'text/html' } }),
+  );
+
+  await assert.rejects(
+    () => source.list(SINCE),
+    (error) =>
+      error instanceof SourceError &&
+      error.kind === 'blocked' &&
+      error.reason === 'header' &&
+      error.status === 403 &&
+      error.code === 'E_SOURCE_BLOCKED',
+  );
+  assert.equal(fake.calls.length, 2, 'a block page is not retried');
+});
+
 test('a 429 is a rate limit that says when to come back', async () => {
   const { source, fake } = makeSource(
     listFailing({ status: 429, headers: { 'retry-after': '30' } }),

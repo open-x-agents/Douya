@@ -157,9 +157,9 @@ canonical UTC 形状是 `/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/`，`due
 - 一个 Source 恰好五个只读成员：`id`、`readScope`、`auth()`、`list(since, cursor?)`、`get(ref)`。接口层没有 create / update / comment / delete / write / post / patch / put / merge / close / label / assign；`assertSource()` 会把后来长出来的写方法当场拒掉（`E_SOURCE_WRITE_METHOD`），缺成员是 `E_SOURCE_SHAPE`。
 - `auth()` 同步、不联网：没有 token 就是 `{ ok: false, reason: 'missing' }`。
 - `list()` 返回 `{ events, next?, partial? }`：`next` 是不透明游标（下一页的完整 URL），`partial` 是带内缺口，不是异常。
-- 错误五类 `auth / rate_limit / partial / timeout / http`，`SourceError.code = E_SOURCE_<KIND>`，带 `.reason / .status / .retryAfterMs / .url`。
+- 错误六类 `auth / rate_limit / partial / timeout / http / blocked`，`SourceError.code = E_SOURCE_<KIND>`，带 `.reason / .status / .retryAfterMs / .url`。`blocked` 是站点 WAF 挡住了这次抓取，不是权限或限流，也不代表站点政策。
 - ref 词表：`github:<issue|pr>/<owner>/<name>/<number>`，外部部分的字符集与 `src/core/event.js` 的 `EXTERNAL_REF` 一致（不含 `#`）。带仓名不是装饰：两个仓都有 10 号，不带仓名账本里就会撞成一条。`eventIdForRef()` 给 `evt_` + sha1(硬键) 前 10 位。
-- 缺口文案只有一处 `describeSourceGaps()`（`GitHub 凭据失效了`、`GitHub 限流，30 秒后再取`、`GitHub 超时，这一份缺了` …），测试逐字断言。
+- 缺口文案只有一处 `describeSourceGaps()`（`GitHub 凭据失效了`、`GitHub 限流，30 秒后再取`、`GitHub 超时，这一份缺了`、`GitHub 挡住了这次访问，我不会绕过它。` …），测试逐字断言；拦截那一句由 `src/sources/blocked.js` 的 `blockedNote()` 给出，不在别处另写一遍。
 
 ### GitHub 适配器
 
@@ -169,14 +169,14 @@ canonical UTC 形状是 `/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/`，`due
 - 读八条路径：`/user`；分给我的（`/issues?filter=assigned&state=all&since=…`，跨仓）；等我 review 的、我开的 PR（两条 search）；PR 的 head；tip 的 check-runs；最新一条评论；`get(ref)`。
 - CI 只认 check run，不认 combined status：同一 sha 的 `/status` 可以是 `pending`、`total_count: 0`，读它会把绿的 tip 误报成未完成。汇总规则：任一未完成 → `pending`；有 failure / cancelled / timed_out / action_required → `failure`；全 success → `success`；一条都没有 → `none`。
 - 分页：`Link: rel="next"` 的完整 URL 就是游标；`maxPages=5`、`maxObjects=60`，撞上限往 `partial` 里放 `page-cap` / `object-cap`，不静默截断。
-- 错误分类：401 → `auth/expired`；403 且限流打光 → `rate_limit`；其它 403 → `auth/scope`；429 → `rate_limit`（带 `retryAfterMs`）；网络 / abort / 5xx 重试 3 次（250 → 500 → 1000 ms）后 → `timeout`；其它非 2xx → `http`；子请求坏了是带内 `partial`，那份 PR 还在。
+- 错误分类：`cf-mitigated` 头先判（`block / challenge / managed` → `blocked`，不重试，位置在 401/403 之前）；401 → `auth/expired`；403 且限流打光 → `rate_limit`；其它 403 → `auth/scope`；429 → `rate_limit`（带 `retryAfterMs`）；网络 / abort / 5xx 重试 3 次（250 → 500 → 1000 ms）后 → `timeout`；其它非 2xx → `http`；子请求坏了是带内 `partial`，那份 PR 还在。
 
 ### 摄取
 
 `src/sources/ingest.js` 的 `ingestSource({ source, dir, since, now, overlapMs, windowMs, store })`：观察 → `upsertEvent()` + `appendEvidence()`。一个对象的 ref 不变，所以重跑只会合并、不会翻倍。
 
 - since 的来法：参数 > `<dir>/sources/github.json` 的 since > now − 24h。
-- 四类 `SourceError` 不抛：`complete: false`、`missing` 一条或几条、`gap_text` 有话说。早报据此标「缺源」，而不是变成空白；非 `SourceError` 的编程错误照常抛。
+- `SourceError`（含 `blocked`）不抛：`complete: false`、`missing` 一条或几条、`gap_text` 有话说。早报据此标「缺源」，而不是变成空白；非 `SourceError` 的编程错误照常抛。
 - 返回值形状固定：`{ source, complete, missing, gap_text, since, until, cursor, fetched, created, merged, appended, skipped, events }`。
 - 不做合并规则 / 去重 / 冲突（#13）、不排序展示、不写文案。
 
@@ -185,7 +185,7 @@ canonical UTC 形状是 `/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/`，`due
 `<dir>/sources/github.json`：`{ id, since, until, cursor, complete, at }`，用 `src/core/atomic.js` 的 `atomicWriteJson()` 写在 `withDataLock(dir, …)` 里。
 
 - 只有「读完了」（`complete: true`、没有 `next`、没有缺口）才前进到 `until − overlapMs`（默认 1 小时）。GitHub 的 `since` 是 `updated_at` 闭区间、search 的 `updated:` 只有天粒度，这 1 小时重叠就是用来兜边界的。
-- 失败（四类错误 / partial）一律不动水位：下一次重跑同一窗口，幂等保证重跑不翻倍。
+- 失败（`SourceError` / partial）一律不动水位：下一次重跑同一窗口，幂等保证重跑不翻倍。
 
 ### 证据
 

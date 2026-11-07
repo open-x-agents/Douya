@@ -236,6 +236,22 @@ test('a rate limit leaves the watermark alone, so the next run retries the same 
   assert.equal(await readFile(join(dir, 'sources', 'github.json'), 'utf8'), before, 'the watermark did not move');
 });
 
+test('a blocked source says the sentence and leaves the watermark alone', async (t) => {
+  const dir = await workspace(t);
+  const source = fakeSource({
+    fail: new SourceError('blocked', 'GitHub served a block page', { reason: 'header', status: 403 }),
+  });
+
+  const result = await ingestSource({ source, dir, since: SINCE, now: () => new Date(UNTIL) });
+
+  assert.equal(result.complete, false);
+  assert.equal(result.source, 'github');
+  assert.equal(result.missing.length, 1);
+  assert.equal(result.missing[0].kind, 'blocked');
+  assert.equal(result.gap_text, 'GitHub 挡住了这次访问，我不会绕过它。');
+  await assert.rejects(readFile(join(dir, 'sources', 'github.json'), 'utf8'), { code: 'ENOENT' });
+});
+
 test('after a finished window the watermark moves to the run time minus the overlap', async (t) => {
   const dir = await workspace(t);
   const source = fakeSource({ pages: [{ events: [] }] });

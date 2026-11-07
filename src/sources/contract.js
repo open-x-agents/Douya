@@ -121,10 +121,10 @@ export function describeSourceGap(gap) {
     }
     case 'timeout':
       return `${label} 超时，这一份缺了`;
-    case 'http':
-      return `${label} 报错（HTTP ${gap.status ?? '?'}）`;
     case 'blocked':
       return blockedNote('zh', { site: label });
+    case 'http':
+      return `${label} 报错（HTTP ${gap.status ?? '?'}）`;
     case 'partial':
       return `${label} 有一项没取到：${gap.ref || gap.reason || gap.detail || '未知项'}`;
     default:

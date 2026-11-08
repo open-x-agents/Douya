@@ -481,11 +481,11 @@ export async function registerBotTools(ctx, opts = {}) {
 
   register(() => defineTool({
     name: 'odm_card_snooze',
-    description: 'Snooze card. Default 24h.',
+    description: 'Snooze card. Default 24h. until must be a future time (ISO 8601 with offset, Asia/Shanghai is +08:00); a past time is rejected.',
     parameters: {
       id: { type: 'string', required: true },
       hours: { type: 'number' },
-      until: { type: 'string' },
+      until: { type: 'string', description: 'Future ISO 8601 time with offset, e.g. 2026-11-09T09:00:00+08:00' },
     },
     output,
     async execute(args) {

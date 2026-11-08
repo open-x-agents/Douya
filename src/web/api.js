@@ -26,7 +26,7 @@ import { isAfterHours, isWorkish, doneToday, greetingLine, shHour } from './day-
 import { setDuty, doneDuty, restoreDuty, dutyView } from './duty.js';
 import { resolveLang, t as i18nT, DEFAULT_LOCALE } from '../i18n/index.js';
 import { sweepClearedCards, applyClearance, cardClearance, completeClearedCard } from './card-clearance.js';
-import { findTimetableCard, readPlan, applyPlanEdit, todaysCalendarEvents } from './timetable-plan.js';
+import { findTimetableCard, readPlan, applyPlanEdit, todaysCalendarEvents, localDay, localDays, pruneWeekPlans, hhmm } from './timetable-plan.js';
 import { uiView } from '../ui/ops.js';
 import { createSurfaceService } from '../ui/surfaces.js';
 import { resolveDisplayName, lastGithubIdentity } from './aggregation.js';
@@ -802,22 +802,72 @@ export function createApiRouter(ctx) {
     futureApply(input, opts) { return futureService.apply(input, opts); },
 
     /** 我的一天: Chief reads / edits the suggested blocks; persisted on the timetable card, pushed live to open tabs. */
-    timetableGet() {
-      const card = findTimetableCard(store.get().cards || []);
-      return card ? { success: true, ...readPlan(card) } : { success: false, error: '没有「我的一天」卡片（先刷新今日生成一次）' };
+    timetableGet({ date = null } = {}) {
+      const state = store.get();
+      const card = findTimetableCard(state.cards || []);
+      const today = localDay();
+      const weekPlans = pruneWeekPlans(state.weekPlans || {});
+      const week = localDays(new Date(), 7).map(d => ({
+        date: d,
+        today: d === today,
+        blocks: d === today
+          ? (card ? readPlan(card).blocks : [])
+          : (weekPlans[d]?.blocks || []),
+        by: d === today ? (card ? readPlan(card).userEdited?.by : null) : (weekPlans[d]?.by || null),
+      }));
+      if (date && date !== today) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { success: false, error: `date must be YYYY-MM-DD (got ${date})` };
+        if (!localDays(new Date(), 14).includes(date)) return { success: false, error: `date ${date} is outside the next 14 days` };
+        return { success: true, date, today: false, blocks: weekPlans[date]?.blocks || [], fixedEvents: [], next: null, week, userEdited: weekPlans[date] || null };
+      }
+      return card
+        ? { success: true, date: today, today: true, ...readPlan(card), week }
+        : { success: false, error: '没有「我的一天」卡片（先刷新今日生成一次）', week };
     },
     async timetableApply(edit = {}, { by = 'chief' } = {}) {
       const state = store.get();
+      const today = localDay();
+      const date = typeof edit.date === 'string' && edit.date ? edit.date : today;
+      // Other days this week: store suggested blocks on weekPlans (no calendar card for that day yet).
+      if (date !== today) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { success: false, errors: [`date must be YYYY-MM-DD (got ${date})`] };
+        if (!localDays(new Date(), 14).includes(date)) return { success: false, errors: [`date ${date} is outside the next 14 days`] };
+        if (edit.mode === 'reset') {
+          const next = { ...(state.weekPlans || {}) }; delete next[date];
+          await store.save({ weekPlans: pruneWeekPlans(next) }, { weekPlans: true });
+          return { success: true, changed: true, reset: true, date, plan: { date, blocks: [] }, message: `豆芽：已清空 ${date} 的安排` };
+        }
+        const list = Array.isArray(edit.blocks) ? edit.blocks : [];
+        if (edit.mode === 'patch') return { success: false, errors: ['Other days only support mode=replace or reset (pass the full day\'s blocks)'] };
+        if (!list.length) return { success: false, errors: ['replace 需要至少一个 block'] };
+        const blocks = [];
+        for (const [i, b] of list.entries()) {
+          const start = hhmm(b?.start), end = hhmm(b?.end);
+          if (!start || !end) return { success: false, errors: [`blocks[${i}] needs start/end as HH:MM`] };
+          if (start >= end) return { success: false, errors: [`blocks[${i}] end must be after start`] };
+          blocks.push({ start, end, title: String(b.title || '').trim() || '安排', category: String(b.kind || b.category || 'work') });
+        }
+        blocks.sort((a, b) => a.start.localeCompare(b.start));
+        const entry = { date, blocks, by, at: new Date().toISOString() };
+        const weekPlans = pruneWeekPlans({ ...(state.weekPlans || {}), [date]: entry });
+        await store.save({ weekPlans }, { weekPlans: true });
+        uiService.emit({ kind: 'cards', reason: 'timetable', message: `豆芽安排了 ${date}` });
+        console.log(`[timetable] ${by} week ${date} → ${blocks.length} blocks`);
+        return { success: true, changed: true, date, plan: { date, blocks, next: blocks[0] || null }, message: `豆芽更新了 ${date} 的安排`, week: localDays(new Date(), 7).map(d => ({ date: d, blocks: (weekPlans[d]?.blocks) || [] })) };
+      }
       const cards = state.cards || [];
       const card = findTimetableCard(cards);
       const res = applyPlanEdit(card, edit, { by });
       if (!res.ok) return { success: false, errors: res.errors, ...(card ? { current: readPlan(card) } : {}) };
       const saved = { ...res.card, updatedAt: new Date().toISOString() };
-      await store.save({ cards: [saved] });
+      // A plan written earlier this week for today lands on the card once the day arrives.
+      const weekPlans = { ...(state.weekPlans || {}) };
+      delete weekPlans[today];
+      await store.save({ cards: [saved], weekPlans: pruneWeekPlans(weekPlans) }, { weekPlans: true });
       const message = res.reset ? '豆芽：今天的时间表会在下次汇聚时重新生成' : '豆芽更新了「我的一天」';
       uiService.emit({ kind: 'cards', reason: 'timetable', cardId: card.id, message });
       console.log(`[timetable] ${by} ${edit.mode || (edit.ops ? 'patch' : 'replace')} → ${res.plan.blocks.length} blocks, next=${res.plan.next ? res.plan.next.start + ' ' + res.plan.next.title : '-'}`);
-      return { success: true, changed: res.changed, reset: !!res.reset, warnings: res.warnings, plan: res.plan, message };
+      return { success: true, changed: res.changed, reset: !!res.reset, warnings: res.warnings, plan: res.plan, message, date: today };
     },
     uiBootId() { return uiService.bootId; },
     /** Bot: generate a temporary view (validated + hydrated from the store). */

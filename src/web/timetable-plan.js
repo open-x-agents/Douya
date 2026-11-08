@@ -19,6 +19,29 @@ export function localDay(now = new Date()) {
   return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`
 }
 
+/** Next N Asia/Shanghai calendar days starting at `from` (inclusive), YYYY-MM-DD. */
+export function localDays(from = new Date(), n = 7) {
+  const out = []
+  const base = new Date(+new Date(from) + SH)
+  base.setUTCHours(0, 0, 0, 0)
+  for (let i = 0; i < n; i++) {
+    const d = new Date(+base + i * 864e5)
+    out.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`)
+  }
+  return out
+}
+
+/** Keep only plans for today and the next `keep` days; drop past / far future. */
+export function pruneWeekPlans(weekPlans = {}, { now = new Date(), keep = 14 } = {}) {
+  const allow = new Set(localDays(now, keep))
+  const out = {}
+  for (const [date, plan] of Object.entries(weekPlans || {})) {
+    if (allow.has(date) && plan && Array.isArray(plan.blocks)) out[date] = plan
+  }
+  return out
+}
+
+
 // "9:5" / "09:05" / "2026-11-04T09:05:00+08:00" -> "09:05" in Asia/Shanghai; plain HH:MM kept as written.
 export function hhmm(v) {
   if (v == null) return null
@@ -190,13 +213,22 @@ export function applyPlanEdit(card, edit = {}, { now = new Date(), by = 'chief' 
  * Re-digest over an edited day: keep today's chat-edited suggested blocks, take fresh calendar events,
  * drop edited blocks that now collide with a new event. Different day / no edit -> incoming as-is.
  */
-export function mergeDigestTimetable(oldCard, incCard, { now = new Date() } = {}) {
+export function mergeDigestTimetable(oldCard, incCard, { now = new Date(), weekPlan = null } = {}) {
   const oldTT = timetableBlock(oldCard), incTT = timetableBlock(incCard)
-  if (!oldTT?.userPlan || !incTT || incCard?.regenerate) return incCard
-  if (oldTT.userPlan.date !== localDay(now)) return incCard
+  if (!incTT || incCard?.regenerate) return incCard
+  const day = localDay(now)
   const fixed = (incTT.fixedBlocks || []).map(b => ({ start: hhmm(b.start), end: hhmm(b.end) })).filter(b => b.start && b.end)
-  const kept = (oldTT.suggestedBlocks || []).filter(b => !fixed.some(f => overlaps(f, b)))
-  const nextTT = { ...incTT, suggestedBlocks: kept, userPlan: oldTT.userPlan }
+  // A chat edit on today's card wins; otherwise a plan written earlier this week for today lands now.
+  let source = null, by = null, at = null
+  if (oldTT?.userPlan?.date === day) {
+    source = oldTT.suggestedBlocks || []; by = oldTT.userPlan.by; at = oldTT.userPlan.at
+  } else if (weekPlan?.blocks?.length) {
+    source = weekPlan.blocks; by = weekPlan.by || 'chief'; at = weekPlan.at || new Date(now).toISOString()
+  } else {
+    return incCard
+  }
+  const kept = source.filter(b => !fixed.some(f => overlaps(f, b)))
+  const nextTT = { ...incTT, suggestedBlocks: kept, userPlan: { date: day, by, at } }
   return { ...incCard, blocks: (incCard.blocks || []).map(b => (b === incTT ? nextTT : b)) }
 }
 

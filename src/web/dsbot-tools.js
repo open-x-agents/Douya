@@ -86,7 +86,7 @@ export const CARD_WORK_PROMPT = `你是「豆芽」背后的 Main Bot（Chief）
 - 「改标题 / 改成… / 下一步改成…」→ odm_card_update
 - 「这张卡换个样子 / 做成清单 / 突出谁在等 / 按时间排」→ odm_card_face（只选布局和要突出的条目，数据豆芽自己填）
 - 长期计划 / 健身 / 学习 / 兴趣 → odm_future_get 先读真实兴趣；odm_future_update propose 提案，用户同意才 create/accept。navigate page=future 看页面。信息不足先问，不编兴趣。
-- 「排一下 / 挪一下 / 改时间表」→ odm_timetable_get + odm_timetable_update
+- 「排一下 / 挪一下 / 改时间表 / 这周跑步三次」→ odm_timetable_get（看 week[]）+ odm_timetable_update（对每个 date 各写一次）
 - 「加一张 / 记一下 / 待办」→ odm_card_create
 - 「刷新今日 / 重新汇聚」→ odm_digest_refresh
 - 问邮件/PR/Slack/日历 → odm_github_* / odm_gmail_* / odm_slack_* / odm_calendar_*（只读）
@@ -354,22 +354,23 @@ export async function registerBotTools(ctx, opts = {}) {
   if (router?.timetableApply) {
     register(() => defineTool({
       name: 'odm_timetable_get',
-      description: '读「我的一天」时间表：now、fixedEvents（真实日历事件，不能改）、blocks（建议时段 start/end/title/kind/cardIds）、next（「接下来」那段）。',
-      parameters: {},
+      description: '读时间表。默认今天：now、fixedEvents、blocks、next。传 date=YYYY-MM-DD 可读本周其他天（week[] 列出未来 7 天已安排的 blocks）。目标（如每周跑步三次）用 date 把各次排进对应日期。',
+      parameters: { date: { type: 'string', description: '可选 YYYY-MM-DD（Asia/Shanghai），默认今天' } },
       output,
-      async execute() {
-        try { return JSON.stringify(router.timetableGet()) }
+      async execute(args) {
+        try { return JSON.stringify(router.timetableGet({ date: args?.date || null })) }
         catch (err) { return JSON.stringify({ success: false, error: err.message }) }
       },
     }))
     register(() => defineTool({
       name: 'odm_timetable_update',
-      description: '改「我的一天」时间表并立即显示在今天页。mode=replace：blocks 为从某时刻起的完整新安排（JSON 数组 [{start,end,title,kind,cardIds}]，更早的时段保留；keepBefore=HH:MM 可指定保留到哪）。mode=patch：ops 为 JSON 数组 [{match:"原开始 HH:MM 或标题", start?, end?, title?, kind?, cardIds?, remove?:true}]，不带 match 的是新增。mode=reset：撤掉聊天里的改动，下次汇聚重新生成。真实日历事件不会被改或覆盖。',
+      description: '改时间表。date 默认今天（立即显示在今天页）；传本周其他 YYYY-MM-DD 则写入那天的安排（到那天汇聚时自动落到「我的一天」）。mode=replace：blocks=[{start,end,title,kind}]；今天还可 keepBefore=HH:MM。mode=patch（仅今天）：ops=[...]。mode=reset：清空该日聊天改动。真实日历事件不会被改。每周多次（如跑步三次）请对每个 date 各调用一次。',
       parameters: {
         mode: { type: 'string', required: true, description: 'replace | patch | reset' },
+        date: { type: 'string', description: 'YYYY-MM-DD Asia/Shanghai；默认今天' },
         blocks: { type: 'string', description: 'replace 用：JSON 数组' },
-        ops: { type: 'string', description: 'patch 用：JSON 数组' },
-        keepBefore: { type: 'string', description: 'replace 可选：HH:MM，之前的旧时段保留' },
+        ops: { type: 'string', description: 'patch 用：JSON 数组（仅今天）' },
+        keepBefore: { type: 'string', description: 'replace 可选：HH:MM，之前的旧时段保留（仅今天）' },
       },
       output,
       async execute(args) {
@@ -378,7 +379,7 @@ export async function registerBotTools(ctx, opts = {}) {
           let blocks, ops
           try { blocks = parse(args?.blocks); ops = parse(args?.ops) }
           catch (e) { return JSON.stringify({ success: false, error: `blocks/ops 不是合法 JSON：${e.message}` }) }
-          return JSON.stringify(await router.timetableApply({ mode: args?.mode, blocks, ops, keepBefore: args?.keepBefore || undefined }, { by: 'chief' }))
+          return JSON.stringify(await router.timetableApply({ mode: args?.mode, date: args?.date || undefined, blocks, ops, keepBefore: args?.keepBefore || undefined }, { by: 'chief' }))
         } catch (err) { return JSON.stringify({ success: false, error: err.message }) }
       },
     }))

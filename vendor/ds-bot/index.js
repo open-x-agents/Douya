@@ -26,6 +26,7 @@ import * as approvals from './src/host/approvals.js'
 import * as resume from './src/host/resume.js'
 import * as memory from './src/host/memory.js'
 import * as parts from './src/host/parts.js'
+import * as routePrivateHook from './src/host/route-private-hook.js'
 import * as images from './src/host/images.js'
 import * as avatarLibrary from './src/host/avatar-library.js'
 import * as browser from './src/host/browser.js'
@@ -53,7 +54,7 @@ export const inject = ['llm', 'tools', 'systemPrompt', 'sessionController', 'ses
 // install. Listeners run and tools are listed in registration order, so this order holds:
 // usage meters model requests after every listener that rewrites them. privacy checks a
 // call before the hooks of tools do, so a closed call never reaches a card they show.
-const MODULES = [diagnostics, store, workLines, routeInbound, models, providers, permissions, turns, handoffs, requests, delivery, roster, folders, privacy, agents, prompt, timeContext, tools, chatIndex, groups, approvals, resume, memory, parts, images, avatarLibrary, secrets, connectors, capabilities, learning, schedules, browser, browserPlugins, usage, update, dshUpdate, thinking, feed, channel, officeSkills]
+const MODULES = [diagnostics, store, workLines, routeInbound, models, providers, permissions, turns, handoffs, requests, delivery, roster, folders, privacy, agents, prompt, timeContext, tools, chatIndex, groups, approvals, resume, memory, parts, routePrivateHook, images, avatarLibrary, secrets, connectors, capabilities, learning, schedules, browser, browserPlugins, usage, update, dshUpdate, thinking, feed, channel, officeSkills]
 
 export function apply(ctx, config = {}) {
   createRuntime(ctx, config)

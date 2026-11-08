@@ -200,7 +200,9 @@ test('a request steered into a running turn is recorded once and answered in a t
 // Issue #580: a queued message the user steers into the running turn restarts
 // the activity row's clock from when it landed, not from the turn's start.
 test('a user message steered into the running steps marks when it landed', async (t) => {
-  const { emit, call, stop } = await start(team())
+  const seed = team()
+  seed.workLines = { L: { id: 'L', botId: 'b', sessionId: 'b', label: '还没好吗', updatedAt: 1, segments: [] } }
+  const { emit, call, stop } = await start(seed)
   t.after(stop)
   const steered = async () => (await call('state', {})).value.work.steered ?? {}
   const userMessage = id => ({ id, role: 'user', content: textBlock('还没好吗'), source: { kind: 'user' } })

@@ -123,6 +123,9 @@ export function teamActions({ call, after, partFor, roster, ui, live, cards, hel
     // The private chat's own stop. `partFor` sends the Bot's current part; the host
     // cancels that part only, and leaves the Bot's group Sessions running.
     stopPrivate: sessionId => after(call('stop-private', { sessionId: partFor(sessionId) })),
+    // Records the chosen line. The host does not steer or queue the sentence.
+    confirmPrivate: (sessionId, choiceId, generation) => after(call('confirm-private', { sessionId: partFor(sessionId), choiceId, generation })),
+    retryPrivateSave: sessionId => after(call('retry-private-save', { sessionId: partFor(sessionId) })),
     // Values go out in these requests and never come back in a response.
     secretSet: payload => after(call('secret-set', payload)),
     secretAllow: requestId => after(call('secret-allow', { requestId })),

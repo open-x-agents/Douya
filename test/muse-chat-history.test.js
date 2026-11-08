@@ -237,3 +237,9 @@ test('the Muse /api/chat/history route restores bubbles from the display record'
   assert.deepEqual(json.messages.map(m => [m.role, m.content]), [['user', ATTACH_TEXT], ['assistant', '收到']])
   assert.deepEqual(json.messages[0].attachments, ATTACH_SHOWN[0].attachments)
 })
+
+test('context records ds-bot appends after the prompt do not drop the reply', () => {
+  const ctxRec = (seq, kind) => ({ event: { seq, time: 1_790_000_000_000 + seq, type: 'user/message', data: { role: 'user', source: { kind, form: 'snapshot' }, content: [{ type: 'text', text: 'Current runtime context…' }] } } })
+  const out = historyFromRecords([ctxRec(0, 'plugin:openviking-memory'), owner(1, 'hi'), ctxRec(2, 'runtime-context'), ctxRec(3, 'skill-catalog'), ctxRec(4, 'time-context'), ctxRec(5, 'plugin:openviking-memory'), assist(6, '你好！'), end(7)])
+  assert.deepEqual(out.map(m => [m.role, m.content]), [['user', 'hi'], ['assistant', '你好！']])
+})

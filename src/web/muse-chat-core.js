@@ -637,6 +637,10 @@ export function historyFromRecords(records, { limit = 40, display = null } = {})
     if (ev.type === 'user/message') {
       const source = messageSource(ev)
       const text = messageText(ev)
+      // ds-bot and plugins append model-only context (runtime-context, skill-catalog, time-context,
+      // plugin:openviking-memory, …) as user/message records around the owner's prompt. Only an owner prompt
+      // or a Bot relay starts a new turn; anything else must not close the reply.
+      if (source?.kind !== 'user' && source?.kind !== 'bot') continue
       open = false; replyIdx = -1
       if (source?.kind !== 'user') continue
       const at = Number.isFinite(ev.time) ? { at: new Date(ev.time).toISOString() } : {}

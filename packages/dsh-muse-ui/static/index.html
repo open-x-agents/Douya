@@ -2780,12 +2780,21 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
 </svg>`
 }
   /** Thinking indicator: the sprout bobbing + a shimmering status line (Chief's live step when known). */
+  // Chief's live step labels come from the server in Chinese; show them in the page language.
+  function thinkLabel(label) {
+    const s = String(label || '');
+    if (!s || /^豆芽正在想/.test(s)) return t('chat.thinking');
+    if (/^正在写回复/.test(s)) return t('chat.writing');
+    const m = s.match(/^正在调用\s*(.+?)[.…。]*$/);
+    if (m) return t('chat.calling', { tool: m[1] });
+    return s;
+  }
   function thinkingHtml(label) {
-    return `<span class="think-ind">${douyaSvg({ size: 22, state: 'think', simple: true })}<span class="think-shim">${escMd(label || '豆芽正在想')}</span></span>`;
+    return `<span class="think-ind">${douyaSvg({ size: 22, state: 'think', simple: true })}<span class="think-shim">${escMd(thinkLabel(label))}</span></span>`;
   }
   function setThinking(el, label) {
     const sh = el && el.querySelector('.think-shim');
-    if (sh) sh.textContent = String(label || '豆芽正在想').replace(/[.…。]+$/, '') + '…';
+    if (sh) sh.textContent = thinkLabel(label).replace(/[.…。]+$/, '') + '…';
     else if (el) el.innerHTML = thinkingHtml(label);
   }
   // Draft blocks: 确认发送 uses the pending-confirmation card Chief already made for this turn; without one it asks
@@ -6566,6 +6575,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       onApply: () => { autoShown = autoPending; autoPending = null; rerenderToday(); showUiToast(`已按${autoShown.periodLabel}重新排序`); },
       onIgnore: () => { autoPending = { ...autoPending, ignored: true }; } });
   }
+  function todNote(a) {
+    const p = a.period || 'evening';
+    const when = t(`today.tod_period_${p}`);
+    const base = a.enough ? t('today.tod_note_habit', { p: when, n: a.interactions || 0 }) : t('today.tod_note_new', { p: when, n: a.interactions || 0 });
+    return `${base} · ${t(`today.tod_why_${p}`)}`;
+  }
   function renderTodStrip() {
     const el = $('todStrip'); if (!el) return;
     el.textContent = '';
@@ -6574,7 +6589,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     el.style.display = '';
     const tx = document.createElement('span'); tx.className = 'tod-text';
     const undone = autoUndone();
-    tx.textContent = !a.enabled ? t('today.tod_off') : undone ? t('today.tod_undone', { p: a.periodLabel }) : `🕘 ${a.note} · ${a.rationale}`;
+    tx.textContent = !a.enabled ? t('today.tod_off') : undone ? t('today.tod_undone', { p: a.periodLabel }) : `🕘 ${todNote(a)}`;
     el.appendChild(tx);
     const mk = (label, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'tod-btn'; b.textContent = label; b.addEventListener('click', fn); el.appendChild(b); return b; };
     if (a.enabled) mk(undone ? t('today.tod_apply') : t('today.tod_undo'), () => { try { sessionStorage.setItem('odm.autoUndone', undone ? '0' : '1'); } catch (_) {} rerenderToday(); });

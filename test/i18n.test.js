@@ -172,3 +172,13 @@ test('Today hero, headline counts and time-of-day strip have EN copy (no hardcod
   assert.match(t('today.head_pr', 'en', { n: 2 }), /^2 PRs/)
   assert.match(t('today.hero_lead', 'zh', { n: 3, u: 1 }), /3 个项目.*1 个/)
 })
+
+test('thinking indicator and time-of-day note are bilingual (no zh-only server strings in EN)', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  assert.ok(!html.includes("label || '豆芽正在想'"), 'thinking fallback must go through i18n')
+  assert.ok(!html.includes('${a.note} · ${a.rationale}'), 'tod note must be composed from i18n keys')
+  assert.equal(t('chat.thinking', 'en'), 'Douya is thinking')
+  assert.match(t('today.tod_note_new', 'en', { p: t('today.tod_period_evening', 'en'), n: 0 }), /^Sorted for the evening/)
+  assert.match(t('today.tod_note_new', 'zh', { p: t('today.tod_period_evening', 'zh'), n: 0 }), /^按傍晚排序/)
+  for (const p of ['morning', 'work', 'evening']) assert.notEqual(t(`today.tod_why_${p}`, 'en'), `today.tod_why_${p}`)
+})

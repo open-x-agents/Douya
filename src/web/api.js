@@ -988,6 +988,11 @@ export function createApiRouter(ctx) {
 
     async getToday({ hour = null, lang = DEFAULT_LOCALE } = {}) {
       const locale = resolveLang(lang)
+      // Remember the page language so digests / mail clusters match the UI (EN cards when EN is selected).
+      try {
+        const st = store.get()
+        if ((st.prefs?.lang || DEFAULT_LOCALE) !== locale) await store.save({ prefs: { ...(st.prefs || {}), lang: locale } })
+      } catch {}
       try {
         const dateLocale = locale === 'zh' ? 'zh-CN' : 'en-US'
         const today = new Date().toLocaleDateString(dateLocale, {
@@ -1311,7 +1316,10 @@ export function createApiRouter(ctx) {
 
         // Run multi-stage aggregation pipeline with profile context
         const { runAggregationPipeline } = await import('./aggregation.js');
-        const profileContext = profileManager.getPersonalizationContext();
+        const profileContext = {
+          ...(profileManager.getPersonalizationContext() || {}),
+          lang: resolveLang(store.get()?.prefs?.lang || DEFAULT_LOCALE),
+        };
         // Count model traffic (chars in / out, and usage when the client reports it) for the digest comparison.
         const meter = { calls: 0, inChars: 0, outChars: 0, usage: { input: 0, output: 0 } };
         const metered = Object.create(llm);

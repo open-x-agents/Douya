@@ -145,14 +145,21 @@ const keyOf = (channel, it) => channel === 'github' ? (it.metadata?.repository |
 function overlay(card, cand, edit) {
   if (!card || !cand) return card
   const needs = cand.needsAction
-  if (cand.summary) { card.body = cand.summary; card.why = cand.summary }
-  const next = edit?.nextStep || cand.nextStep
-  if (next) card.nextAction = next
+  // email-group body/nextAction are authored in the page locale by buildEmailClusters.
+  // Source-bot candidate summary/nextStep is often Chinese; do not overwrite the localized copy.
+  // Chief edits (edit.nextStep / edit.title) may still refine nextAction; title stays group-localized.
+  if (card.type !== 'email-group') {
+    if (cand.summary) { card.body = cand.summary; card.why = cand.summary }
+    const next = edit?.nextStep || cand.nextStep
+    if (next) card.nextAction = next
+    if (edit?.title || cand.title) card.title = edit?.title || cand.title
+  } else if (edit?.nextStep) {
+    card.nextAction = edit.nextStep
+  }
   card.priority = edit?.priority || cand.priority || card.priority
   const waitingOthers = !needs && (cand.items || []).some(r => r.status === 'waiting')
   card.waiting = needs ? 'you' : waitingOthers ? 'others' : (card.waiting === 'you' ? 'fyi' : card.waiting || 'fyi')
-  card.metadata = { ...(card.metadata || {}), needsAction: needs, digest: 'bot', candidate: cand.id, rank: edit?.rank, target: cand.target }
-  if (card.type !== 'email-group' && (edit?.title || cand.title)) card.title = edit?.title || cand.title
+  card.metadata = { ...(card.metadata || {}), needsAction: needs, digest: 'bot', candidate: cand.id, rank: edit?.rank, target: cand.target, lang: card.metadata?.lang }
   if (cand.face) card.face = { ...cand.face, at: new Date().toISOString() }
   return card
 }
@@ -176,7 +183,7 @@ export function buildCards(snaps, candidatesBy, plan, opts = {}) {
   return { cards: res.cards, stats: res.stats }
 }
 
-function buildOnce(snaps, candidatesBy, plan, { today, now = Date.now() } = {}) {
+function buildOnce(snaps, candidatesBy, plan, { today, now = Date.now(), lang = 'en' } = {}) {
   const all = Object.values(candidatesBy).flat()
   const byId = new Map(all.map(c => [c.id, c]))
   const itemOf = (cand, r) => snaps[cand.channel]?.byRef.get(r.ref)
@@ -198,7 +205,7 @@ function buildOnce(snaps, candidatesBy, plan, { today, now = Date.now() } = {}) 
       for (const [sid, c] of refCand) assign.set(sid, c.category)
       // Every live mail lands in a group (unseen / unassigned ones by the rule classifier), so counts stay true.
       const mail = (snap.all || snap.items).filter(it => !away.has(it.sourceId))
-      for (const card of buildEmailClusters(mail, { today, now, assign })) {
+      for (const card of buildEmailClusters(mail, { today, now, assign, lang })) {
         const sid = card.items?.[0]?.sourceId
         const cand = card.type === 'email-action' ? refCand.get(sid) : cands.filter(c => c.category === card.metadata?.group).sort((a, b) => b.items.length - a.items.length)[0] || null
         cards.push(overlay(card, cand, cand && plan.edits?.get(cand.id))); if (cand) candCard.set(cand.id, card)

@@ -24,7 +24,7 @@ test('one tile per category, ≤4 actionable singles, never a bare Open next ste
     ...Array.from({ length: 6 }, (_, i) => mail(`h${i}`, `Could you confirm the plan ${i}?`, `Person ${i} <p${i}@corp.example>`)),
     mail('s1', 'Security alert', 'G <no-reply@accounts.example>'),
   ]
-  const out = buildEmailClusters(items, { today: '2026-11-03', now: 0 })
+  const out = buildEmailClusters(items, { today: '2026-11-03', now: 0, lang: 'zh' })
   const singles = out.filter(c => c.type === 'email-action')
   const groups = out.filter(c => c.type === 'email-group')
   assert.equal(singles.length, 4)
@@ -41,7 +41,7 @@ test('one tile per category, ≤4 actionable singles, never a bare Open next ste
 })
 
 test('legacy single-mail tiles merge into groups without losing completions', () => {
-  const groups = buildEmailClusters([mail('n1', '50% off today', 'X <news@x.example>', ['CATEGORY_PROMOTIONS'])], { today: '2026-11-04', now: 0 })
+  const groups = buildEmailClusters([mail('n1', '50% off today', 'X <news@x.example>', ['CATEGORY_PROMOTIONS'])], { today: '2026-11-04', now: 0, lang: 'zh' })
   const legacy = [
     { id: 'old1', source: 'gmail', type: 'single-item', status: 'active', title: 'Extra 20% Off clearance', body: 'From: Y <deals@y.example>', url: 'https://mail.google.com/mail/u/0/#inbox/old1' },
     { id: 'old2', source: 'gmail', type: 'single-item', status: 'done', completedAt: '2026-11-02T00:00:00Z', title: 'Hi', body: 'From: Z <z@z.example>', url: 'https://mail.google.com/mail/u/0/#inbox/old2' },
@@ -61,9 +61,9 @@ test('legacy single-mail tiles merge into groups without losing completions', ()
 })
 
 test('same-day re-digest keeps mail already in the group', () => {
-  const first = buildEmailClusters([mail('a1', '30% off', 'A <news@a.example>', ['CATEGORY_PROMOTIONS'])], { today: '2026-11-05', now: 0 })
+  const first = buildEmailClusters([mail('a1', '30% off', 'A <news@a.example>', ['CATEGORY_PROMOTIONS'])], { today: '2026-11-05', now: 0, lang: 'zh' })
   first[0].blocks.find(b => b.type === 'link-list').links.push({ title: 'old', url: 'https://mail.google.com/mail/u/0/#inbox/legacy', from: 'L' })
-  const again = buildEmailClusters([mail('b2', '40% off', 'B <news@b.example>', ['CATEGORY_PROMOTIONS'])], { today: '2026-11-05', now: 0 })
+  const again = buildEmailClusters([mail('b2', '40% off', 'B <news@b.example>', ['CATEGORY_PROMOTIONS'])], { today: '2026-11-05', now: 0, lang: 'zh' })
   const { cards } = migrateEmailCards(first, again, {})
   const g = cards.find(c => c.type === 'email-group')
   assert.equal(g.blocks.find(b => b.type === 'link-list').links.length, 3)
@@ -104,4 +104,22 @@ test('foldGithubNotifsIntoRepos moves [owner/repo] mail into the matching projec
   assert.equal(code.items.length, 2)
   assert.ok(code.items.every(i => !/openDigitalMate/.test(i.title)))
   assert.equal(code.metadata.count, 2)
+})
+
+test('buildEmailClusters titles and bodies follow lang (EN vs ZH)', () => {
+  const items = [
+    mail('e1', '[acme/app] Run failed: tests - main', 'GitHub <notifications@github.com>'),
+    mail('e2', 'Can you review by Friday?', 'Ann <ann@corp.example>'),
+  ]
+  const zh = buildEmailClusters(items, { today: '2026-11-08', now: 0, lang: 'zh' })
+  const en = buildEmailClusters(items, { today: '2026-11-08', now: 0, lang: 'en' })
+  const zhCode = zh.find(c => c.metadata?.group === 'code')
+  const enCode = en.find(c => c.metadata?.group === 'code')
+  assert.equal(zhCode?.title, 'CI与代码通知')
+  assert.equal(enCode?.title, 'CI & code')
+  assert.match(enCode?.body || '', /CI\/code|failure/i)
+  assert.ok(!/封来自|需要你处理/.test(enCode?.body || ''))
+  const enAction = en.find(c => c.type === 'email-action' || c.metadata?.group === 'action')
+  assert.ok(enAction)
+  assert.ok(!/[\u4e00-\u9fa5]/.test(enAction.title + enAction.body + (enAction.nextAction || '')))
 })

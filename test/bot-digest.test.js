@@ -342,3 +342,19 @@ test('getToday persists prefs.lang so digests match the page', async () => {
   await router.getToday({ lang: 'en' })
   assert.equal(store.get().prefs?.lang, 'en')
 })
+
+
+test('github card with blanked nextAction gets an Open the repo fallback', async () => {
+  const { linkCitedNums } = await import('../src/digest/build.js')
+  const { t } = await import('../src/i18n/index.js')
+  const item = pr(12, 'acme/app', 'Fix next')
+  const card = {
+    source: 'github', url: 'https://github.com/acme/app', title: 'acme/app',
+    nextAction: '审 #999',
+    blocks: [{ type: 'link-list', links: [{ title: 'PR #12', url: item.url }] }],
+  }
+  linkCitedNums(card, [item], it => ({ title: it.title, url: it.url }))
+  assert.equal(card.nextAction, '', 'ungrounded #999 blanks the next step')
+  if (!card.nextAction) card.nextAction = t('card.open_repo', 'en')
+  assert.equal(card.nextAction, 'Open the repo')
+})

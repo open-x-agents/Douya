@@ -434,7 +434,7 @@ export function createBotDigest(deps) {
         const profile = { ...(deps.profileContext?.() || {}), lang }
         const hero = await A.generateHeroCard(grouped, sourceData, fake({ narrative: [runRec.plan.headline, runRec.plan.narrative].filter(Boolean).join('：') }), profile)
         const timetable = await A.generateTimetable(grouped, sourceData, fake({ suggestedBlocks: runRec.plan.timeline }), profile)
-        const ach = A.generateAchievementsTile(sourceData, items)
+        const ach = A.generateAchievementsTile(sourceData, items, lang)
         const yt = youtubeCluster(youtubeItems(auxData.youtube), lang)
         const youtubeCards = yt ? A.generateClusterCards({ urgent: [], action: [], fyi: [yt] }) : []
         const genericCards = Object.keys(SOURCE_RECIPES).flatMap(slug => {

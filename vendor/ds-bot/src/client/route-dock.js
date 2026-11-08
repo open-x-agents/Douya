@@ -64,10 +64,11 @@ function PrivateHoldDock({ sessionId, useRoster, actions }) {
   if (text === '') return null
   const choices = Array.isArray(hold.choices) ? hold.choices : []
   const bound = hold.status === 'bound'
+  const given = bound && hold.delivered === true
   const generation = hold.generation
   const unsaved = (hold.items ?? []).some(item => item?.outcome === 'unrecoverable' || item?.outcome === 'queue-failed')
   const choose = (id) => {
-    if (sending || bound || typeof id !== 'string' || id === '' || typeof generation !== 'number' || typeof actions.confirmPrivate !== 'function') return
+    if (sending || given || typeof id !== 'string' || id === '' || typeof generation !== 'number' || typeof actions.confirmPrivate !== 'function') return
     setSending(true)
     void settleHoldAction(() => actions.confirmPrivate(sessionId, id, generation)).then((result) => {
       setFault(result.ok ? '' : result.message)
@@ -86,9 +87,11 @@ function PrivateHoldDock({ sessionId, useRoster, actions }) {
       unsaved ? h('p', { className: 'bt-route-miss', 'data-private-unsaved-note': '' }, t('Not saved. Copy this sentence and send it again if you still want it.')) : null,
       fault !== '' ? h('p', { className: 'bt-route-miss', 'data-private-save-error': '' }, fault) : null,
       unsaved ? h('button', { type: 'button', className: 'bt-route-choice', disabled: sending, onClick: retry }, t('Save this hold again')) : null,
-      bound
-        ? h('p', { className: 'bt-route-miss' }, `${t('Bound. The model has not been given this sentence.')} ${t('Opening another chat is not part of this step.')}`)
-        : h('div', { className: 'bt-route-list' }, choices.map((choice) => {
+      given
+        ? h('p', { className: 'bt-route-miss', 'data-private-delivered': '' }, `${t('Given to this line. The model can answer it now.')} ${t('Opening another chat is not part of this step.')}`)
+        : h('div', { className: 'bt-route-list' },
+          bound ? h('p', { className: 'bt-route-miss' }, `${t('Bound. The model has not been given this sentence.')} ${t('Opening another chat is not part of this step.')}`) : null,
+          choices.map((choice) => {
           const id = typeof choice?.id === 'string' ? choice.id : ''
           const label = choiceLabel(choice)
           return h('button', {

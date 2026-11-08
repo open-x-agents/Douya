@@ -11,7 +11,7 @@ import { resolveSendMode } from '../shared/send-mode.js'
 import { clearDraftIfPosted } from '../shared/room-draft.js'
 import { decideRoomSteer, roomMembers, textNamesMember } from './group-steer.js'
 import { routeTakesEffect } from './route-inbound.js'
-import { bindPrivateHold, guardPrivateSaves, privateHold, serializePrivate } from './route-private.js'
+import { bindPrivateHold, finishBoundDelivery, guardPrivateSaves, privateHold, releaseBoundSentence, serializePrivate } from './route-private.js'
 import { citedFromLog } from '../shared/cite.js'
 
 const LANGUAGES = { zh: 'Chinese (简体中文)', en: 'English' }
@@ -41,6 +41,37 @@ const isInternal = error => error instanceof TypeError || error instanceof Refer
 export function errorCode(error) {
   if (typeof error?.code === 'string' && error.code.startsWith('bot/')) return error.code
   return isInternal(error) ? 'bot/internal' : 'bot/refused'
+}
+
+// Hand the confirmed sentence to the bound line's next turn. Does not open a
+// part. A different existing line session is that line's own chat, not a new
+// one. The running step is not steered: followup waits for the next turn.
+async function deliverBoundSentence(rt, sessionId, commit) {
+  const release = releaseBoundSentence(rt.state, sessionId)
+  if (release == null) return privateHold(rt.state, sessionId)?.delivered === true
+  const messageId = release.messageId ?? randomUUID()
+  try {
+    if (typeof rt.resolveAgent !== 'function') throw new Error('no session')
+    const agent = await rt.resolveAgent(release.target)
+    if (typeof agent?.followup !== 'function') throw new Error('no session')
+    agent.followup({
+      id: messageId,
+      role: 'user',
+      source: { kind: 'user' },
+      content: [{ type: 'text', text: release.text }],
+    })
+  } catch (error) {
+    finishBoundDelivery(rt.state, sessionId, false)
+    rt.warn?.('ds-bot: private sentence was not delivered: %s', error)
+    return false
+  }
+  finishBoundDelivery(rt.state, sessionId, true)
+  try {
+    await commit({ required: true })
+  } catch (error) {
+    rt.warn?.('ds-bot: private delivery was not saved: %s', error)
+  }
+  return true
 }
 
 export function install(rt) {
@@ -396,25 +427,28 @@ export function install(rt) {
             const prior = { status: hold.status, boundTo: hold.boundTo, boundAt: hold.boundAt, label: hold.label }
             const bound = bindPrivateHold(rt.state, sessionId, body.choiceId, body.generation)
             if (bound === undefined) return fail('Not a line on this hold', 'bot/invalid')
-            if (already) return ok({ bound: true, delivered: false, generation: bound.generation })
-            try {
-              await commit({ required: true })
-            } catch (error) {
-              const current = privateHold(rt.state, sessionId)
-              if (current?.generation === body.generation) {
-                current.status = prior.status
-                current.delivered = false
-                if (prior.boundTo === undefined) delete current.boundTo
-                else current.boundTo = prior.boundTo
-                if (prior.boundAt === undefined) delete current.boundAt
-                else current.boundAt = prior.boundAt
-                if (prior.label === undefined) delete current.label
-                else current.label = prior.label
+            if (already && bound.delivered === true) return ok({ bound: true, delivered: true, generation: bound.generation })
+            if (!already) {
+              try {
+                await commit({ required: true })
+              } catch (error) {
+                const current = privateHold(rt.state, sessionId)
+                if (current?.generation === body.generation) {
+                  current.status = prior.status
+                  current.delivered = false
+                  if (prior.boundTo === undefined) delete current.boundTo
+                  else current.boundTo = prior.boundTo
+                  if (prior.boundAt === undefined) delete current.boundAt
+                  else current.boundAt = prior.boundAt
+                  if (prior.label === undefined) delete current.label
+                  else current.label = prior.label
+                }
+                rt.warn?.('ds-bot: private binding was not saved: %s', error)
+                return fail('Could not save the binding', 'bot/save')
               }
-              rt.warn?.('ds-bot: private binding was not saved: %s', error)
-              return fail('Could not save the binding', 'bot/save')
             }
-            return ok({ bound: true, delivered: false, generation: bound.generation })
+            const delivered = await deliverBoundSentence(rt, sessionId, commit)
+            return ok({ bound: true, delivered, generation: bound.generation })
           })
         }
         case 'retry-private-save': {

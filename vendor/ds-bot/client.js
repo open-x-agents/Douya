@@ -641,6 +641,7 @@ var ZH = {
   "“New” is waiting for confirmation. It does not open another chat yet.": "「新开」先停在确认里，还不会另开一条会话。",
   "Bind to this line": "绑到这条",
   "Bound. The model has not been given this sentence.": "已记下绑定。这句还没有交给模型。",
+  "Given to this line. The model can answer it now.": "已经交给这条线。模型可以接着答。",
   "Opening another chat is not part of this step.": "这一步还不会另开一条会话。",
   "Searching online": "上网搜索",
   "Reading a page": "阅读网页",
@@ -1644,10 +1645,11 @@ function PrivateHoldDock({ sessionId, useRoster, actions }) {
   if (text === "") return null;
   const choices = Array.isArray(hold.choices) ? hold.choices : [];
   const bound2 = hold.status === "bound";
+  const given = bound2 && hold.delivered === true;
   const generation = hold.generation;
   const unsaved = (hold.items ?? []).some((item) => item?.outcome === "unrecoverable" || item?.outcome === "queue-failed");
   const choose = (id) => {
-    if (sending || bound2 || typeof id !== "string" || id === "" || typeof generation !== "number" || typeof actions.confirmPrivate !== "function") return;
+    if (sending || given || typeof id !== "string" || id === "" || typeof generation !== "number" || typeof actions.confirmPrivate !== "function") return;
     setSending(true);
     void settleHoldAction(() => actions.confirmPrivate(sessionId, id, generation)).then((result) => {
       setFault(result.ok ? "" : result.message);
@@ -1670,23 +1672,28 @@ function PrivateHoldDock({ sessionId, useRoster, actions }) {
       unsaved ? (0, import_react.createElement)("p", { className: "bt-route-miss", "data-private-unsaved-note": "" }, t("Not saved. Copy this sentence and send it again if you still want it.")) : null,
       fault !== "" ? (0, import_react.createElement)("p", { className: "bt-route-miss", "data-private-save-error": "" }, fault) : null,
       unsaved ? (0, import_react.createElement)("button", { type: "button", className: "bt-route-choice", disabled: sending, onClick: retry }, t("Save this hold again")) : null,
-      bound2 ? (0, import_react.createElement)("p", { className: "bt-route-miss" }, `${t("Bound. The model has not been given this sentence.")} ${t("Opening another chat is not part of this step.")}`) : (0, import_react.createElement)("div", { className: "bt-route-list" }, choices.map((choice) => {
-        const id = typeof choice?.id === "string" ? choice.id : "";
-        const label = choiceLabel(choice);
-        return (0, import_react.createElement)(
-          "button",
-          {
-            key: id !== "" ? id : label,
-            type: "button",
-            className: "bt-route-choice",
-            disabled: sending || id === "",
-            "data-highlight": hold.highlight === id ? "" : void 0,
-            onClick: () => choose(id)
-          },
-          (0, import_react.createElement)("span", { className: "bt-route-choice-name" }, label),
-          (0, import_react.createElement)("span", { className: "bt-route-choice-state" }, t("Bind to this line"))
-        );
-      }))
+      given ? (0, import_react.createElement)("p", { className: "bt-route-miss", "data-private-delivered": "" }, `${t("Given to this line. The model can answer it now.")} ${t("Opening another chat is not part of this step.")}`) : (0, import_react.createElement)(
+        "div",
+        { className: "bt-route-list" },
+        bound2 ? (0, import_react.createElement)("p", { className: "bt-route-miss" }, `${t("Bound. The model has not been given this sentence.")} ${t("Opening another chat is not part of this step.")}`) : null,
+        choices.map((choice) => {
+          const id = typeof choice?.id === "string" ? choice.id : "";
+          const label = choiceLabel(choice);
+          return (0, import_react.createElement)(
+            "button",
+            {
+              key: id !== "" ? id : label,
+              type: "button",
+              className: "bt-route-choice",
+              disabled: sending || id === "",
+              "data-highlight": hold.highlight === id ? "" : void 0,
+              onClick: () => choose(id)
+            },
+            (0, import_react.createElement)("span", { className: "bt-route-choice-name" }, label),
+            (0, import_react.createElement)("span", { className: "bt-route-choice-state" }, t("Bind to this line"))
+          );
+        })
+      )
     )
   );
 }

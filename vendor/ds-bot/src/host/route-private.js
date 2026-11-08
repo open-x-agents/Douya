@@ -187,7 +187,7 @@ function itemOf(input) {
     ...(typeof input.workLineId === 'string' && input.workLineId !== '' ? { workLineId: input.workLineId } : {}),
     ...(typeof input.sessionId === 'string' && input.sessionId !== '' ? { sessionId: input.sessionId } : {}),
     ...(typeof input.botId === 'string' && input.botId !== '' ? { botId: input.botId } : {}),
-    ...(input.outcome === 'queued' || input.outcome === 'queue-failed' || input.outcome === 'held' || input.outcome === 'unrecoverable' ? { outcome: input.outcome } : {}),
+    ...(input.outcome === 'queued' || input.outcome === 'queue-failed' || input.outcome === 'held' || input.outcome === 'unrecoverable' || input.outcome === 'delivered' ? { outcome: input.outcome } : {}),
     at: typeof input.at === 'number' ? input.at : Date.now(),
   }
 }
@@ -283,7 +283,7 @@ export function privateHold(state, sessionId) {
 }
 
 /**
- * Record which open work line the user picked. Does not put the sentence back
+ * Record which open work line the user picked. Does not itself put the sentence
  * in an inbox. An unknown, closed, or other-bot choice leaves the hold unchanged.
  */
 export function bindPrivateHold(state, sessionId, choiceId, generation, now = Date.now()) {
@@ -307,6 +307,39 @@ export function bindPrivateHold(state, sessionId, choiceId, generation, now = Da
   return hold
 }
 
+/**
+ * The ask or new sentence to hand to the bound line. Marks it delivered in
+ * memory so the next pre-step will not strip it. The caller appends and wakes.
+ * A queue handoff is left alone. Returns undefined when there is nothing to send.
+ */
+export function releaseBoundSentence(state, sessionId) {
+  const hold = privateHold(state, sessionId)
+  if (hold == null || hold.status !== 'bound' || hold.delivered === true) return undefined
+  const item = [...(hold.items ?? [])].reverse().find(entry => (entry?.action === 'ask' || entry?.action === 'new') && entry.outcome !== 'delivered' && entry.outcome !== 'unrecoverable' && entry.outcome !== 'queue-failed' && typeof entry.text === 'string' && entry.text !== '')
+  if (item == null) return undefined
+  const line = state.workLines != null && typeof state.workLines === 'object' && !Array.isArray(state.workLines) ? state.workLines[hold.boundTo] : undefined
+  const target = typeof line?.sessionId === 'string' && line.sessionId !== '' ? line.sessionId : sessionId
+  if (typeof item.messageId === 'string' && item.messageId !== '') noteHoldOutcome(state, sessionId, item.messageId, 'delivered')
+  return {
+    target,
+    messageId: typeof item.messageId === 'string' && item.messageId !== '' ? item.messageId : undefined,
+    text: item.text,
+    label: hold.label,
+  }
+}
+
+export function finishBoundDelivery(state, sessionId, delivered) {
+  const hold = privateHold(state, sessionId)
+  if (hold == null) return undefined
+  hold.delivered = delivered === true
+  if (delivered !== true) {
+    for (const item of hold.items ?? []) {
+      if (item?.outcome === 'delivered' && (item.action === 'ask' || item.action === 'new')) item.outcome = 'held'
+    }
+  }
+  return hold
+}
+
 export function dropQueuedHold(state, sessionId, messageId) {
   const hold = privateHold(state, sessionId)
   if (hold == null) return
@@ -322,7 +355,7 @@ export function dropQueuedHold(state, sessionId, messageId) {
  * @param {{ items?: { messageId?: string, action?: string, outcome?: string }[] }} [hold]
  */
 export function withholdFromStep(messages, hold) {
-  const items = (hold?.items ?? []).filter(item => item?.outcome !== 'queued' && (item?.action === 'ask' || item?.action === 'new' || item?.action === 'queue') && typeof item.messageId === 'string' && item.messageId !== '')
+  const items = (hold?.items ?? []).filter(item => item?.outcome !== 'queued' && item?.outcome !== 'delivered' && (item?.action === 'ask' || item?.action === 'new' || item?.action === 'queue') && typeof item.messageId === 'string' && item.messageId !== '')
   if (items.length === 0) return { kept: messages, withheld: [] }
   const ids = new Set(items.map(item => item.messageId))
   const kept = []

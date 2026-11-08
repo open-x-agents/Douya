@@ -587,6 +587,7 @@ const ZH = {
   '“New” is waiting for confirmation. It does not open another chat yet.': '「新开」先停在确认里，还不会另开一条会话。',
   'Bind to this line': '绑到这条',
   'Bound. The model has not been given this sentence.': '已记下绑定。这句还没有交给模型。',
+  'Given to this line. The model can answer it now.': '已经交给这条线。模型可以接着答。',
   'Opening another chat is not part of this step.': '这一步还不会另开一条会话。',
   'Searching online': '上网搜索',
   'Reading a page': '阅读网页',

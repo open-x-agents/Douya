@@ -1169,6 +1169,114 @@ test('a failed confirm or retry is not published by a queue ack or a label save'
   assert.equal(diskRetry.workLines['line-c'].label, 'hello there')
 })
 
+test('confirm delivers the held sentence on the bound line and a later choice does not rewrite it', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'ds-bot-deliver-'))
+  const team = fakeContext()
+  let route
+  const register = team.connection.fetch.register
+  team.connection.fetch.register = (options) => { route = options; return register(options) }
+  const rt = createRuntime(team, { home })
+  const ctx = new Context()
+  for (const plugin of [SessionStore, SessionProjection, LlmRuntime, ToolRuntime, SystemPrompt, Agents, AgentLoop]) {
+    await ctx.plugin(plugin)
+  }
+  t.after(async () => {
+    await ctx.fiber.dispose()
+    await team.dispose()
+    rmSync(home, { recursive: true, force: true })
+  })
+  const calls = []
+  ctx.llm.registerAdapter(['fake'], {
+    providerInfo: (id) => ({ id, name: 'Fake' }),
+    providerRetryPolicy: () => undefined,
+    async prepareCall() {
+      return {
+        model: { id: 'fake-model', name: 'Fake', provider: 'fake' },
+        stream(options) {
+          calls.push(JSON.stringify(options))
+          return (async function* () {
+            yield { type: 'text-delta', index: 0, text: 'ack' }
+            yield { type: 'finish', reason: { kind: 'stop' } }
+          })()
+        },
+      }
+    },
+  })
+  installPrivateHook({
+    ctx,
+    state: rt.state,
+    isBotSession: () => true,
+    roomOf: () => undefined,
+    save: (options) => rt.save(options),
+    warn: () => {},
+  })
+  const sessionId = 'sess-deliver'
+  const agent = await ctx.agentLoop.create(sessionId, { provider: 'fake', model: 'fake-model' }, { cwd: '/tmp' })
+  rt.resolveAgent = async (id) => {
+    if (id !== sessionId) throw new Error(`unexpected session ${id}`)
+    return agent
+  }
+  await rt.load()
+  createLine(rt.state, { id: 'line-a', botId: 'a', sessionId, label: 'plan the picnic' })
+  rt.state.workLines['line-b'] = { id: 'line-b', botId: 'a', sessionId, label: 'budget review', updatedAt: 2, segments: [] }
+  const first = createUserMessage({ content: [{ type: 'text', text: 'BIND_SENTENCE_141' }], source: { kind: 'user' } })
+  rememberPrivateHold(rt.state, {
+    sessionId, botId: 'a', messageId: first.id, action: 'ask', text: 'BIND_SENTENCE_141',
+    choices: [
+      { id: 'line-a', label: 'plan the picnic', sessionId },
+      { id: 'line-b', label: 'budget review', sessionId },
+    ],
+    at: 1,
+  })
+  await rt.save({ required: true })
+  agent.steer(first)
+  await agent.whenIdle()
+  assert.equal(calls.length, 0)
+  assert.equal(agent.session.snapshotEvents().some(event => event.type === 'user/message' && event.data?.id === first.id), false)
+  const post = async (payload) => (await route.fetch(new Request('http://localhost/api/bot', {
+    method: 'POST',
+    body: JSON.stringify({ endpoint: 'confirm-private', payload }),
+  }))).json()
+  const generation = rt.state.privateHolds[sessionId].generation
+  const confirmed = await post({ sessionId, choiceId: 'line-a', generation })
+  assert.equal(confirmed.ok, true)
+  assert.equal(confirmed.value.bound, true)
+  assert.equal(confirmed.value.delivered, true)
+  await agent.whenIdle()
+  assert.equal(calls.filter(body => body.includes('BIND_SENTENCE_141')).length, 1)
+  assert.equal(agent.session.snapshotEvents().filter(event => event.type === 'user/message' && event.data?.id === first.id).length, 1)
+  assert.equal(rt.state.privateHolds[sessionId].delivered, true)
+  assert.equal(rt.state.privateHolds[sessionId].label, 'plan the picnic')
+  const firstText = agent.session.snapshotEvents().find(event => event.type === 'user/message' && event.data?.id === first.id)
+  const opened = createUserMessage({ content: [{ type: 'text', text: '新开 另一件事' }], source: { kind: 'user' } })
+  rememberPrivateHold(rt.state, {
+    sessionId, botId: 'a', messageId: opened.id, action: 'new', text: '新开 另一件事',
+    choices: [
+      { id: 'line-a', label: 'plan the picnic', sessionId },
+      { id: 'line-b', label: 'budget review', sessionId },
+    ],
+    at: 2,
+  })
+  const rebound = await post({ sessionId, choiceId: 'line-b', generation: rt.state.privateHolds[sessionId].generation })
+  assert.equal(rebound.ok, true)
+  assert.equal(rebound.value.delivered, true)
+  await agent.whenIdle()
+  assert.equal(calls.filter(body => body.includes('新开 另一件事')).length, 1)
+  assert.equal(JSON.stringify(agent.session.snapshotEvents().find(event => event.type === 'user/message' && event.data?.id === first.id)), JSON.stringify(firstText))
+  assert.equal(rt.state.privateHolds[sessionId].label, 'budget review')
+  assert.equal(rt.state.workLines['line-a'].sessionId, sessionId)
+  assert.equal(rt.state.workLines['line-b'].sessionId, sessionId)
+  await team.dispose()
+  const again = fakeContext()
+  const loaded = createRuntime(again, { home })
+  t.after(() => again.dispose())
+  await loaded.load()
+  assert.equal(loaded.state.privateHolds[sessionId].status, 'bound')
+  assert.equal(loaded.state.privateHolds[sessionId].boundTo, 'line-b')
+  assert.equal(loaded.state.privateHolds[sessionId].delivered, true)
+  assert.equal(loaded.state.privateHolds[sessionId].label, 'budget review')
+})
+
 test('DSH refuses a second append while a splice is still being published', async (t) => {
   const ctx = new Context()
   await ctx.plugin(SessionStore)

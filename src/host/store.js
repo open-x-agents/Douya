@@ -6,6 +6,7 @@ import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { fixRepoCard } from '../web/repo-copy.js'
 import { reconcileCards, dedupe } from './reconcile.js'
+import { localDay } from '../web/timetable-plan.js'
 
 /** Statuses a digest must not overwrite with a fresh "active" copy. */
 export const TERMINAL_CARD_STATUSES = new Set(['done', 'dismissed'])
@@ -24,6 +25,7 @@ export function emptyState() {
     week: [],
     prefs: {},
     futurePlans: [],
+    weekPlans: {},
     cards: [],
     // Durable completion / dismiss ledger — digests never clear this.
     completions: [],
@@ -75,6 +77,7 @@ export function normalizeState(raw) {
     week: Array.isArray(raw.week) ? raw.week : [],
     prefs: isRecord(raw.prefs) ? raw.prefs : {},
     futurePlans: Array.isArray(raw.futurePlans) ? raw.futurePlans : [],
+    weekPlans: (raw.weekPlans && typeof raw.weekPlans === 'object' && !Array.isArray(raw.weekPlans)) ? raw.weekPlans : {},
     cards: Array.isArray(raw.cards) ? cleanupCards(raw.cards.map(fixRepoCard), raw) : [],
     completions: Array.isArray(raw.completions) ? dedupeItemCompletions(raw.completions) : [],
     itemStatus: isRecord(raw.itemStatus) ? raw.itemStatus : {},
@@ -261,7 +264,14 @@ export function createStore(path) {
       } else if (Array.isArray(next.cards) && digest) {
         // Digest: reconcile against the stored cards — update the card for the same entity in place, create only
         // when nothing matches, fold duplicates. Never deletes; done cards reopen only for genuinely new items.
-        const r = reconcileCards(existing.cards || [], next.cards, { itemStatus: next.itemStatus ?? existing.itemStatus, cardChats: { ...(next.cardChats ?? existing.cardChats ?? {}) }, seen: opts.seen, channels: opts.channels })
+        const today = localDay()
+        const weekPlan = (existing.weekPlans || {})[today] || null
+        const r = reconcileCards(existing.cards || [], next.cards, { itemStatus: next.itemStatus ?? existing.itemStatus, cardChats: { ...(next.cardChats ?? existing.cardChats ?? {}) }, seen: opts.seen, channels: opts.channels, weekPlan })
+        // Consumed today's week plan once it lands on the card.
+        if (weekPlan && r.cards.some(c => c.type === 'timetable' && c.blocks?.some?.(b => b.userPlan?.date === today))) {
+          const wp = { ...(existing.weekPlans || {}) }; delete wp[today]; next = { ...next, weekPlans: wp }
+          opts = { ...opts, weekPlans: true }
+        }
         cards = r.cards
         next = { ...next, itemStatus: r.itemStatus, cardChats: r.cardChats, lastReconcile: { at: new Date().toISOString(), ...r.stats } }
       } else if (Array.isArray(next.cards)) {
@@ -279,6 +289,7 @@ export function createStore(path) {
         ...next,
         // Only the Future service writes plans. A digest / unrelated stale full-state save must not rewind progress.
         futurePlans: opts.futurePlans === true && Array.isArray(next.futurePlans) ? next.futurePlans : (existing.futurePlans || []),
+        weekPlans: opts.weekPlans === true && next.weekPlans && typeof next.weekPlans === 'object' ? next.weekPlans : (existing.weekPlans || {}),
         cards,
         completions,
         revision: (next?.revision ?? existing.revision ?? 0) + 1,

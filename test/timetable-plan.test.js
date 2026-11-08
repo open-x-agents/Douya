@@ -120,3 +120,30 @@ test('suggestMeetingBuffers: existing block after meeting → none', () => {
   c.blocks[0].suggestedBlocks.push({ start: '16:30', end: '16:45', title: '已有缓冲', category: 'break' })
   assert.deepEqual(suggestMeetingBuffers(c), [])
 })
+import { localDays, pruneWeekPlans } from '../src/web/timetable-plan.js'
+
+test('localDays lists Asia/Shanghai calendar days; pruneWeekPlans drops past and far future', () => {
+  const days = localDays(NOW, 7)
+  assert.equal(days[0], '2026-11-04')
+  assert.equal(days.length, 7)
+  assert.equal(days[6], '2026-11-10')
+  const kept = pruneWeekPlans({
+    '2026-11-03': { blocks: [{ start: '19:00', end: '19:30', title: 'old' }] },
+    '2026-11-06': { blocks: [{ start: '19:00', end: '19:30', title: 'run' }] },
+    '2026-12-01': { blocks: [{ start: '19:00', end: '19:30', title: 'far' }] },
+  }, { now: NOW, keep: 14 })
+  assert.deepEqual(Object.keys(kept).sort(), ['2026-11-06'])
+})
+
+test('mergeDigestTimetable applies a weekPlan written earlier when the day arrives', () => {
+  const inc = card({ suggestedBlocks: [{ start: '10:00', end: '11:00', title: '自动排', category: 'work' }] })
+  const weekPlan = { date: '2026-11-04', by: 'chief', at: '2026-11-03T12:00:00Z', blocks: [
+    { start: '19:00', end: '19:30', title: '跑步', category: 'exercise' },
+    { start: '19:30', end: '19:35', title: '拉伸', category: 'break' },
+  ] }
+  const m = mergeDigestTimetable(card({ suggestedBlocks: [] }), inc, { now: NOW, weekPlan })
+  const tt = m.blocks.find(b => b.type === 'timetable')
+  assert.deepEqual(tt.suggestedBlocks.map(b => b.title), ['跑步', '拉伸'])
+  assert.equal(tt.userPlan.date, '2026-11-04')
+  assert.equal(tt.userPlan.by, 'chief')
+})

@@ -155,7 +155,7 @@ export function reconcileCards(existing = [], incoming = [], opts = {}) {
     }
     const old = m.card
     // 我的一天 edited in chat today: keep that plan, take fresh calendar events.
-    if (old.type === 'timetable' && inc.type === 'timetable') Object.assign(inc, mergeDigestTimetable(old, inc, { now: opts.clock ? opts.clock() : new Date() }))
+    if (old.type === 'timetable' && inc.type === 'timetable') Object.assign(inc, mergeDigestTimetable(old, inc, { now: opts.clock ? opts.clock() : new Date(), weekPlan: opts.weekPlan || null }))
     if (m.how === 'hint') stats.hintUsed++
     if (m.how === 'urls' || m.how === 'title') stats.fuzzy++
     if (String(raw.metadata?.target || '') === 'new') stats.newBecameUpdate++

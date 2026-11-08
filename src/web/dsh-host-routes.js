@@ -195,6 +195,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
   effect({
     path: '/api/opendigitalmate/digest-status',
     methods: ['GET'],
+    requestBody: 'buffered',
     fetch: async () => json(router.digestStatus()),
   }, 'opendigitalmate: digest-status')
 

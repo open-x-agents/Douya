@@ -628,7 +628,6 @@ function ownerText(raw) {
  * last assistant text (what the live bubble showed). Team relays, runtime context and clock
  * injections are not the owner's words, so they stay out.
  */
-const CONTEXT_SOURCES = new Set(['runtime-context', 'skill-catalog', 'time-context', 'memory-context'])
 export function historyFromRecords(records, { limit = 40, display = null } = {}) {
   const out = []
   let open = false     // the owner prompt whose turn is still the current one
@@ -638,9 +637,10 @@ export function historyFromRecords(records, { limit = 40, display = null } = {})
     if (ev.type === 'user/message') {
       const source = messageSource(ev)
       const text = messageText(ev)
-      // ds-bot appends model-only context (runtime-context, skill-catalog, time-context) as user/message
-      // records right after the owner's prompt; they are not a new turn, so they must not close the reply.
-      if (CONTEXT_SOURCES.has(source?.kind)) continue
+      // ds-bot and plugins append model-only context (runtime-context, skill-catalog, time-context,
+      // plugin:openviking-memory, …) as user/message records around the owner's prompt. Only an owner prompt
+      // or a Bot relay starts a new turn; anything else must not close the reply.
+      if (source?.kind !== 'user' && source?.kind !== 'bot') continue
       open = false; replyIdx = -1
       if (source?.kind !== 'user') continue
       const at = Number.isFinite(ev.time) ? { at: new Date(ev.time).toISOString() } : {}

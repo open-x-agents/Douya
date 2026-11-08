@@ -2,7 +2,7 @@
 // (same sourceIds as the legacy pipeline, so existing cards are updated in place, never duplicated).
 import { CHANNELS } from './channels.js'
 import { validateFace } from '../ui/face.js'
-import { buildEmailClusters, emailLink } from '../web/email-groups.js'
+import { buildEmailClusters, emailLink, foldGithubNotifsIntoRepos } from '../web/email-groups.js'
 import { clusterByProjectTheme, classifyClusters, groupAndRank, generateClusterCards } from '../web/aggregation.js'
 
 const clip = (s, n) => { s = String(s ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s }
@@ -226,10 +226,11 @@ function buildOnce(snaps, candidatesBy, plan, { today, now = Date.now() } = {}) 
     for (const { it } of list) if (!seen.has(it.url)) { seen.add(it.url); ll.links.push({ ...linkOf(it), mergedFrom: it.source }) }
     card.metadata = { ...(card.metadata || {}), mergedFrom: [...new Set(list.map(x => x.it.source))], mergeReason: list[0]?.reason || '' }
   }
+  const fold = foldGithubNotifsIntoRepos(cards)
   const gh = snaps.github?.all || snaps.github?.items || []
   let cited = 0
   if (gh.length) for (const card of cards) if (card.source === 'github') cited += linkCitedNums(card, gh, linkOf)
-  return { cards, missingInto, stats: { citedLinks: cited, candidates: all.length, merged: [...byId.values()].filter(c => c.mergedInto).length, mergedItems: away.size } }
+  return { cards, missingInto, stats: { citedLinks: cited, candidates: all.length, merged: [...byId.values()].filter(c => c.mergedInto).length, mergedItems: away.size, foldedGithubMail: fold.folded } }
 }
 
 const repoIn = u => (String(u || '').match(/github\.com\/([^/]+\/[^/#?]+)/) || [])[1] || null

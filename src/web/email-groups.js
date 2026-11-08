@@ -140,6 +140,75 @@ function refreshGroupCard(g) {
   if (g.metadata) Object.assign(g.metadata, { count: pseudo.length, senders })
 }
 
+/** Repo from a GitHub notification subject: "[owner/repo] …". */
+export function githubNotifRepo(title, from = '') {
+  const m = String(title || '').match(/\[([\w.-]+\/[\w.-]+)\]/)
+  if (m) return m[1]
+  if (/notifications@github\.com/i.test(String(from))) return null
+  return null
+}
+
+/** Repo key of a project-cluster card (sourceId github:cluster:owner/repo or its github.com URL). */
+export function repoKeyOfCard(card) {
+  const sid = String(card?.sourceId || '')
+  const m = sid.match(/^github:cluster:([^:]+)/)
+  if (m) return m[1]
+  const u = String(card?.url || '')
+  return (u.match(/github\.com\/([^/]+\/[^/#?]+)/) || [])[1] || null
+}
+
+/**
+ * Fold GitHub notification emails out of the "CI与代码通知" (code) mail group into the matching
+ * repo project-cluster card. Leaves mail that has no matching repo card in the group.
+ * Mutates `cards` in place; returns { folded, droppedFromCode }.
+ */
+export function foldGithubNotifsIntoRepos(cards = []) {
+  const list = Array.isArray(cards) ? cards : []
+  const byRepo = new Map()
+  for (const c of list) {
+    if (c?.type !== 'project-cluster' || c.source !== 'github') continue
+    const repo = repoKeyOfCard(c)
+    if (repo) byRepo.set(repo, c)
+  }
+  if (!byRepo.size) return { folded: 0, droppedFromCode: 0 }
+  let folded = 0
+  for (const g of list) {
+    if (g?.type !== 'email-group' || g.metadata?.group !== 'code') continue
+    const items = Array.isArray(g.items) ? g.items : []
+    const keep = [], move = []
+    for (const it of items) {
+      const repo = githubNotifRepo(it.title, it.metadata?.from || it.body)
+      if (repo && byRepo.has(repo)) move.push({ it, repo })
+      else keep.push(it)
+    }
+    if (!move.length) continue
+    for (const { it, repo } of move) {
+      const card = byRepo.get(repo)
+      let ll = (card.blocks || []).find(b => b.type === 'link-list')
+      if (!ll) { ll = { type: 'link-list', links: [] }; (card.blocks ||= []).push(ll) }
+      if (!(ll.links || []).some(l => l.url === it.url)) {
+        ll.links = [...(ll.links || []), { ...emailLink(it), mergedFrom: 'gmail' }].slice(0, MAX_GROUP_LINKS)
+      }
+      card.items = [...(card.items || []), it]
+      card.clusterSize = (card.clusterSize || 0) + 1
+      card.metadata = { ...(card.metadata || {}), emailCount: (card.metadata?.emailCount || 0) + 1, mergedFrom: [...new Set([...(card.metadata?.mergedFrom || []), 'gmail'])] }
+      folded++
+    }
+    if (!keep.length) {
+      const i = list.indexOf(g)
+      if (i >= 0) list.splice(i, 1)
+    } else {
+      g.items = keep
+      g.topItems = keep.slice(0, 3)
+      let ll = (g.blocks || []).find(b => b.type === 'link-list')
+      if (!ll) { ll = { type: 'link-list', links: [] }; (g.blocks ||= []).push(ll) }
+      ll.links = keep.slice(0, MAX_GROUP_LINKS).map(emailLink)
+      refreshGroupCard(g)
+    }
+  }
+  return { folded, droppedFromCode: folded }
+}
+
 export function emailLink(it) {
   return {
     title: clip(clean(it.title) || '(无主题)', 90),

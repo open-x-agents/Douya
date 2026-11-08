@@ -24,6 +24,16 @@ export function createFutureService({ store, memories = listOpenVikingMemories, 
       if (op === 'create' && input.userAgreed !== true) return fail('Ask the user to agree first, or propose a draft.')
       const title = text(input.title, 100), goal = text(input.goal), step = text(input.step, 240)
       if (!title || !goal || !step) return fail('title, goal and one concrete step are required.')
+      // Same goal again (Chief "creating" what it just proposed) must not leave a twin card on Future.
+      const key = t => String(t || '').replace(/\s+/g, '').toLowerCase()
+      const twin = plans.find(p => p.status !== 'archived' && key(p.title) === key(title))
+      if (twin && op === 'create' && twin.status === 'proposed') {
+        twin.status = 'active'; twin.acceptedAt = now; twin.updatedAt = now
+        await store.save({ futurePlans: plans }, { futurePlans: true })
+        emit({ kind: 'future', reason: 'accept' })
+        return { ok: true, plan: structuredClone(twin), note: 'Activated the existing proposal with this title instead of adding a second plan.' }
+      }
+      if (twin) return fail(`A plan titled "${twin.title}" already exists (id ${twin.id}, ${twin.status}); update${twin.status === 'proposed' ? ' or accept' : ''} it instead.`)
       let basis
       if (input.memoryId) {
         const ctx = await context()

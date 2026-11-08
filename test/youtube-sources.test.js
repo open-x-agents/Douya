@@ -119,3 +119,10 @@ test('aux-only run commits YouTube and generic cards, skips Chief, preserves uns
     assert.ok(runner.lastRun().cards.some(c => c.source === 'notion'))
   } finally { await rm(home, { recursive: true, force: true }) }
 })
+
+test('YouTube read failures say why (quota vs access)', async () => {
+  const { fetchYouTube } = await import('../src/web/youtube.js')
+  const quota = { successful: false, error: '{"error":{"code":403,"errors":[{"domain":"youtube.quota","reason":"quotaExceeded"}]}}', data: { status_code: 403 } }
+  await assert.rejects(fetchYouTube({ executeAction: async () => quota }, { id: 'ca_1' }), /quota exceeded/)
+  await assert.rejects(fetchYouTube({ executeAction: async () => ({ successful: false, error: 'token expired', data: { status_code: 401 } }) }, { id: 'ca_1' }), /reconnect YouTube/)
+})

@@ -2,6 +2,16 @@ import { t } from '../i18n/index.js'
 
 // Verified against https://docs.composio.dev/toolkits/youtube (20261101_00).
 // One subscriptions page + at most 10 activity pages, 3 at a time; no quota-heavy search.
+// Say why, so Sources can tell "quota used up" (Google's daily YouTube API limit, resets at midnight Pacific) from a broken link.
+function readReason(r) {
+  const raw = [r?.error, r?.data?.message, r?.data?.http_error].filter(Boolean).map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ')
+  if (/quotaExceeded|exceeded your\s*(<[^>]*>|\\u003c[^ ]*)?\s*quota/i.test(raw)) return ': daily YouTube API quota exceeded (resets at midnight Pacific time)'
+  const status = r?.data?.status_code
+  if (status === 401 || status === 403 || /unauthori[sz]ed|forbidden|expired/i.test(raw)) return `: access denied${status ? ` (HTTP ${status})` : ''} — reconnect YouTube`
+  const msg = raw.replace(/\s+/g, ' ').trim().slice(0, 120)
+  return msg ? `: ${msg}` : ''
+}
+
 export async function fetchYouTube(client, source, { now = Date.now(), timeoutMs = 8000 } = {}) {
   const pin = source.id ? { connectedAccountId: source.id } : {}
   const read = async (slug, args) => {
@@ -12,7 +22,7 @@ export async function fetchYouTube(client, source, { now = Date.now(), timeoutMs
         new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('YouTube read timed out')), timeoutMs) }),
       ])
       const data = r?.data?.data ?? r?.data
-      if (!r || r.successful === false || r.error || !Array.isArray(data?.items)) throw new Error('YouTube read failed')
+      if (!r || r.successful === false || r.error || !Array.isArray(data?.items)) throw new Error(`YouTube read failed${readReason(r)}`)
       return data
     } finally { clearTimeout(timer) }
   }

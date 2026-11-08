@@ -27,6 +27,12 @@ const cleanLabel = (label) => {
   return line === '' ? undefined : line
 }
 
+/** First line, 80 characters, nothing after the line break. */
+export function labelFromText(text) {
+  const stripped = String(text ?? '').trim().replace(/^(?:新开|\/new)\b\s*/i, '')
+  return cleanLabel(stripped === '' ? String(text ?? '') : stripped)
+}
+
 const cleanQuote = (quote) => {
   if (quote == null || typeof quote !== 'object' || Array.isArray(quote)) return undefined
   /** @type {{ roomId?: string, seq?: number }} */
@@ -204,6 +210,21 @@ export function ensureLegacy(state, { now = Date.now(), createId, chatOf } = {})
  * @param {Record<string, any>} state
  * @param {{ workLineId?: string, sessionId?: string, roomId?: string, now?: number }} [input]
  */
+/**
+ * Set the line's label from the opening sentence once. A later sentence does not
+ * replace it, and the rest of the sentence is not stored on the index.
+ */
+export function noteLineLabel(state, sessionId, text, now = Date.now()) {
+  const line = lineBySession(state, sessionId)
+  if (line == null) return undefined
+  if (typeof line.label === 'string' && line.label !== '') return line
+  const label = labelFromText(text)
+  if (label === undefined) return line
+  line.label = label
+  line.updatedAt = now
+  return line
+}
+
 export function noteLineRoom(state, { workLineId, sessionId, roomId, now = Date.now() } = {}) {
   const lines = linesOf(state)
   const line = (typeof workLineId === 'string' && lines[workLineId] != null)

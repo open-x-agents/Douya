@@ -10,7 +10,8 @@ import { absoluteLinks } from './links.js'
 import { textOf } from './text.js'
 import { reminderText } from './schedules.js'
 import { appendCite, citeCarrier, citeItem, citesOf, mergeCites, visibleRoomCites } from '../shared/cite.js'
-import { lineBySession } from './work-lines.js'
+import { lineBySession, listByBot, noteLineLabel } from './work-lines.js'
+import { rememberPrivateHold, routeAck, routeFailureAck, routePrivate, serializePrivate } from './route-private.js'
 
 // A failed turn's `LlmFailure`, kept to what can be shown and logged. Like DSH's own
 // error row, an AUTH failure loses its message: providers may echo part of the key.
@@ -321,6 +322,11 @@ export function install(rt) {
   const steeredView = () => Object.fromEntries([...live]
     .filter(([, entry]) => entry.turn !== undefined && entry.steeredAt !== undefined)
     .map(([id, entry]) => [id, entry.steeredAt]))
+
+  // Activity-row copy for a private sentence that is not joining the current step.
+  const routeNoteView = () => Object.fromEntries([...live]
+    .filter(([, entry]) => entry.turn !== undefined && entry.routeNote !== undefined)
+    .map(([id, entry]) => [id, entry.routeNote]))
 
   // Per group, the members whose turn there is running or who move on to a fresh part;
   // the round's current speaker is marked, since its round shows it.
@@ -677,12 +683,16 @@ export function install(rt) {
       case 'agent/inbox/spliced': {
         // A message the user steered into the running turn is fresh input, like
         // a send that never queued.
-        const inserted = (event.data?.inserted ?? []).filter(message => message?.source?.kind === 'user')
+        const inserted = (event.data?.inserted ?? []).filter(message => message?.source?.kind === 'user' && message?.source?.dsBotQueue !== true && message?.source?.dsBotDeliver !== true)
+        const privateRoute = !rt.roomOf(id) && rt.chatOwners.has(id)
+          ? notePrivateSplice(rt, id, entry, event, inserted)
+          : undefined
         if (event.data?.target === 'next-step' && entry.turn !== undefined) {
           for (const message of event.data?.inserted ?? []) {
             if (message?.source?.userSteer === true) rememberSteerCite(entry, message.source)
           }
-          if (inserted.length > 0) entry.steeredAt = event.time ?? Date.now()
+          // A private ask, queue, or new is not a steer into this step.
+          if (inserted.length > 0 && privateRoute?.held !== true) entry.steeredAt = event.time ?? Date.now()
         }
         // busyEnter=steer calls agent.steer on the room session. The line is in
         // next-step immediately; user/message waits until that session's next
@@ -757,6 +767,7 @@ export function install(rt) {
         entry.joined = []
         entry.since = undefined
         entry.steeredAt = undefined
+        entry.routeNote = undefined
         entry.tool = undefined
         entry.calls = undefined
         entry.lastText = undefined
@@ -878,5 +889,84 @@ export function install(rt) {
   // round is not dropped before its source arrives.
   rt.turnVisibleInGroup = (sessionId) => speaksInGroup(sessionId, live.get(sessionId)?.info)
 
-  Object.assign(rt, { live, liveOf, roomWaiters, roomProgress, roomInbox, activityView, workView, roomWorkView, turnsView, steeredView, callDetail, doingOf, stopRoomTurn, releaseBot, turnVisibleInGroup: rt.turnVisibleInGroup })
+  Object.assign(rt, { live, liveOf, roomWaiters, roomProgress, roomInbox, activityView, workView, roomWorkView, turnsView, steeredView, routeNoteView, callDetail, doingOf, stopRoomTurn, releaseBot, turnVisibleInGroup: rt.turnVisibleInGroup })
+}
+
+function notePrivateSplice(rt, id, entry, event, inserted) {
+  const target = event.data?.target
+  if (target !== 'next-step' && target !== 'next-turn') return undefined
+  if (inserted.length === 0) return undefined
+  const botId = rt.chatOwners.get(id)
+  const lines = listByBot(rt.state, botId, sessionId => rt.live.get(sessionId))
+    .map(line => ({ ...line, current: line.sessionId === id }))
+  let held = false
+  const jobs = []
+  for (const message of inserted) {
+    const text = textOf(message.content)
+    if (text === '') continue
+    const decision = routePrivate({
+      text,
+      busy: entry.turn !== undefined,
+      lines,
+      explicitQueue: target === 'next-turn' && entry.turn !== undefined,
+    })
+    if (decision.action === 'steer') {
+      const before = lineBySession(rt.state, id)?.label
+      noteLineLabel(rt.state, id, text, event.time ?? Date.now())
+      if (lineBySession(rt.state, id)?.label !== before) jobs.push(persistTeam(rt))
+      continue
+    }
+    // A busy explicit queue is already in next-turn. The running step claims
+    // next-step only, so the sentence is not in this model call. Remembering a
+    // queue hold would strip it again on the following turn.
+    if (decision.action === 'queue' && target === 'next-turn') {
+      jobs.push(persistAck(rt, entry, decision, event.time ?? Date.now()))
+      continue
+    }
+    held = true
+    const at = event.time ?? Date.now()
+    jobs.push(serializePrivate(rt, id, async (commit) => {
+      rememberPrivateHold(rt.state, {
+        sessionId: id,
+        messageId: message.id,
+        action: decision.action,
+        text,
+        label: decision.label,
+        workLineId: decision.workLineId,
+        choices: decision.choices,
+        highlight: decision.highlight,
+        botId,
+        at,
+      })
+      await persistAck(rt, entry, decision, at, commit)
+    }))
+  }
+  const persist = Promise.all(jobs)
+  rt.privateHoldPersist = Promise.resolve(rt.privateHoldPersist).then(() => persist, () => persist)
+  return { held }
+}
+
+function persistTeam(rt, commit) {
+  if (typeof rt.save !== 'function' && typeof commit !== 'function') return Promise.resolve(false)
+  // commit is the transaction that opened this edit. A queue ack or a label
+  // save does not receive it, so those wait out someone else's open edit.
+  const save = typeof commit === 'function' ? commit({ required: true }) : rt.save({ required: true })
+  return save.then(() => true, (error) => {
+    rt.warn?.('ds-bot: private work-line label was not saved: %s', error)
+    return false
+  })
+}
+
+async function persistAck(rt, entry, decision, at, commit) {
+  const saved = await persistTeam(rt, commit)
+  const text = saved ? routeAck(decision) : routeFailureAck()
+  if (text === undefined) return saved
+  entry.routeNote = {
+    at,
+    text,
+    action: decision.action,
+    saved,
+    ...(decision.label ? { label: decision.label } : {}),
+  }
+  return saved
 }

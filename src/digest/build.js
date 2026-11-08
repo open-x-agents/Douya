@@ -1,3 +1,4 @@
+import { t, resolveLang, DEFAULT_LOCALE } from '../i18n/index.js'
 // Bot digest: validate source-bot candidates, apply Chief's merge plan, and build cards in the legacy shapes
 // (same sourceIds as the legacy pipeline, so existing cards are updated in place, never duplicated).
 import { CHANNELS } from './channels.js'
@@ -236,7 +237,10 @@ function buildOnce(snaps, candidatesBy, plan, { today, now = Date.now(), lang = 
   const fold = foldGithubNotifsIntoRepos(cards)
   const gh = snaps.github?.all || snaps.github?.items || []
   let cited = 0
-  if (gh.length) for (const card of cards) if (card.source === 'github') cited += linkCitedNums(card, gh, linkOf)
+  if (gh.length) for (const card of cards) if (card.source === 'github') {
+    cited += linkCitedNums(card, gh, linkOf)
+    if (!card.nextAction) card.nextAction = t('card.open_repo', resolveLang(lang))
+  }
   return { cards, missingInto, stats: { citedLinks: cited, candidates: all.length, merged: [...byId.values()].filter(c => c.mergedInto).length, mergedItems: away.size, foldedGithubMail: fold.folded } }
 }
 

@@ -3183,11 +3183,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       <section class="myday" data-sys="timetable" data-card-id="${escapeHtml(card.id || '')}">
         <div class="myday-head">
           <div>
-            <div class="eyebrow c-teal">我的一天 · MY DAY${tt.userPlan && tt.userPlan.date === localDayStr() ? '<span class="myday-edited">豆芽已调整</span>' : ''}</div>
+            <div class="eyebrow c-teal">${escapeHtml(t('tile.tt.eyebrow'))}${tt.userPlan && tt.userPlan.date === localDayStr() ? `<span class="myday-edited">${escapeHtml(t('tile.tt.edited'))}</span>` : ''}</div>
             <div class="myday-note" data-tt-note>${note}</div>
             ${tzNote || tzClient}
           </div>
-          <div class="myday-meta"><span><b>${fixedN}</b> 个固定日程</span><span><b>${Math.max(0, blocks.length - fixedN)}</b> 个建议时段</span><span>现在 <b data-tt-now>${fmtMin(nowM)}</b></span></div>
+          <div class="myday-meta"><span>${escapeHtml(t('tile.tt.fixed_n', { n: fixedN }))}</span><span>${escapeHtml(t('tile.tt.suggested_n', { n: Math.max(0, blocks.length - fixedN) }))}</span><span>${escapeHtml(t('tile.tt.now_label'))} <b data-tt-now>${fmtMin(nowM)}</b></span></div>
         </div>
         <div class="tt" data-lo="${lo}" data-hi="${hi}">
           <div class="tt-track" style="height:${blocks.length ? (nLanes * laneH + 6) : 72}px">${bars || emptyHtml}
@@ -6635,8 +6635,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (!overlay || !title || !subtitle || !content) return;
     const r = repoOf(card);
     const isTT = card.type === 'timetable';
-    title.textContent = isTT ? '我的一天' : headline(card);
-    subtitle.innerHTML = isTT ? '今天的固定日程与豆芽建议的时段' :
+    title.textContent = isTT ? t('tile.tt.title') : headline(card);
+    subtitle.innerHTML = isTT ? escapeHtml(t('tile.tt.zoom_sub')) :
       `<span class="z-src">${escapeHtml(SRC_ZH[card.source] || card.source || '')}</span>${r ? ` · <a href="${escapeHtml(card.url)}" target="_blank" rel="noopener">${escapeHtml(r.owner + ' / ' + r.name)}</a>` : ''}`;
     let html = '';
     if (isTT) {

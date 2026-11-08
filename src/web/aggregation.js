@@ -3,6 +3,7 @@ import { fetchYouTube, youtubeItems, youtubeCluster } from './youtube.js';
 import { tidyRepoCopy } from './repo-copy.js';
 export { tidyRepoCopy };
 import { buildEmailClusters } from './email-groups.js';
+import { t, resolveLang, DEFAULT_LOCALE } from '../i18n/index.js';
 import { buildSlackCopy, selfSlackIds } from './slack-cards.js';
 /**
  * Multi-stage aggregation pipeline for daily digest
@@ -1780,7 +1781,7 @@ export async function runAggregationPipeline(composioClient, activeSources, llmC
   brief.cards.splice(1, 0, timetable);
   
   console.log('[Aggregation] Stage 9: Generating achievements tile...');
-  const achievements = generateAchievementsTile(sourceData, items);
+  const achievements = generateAchievementsTile(sourceData, items, profileContext?.lang || 'en');
   if (achievements) brief.cards.push(achievements);
   
   console.log('[Aggregation] Stage 10: Generating inbox overview...');
@@ -1797,11 +1798,14 @@ export async function runAggregationPipeline(composioClient, activeSources, llmC
  */
 export async function generateHeroCard(grouped, sourceData, llmClient, profileContext) {
   const now = new Date();
+  const locale = resolveLang(profileContext?.lang || DEFAULT_LOCALE);
   const hour = now.getHours();
-  const timeOfDay = hour < 12 ? '早上' : hour < 17 ? '下午' : '晚上';
-  const greeting = hour < 12 ? '早上好' : hour < 17 ? '下午好' : '晚上好';
-  
-  const date = now.toLocaleDateString('zh-CN', { weekday: 'long', month: 'long', day: 'numeric' });
+  const periodKey = hour < 12 ? 'tile.hero.period_morning' : hour < 17 ? 'tile.hero.period_afternoon' : 'tile.hero.period_evening';
+  const greetKey = hour < 12 ? 'tile.hero.greet_morning' : hour < 17 ? 'tile.hero.greet_afternoon' : 'tile.hero.greet_evening';
+  const timeOfDay = t(periodKey, locale);
+  const greeting = t(greetKey, locale);
+  const dateLocale = locale === 'zh' ? 'zh-CN' : 'en-US';
+  const date = now.toLocaleDateString(dateLocale, { timeZone: 'Asia/Shanghai', weekday: 'long', month: 'long', day: 'numeric' });
   
   // Calculate today's achievements
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -1848,13 +1852,11 @@ export async function generateHeroCard(grouped, sourceData, llmClient, profileCo
 - 提及具体数字（如果显著）
 - 不要空泛的套话
 - 最多 120 字符
-- 用中文
+- Write in ${locale === 'zh' ? 'Simplified Chinese' : 'English'}
 
-示例: "今天有 ${actionCount} 件事需要你处理，其中 ${urgentCount} 件比较紧急。让我们一起搞定它们！"
+JSON: {"narrative": "1-2 sentence narrative"}`;
 
-JSON: {"narrative": "你的 1-2 句叙述"}`;
-
-  let narrative = `今天有 ${actionCount + urgentCount} 件待处理，其中 ${urgentCount} 件比较紧急。`;
+  let narrative = t('tile.hero.narrative_fallback', locale, { n: actionCount + urgentCount, urgent: urgentCount });
   try {
     let fullText = '';
     for await (const chunk of llmClient.stream({
@@ -1874,12 +1876,13 @@ JSON: {"narrative": "你的 1-2 句叙述"}`;
     id: `card_hero_${Date.now()}`,
     type: 'hero',
     title: `${date} · ${timeOfDay}`,
-    body: `${greeting}, ${profileContext?.name || '你'}`,
+    body: `${greeting}, ${profileContext?.name || (locale === 'zh' ? '你' : 'there')}`,
     source: 'system',
     sourceId: `hero:${new Date().toISOString().split('T')[0]}`,
     priority: 'high',
     status: 'active',
     size: 'large',
+    metadata: { lang: locale },
     blocks: [
       {
         type: 'narrative',
@@ -1889,9 +1892,9 @@ JSON: {"narrative": "你的 1-2 句叙述"}`;
         type: 'achievement-rings',
         rings: [
           // Real counts only; there is no invented daily target, so rings carry no max.
-          { label: '今日合并（与你相关的 PR）', value: prsMergedToday, max: null, color: '#00d084' },
-          { label: '今日关闭（相关 issue）', value: issuesClosedToday, max: null, color: '#4a6cf7' },
-          { label: '最近 24h 已读邮件', value: emailsProcessed, max: null, color: '#ffa600' },
+          { label: t('tile.hero.ring_merged', locale), value: prsMergedToday, max: null, color: '#00d084' },
+          { label: t('tile.hero.ring_closed', locale), value: issuesClosedToday, max: null, color: '#4a6cf7' },
+          { label: t('tile.hero.ring_mail', locale), value: emailsProcessed, max: null, color: '#ffa600' },
         ],
       },
     ],
@@ -1998,22 +2001,24 @@ JSON: {
     suggestedBlocks = [];
   }
   
+  const locale = resolveLang(profileContext?.lang || DEFAULT_LOCALE);
   return {
     id: `card_timetable_${Date.now()}`,
     type: 'timetable',
-    title: '我的一天',
-    body: events.length > 0 ? `已安排 ${events.length} 个日程` : '规划你的一天',
+    title: t('tile.tt.title', locale),
+    body: events.length > 0 ? t('tile.tt.body_planned', locale, { n: events.length }) : t('tile.tt.body_empty', locale),
     source: 'system',
     sourceId: `timetable:${new Date().toISOString().split('T')[0]}`,
     priority: 'high',
     status: 'active',
     size: 'wide',
+    metadata: { lang: locale },
     blocks: [{
       type: 'timetable',
       fixedBlocks,
       suggestedBlocks,
       nowTime: now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false }),
-      ...(tzMismatch ? { tzNote: '日历原时区不是北京时间，已按 Asia/Shanghai 显示' } : {}),
+      ...(tzMismatch ? { tzNote: t('tile.tt.tz_note', locale) } : {}),
     }],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -2023,7 +2028,7 @@ JSON: {
 /**
  * Generate achievements tile with streak and contribution heatmap
  */
-export function generateAchievementsTile(sourceData, items) {
+export function generateAchievementsTile(sourceData, items, lang = DEFAULT_LOCALE) {
   const githubItems = allGithubItems(sourceData);
   
   // Calculate total merged PRs
@@ -2073,33 +2078,101 @@ export function generateAchievementsTile(sourceData, items) {
   
   if (mergedPRs === 0 && streak === 0) return null; // Skip if no data
   
+  const locale = resolveLang(lang);
   return {
     id: `card_achievements_${Date.now()}`,
     type: 'achievements-tile',
-    title: '成就统计',
-    body: `连续活跃 ${streak} 天，已合并 ${mergedPRs} 个 PR`,
+    title: t('tile.ach.title', locale),
+    body: t('tile.ach.body', locale, { streak, n: mergedPRs }),
     source: 'system',
     sourceId: `achievements:${new Date().toISOString().split('T')[0]}`,
     priority: 'medium',
     status: 'active',
     size: 'wide',
+    metadata: { lang: locale },
     blocks: [
       {
         type: 'stat-row',
         stats: [
-          { label: '已合并 PR', value: mergedPRs, color: '#00d084' },
-          { label: '连续活跃天数', value: streak, color: '#4a6cf7' },
+          { label: t('tile.ach.merged', locale), value: mergedPRs, color: '#00d084' },
+          { label: t('tile.ach.streak', locale), value: streak, color: '#4a6cf7' },
         ],
       },
       {
         type: 'heatmap',
         data: heatmapData,
-        label: '最近 8 周贡献',
+        label: t('tile.ach.heatmap', locale),
       },
     ],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
+}
+
+
+/** Re-paint hero / My day / achievements chrome for the page language (no new digest). */
+export function paintSystemChrome(card, lang = DEFAULT_LOCALE) {
+  if (!card || typeof card !== 'object') return card
+  const locale = resolveLang(lang)
+  if (card.type === 'hero') {
+    const now = new Date()
+    const hour = now.getHours()
+    const periodKey = hour < 12 ? 'tile.hero.period_morning' : hour < 17 ? 'tile.hero.period_afternoon' : 'tile.hero.period_evening'
+    const greetKey = hour < 12 ? 'tile.hero.greet_morning' : hour < 17 ? 'tile.hero.greet_afternoon' : 'tile.hero.greet_evening'
+    const dateLocale = locale === 'zh' ? 'zh-CN' : 'en-US'
+    const date = now.toLocaleDateString(dateLocale, { timeZone: 'Asia/Shanghai', weekday: 'long', month: 'long', day: 'numeric' })
+    const name = String(card.body || '').split(/[,，]/)[1]?.trim() || (locale === 'zh' ? '你' : 'there')
+    return {
+      ...card,
+      title: `${date} · ${t(periodKey, locale)}`,
+      body: `${t(greetKey, locale)}, ${name}`,
+      metadata: { ...(card.metadata || {}), lang: locale },
+      blocks: (card.blocks || []).map(b => {
+        if (b?.type !== 'achievement-rings' || !Array.isArray(b.rings)) return b
+        const labels = [t('tile.hero.ring_merged', locale), t('tile.hero.ring_closed', locale), t('tile.hero.ring_mail', locale)]
+        return { ...b, rings: b.rings.map((r, i) => ({ ...r, label: labels[i] || r.label })) }
+      }),
+    }
+  }
+  if (card.type === 'timetable') {
+    const tt = (card.blocks || []).find(b => b?.type === 'timetable') || {}
+    const n = Array.isArray(tt.fixedBlocks) ? tt.fixedBlocks.length : 0
+    return {
+      ...card,
+      title: t('tile.tt.title', locale),
+      body: n > 0 ? t('tile.tt.body_planned', locale, { n }) : t('tile.tt.body_empty', locale),
+      metadata: { ...(card.metadata || {}), lang: locale },
+      blocks: (card.blocks || []).map(b => {
+        if (b?.type !== 'timetable' || !b.tzNote) return b
+        return { ...b, tzNote: t('tile.tt.tz_note', locale) }
+      }),
+    }
+  }
+  if (card.type === 'achievements-tile') {
+    const stats = (card.blocks || []).find(b => b?.type === 'stat-row')?.stats || []
+    const merged = Number(stats.find(x => /PR|合并|merged/i.test(String(x.label || '')))?.value ?? stats[0]?.value ?? 0)
+    const streak = Number(stats.find(x => /streak|连续|活跃/i.test(String(x.label || '')))?.value ?? stats[1]?.value ?? 0)
+    return {
+      ...card,
+      title: t('tile.ach.title', locale),
+      body: t('tile.ach.body', locale, { streak, n: merged }),
+      metadata: { ...(card.metadata || {}), lang: locale },
+      blocks: (card.blocks || []).map(b => {
+        if (b?.type === 'stat-row' && Array.isArray(b.stats)) {
+          return {
+            ...b,
+            stats: b.stats.map((st, i) => ({
+              ...st,
+              label: i === 0 ? t('tile.ach.merged', locale) : i === 1 ? t('tile.ach.streak', locale) : st.label,
+            })),
+          }
+        }
+        if (b?.type === 'heatmap') return { ...b, label: t('tile.ach.heatmap', locale) }
+        return b
+      }),
+    }
+  }
+  return card
 }
 
 /**

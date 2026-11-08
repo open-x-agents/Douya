@@ -29,7 +29,7 @@ import { sweepClearedCards, applyClearance, cardClearance, completeClearedCard }
 import { findTimetableCard, readPlan, applyPlanEdit, todaysCalendarEvents, localDay, localDays, pruneWeekPlans, hhmm } from './timetable-plan.js';
 import { uiView } from '../ui/ops.js';
 import { createSurfaceService } from '../ui/surfaces.js';
-import { resolveDisplayName, lastGithubIdentity } from './aggregation.js';
+import { resolveDisplayName, lastGithubIdentity, paintSystemChrome } from './aggregation.js';
 import { listMemories as listMemoriesStore, forgetMemory as forgetMemoryStore, MAX_PREFS } from '../digest/runner.js';
 import { attachMemoryImage, downloadMemoryImage } from '../digest/openviking.js';
 import { recordCompletion, setItemStatus, clearItemStatus, annotateCards, cardItemUrls } from '../host/store.js'
@@ -1102,7 +1102,8 @@ export function createApiRouter(ctx) {
           lastDigestAt: state.lastDigest?.generatedAt || null,
           cards: annotateCards(activeCards, state.itemStatus).map(c => {
             if (c.type === 'view') return { ...c, view: surfaceService.cardView(c) };
-            const cleared = applyClearance(c, state.itemStatus || {});
+            const painted = paintSystemChrome(c, locale);
+            const cleared = applyClearance(painted, state.itemStatus || {});
             const prepared = cleared.clearance === 'cleared' ? [] : prepareCardActions(cleared, { itemStatus: state.itemStatus || {}, lang: locale });
             const faceOpts = { itemStatus: state.itemStatus || {}, events: calToday, lang: locale };
             const faceView = hydrateFace(cleared, cleared.face || autoFace(cleared), faceOpts) || (cleared.face ? hydrateFace(cleared, autoFace(cleared), faceOpts) : null);

@@ -33,4 +33,7 @@ test('Today header source line comes from live ACTIVE connected sources, incl. C
   assert.equal(todaySourcesText(null, [{ source: 'github' }, { source: 'bot' }, { source: 'system' }], 'en'), 'GitHub')
   assert.equal(todaySourcesText([], [], 'en'), 'No sources yet')
   assert.equal(todaySourcesText([], [], 'zh'), '暂无数据')
+  assert.equal(todaySourcesText([acc('youtube'), acc('gmail')], [], 'en'), 'Gmail, YouTube')
+  assert.equal(todaySourcesText([acc('youtube'), acc('gmail')], [], 'en', ['youtube']), 'Gmail, YouTube (failed)')
+  assert.equal(todaySourcesText([acc('youtube')], [], 'zh', ['youtube']), 'YouTube（失败）')
 })

@@ -1040,7 +1040,20 @@ export function createApiRouter(ctx) {
         // Source line: the live ACTIVE connected accounts (信源状态's cache, never blocks long); cards only as a fallback.
         let accts = null;
         try { const r = await connectedAccounts(); accts = Array.isArray(r?.items) ? r.items : null; } catch { accts = null; }
-        const sourcesText = todaySourcesText(accts, activeCards, locale);
+        // Mark sources that failed on the latest bot digest (e.g. YouTube quota) so the stamp does not look healthy.
+        const failedSlugs = [];
+        try {
+          const last = (botDigest?.store?.get?.()?.runs || [])[0] || null;
+          const live = botDigest?.live?.() || null;
+          const bags = [last?.aux, last?.channels, live?.channels];
+          for (const bag of bags) {
+            if (!bag || typeof bag !== 'object') continue;
+            for (const [slug, v] of Object.entries(bag)) {
+              if (v && (v.status === 'failed' || v.status === 'timeout') && !failedSlugs.includes(slug)) failedSlugs.push(slug);
+            }
+          }
+        } catch {}
+        const sourcesText = todaySourcesText(accts, activeCards, locale, failedSlugs);
 
         // Display name ONLY from connected sources (GitHub name → login). Never profile.json.
         const home = config.home || '.odm-data';
@@ -2626,12 +2639,12 @@ export function mountApiRoutes(server, router, { extraRoutes = [] } = {}) {
 
 export default { createApiRouter, mountApiRoutes };
 
-const SOURCE_ORDER = ['gmail', 'github', 'slack', 'googlecalendar'];
+const SOURCE_ORDER = ['gmail', 'github', 'slack', 'googlecalendar', 'youtube'];
 /** Today header source list: ACTIVE connected accounts, else card sources. Labels follow lang. */
-export function todaySourcesText(accounts, cards = [], lang = DEFAULT_LOCALE) {
+export function todaySourcesText(accounts, cards = [], lang = DEFAULT_LOCALE, failedSlugs = []) {
   const locale = resolveLang(lang);
   const label = {
-    gmail: 'Gmail', github: 'GitHub', slack: 'Slack',
+    gmail: 'Gmail', github: 'GitHub', slack: 'Slack', youtube: 'YouTube',
     googlecalendar: i18nT('source.calendar', locale),
     google_calendar: i18nT('source.calendar', locale),
     notion: 'Notion', linear: 'Linear', outlook: 'Outlook',
@@ -2641,5 +2654,9 @@ export function todaySourcesText(accounts, cards = [], lang = DEFAULT_LOCALE) {
   if (!slugs.length) return i18nT('stamp.none', locale);
   const rank = s => { const i = SOURCE_ORDER.indexOf(s === 'google_calendar' ? 'googlecalendar' : s); return i < 0 ? 99 : i; };
   const join = locale === 'zh' ? '、' : ', ';
-  return [...new Set(slugs.sort((a, b) => rank(a) - rank(b)).map(s => label[s] || s))].join(join);
+  const failed = new Set(Array.isArray(failedSlugs) ? failedSlugs : []);
+  return [...new Set(slugs.sort((a, b) => rank(a) - rank(b)).map(s => {
+    const name = label[s] || (s === 'youtube' ? 'YouTube' : s)
+    return failed.has(s) ? (locale === 'zh' ? `${name}（失败）` : `${name} (failed)`) : name
+  }))].join(join);
 }

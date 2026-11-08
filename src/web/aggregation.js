@@ -1753,7 +1753,7 @@ export async function runAggregationPipeline(composioClient, activeSources, llmC
   console.log(`[Aggregation] Deduped to ${deduped.length} items`);
   
   console.log('[Aggregation] Stage 3.5: Clustering by project/theme...');
-  const clusters = clusterByProjectTheme(deduped);
+  const clusters = clusterByProjectTheme(deduped, { lang: profileContext?.lang || 'en' });
   console.log(`[Aggregation] Clustered into ${clusters.length} themed tiles`);
   
   console.log('[Aggregation] Stage 4: Classifying clusters...');

@@ -280,3 +280,65 @@ test("digest preferences reach the next run's source bots and the Chief", async 
   for (const p of [github, chief]) assert.ok(p.includes('GitHub 只留要我处理的'), 'a channel pref reaches its channel and the Chief')
   assert.ok(!gmail.includes('GitHub 只留要我处理的'), 'a channel pref stays out of the other channel')
 })
+
+test('EN page: email-group body stays English after overlay of a Chinese candidate summary', () => {
+  const items = [
+    mail('c1', '[acme/app] Run failed: tests - main', 'GitHub <notifications@github.com>'),
+    mail('c2', '[acme/app] PR run failed: lint', 'GitHub <notifications@github.com>'),
+  ]
+  const gsnap = buildSnapshot('gmail', items, {})
+  const refs = gsnap.rows.map(r => r.ref)
+  const gm = validateCandidates('gmail', [{
+    title: 'CI 失败',
+    category: 'code',
+    needsAction: true,
+    summary: '两条 CI 通知，其中一条失败，需要你先看失败日志。',
+    nextStep: '先看失败日志',
+    items: refs,
+  }], gsnap).candidates
+  const plan = validatePlan({ merges: [], cards: [] }, gm)
+  const { cards } = buildCards({ gmail: gsnap }, { gmail: gm }, plan, { today: DAY, lang: 'en' })
+  const code = cards.find(c => c.type === 'email-group' && c.metadata?.group === 'code')
+  assert.ok(code, 'code group exists')
+  assert.equal(code.title, 'CI & code')
+  assert.match(code.body, /CI\/code|failure/i)
+  assert.doesNotMatch(code.body, /两条|失败日志/)
+  assert.match(code.nextAction, /failure|Check|dismiss/i)
+  assert.doesNotMatch(code.nextAction, /先看失败/)
+  assert.equal(code.metadata?.lang, 'en')
+})
+
+test('sourcePrompt asks for candidate text in the page language', async () => {
+  const { sourcePrompt } = await import('../src/digest/runner.js')
+  const en = sourcePrompt('gmail', { prefs: [], memory: [], now: Date.now(), lang: 'en' })
+  assert.match(en, /Write every candidate title, summary, and nextStep in English/)
+  const zh = sourcePrompt('gmail', { prefs: [], memory: [], now: Date.now(), lang: 'zh' })
+  assert.match(zh, /简体中文/)
+})
+
+test('legacy clusterByProjectTheme keeps ZH mail tiles when lang is zh', async () => {
+  const items = [
+    mail('z1', '[acme/app] Run failed: tests - main', 'GitHub <notifications@github.com>'),
+    mail('z2', '50% off everything', 'Shop <deals@shop.com>', ['CATEGORY_PROMOTIONS']),
+  ]
+  const clusters = agg.clusterByProjectTheme(items, { lang: 'zh' })
+  const code = clusters.find(c => c.type === 'email-group' && c.metadata?.group === 'code')
+  const promo = clusters.find(c => c.type === 'email-group' && c.metadata?.group === 'promo')
+  assert.equal(code?.title, 'CI与代码通知')
+  assert.match(code?.body || '', /CI|代码|失败/)
+  assert.equal(promo?.title, '促销与订阅')
+  assert.match(promo?.body || '', /促销/)
+  const en = agg.clusterByProjectTheme(items, { lang: 'en' })
+  assert.equal(en.find(c => c.metadata?.group === 'code')?.title, 'CI & code')
+})
+
+test('getToday persists prefs.lang so digests match the page', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'odm-lang-'))
+  const store = createStore(join(home, 'state.json'))
+  await store.load()
+  const router = createApiRouter({ store, config: { home, dataDir: home } })
+  await router.getToday({ lang: 'zh' })
+  assert.equal(store.get().prefs?.lang, 'zh')
+  await router.getToday({ lang: 'en' })
+  assert.equal(store.get().prefs?.lang, 'en')
+})

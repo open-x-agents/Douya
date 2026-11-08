@@ -112,9 +112,12 @@ export function existingCardsFor(cards, channel = null) {
     .slice(0, 40).map(c => ({ id: c.id, key: stableKey(c), title: clip(c.title, 40), status: c.status || 'active', items: linkUrls(c).length }))
 }
 
-function sourcePrompt(channel, { prefs, memory, now, existing = [] }) {
+export function sourcePrompt(channel, { prefs, memory, now, existing = [], lang = DEFAULT_LOCALE } = {}) {
   const c = CHANNELS[channel]
+  const locale = resolveLang(lang)
+  const langNote = t('digest.source_lang', locale)
   return `【汇聚 · ${c.label} 信源 Bot】现在 ${shNow(now)}（Asia/Shanghai）。你只负责 ${c.label} 这一个渠道，为「今天」页准备候选卡。
+${langNote}
 步骤：
 1. 调 odm_digest_snapshot 拿本渠道快照（已去掉用户完成/忽略的条目）。每条有 ref（如 ${c.letter}3）。
 2. 需要细节时可以用本渠道只读工具（${c.readTools.join('、')}）；不要做任何写操作、不要发消息。
@@ -174,7 +177,7 @@ function calendarLines(data) {
   return `\n今天日历里的真实日程（timeline 不能和它们重叠）：${ev.slice(0, 12).map(e => `${t(e.start?.dateTime || e.start?.date)}–${t(e.end?.dateTime || e.end?.date)} ${clip(e.summary || '日程', 24)}`).join('；')}`
 }
 
-function chiefPrompt({ candidates, statuses, prefs, chiefMemory, now, existing, lang = DEFAULT_LOCALE }) {
+export function chiefPrompt({ candidates, statuses, prefs, chiefMemory, now, existing, lang = DEFAULT_LOCALE }) {
   const locale = resolveLang(lang)
   const langNote = t('digest.chief_lang', locale)
   const rows = candidates.map(c => ({ id: c.id, target: c.target, ch: c.channel, cat: c.category, title: c.title, needs: c.needsAction, pri: c.priority, next: c.nextStep, summary: c.summary, n: c.items.length, items: c.itemTitles }))
@@ -315,7 +318,7 @@ export function createBotDigest(deps) {
       bySession.set(sid, { role: channel, run }); ch.sessionId = sid
       const s = digestStore.get()
       const prefs = s.prefs.filter(p => !p.channel || p.channel === channel)
-      const turn = await runTurn(ctx, sid, sourcePrompt(channel, { prefs, memory: s.memory[channel] || [], now: Date.now(), existing: existingCardsFor(store.get()?.cards, channel) }), { timeoutMs: deps.sourceTimeoutMs || 150_000 })
+      const turn = await runTurn(ctx, sid, sourcePrompt(channel, { prefs, memory: s.memory[channel] || [], now: Date.now(), existing: existingCardsFor(store.get()?.cards, channel), lang: resolveLang(store.get()?.prefs?.lang || deps.profileContext?.()?.lang || DEFAULT_LOCALE) }), { timeoutMs: deps.sourceTimeoutMs || 150_000 })
       ch.usage = turn.usage; ch.turnMs = turn.ms
       if (!ch.candidates) { ch.status = turn.timeout ? 'timeout' : 'failed'; ch.error = turn.timeout ? '超时，没有提交候选卡' : '没有提交候选卡' }
       else { ch.status = 'done'; ch.cards = ch.candidates.length }

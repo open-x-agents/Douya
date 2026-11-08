@@ -98,7 +98,7 @@ function groupCopy(key, list, senders, lang = DEFAULT_LOCALE) {
       const failed = list.filter(i => CI_TEXT.test(i.title || ''))
       const repos = [...new Set(list.map(i => ((i.title || '').match(/\[([\w.-]+\/[\w.-]+)\]/) || [])[1]).filter(Boolean))]
       const reposTxt = repos.length ? t('mail.copy.code_repos', locale, { repos: repos.slice(0, 3).join(locale === 'zh' ? '、' : ', ') }) : t('mail.copy.code_from', locale, { who })
-      const failedTxt = failed.length ? t('mail.copy.code_failed', locale, { n: failed.length }) : ''
+      const failedTxt = failed.length === 1 ? t('mail.copy.code_failed_one', locale) : (failed.length ? t('mail.copy.code_failed', locale, { n: failed.length }) : '')
       return {
         body: t('mail.copy.code', locale, { n, repos: reposTxt, failed: failedTxt }),
         nextAction: failed.length
@@ -218,16 +218,17 @@ export function foldGithubNotifsIntoRepos(cards = []) {
       g.topItems = keep.slice(0, 3)
       let ll = (g.blocks || []).find(b => b.type === 'link-list')
       if (!ll) { ll = { type: 'link-list', links: [] }; (g.blocks ||= []).push(ll) }
-      ll.links = keep.slice(0, MAX_GROUP_LINKS).map(emailLink)
+      ll.links = keep.slice(0, MAX_GROUP_LINKS).map(it => emailLink(it, g.metadata?.lang || DEFAULT_LOCALE))
       refreshGroupCard(g)
     }
   }
   return { folded, droppedFromCode: folded }
 }
 
-export function emailLink(it) {
+export function emailLink(it, lang = DEFAULT_LOCALE) {
+  const locale = resolveLang(lang)
   return {
-    title: clip(clean(it.title) || '(无主题)', 90),
+    title: clip(clean(it.title) || t('mail.no_subject', locale), 90),
     url: it.url,
     type: 'email',
     from: nameOf(it.metadata?.from || it.body),
@@ -279,7 +280,7 @@ export function buildEmailClusters(emailItems, { today = new Date().toISOString(
       topItems: [it],
       nextAction: t('mail.single_next', locale, { who, title: clip(clean(it.title), 28) }),
       waiting: 'you',
-      blocks: [{ type: 'link-list', links: [emailLink(it)] }],
+      blocks: [{ type: 'link-list', links: [emailLink(it, locale)] }],
       actions: [{ label: t('mail.reply_who', locale, { who }), value: it.url, primary: true }],
       metadata: { group: 'action', from: it.metadata?.from, lang: locale },
       createdAt: new Date(now).toISOString(),
@@ -313,7 +314,7 @@ export function buildEmailClusters(emailItems, { today = new Date().toISOString(
       blocks: [
         { type: 'stat', value: sorted.length, label: t('mail.stat_label', locale) },
         { type: 'tags', tags: senders.map(s => ({ text: s.count > 1 ? `${s.name} ×${s.count}` : s.name, color: key === 'action' ? 'orange' : 'gray' })) },
-        { type: 'link-list', links: sorted.slice(0, MAX_GROUP_LINKS).map(emailLink) },
+        { type: 'link-list', links: sorted.slice(0, MAX_GROUP_LINKS).map(it => emailLink(it, locale)) },
       ],
       actions: [{ label: t('mail.open_first', locale, { title: clip(clean(sorted[0].title), 24) }), value: sorted[0].url, primary: true }],
       metadata: { group: key, count: sorted.length, senders, needsAction: copy.waiting === 'you', lang: locale },

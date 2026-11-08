@@ -1,3 +1,4 @@
+import { t, resolveLang, DEFAULT_LOCALE } from '../i18n/index.js'
 import { SOURCE_RECIPES, sourceCluster, UNSCANNED_REASONS } from '../web/source-recipes.js'
 import { youtubeItems, youtubeCluster } from '../web/youtube.js'
 // Bot digest runner: one dsh session per channel (source bots) in parallel, then a separate Chief digest session
@@ -173,7 +174,9 @@ function calendarLines(data) {
   return `\n今天日历里的真实日程（timeline 不能和它们重叠）：${ev.slice(0, 12).map(e => `${t(e.start?.dateTime || e.start?.date)}–${t(e.end?.dateTime || e.end?.date)} ${clip(e.summary || '日程', 24)}`).join('；')}`
 }
 
-function chiefPrompt({ candidates, statuses, prefs, chiefMemory, now, existing }) {
+function chiefPrompt({ candidates, statuses, prefs, chiefMemory, now, existing, lang = DEFAULT_LOCALE }) {
+  const locale = resolveLang(lang)
+  const langNote = t('digest.chief_lang', locale)
   const rows = candidates.map(c => ({ id: c.id, target: c.target, ch: c.channel, cat: c.category, title: c.title, needs: c.needsAction, pri: c.priority, next: c.nextStep, summary: c.summary, n: c.items.length, items: c.itemTitles }))
   return `【汇聚 · Chief】现在 ${shNow(now)}（Asia/Shanghai）。各渠道信源 Bot 已给出候选卡，你来合并成今天页。
 渠道状态：${statuses}
@@ -189,6 +192,7 @@ ${chiefMemory ? `\n你的长期记忆（关于用户）：\n${clip(chiefMemory, 
 1. 去重 / 跨渠道合并：同一件事在多个渠道（GitHub 通知邮件 + 对应 PR 卡；Slack 里讨论某个 PR）→ merges:[{"into":"github:0","from":["gmail:3"],"reason":"同一 PR"}]。只合并确实是同一件事的；into 填工作本身那张（GitHub/Slack 卡），from 填通知邮件。不确定就别合并。
 2. 排优先级：cards:[{"id","priority":"urgent|high|medium|low","nextStep"?,"title"?}]，按重要性从高到低列出（不列的保持原样）。先排「有人卡在等你 / 有截止 / CI 挂了」的，再排普通待办；促销/社交类保持 low。改写 nextStep 时只能用候选卡里出现过的编号，必须是动词+具体对象。
 3. 今天的标题 headline（≤20 字）和 narrative（一两句：今天最该先做什么，基于真实候选卡）。
+${langNote}
 4. timeline：今天剩余时间的建议安排 3~6 段 [{"start":"HH:MM","end":"HH:MM","title","category":"focus|work|review|meeting|break|admin|personal"}]，从现在之后开始；不要和真实日历冲突。
 然后调用一次 odm_digest_commit，参数 plan 是上述 JSON 对象（字符串）。返回 errors 时修正后重试一次。最后回复一行：已提交。`
 }
@@ -361,6 +365,7 @@ export function createBotDigest(deps) {
       const t0 = Date.now()
       const runRec = { id: `d${t0.toString(36)}`, startedAt: new Date(t0).toISOString(), status: 'running', channels: {}, chief: { status: 'queued' } }
       liveRun = runRec
+      const lang = resolveLang(store.get()?.prefs?.lang || deps.profileContext?.()?.lang || DEFAULT_LOCALE)
       try {
         const res = await deps.client().getConnectedAccounts()
         const accounts = (res?.items || []).filter(a => a.status === 'ACTIVE' && a.toolkit?.slug)
@@ -395,7 +400,7 @@ export function createBotDigest(deps) {
           ...Object.values(runRec.aux).map(v => `${v.label} ${v.status === 'done' ? `完成 · ${v.note}` : `${v.status === 'skipped' ? '跳过' : '失败'}（${v.error || v.status}）`}`),
         ].join('；') + calendarLines(auxData)
         if (!all.length) {
-          runRec.plan = { headline: '今天没有新待办', narrative: '各信源没有需要处理的新条目；日程与时间表仍按日历刷新。', merges: [], edits: new Map(), timeline: [], errors: [] }
+          runRec.plan = { headline: t('digest.empty_headline', lang), narrative: t('digest.empty_narrative', lang), merges: [], edits: new Map(), timeline: [], errors: [] }
           runRec.chief.status = 'skipped'
           runRec.chief.note = 'zero candidates'
           progress(runRec)
@@ -405,7 +410,7 @@ export function createBotDigest(deps) {
           bySession.set(chiefSid, { role: 'chief', run: runRec }); runRec.chief.sessionId = chiefSid
           const s = digestStore.get()
           const pinned = (store.get()?.cards || []).filter(c => c.pinned && c.status === 'active').slice(0, 6).map(c => clip(c.title, 30)).join('、')
-          const turn = await runTurn(ctx, chiefSid, chiefPrompt({ candidates: all, statuses, prefs: s.prefs, chiefMemory: (await deps.chiefMemory?.()) || '', now: Date.now(), existing: pinned }), { timeoutMs: deps.chiefTimeoutMs || 150_000 })
+          const turn = await runTurn(ctx, chiefSid, chiefPrompt({ candidates: all, statuses, prefs: s.prefs, chiefMemory: (await deps.chiefMemory?.()) || '', now: Date.now(), existing: pinned, lang }), { timeoutMs: deps.chiefTimeoutMs || 150_000 })
           runRec.chief.usage = turn.usage; runRec.chief.ms = turn.ms
           if (!runRec.plan) throw new Error(turn.timeout ? 'Chief 汇聚超时，没有提交' : 'Chief 没有提交汇聚计划')
           runRec.chief.status = 'done'; progress(runRec)
@@ -415,7 +420,7 @@ export function createBotDigest(deps) {
         const snaps = Object.fromEntries(ok.map(([k, v]) => [k, v.snapshot]))
         const cands = Object.fromEntries(ok.map(([k, v]) => [k, v.candidates]))
         const today = new Date().toISOString().split('T')[0]
-        const built = buildCards(snaps, cands, runRec.plan, { today })
+        const built = buildCards(snaps, cands, runRec.plan, { today, lang })
         const valid = new Set(Object.values(snaps).flatMap(s => [...s.byUrl.keys()]))
         const bad = invalidLinks(built.cards, valid)
         for (const c of built.cards) for (const b of c.blocks || []) if (b.links) b.links = b.links.filter(l => !l?.url || valid.has(l.url))
@@ -423,13 +428,14 @@ export function createBotDigest(deps) {
         const items = A.dedupeItems(A.normalizeItems(sourceData))
         const fake = obj => ({ async *stream() { yield { type: 'text', text: JSON.stringify(obj) } } })
         const grouped = { urgent: [], action: [], fyi: [] }
-        const hero = await A.generateHeroCard(grouped, sourceData, fake({ narrative: [runRec.plan.headline, runRec.plan.narrative].filter(Boolean).join('：') }), deps.profileContext?.() || {})
-        const timetable = await A.generateTimetable(grouped, sourceData, fake({ suggestedBlocks: runRec.plan.timeline }), deps.profileContext?.() || {})
+        const profile = { ...(deps.profileContext?.() || {}), lang }
+        const hero = await A.generateHeroCard(grouped, sourceData, fake({ narrative: [runRec.plan.headline, runRec.plan.narrative].filter(Boolean).join('：') }), profile)
+        const timetable = await A.generateTimetable(grouped, sourceData, fake({ suggestedBlocks: runRec.plan.timeline }), profile)
         const ach = A.generateAchievementsTile(sourceData, items)
-        const yt = youtubeCluster(youtubeItems(auxData.youtube), deps.profileContext?.()?.lang || 'en')
+        const yt = youtubeCluster(youtubeItems(auxData.youtube), lang)
         const youtubeCards = yt ? A.generateClusterCards({ urgent: [], action: [], fyi: [yt] }) : []
         const genericCards = Object.keys(SOURCE_RECIPES).flatMap(slug => {
-          const c = sourceCluster(auxData[slug]?.items || [], deps.profileContext?.()?.lang || 'en')
+          const c = sourceCluster(auxData[slug]?.items || [], lang)
           return c ? A.generateClusterCards({ urgent: [], action: [], fyi: [c] }) : []
         })
         const cards = [hero, timetable, ...youtubeCards, ...genericCards, ...built.cards, ...(ach ? [ach] : [])]

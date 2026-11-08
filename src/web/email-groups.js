@@ -1,3 +1,4 @@
+import { t, resolveLang, DEFAULT_LOCALE } from '../i18n/index.js'
 /**
  * Email → category cluster cards for the Today grid.
  *
@@ -10,12 +11,17 @@ const MAX_SINGLES = 4
 const MAX_GROUP_LINKS = 60
 
 export const GROUPS = {
-  action: { label: '需要你处理', icon: 'person', order: 0 },
-  code: { label: 'CI与代码通知', icon: 'code', order: 1 },
-  security: { label: '账号与安全通知', icon: 'shield', order: 2 },
-  updates: { label: '服务与通知', icon: 'bell', order: 3 },
-  social: { label: '社交通知', icon: 'chat', order: 4 },
-  promo: { label: '促销与订阅', icon: 'tag', order: 5 },
+  action: { labelKey: 'mail.group.action', icon: 'person', order: 0 },
+  code: { labelKey: 'mail.group.code', icon: 'code', order: 1 },
+  security: { labelKey: 'mail.group.security', icon: 'shield', order: 2 },
+  updates: { labelKey: 'mail.group.updates', icon: 'bell', order: 3 },
+  social: { labelKey: 'mail.group.social', icon: 'chat', order: 4 },
+  promo: { labelKey: 'mail.group.promo', icon: 'tag', order: 5 },
+}
+/** Display label for a mail group in the page language. */
+export function groupLabel(key, lang = DEFAULT_LOCALE) {
+  const g = GROUPS[key]
+  return g ? t(g.labelKey, resolveLang(lang)) : key
 }
 
 const BOT_SENDER = /no-?reply|do-?not-?reply|notifications?@|notify@|alerts?@|mailer|news(letter)?@|info@|hello@|marketing|promo|offers?@|deals?@|updates?@|support@|team@|account(s)?@|billing@|digest|bounce|@e\.|@em\.|@email\.|@mail\.|@m\.|@mg\.|@send\.|@reply\./i
@@ -71,70 +77,80 @@ function topSenders(list, n = 3, key = null) {
   return [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([name, c]) => ({ name, count: c }))
 }
 
-function groupCopy(key, list, senders) {
+function groupCopy(key, list, senders, lang = DEFAULT_LOCALE) {
+  const locale = resolveLang(lang)
   const n = list.length
-  const who = senders.map(s => s.name).join('、')
-  const more = n > senders.length ? ' 等' : ''
+  const who = senders.map(s => s.name).join(locale === 'zh' ? '、' : ', ')
+  const more = n > senders.length ? (locale === 'zh' ? ' 等' : '…') : ''
   const unread = list.filter(i => (i.metadata?.labelIds || []).includes('UNREAD') || i.type === 'email-unread').length
-  const unreadTxt = unread ? `，${unread} 封未读` : ''
+  const unreadTxt = unread ? (locale === 'zh' ? `，${unread} 封未读` : `, ${unread} unread`) : ''
   switch (key) {
     case 'action': {
       const first = list[0]
+      const w = nameOf(first.metadata?.from || first.body)
       return {
-        body: `${n} 封来自真人的邮件${unreadTxt}：${who}${more}。可能需要你回复或确认。`,
-        nextAction: `先回复 ${nameOf(first.metadata?.from || first.body)}：「${clip(clean(first.title), 28)}」`,
+        body: t('mail.copy.action', locale, { n, unread: unreadTxt, who, more }),
+        nextAction: t('mail.copy.action_next', locale, { who: w, title: clip(clean(first.title), 28) }),
         waiting: 'you', priority: 'high',
       }
     }
     case 'code': {
       const failed = list.filter(i => CI_TEXT.test(i.title || ''))
       const repos = [...new Set(list.map(i => ((i.title || '').match(/\[([\w.-]+\/[\w.-]+)\]/) || [])[1]).filter(Boolean))]
+      const reposTxt = repos.length ? t('mail.copy.code_repos', locale, { repos: repos.slice(0, 3).join(locale === 'zh' ? '、' : ', ') }) : t('mail.copy.code_from', locale, { who })
+      const failedTxt = failed.length ? t('mail.copy.code_failed', locale, { n: failed.length }) : ''
       return {
-        body: `${n} 封 CI/代码通知${repos.length ? `，涉及 ${repos.slice(0, 3).join('、')}` : `，来自 ${who}`}${failed.length ? `；其中 ${failed.length} 封是失败告警` : ''}。`,
-        nextAction: failed.length ? `先看「${clip(clean(failed[0].title), 30)}」的失败日志` : `${n} 封无需立即处理，扫一眼后可一键全部忽略`,
+        body: t('mail.copy.code', locale, { n, repos: reposTxt, failed: failedTxt }),
+        nextAction: failed.length
+          ? t('mail.copy.code_next_fail', locale, { title: clip(clean(failed[0].title), 30) })
+          : t('mail.copy.code_next_ok', locale, { n }),
         waiting: failed.length ? 'you' : 'fyi', priority: failed.length ? 'medium' : 'low',
       }
     }
     case 'security':
       return {
-        body: `${n} 封账号与安全通知，来自 ${who}${more}。确认都是你本人操作即可。`,
-        nextAction: `确认 ${n} 封都是本人操作；有异常就改密码，其余一键忽略`,
+        body: t('mail.copy.security', locale, { n, who, more }),
+        nextAction: t('mail.copy.security_next', locale, { n }),
         waiting: 'you', priority: 'medium',
       }
     case 'social':
       return {
-        body: `${n} 条社交平台通知，来自 ${who}${more}。`,
-        nextAction: `${n} 条无需处理；想回复到对应平台，其余可一键全部忽略`,
+        body: t('mail.copy.social', locale, { n, who, more }),
+        nextAction: t('mail.copy.social_next', locale, { n }),
         waiting: 'fyi', priority: 'low',
       }
     case 'promo':
       return {
-        body: `${n} 封促销与订阅邮件，来自 ${who}${more}。没有需要你回复的。`,
-        nextAction: `促销 ${n} 封，无需处理，可一键全部忽略`,
+        body: t('mail.copy.promo', locale, { n, who, more }),
+        nextAction: t('mail.copy.promo_next', locale, { n }),
         waiting: 'fyi', priority: 'low',
       }
     default:
       return {
-        body: `${n} 封服务与系统通知（订单、账单、活动、平台消息等），来自 ${who}${more}。`,
-        nextAction: `${n} 封多为通知，扫一眼有无账单或截止日期，其余一键忽略`,
+        body: t('mail.copy.updates', locale, { n, who, more }),
+        nextAction: t('mail.copy.updates_next', locale, { n }),
         waiting: 'fyi', priority: 'low',
       }
   }
 }
 
-function copyFor(key, list, senders) {
-  const copy = groupCopy(key, list, senders)
-  if (list.length === 1 && key !== 'action' && copy.waiting !== 'you') copy.nextAction = `只有 1 封「${clip(clean(list[0].title), 24)}」，看一眼没事就忽略`
+function copyFor(key, list, senders, lang = DEFAULT_LOCALE) {
+  const copy = groupCopy(key, list, senders, lang)
+  if (list.length === 1 && key !== 'action' && copy.waiting !== 'you') {
+    copy.nextAction = t('mail.copy.single_fyi', resolveLang(lang), { title: clip(clean(list[0].title), 24) })
+  }
   return copy
 }
 
 /** Rebuild a group card's counts and copy from its link-list (after migration folded mail in). */
 function refreshGroupCard(g) {
   const ll = g.blocks.find(b => b.type === 'link-list')
+  const lang = g.metadata?.lang || DEFAULT_LOCALE
   const pseudo = ll.links.map(l => ({ title: l.title, url: l.url, body: `From: ${l.from || ''}`, metadata: { from: l.from || '' } }))
   const senders = topSenders(pseudo, 3, g.metadata?.group)
-  const copy = copyFor(g.metadata?.group, pseudo, senders)
-  Object.assign(g, { body: copy.body, why: copy.body, nextAction: copy.nextAction, clusterSize: pseudo.length, subtitle: `共 ${pseudo.length} 封` })
+  const copy = copyFor(g.metadata?.group, pseudo, senders, lang)
+  const n = pseudo.length
+  Object.assign(g, { body: copy.body, why: copy.body, nextAction: copy.nextAction, clusterSize: n, subtitle: resolveLang(lang) === 'zh' ? `共 ${n} 封` : `${n} emails`, title: groupLabel(g.metadata?.group, lang) })
   const stat = g.blocks.find(b => b.type === 'stat'); if (stat) stat.value = pseudo.length
   const tags = g.blocks.find(b => b.type === 'tags'); if (tags) tags.tags = senders.map(x => ({ text: x.count > 1 ? `${x.name} ×${x.count}` : x.name, color: tags.tags[0]?.color || 'gray' }))
   if (g.metadata) Object.assign(g.metadata, { count: pseudo.length, senders })
@@ -224,7 +240,8 @@ export function emailLink(it) {
  * @returns {object[]} clusters of type 'email-group' (one per non-empty category) and
  *   'email-action' (≤ MAX_SINGLES actionable mails from real people)
  */
-export function buildEmailClusters(emailItems, { today = new Date().toISOString().split('T')[0], now = Date.now(), assign = null } = {}) {
+export function buildEmailClusters(emailItems, { today = new Date().toISOString().split('T')[0], now = Date.now(), assign = null, lang = DEFAULT_LOCALE } = {}) {
+  const locale = resolveLang(lang)
   // assign (bot digest): Map sourceId -> 'single' | group key, decided by the Gmail source bot. Unassigned mail
   // falls back to the rule classifier; singles stay capped at MAX_SINGLES (overflow goes to 需要你处理).
   const buckets = new Map()
@@ -253,18 +270,18 @@ export function buildEmailClusters(emailItems, { today = new Date().toISOString(
       sourceId: `gmail:action:${it.sourceId}`,
       title: clip(clean(it.title), 80),
       subtitle: who,
-      body: `${who} 的来信${it.metadata?.snippet ? `：${clip(String(it.metadata.snippet?.body || it.metadata.snippet), 90)}` : ''}`,
+      body: t('mail.single_body', locale, { who, snippet: it.metadata?.snippet ? t('mail.single_body_snip', locale, { text: clip(String(it.metadata.snippet?.body || it.metadata.snippet), 90) }) : '' }),
       url: it.url,
       priority: 'high',
       status: 'active',
       clusterSize: 1,
       items: [it],
       topItems: [it],
-      nextAction: `回复 ${who}：「${clip(clean(it.title), 28)}」`,
+      nextAction: t('mail.single_next', locale, { who, title: clip(clean(it.title), 28) }),
       waiting: 'you',
       blocks: [{ type: 'link-list', links: [emailLink(it)] }],
-      actions: [{ label: `回复 ${who}`, value: it.url, primary: true }],
-      metadata: { group: 'action', from: it.metadata?.from },
+      actions: [{ label: t('mail.reply_who', locale, { who }), value: it.url, primary: true }],
+      metadata: { group: 'action', from: it.metadata?.from, lang: locale },
       createdAt: new Date(now).toISOString(),
       updatedAt: new Date(now).toISOString(),
     })
@@ -275,14 +292,14 @@ export function buildEmailClusters(emailItems, { today = new Date().toISOString(
     if (!list.length) continue
     const sorted = [...list].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
     const senders = topSenders(sorted, 3, key)
-    const copy = copyFor(key, sorted, senders)
+    const copy = copyFor(key, sorted, senders, locale)
     out.push({
       id: `email_group_${key}_${today}`,
       type: 'email-group',
       source: 'gmail',
       sourceId: `gmail:group:${key}:${today}`,
-      title: GROUPS[key].label,
-      subtitle: `共 ${sorted.length} 封`,
+      title: groupLabel(key, locale),
+      subtitle: locale === 'zh' ? `共 ${sorted.length} 封` : `${sorted.length} emails`,
       body: copy.body,
       why: copy.body,
       url: sorted.length === 1 ? sorted[0].url : 'https://mail.google.com/mail/u/0/#inbox',
@@ -294,12 +311,12 @@ export function buildEmailClusters(emailItems, { today = new Date().toISOString(
       nextAction: copy.nextAction,
       waiting: copy.waiting,
       blocks: [
-        { type: 'stat', value: sorted.length, label: '封邮件' },
+        { type: 'stat', value: sorted.length, label: t('mail.stat_label', locale) },
         { type: 'tags', tags: senders.map(s => ({ text: s.count > 1 ? `${s.name} ×${s.count}` : s.name, color: key === 'action' ? 'orange' : 'gray' })) },
         { type: 'link-list', links: sorted.slice(0, MAX_GROUP_LINKS).map(emailLink) },
       ],
-      actions: [{ label: `打开第一封：${clip(clean(sorted[0].title), 24)}`, value: sorted[0].url, primary: true }],
-      metadata: { group: key, count: sorted.length, senders, needsAction: copy.waiting === 'you' },
+      actions: [{ label: t('mail.open_first', locale, { title: clip(clean(sorted[0].title), 24) }), value: sorted[0].url, primary: true }],
+      metadata: { group: key, count: sorted.length, senders, needsAction: copy.waiting === 'you', lang: locale },
       createdAt: new Date(now).toISOString(),
       updatedAt: new Date(now).toISOString(),
     })

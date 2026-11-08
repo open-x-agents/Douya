@@ -176,7 +176,7 @@ export function buildCards(snaps, candidatesBy, plan, opts = {}) {
   return { cards: res.cards, stats: res.stats }
 }
 
-function buildOnce(snaps, candidatesBy, plan, { today, now = Date.now() } = {}) {
+function buildOnce(snaps, candidatesBy, plan, { today, now = Date.now(), lang = 'en' } = {}) {
   const all = Object.values(candidatesBy).flat()
   const byId = new Map(all.map(c => [c.id, c]))
   const itemOf = (cand, r) => snaps[cand.channel]?.byRef.get(r.ref)
@@ -198,7 +198,7 @@ function buildOnce(snaps, candidatesBy, plan, { today, now = Date.now() } = {}) 
       for (const [sid, c] of refCand) assign.set(sid, c.category)
       // Every live mail lands in a group (unseen / unassigned ones by the rule classifier), so counts stay true.
       const mail = (snap.all || snap.items).filter(it => !away.has(it.sourceId))
-      for (const card of buildEmailClusters(mail, { today, now, assign })) {
+      for (const card of buildEmailClusters(mail, { today, now, assign, lang })) {
         const sid = card.items?.[0]?.sourceId
         const cand = card.type === 'email-action' ? refCand.get(sid) : cands.filter(c => c.category === card.metadata?.group).sort((a, b) => b.items.length - a.items.length)[0] || null
         cards.push(overlay(card, cand, cand && plan.edits?.get(cand.id))); if (cand) candCard.set(cand.id, card)

@@ -899,7 +899,7 @@ export function clusterByProjectTheme(items, opts = {}) {
   // plus at most a few actionable mails from real people. Replaces per-sender, newsletter
   // and donut tiles, which produced one tile per promo mail.
   const looseEmails = emailItems.filter(e => !mergedIntoRepo.has(e.sourceId));
-  const emailClusters = buildEmailClusters(looseEmails, opts.email || {});
+  const emailClusters = buildEmailClusters(looseEmails, { ...(opts.email || {}), lang: opts.lang || opts.email?.lang || 'en' });
   clusters.push(...emailClusters);
   console.log(`[Clustering] Gmail: ${emailClusters.length} category tiles from ${looseEmails.length} emails (${mergedIntoRepo.size} merged into repo tiles)`);
 
@@ -1615,10 +1615,10 @@ export function generateClusterCards(grouped) {
 }
 
 /**
- * Generate LLM headlines and summaries for project clusters
- * Style: headline in English, summary in Chinese with clear context
+ * Generate LLM headlines and summaries for project clusters.
+ * Headline stays English; summary follows the page language (EN or ZH).
  */
-async function generateProjectHeadlinesAndSummaries(grouped, llmClient) {
+async function generateProjectHeadlinesAndSummaries(grouped, llmClient, lang = 'en') {
   const projectClusters = [
     ...grouped.urgent.filter(c => c.type === 'project-cluster'),
     ...grouped.action.filter(c => c.type === 'project-cluster'),
@@ -1639,31 +1639,26 @@ async function generateProjectHeadlinesAndSummaries(grouped, llmClient) {
       // Get top items for context
       const topTitles = cluster.topItems.slice(0, 3).map(i => `"${i.title}"`).join(', ');
       
-      const prompt = `为代码仓库 ${repoName} 生成一个英文标题和中文摘要。
+      const summaryLang = (lang === 'zh') ? 'Chinese' : 'English';
+      const prompt = `For the repo ${repoName}, write a short English headline and a ${summaryLang} summary.
 
-**活动数据（真实数据，不要编造）**:
-- ${openPRs} 个 PR 待处理
-- ${mergedPRs} 个 PR 已合并（最近 24h）
-- ${openIssues} 个 issue
-- ${reviewCount} 个 PR 需要 review
-- 热点项目: ${topTitles}
+**Activity (real numbers — do not invent)**:
+- ${openPRs} open PRs
+- ${mergedPRs} PRs merged (last 24h)
+- ${openIssues} issues
+- ${reviewCount} PRs needing review
+- Hot items: ${topTitles}
 
-**生成两部分**:
-1. **headline**（英文，最多 60 字符）: 简洁描述活动重点
-   - 风格: "<what shipped / what is in progress>, <N> reviews pending"（N 必须来自上面的真实数据）"
+**Two parts**:
+1. **headline** (English, ≤60 chars): what shipped / what is in progress; include "<N> reviews pending" only when N>0 from the data above.
+2. **summary** (${summaryLang}, 1–2 sentences, ≤100 chars): what happened and why it matters, using only the numbers/titles above. Skip any clause whose count is 0.
 
-2. **summary**（中文，1-2 句话，最多 100 字）: 说明发生了什么、为什么重要
-   - 必须基于真实数据（数字、PR 标题）
-   - 说明具体工作内容（如果有热点项目名称就提）
-   - 说明需要的行动（如果有待 review 的）
-   - 句式: "<仓库> 过去 24h 合并了 <N> 个 PR，主要是 <热点 PR 主题>；还有 <M> 个 PR 等待 review。"（尖括号处只能填上面的真实数据）"
-   - 数字为 0 的那一句不要写（不要写「合并了 0 个 PR」「0 个 PR 等待 review」「0 reviews pending」），改为直接说在推进什么"
-
-JSON: {"headline": "英文标题", "summary": "中文摘要"}`;
+JSON: {"headline":"…","summary":"…"}`;
       
       let headline = cluster.title; // Fallback
-      let summary = `${openPRs} 个 PR 待处理，${openIssues} 个 issue。`;
-      
+      let summary = lang === 'zh'
+        ? `${openPRs} 个 PR 待处理，${openIssues} 个 issue。`
+        : `${openPRs} open PRs, ${openIssues} issues.`;
       try {
         let fullText = '';
         for await (const chunk of llmClient.stream({
@@ -1769,7 +1764,7 @@ export async function runAggregationPipeline(composioClient, activeSources, llmC
   console.log(`[Aggregation] ${grouped.urgent.length} urgent, ${grouped.action.length} action, ${grouped.fyi.length} fyi clusters`);
   
   console.log('[Aggregation] Stage 5.5: Generating project headlines and summaries...');
-  await generateProjectHeadlinesAndSummaries(grouped, llmClient);
+  await generateProjectHeadlinesAndSummaries(grouped, llmClient, profileContext?.lang || 'en');
   await generateSuggestedQuestions(grouped, llmClient);
   
   console.log('[Aggregation] Stage 6: Writing brief with LLM...');

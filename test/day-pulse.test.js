@@ -54,6 +54,13 @@ test('greeting line is built from live counts and stays honest when empty', () =
   assert.match(greetingLine({ hour: 21, cards: [], done: { count: 2 }, lang: 'zh' }), /今天搞定了 2 件.*收工/)
   assert.match(greetingLine({ hour: 9, cards: [], lang: 'zh' }), /没有待办/)
   assert.doesNotMatch(greetingLine({ hour: 9, cards: [], lang: 'zh' }), /\d/)
+  // EN: space after the period so "morning.11 open" never glues together.
+  const enNoon = greetingLine({ hour: 12, cards, done: { count: 1 }, next: { kind: 'card', title: 'Review PR #12' }, lang: 'en' })
+  assert.match(enNoon, /this morning\. \d+ open today/)
+  assert.doesNotMatch(enNoon, /morning\.\d/)
+  const enAft = greetingLine({ hour: 15, cards, done: { count: 4 }, lang: 'en' })
+  assert.match(enAft, /already done\. \d+ open today/)
+  assert.doesNotMatch(enAft, /done\.\d/)
 })
 
 test('a user drag order is kept by stable key and a bot reorder cannot override it', () => {

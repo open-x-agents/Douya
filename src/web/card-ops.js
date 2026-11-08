@@ -107,12 +107,7 @@ export function createCardOps({ baseUrl = DEFAULT_MUSE, router = null } = {}) {
       return this.update(id, { status: 'dismissed', dismissedBy: by })
     },
     async snooze(id, { until, hours } = {}) {
-      let snoozeUntil = until
-      if (!snoozeUntil) {
-        const h = Number(hours) > 0 ? Number(hours) : 24
-        snoozeUntil = new Date(Date.now() + h * 3600_000).toISOString()
-      }
-      return this.update(id, { status: 'snoozed', snoozeUntil })
+      return this.update(id, { status: 'snoozed', snoozeUntil: resolveSnoozeUntil({ until, hours }) })
     },
     async remove(id) {
       const data = await call('/api/opendigitalmate/card-delete', { method: 'POST', body: { id } })
@@ -133,4 +128,20 @@ export function createCardOps({ baseUrl = DEFAULT_MUSE, router = null } = {}) {
       return call('/api/completions')
     },
   }
+}
+
+// Chief once turned "明天早上" into today 09:00, already past: the card never left Today while the reply said it did.
+// A snooze must land in the future; otherwise fail loudly with the current time so the model can fix it.
+export function resolveSnoozeUntil({ until, hours, now = Date.now() } = {}) {
+  if (!until) {
+    const h = Number(hours) > 0 ? Number(hours) : 24
+    return new Date(now + h * 3600_000).toISOString()
+  }
+  const at = Date.parse(until)
+  if (!Number.isFinite(at)) throw new Error(`snooze until "${until}" is not a date; use ISO 8601 with an offset, e.g. 2026-11-09T09:00:00+08:00`)
+  if (at <= now + 60_000) {
+    const nowSh = new Date(now + 8 * 3600_000).toISOString().replace('Z', '+08:00').slice(0, 25)
+    throw new Error(`snooze until ${until} is not in the future (now is ${nowSh} Asia/Shanghai); pick a later time`)
+  }
+  return new Date(at).toISOString()
 }

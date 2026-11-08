@@ -43,23 +43,54 @@ export function errorCode(error) {
   return isInternal(error) ? 'bot/internal' : 'bot/refused'
 }
 
+function pendingList(agent, messageId) {
+  if (Array.isArray(agent?.inbox?.nextStep) && agent.inbox.nextStep.some(message => message?.id === messageId)) return 'next-step'
+  if (Array.isArray(agent?.inbox?.nextTurn) && agent.inbox.nextTurn.some(message => message?.id === messageId)) return 'next-turn'
+  return undefined
+}
+
+// The sentence is already in this inbox. A second followup with the same id
+// is refused ("already pending"). A next-step row would be claimed by the
+// running turn's later step, so move it to next-turn. The current tool step
+// keeps going; the following turn claims this one row.
+function parkPendingDelivery(agent, message) {
+  const inbox = agent?.inbox
+  const where = pendingList(agent, message.id)
+  if (where === undefined || typeof inbox?.remove !== 'function' || typeof inbox?.append !== 'function') return false
+  if (where === 'next-step') {
+    inbox.remove(message.id)
+    try {
+      inbox.append('next-turn', message)
+    } catch (error) {
+      try { inbox.append('next-step', message) } catch { /* the first error is the one the caller reports */ }
+      throw error
+    }
+  } else if (typeof inbox.replace === 'function') {
+    inbox.replace(message.id, message)
+  }
+  if (agent.phase?.kind === 'idle') agent.wakeDriver?.()
+  return true
+}
+
 // Hand the confirmed sentence to the bound line's next turn. Does not open a
 // part. A different existing line session is that line's own chat, not a new
-// one. The running step is not steered: followup waits for the next turn.
+// one. The running step is not steered: a followup, or a row already waiting
+// in the inbox, is claimed on the next turn.
 async function deliverBoundSentence(rt, sessionId, commit) {
   const release = releaseBoundSentence(rt.state, sessionId)
   if (release == null) return privateHold(rt.state, sessionId)?.delivered === true
   const messageId = release.messageId ?? randomUUID()
+  const message = {
+    id: messageId,
+    role: 'user',
+    source: { kind: 'user', dsBotDeliver: true },
+    content: [{ type: 'text', text: release.text }],
+  }
   try {
     if (typeof rt.resolveAgent !== 'function') throw new Error('no session')
     const agent = await rt.resolveAgent(release.target)
     if (typeof agent?.followup !== 'function') throw new Error('no session')
-    agent.followup({
-      id: messageId,
-      role: 'user',
-      source: { kind: 'user', dsBotDeliver: true },
-      content: [{ type: 'text', text: release.text }],
-    })
+    if (!parkPendingDelivery(agent, message)) agent.followup(message)
   } catch (error) {
     finishBoundDelivery(rt.state, sessionId, false)
     rt.warn?.('ds-bot: private sentence was not delivered: %s', error)
@@ -412,7 +443,7 @@ export function install(rt) {
           return ok(await rt.stopRoomWork(String(body.roomId ?? '')))
         // Stop the open private chat only. Rooms, member Sessions, and browser holds
         // stay as they are: this does not walk rooms or call stopRoomWork.
-        // Record which line the user picked. The sentence stays out of every inbox.
+        // Record which line the user picked, then hand that sentence to the line's next turn.
         case 'confirm-private': {
           if (typeof body.sessionId !== 'string' || body.sessionId === '') return fail('Nothing to confirm', 'bot/invalid')
           if (typeof body.choiceId !== 'string' || body.choiceId === '') return fail('Nothing to confirm', 'bot/invalid')

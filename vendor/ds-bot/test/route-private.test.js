@@ -1312,6 +1312,131 @@ test('confirm delivers the held sentence on the bound line and a later choice do
   assert.equal(rt.state.privateHolds[sessionId].status, 'pending')
 })
 
+test('a bind during a tool step waits for the next turn and is admitted once', async (t) => {
+  const home = mkdtempSync(join(tmpdir(), 'ds-bot-busy-bind-'))
+  const team = fakeContext()
+  let route
+  const register = team.connection.fetch.register
+  team.connection.fetch.register = (options) => { route = options; return register(options) }
+  const rt = createRuntime(team, { home })
+  const ctx = new Context()
+  for (const plugin of [SessionStore, SessionProjection, LlmRuntime, ToolRuntime, SystemPrompt, Agents, AgentLoop]) {
+    await ctx.plugin(plugin)
+  }
+  t.after(async () => {
+    await ctx.fiber.dispose()
+    await team.dispose()
+    rmSync(home, { recursive: true, force: true })
+  })
+  const calls = []
+  let round = 0
+  ctx.llm.registerAdapter(['fake'], {
+    providerInfo: (id) => ({ id, name: 'Fake' }),
+    providerRetryPolicy: () => undefined,
+    async prepareCall() {
+      return {
+        model: { id: 'fake-model', name: 'Fake', provider: 'fake' },
+        stream(options) {
+          const body = JSON.stringify(options)
+          calls.push(body)
+          round += 1
+          const current = round
+          return (async function* () {
+            if (current === 1) {
+              yield { type: 'tool-call-delta', index: 0, id: 'busytool-1', name: 'busytool', argumentsDelta: '{}' }
+              yield { type: 'finish', reason: { kind: 'tool-calls' } }
+              return
+            }
+            const text = body.includes('BUSY_BIND_141') ? 'BUSY_BIND_ACK' : 'BUSY_POST'
+            yield { type: 'text-delta', index: 0, text }
+            yield { type: 'finish', reason: { kind: 'stop' } }
+          })()
+        },
+      }
+    },
+  })
+  const sessionId = 'sess-busy'
+  installPrivateHook({
+    ctx,
+    state: rt.state,
+    isBotSession: () => true,
+    roomOf: () => undefined,
+    save: (options) => rt.save(options),
+    warn: () => {},
+  })
+  const routeRt = {
+    ctx,
+    state: rt.state,
+    chatOwners: new Map([[sessionId, 'a']]),
+    groupOwners: new Set(),
+    isBotSession: () => true,
+    roomOf: () => undefined,
+    botOf: () => ({ name: 'Bot' }),
+    selfOf: (id) => id,
+    dropKickoff: () => {},
+    save: (options) => rt.save(options),
+    warn: () => {},
+  }
+  installTurns(routeRt)
+  const agent = await ctx.agentLoop.create(sessionId, { provider: 'fake', model: 'fake-model' }, { cwd: '/tmp' })
+  rt.resolveAgent = async (id) => {
+    if (id !== sessionId) throw new Error(`unexpected session ${id}`)
+    return agent
+  }
+  await rt.load()
+  const sentence = 'BUSY_BIND_141 please only reply BUSY_BIND_ACK'
+  const ask = createUserMessage({ content: [{ type: 'text', text: sentence }], source: { kind: 'user' } })
+  const post = async (payload) => (await route.fetch(new Request('http://localhost/api/bot', {
+    method: 'POST',
+    body: JSON.stringify({ endpoint: 'confirm-private', payload }),
+  }))).json()
+  ctx.tools.register({
+    name: 'busytool',
+    description: 'Finish the tool step',
+    parameters: {},
+    async execute() {
+      createLine(rt.state, { id: 'line-a', botId: 'a', sessionId, label: 'plan the picnic' })
+      agent.steer(ask)
+      await routeRt.privateHoldPersist
+      const generation = rt.state.privateHolds[sessionId].generation
+      const confirmed = await post({ sessionId, choiceId: 'line-a', generation })
+      assert.equal(confirmed.ok, true)
+      assert.equal(confirmed.value.bound, true)
+      assert.equal(confirmed.value.delivered, true)
+      assert.equal(confirmed.value.generation, generation)
+      assert.equal(agent.inbox.nextStep.some(message => message?.id === ask.id), false)
+      assert.equal(agent.inbox.nextTurn.some(message => message?.id === ask.id), true)
+      assert.equal(agent.inbox.nextTurn.find(message => message?.id === ask.id)?.source?.dsBotDeliver, true)
+      assert.equal(rt.state.privateHolds[sessionId].status, 'bound')
+      assert.equal(rt.state.privateHolds[sessionId].delivered, true)
+      assert.equal(rt.state.privateHolds[sessionId].generation, generation)
+      return 'BUSY_DONE'
+    },
+    output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: String(value) }] },
+  })
+  agent.steer(createUserMessage({ content: [{ type: 'text', text: 'call the tool' }], source: { kind: 'user' } }))
+  await agent.whenIdle()
+  await routeRt.privateHoldPersist
+  const events = agent.session.snapshotEvents()
+  const ends = events.filter(event => event.type === 'turn/end').map(event => event.data?.reason?.kind)
+  const admitted = events.filter(event => event.type === 'user/message' && event.data?.id === ask.id)
+  assert.equal(ends.includes('blocked'), false, ends)
+  assert.equal(ends.includes('aborted'), false, ends)
+  assert.equal(calls.length, 3, calls.map(body => body.includes('BUSY_BIND_141')))
+  assert.equal(calls[0].includes('BUSY_BIND_141'), false)
+  assert.equal(calls[1].includes('BUSY_BIND_141'), false)
+  assert.equal(calls[1].includes('BUSY_DONE'), true)
+  assert.equal(calls[2].includes('BUSY_BIND_141'), true)
+  assert.equal(calls.filter(body => body.includes('BUSY_BIND_141')).length, 1)
+  assert.equal(admitted.length, 1)
+  assert.equal(admitted[0].data?.source?.dsBotDeliver, true)
+  assert.equal(events.some(event => event.type === 'assistant/message' && JSON.stringify(event.data).includes('BUSY_POST')), true)
+  assert.equal(events.some(event => event.type === 'assistant/message' && JSON.stringify(event.data).includes('BUSY_BIND_ACK')), true)
+  assert.equal(rt.state.privateHolds[sessionId].status, 'bound')
+  assert.equal(rt.state.privateHolds[sessionId].delivered, true)
+  assert.equal(rt.state.privateHolds[sessionId].generation, 1)
+})
+
 test('DSH refuses a second append while a splice is still being published', async (t) => {
   const ctx = new Context()
   await ctx.plugin(SessionStore)

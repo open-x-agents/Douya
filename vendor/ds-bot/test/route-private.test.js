@@ -1211,6 +1211,20 @@ test('confirm delivers the held sentence on the bound line and a later choice do
     warn: () => {},
   })
   const sessionId = 'sess-deliver'
+  const routeRt = {
+    ctx,
+    state: rt.state,
+    chatOwners: new Map([[sessionId, 'a']]),
+    groupOwners: new Set(),
+    isBotSession: () => true,
+    roomOf: () => undefined,
+    botOf: () => ({ name: 'Bot' }),
+    selfOf: (id) => id,
+    dropKickoff: () => {},
+    save: (options) => rt.save(options),
+    warn: () => {},
+  }
+  installTurns(routeRt)
   const agent = await ctx.agentLoop.create(sessionId, { provider: 'fake', model: 'fake-model' }, { cwd: '/tmp' })
   rt.resolveAgent = async (id) => {
     if (id !== sessionId) throw new Error(`unexpected session ${id}`)
@@ -1242,6 +1256,11 @@ test('confirm delivers the held sentence on the bound line and a later choice do
   assert.equal(confirmed.ok, true)
   assert.equal(confirmed.value.bound, true)
   assert.equal(confirmed.value.delivered, true)
+  await routeRt.privateHoldPersist
+  await new Promise(resolve => setTimeout(resolve, 20))
+  assert.equal(rt.state.privateHolds[sessionId].generation, generation)
+  assert.equal(rt.state.privateHolds[sessionId].status, 'bound')
+  assert.equal(rt.state.privateHolds[sessionId].delivered, true)
   await agent.whenIdle()
   assert.equal(calls.filter(body => body.includes('BIND_SENTENCE_141')).length, 1)
   assert.equal(agent.session.snapshotEvents().filter(event => event.type === 'user/message' && event.data?.id === first.id).length, 1)
@@ -1257,9 +1276,14 @@ test('confirm delivers the held sentence on the bound line and a later choice do
     ],
     at: 2,
   })
-  const rebound = await post({ sessionId, choiceId: 'line-b', generation: rt.state.privateHolds[sessionId].generation })
+  const reboundGeneration = rt.state.privateHolds[sessionId].generation
+  const rebound = await post({ sessionId, choiceId: 'line-b', generation: reboundGeneration })
   assert.equal(rebound.ok, true)
   assert.equal(rebound.value.delivered, true)
+  await routeRt.privateHoldPersist
+  await new Promise(resolve => setTimeout(resolve, 20))
+  assert.equal(rt.state.privateHolds[sessionId].generation, reboundGeneration)
+  assert.equal(rt.state.privateHolds[sessionId].status, 'bound')
   await agent.whenIdle()
   assert.equal(calls.filter(body => body.includes('新开 另一件事')).length, 1)
   assert.equal(JSON.stringify(agent.session.snapshotEvents().find(event => event.type === 'user/message' && event.data?.id === first.id)), JSON.stringify(firstText))
@@ -1275,6 +1299,17 @@ test('confirm delivers the held sentence on the bound line and a later choice do
   assert.equal(loaded.state.privateHolds[sessionId].boundTo, 'line-b')
   assert.equal(loaded.state.privateHolds[sessionId].delivered, true)
   assert.equal(loaded.state.privateHolds[sessionId].label, 'budget review')
+  const plainGeneration = rt.state.privateHolds[sessionId].generation
+  agent.followup({
+    id: 'plain-user',
+    role: 'user',
+    source: { kind: 'user' },
+    content: [{ type: 'text', text: 'BIND_SENTENCE_141' }],
+  })
+  await routeRt.privateHoldPersist
+  await new Promise(resolve => setTimeout(resolve, 20))
+  assert.equal(rt.state.privateHolds[sessionId].generation, plainGeneration + 1)
+  assert.equal(rt.state.privateHolds[sessionId].status, 'pending')
 })
 
 test('DSH refuses a second append while a splice is still being published', async (t) => {

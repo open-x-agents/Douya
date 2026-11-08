@@ -361,7 +361,8 @@ export function withholdFromStep(messages, hold) {
   const kept = []
   const withheld = []
   for (const message of messages) {
-    if (message?.source?.kind === 'user' && ids.has(message?.id)) withheld.push(message)
+    if (message?.source?.dsBotDeliver === true) kept.push(message)
+    else if (message?.source?.kind === 'user' && ids.has(message?.id)) withheld.push(message)
     else kept.push(message)
   }
   return { kept, withheld }

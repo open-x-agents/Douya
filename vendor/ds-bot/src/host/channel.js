@@ -57,7 +57,7 @@ async function deliverBoundSentence(rt, sessionId, commit) {
     agent.followup({
       id: messageId,
       role: 'user',
-      source: { kind: 'user' },
+      source: { kind: 'user', dsBotDeliver: true },
       content: [{ type: 'text', text: release.text }],
     })
   } catch (error) {

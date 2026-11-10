@@ -117,3 +117,16 @@ test('combineRequests keeps the latest context and concatenates attachments', ()
   assert.equal(c.attachments.length, 2)
   assert.match(c.message, /1\. one\n2\. two/)
 })
+
+test('combineRequests keeps hiddenContext from any message in the batch', () => {
+  const out = combineRequests([
+    { message: "Let's do this together: orbit #2116", hiddenContext: 'Plan: x (plan p1)\nRead odm_future_get first', viewContext: 'v1' },
+    { message: 'this afternoon is free', viewContext: 'v2' },
+  ])
+  assert.match(out.hiddenContext, /plan p1/)
+  assert.match(out.hiddenContext, /odm_future_get/)
+  assert.match(out.message, /orbit #2116/)
+  assert.equal(out.viewContext, 'v2')
+  assert.deepEqual(out.displayItems.map(i => i.text), ["Let's do this together: orbit #2116", 'this afternoon is free'])
+})
+

@@ -94,9 +94,15 @@ test('next step offers Do this with Douya, seeds chat with plan/step context, an
   const btn = op => ({ dataset: { op }, closest: sel => sel === '[data-step-id]' ? { dataset: { stepId: 's1' } } : { dataset: { plan: 'p1' } } })
   listeners.click({ target: { closest: () => btn('do') } })
   assert.equal(calls[0].opts.send, true)
-  for (const bit of ['plan p1', 'step s1', 'Land real fixes', 'I want to ship OSS', 'orbit #2116', 'odm_future_get', 'confirm card']) assert.ok(calls[0].chat.includes(bit), bit)
+  assert.equal(calls[0].chat, 'Let’s do this together: Turn orbit #2116 review into a PR')
+  assert.doesNotMatch(calls[0].chat, /odm_future_get|plan p1|step s1/)
+  for (const bit of ['plan p1', 'step s1', 'Land real fixes', 'I want to ship OSS', 'orbit #2116', 'odm_future_get', 'confirm card']) assert.ok(calls[0].opts.hiddenContext.includes(bit), bit)
   listeners.click({ target: { closest: () => btn('schedule') } })
-  assert.match(calls[1].chat, /timetable/)
+  assert.equal(calls[1].chat, 'Please schedule this: Turn orbit #2116 review into a PR')
+  assert.doesNotMatch(calls[1].chat, /odm_timetable|plan p1|step s1/)
+  assert.match(calls[1].opts.hiddenContext, /timetable/)
+  assert.match(calls[1].opts.hiddenContext, /plan p1/)
+  assert.match(calls[1].opts.hiddenContext, /step s1/)
   // Douya marks it done from chat: the card shows proof, progress, a status line, and the new next step.
   state = { ok: true, available: true, plans: [{ ...active, steps: [{ ...active.steps[0], done: true, evidence: 'PR #12 opened' }, { id: 's2', text: 'Address review on PR #12', done: false }] }] }
   await window.loadFuture()
@@ -105,4 +111,34 @@ test('next step offers Do this with Douya, seeds chat with plan/step context, an
   assert.match(root.innerHTML, /Step done: Turn orbit #2116 review into a PR · PR #12 opened Up next: Address review on PR #12/)
   assert.match(root.innerHTML, /data-step-id="s2"/)
   assert.doesNotMatch(root.innerHTML, /data-step-id="s1"/)
+})
+
+test('ZH do/schedule prompts stay natural, and a URL in evidence is a link', async () => {
+  const active = { id: 'p1', status: 'active', title: '成为稳定的维护者', goal: '把修复真正合进去', basis: { source: 'user', text: '想把开源做下去' }, steps: [{ id: 's1', text: '本周把 orbit #2116 的结论落成一次提交', done: false }] }
+  let state = { ok: true, available: true, plans: [active] }
+  const listeners = {}, calls = [], root = { innerHTML: '', addEventListener: (name, fn) => { listeners[name] = fn } }
+  const window = { ODMi18n: { getLocale: () => 'zh' }, addEventListener: () => {}, futureChat: (value, opts) => calls.push({ chat: value, opts }) }
+  const fetch = async () => ({ ok: true, json: async () => structuredClone(state) })
+  runInNewContext(source, { window, document: { getElementById: () => root }, fetch })
+  await window.loadFuture()
+  const btn = op => ({ dataset: { op }, closest: sel => sel === '[data-step-id]' ? { dataset: { stepId: 's1' } } : { dataset: { plan: 'p1' } } })
+  listeners.click({ target: { closest: () => btn('do') } })
+  assert.equal(calls[0].chat, '我们一起来完成：本周把 orbit #2116 的结论落成一次提交')
+  assert.doesNotMatch(calls[0].chat, /odm_future_get|plan p1|step s1/)
+  assert.match(calls[0].opts.hiddenContext, /odm_future_get/)
+  listeners.click({ target: { closest: () => btn('schedule') } })
+  assert.equal(calls[1].chat, '帮我把这一步排进时间表：本周把 orbit #2116 的结论落成一次提交')
+  assert.doesNotMatch(calls[1].chat, /odm_timetable_get|plan p1/)
+  assert.match(calls[1].opts.hiddenContext, /odm_timetable_get/)
+  state = { ok: true, available: true, plans: [{ ...active, steps: [{ ...active.steps[0], done: true, evidence: 'https://github.com/org/repo/pull/12' }] }] }
+  await window.loadFuture()
+  assert.match(root.innerHTML, /future-evidence">✓ <a href="https:\/\/github.com\/org\/repo\/pull\/12" target="_blank" rel="noopener">https:\/\/github.com\/org\/repo\/pull\/12<\/a>/)
+})
+
+test('Today chat send accepts hiddenContext and only the visible text enters the bubble', async () => {
+  const html = await readFile(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  assert.match(html, /pendingHiddenContext = typeof opts\.hiddenContext === 'string' \? opts\.hiddenContext : ''/)
+  assert.match(html, /if \(hidden\) ctxBody\.hiddenContext = hidden/)
+  assert.match(html, /appendInlineBubble\('me', msg\)/)
+  assert.doesNotMatch(html, /appendInlineBubble\('me', hidden/)
 })

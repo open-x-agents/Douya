@@ -250,3 +250,30 @@ test('a long tool turn is still attributed when the user message is off the newe
   assert.equal(result.ok, true)
   assert.equal(result.text, '长回复')
 })
+
+test('hiddenContext is prepended for the model and kept off the display record', async () => {
+  const recorded = []
+  const session = queuedSession()
+  const display = { record(id, items) { recorded.push({ id, items }) } }
+  const result = await runMuseChatTurn({ sessionController: session.controller({
+    stampId: true,
+    onPrompt() { session.finish('好，先读这一步') },
+  }) }, {
+    message: "Let's do this together: Turn orbit #2116 review into a PR",
+    hiddenContext: 'Plan: Become a steady maintainer (plan p1)\nStep: Turn orbit #2116 review into a PR (step s1)\nRead odm_future_get first',
+    viewContext: '',
+    dshHome: '/tmp/odm-muse-chat-rapid-missing',
+    botId: 'chief',
+    log() {},
+    waitMs: 4000,
+    display,
+  })
+  assert.equal(result.ok, true)
+  const sent = session.events.find(event => event.type === 'user/message').data.content[0].text
+  assert.match(sent, /odm_future_get/)
+  assert.match(sent, /plan p1/)
+  assert.match(sent, /Let's do this together: Turn orbit #2116 review into a PR/)
+  assert.equal(recorded[0].items[0].text, "Let's do this together: Turn orbit #2116 review into a PR")
+  assert.doesNotMatch(recorded[0].items[0].text, /odm_future_get/)
+})
+

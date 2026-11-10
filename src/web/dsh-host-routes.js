@@ -355,6 +355,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
           cardId: req.cardId,
           cardContext: req.cardContext,
           viewContext: req.viewContext,
+          hiddenContext: req.hiddenContext,
           doneContext: req.doneContext,
           attachments: req.attachments,
           dshHome,
@@ -389,6 +390,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
       // Sent replies / closed cards since Chief last looked: the general chat must not list them as open.
       let doneContext = ''
       try { doneContext = router.doneSnapshot() || '' } catch (err) { log(`doneSnapshot failed: ${err.message}`) }
+      const hiddenContext = typeof body.hiddenContext === 'string' ? body.hiddenContext : ''
       timing.contextAt = Date.now()
       // The page names its turn so streamed text / skeletons land in the right bubble.
       const turn = typeof body.turn === 'string' && /^t_[\w-]{4,40}$/.test(body.turn) ? body.turn : null
@@ -397,6 +399,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
         cardId: body.cardId,
         cardContext,
         viewContext,
+        hiddenContext,
         doneContext,
         attachments: body.attachments || body.files || null,
         turn,
@@ -471,6 +474,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
         message: body.message || body.text,
         cardId: body.cardId,
         cardContext: body.cardContext,
+        hiddenContext: body.hiddenContext,
         dshHome,
         log,
       })

@@ -132,7 +132,8 @@ or archives. Suggestions stay inactive until you accept on the page or explicitl
 in chat. If interests are missing, Douya asks rather than assuming fitness or study goals.
 
 The next step on an active plan has **Do this with Douya / 和豆芽一起做**: it opens chat
-seeded with the plan, goal, reason, and step ids, and Douya proposes concrete moves with
+with a short natural sentence about the step. Plan/step ids and tool instructions go as
+hidden context (not shown in the transcript). Douya proposes concrete moves with
 its existing tools (GitHub lookup, drafts, a timetable block via **Schedule it / 排进时间表**).
 Anything outbound stays a Confirm card. When the step is done, Douya calls
 `odm_future_update op=step done=true` with a one-line `evidence` (e.g. the PR link) and an

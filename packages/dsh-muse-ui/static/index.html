@@ -1508,7 +1508,7 @@
   .is-new{animation:cardIn .28s var(--ease-out) both}
   .grid-main > .tile.work.is-new{animation-delay:calc(min(var(--stagger, 0), 8) * 35ms)}
   /* First paint stagger when the page boots (no is-new yet): soft rise for the first few tiles */
-  .grid-main.cardAppearStagger > .tile.work{animation:cardIn .28s var(--ease-out) both}
+  .grid-main.cardAppearStagger > .tile.work,.grid-main.cardAppearStagger > .tile.done-today{animation:cardIn .28s var(--ease-out) both}
   .grid-main.cardAppearStagger > .tile.work:nth-child(1){animation-delay:0ms}
   .grid-main.cardAppearStagger > .tile.work:nth-child(2){animation-delay:35ms}
   .grid-main.cardAppearStagger > .tile.work:nth-child(3){animation-delay:70ms}
@@ -1548,7 +1548,7 @@
   .z-hist-b{display:flex;flex-direction:column;gap:8px;margin-top:10px;opacity:.85}
   .z-hist-b .bubble{max-width:92%}
   .z-acts-row{margin:12px 0 10px}
-  @media (prefers-reduced-motion:reduce){.nx,.step,.daymore,.tile.work,.just-changed,.is-new{animation:none!important;transition:none!important}}
+  @media (prefers-reduced-motion:reduce){.nx,.step,.daymore,.tile.work,.tile.done-today,.just-changed,.is-new,.qa-bar{animation:none!important;transition:none!important}}
   /* ===== Phase B: card faces ===== */
   .w-desc.short{-webkit-line-clamp:2}
   .face{display:flex;flex-direction:column;gap:10px;margin:2px 0 12px}
@@ -1770,7 +1770,7 @@
   .off-toggle:hover{background:rgba(255,255,255,.85)}
   .off-toggle i{margin-left:auto;font-style:normal;color:var(--violet,#7a6ad8);font-size:12.5px}
   .offhours .grid-off{margin-top:12px;opacity:.92}
-  .tile.done-today{background:linear-gradient(135deg,rgba(230,250,240,.95),rgba(240,244,255,.95));border:1px solid rgba(60,180,130,.22);animation:cardIn .6s var(--ease) both}
+  .tile.done-today{background:linear-gradient(135deg,rgba(230,250,240,.95),rgba(240,244,255,.95));border:1px solid rgba(60,180,130,.22)}
   .dt-head{display:flex;align-items:center;gap:12px}
   .dt-head h3{margin:2px 0 0;font-size:22px}
   .dt-head h3 span{margin-left:10px;font-size:13px;font-weight:500;color:var(--ink-3,#7a7f95)}
@@ -1785,8 +1785,6 @@
   .tile-zoom-modal.zoom-out{animation:zoomToTile .26s var(--ease-out) both}
   @keyframes zoomFromTile{from{opacity:.15;transform:translate(var(--zx,0),var(--zy,0)) scale(.46)}to{opacity:1;transform:none}}
   @keyframes zoomToTile{from{opacity:1;transform:none}to{opacity:0;transform:translate(var(--zx,0),var(--zy,0)) scale(.5)}}
-  .tile.done-today{animation:cardIn .32s var(--ease-out) both}
-
   /* Timetable motion */
   .tt-now{animation:nowPulse 2.4s var(--ease) infinite}
   .tt-now::before{animation:nowDot 2.4s var(--ease) infinite}
@@ -1825,7 +1823,8 @@
   .tile.work .swipe-rail button[data-qa="ask"]{background:#7a6ad8}
   .tile.work .swipe-face{position:relative;z-index:1;background:rgba(255,255,255,.96);border-radius:inherit;transition:transform .22s var(--ease);will-change:transform}
   .tile.work.swiping .swipe-face{transition:none}
-  .qa-bar{display:none;gap:6px;margin-top:8px;padding-top:2px}
+  .qa-bar{display:grid;grid-template-rows:0fr;opacity:0;margin-top:0;padding-top:0;pointer-events:none;transition:grid-template-rows 220ms var(--ease-out),opacity 220ms var(--ease-out),margin-top 220ms var(--ease-out),padding-top 220ms var(--ease-out)}
+  .qa-bar-in{min-height:0;overflow:hidden;display:flex;flex-wrap:wrap;gap:6px}
   .qa-bar button{border:0;background:rgba(30,40,80,.05);color:var(--ink2);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:650;cursor:pointer;transition:background .15s,color .15s,transform .15s}
   .qa-bar button:hover{background:rgba(122,106,216,.12);color:var(--violet)}
   .qa-bar button:active{transform:scale(.96)}
@@ -1834,7 +1833,7 @@
   .qa-bar button[data-qa="useless"]{color:var(--ink3)}
   .qa-bar button[data-qa="useless"]:hover{background:rgba(0,0,0,.05);color:var(--ink2)}
   @media (hover:hover) and (pointer:fine){
-    .tile.work.swipeable:hover .qa-bar,.tile.work.swipeable:focus-within .qa-bar{display:flex;flex-wrap:wrap}
+    .tile.work.swipeable:hover .qa-bar,.tile.work.swipeable:focus-within .qa-bar,.tile.work.swipeable.is-kb-focus .qa-bar{grid-template-rows:1fr;opacity:1;margin-top:8px;padding-top:2px;pointer-events:auto}
   }
   .snooze-sheet{position:fixed;inset:0;z-index:10050;display:flex;align-items:flex-end;justify-content:center;background:rgba(20,22,40,.28);opacity:0;pointer-events:none;transition:opacity .2s var(--ease)}
   .snooze-sheet.open{opacity:1;pointer-events:auto}
@@ -1912,15 +1911,15 @@
   }
   @media (prefers-reduced-motion:reduce){
     .tile.work.leaving-done.tuck-done,.tile.done-today.just-tucked,.tile.work.swipe-armed .swipe-rail button{animation:none!important;transition:none!important;transform:none!important}
-    .chat-chips.is-typing,.composer-tip.is-typing{transition:none!important}
+    .chat-chips.is-typing,.composer-tip.is-typing,.qa-bar{transition:none!important}
   }
 
   /* ===== UX desktop pack: hover QA, kb focus, two-col zoom, toast, larger dock ===== */
   @media (hover:hover) and (pointer:fine){
     .tile.work.swipeable{cursor:grab}
     .tile.work.swipeable.swiping{cursor:grabbing}
-    .tile.work.swipeable:hover .qa-bar,.tile.work.swipeable:focus-within .qa-bar,.tile.work.swipeable.is-kb-focus .qa-bar{display:flex;flex-wrap:wrap;opacity:1}
-    .qa-bar{gap:8px;margin-top:10px;padding-top:4px}
+    .tile.work.swipeable:hover .qa-bar,.tile.work.swipeable:focus-within .qa-bar,.tile.work.swipeable.is-kb-focus .qa-bar{grid-template-rows:1fr;opacity:1;margin-top:10px;padding-top:4px;pointer-events:auto}
+    .qa-bar-in{gap:8px}
     .qa-bar button{padding:6px 12px;font-size:12.5px;background:rgba(30,40,80,.04);border:1px solid rgba(30,40,80,.06)}
     .qa-bar button .kbd{margin-left:6px;font-size:10.5px;font-weight:650;opacity:.55;letter-spacing:.02em}
     .grid2 .tile.work.swipeable:hover{transform:translateY(-3px);box-shadow:0 16px 36px rgba(40,44,90,.14),0 2px 8px rgba(40,44,90,.06)}
@@ -2833,6 +2832,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
 
   // Load today's data
   let lastTodaySig = '';
+  let lastCardListHtml = '';
   async function loadToday(opts = {}) {
     try {
       const _tq = new URLSearchParams(); _tq.set('lang', odmLang()); if (Number.isInteger(window.__odmTodHour)) _tq.set('hour', String(window.__odmTodHour));
@@ -2843,11 +2843,6 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       if (!opts.force && sig === lastTodaySig) return;
       lastTodaySig = sig;
       lastToday = data;
-      const listEl = $('cardList');
-      if (listEl && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        listEl.classList.add('is-refreshing');
-        requestAnimationFrame(() => setTimeout(() => listEl.classList.remove('is-refreshing'), 180));
-      }
       takeAutoLayout(data.autoLayout);
       if (data.ui) { uiLayout = data.ui; if (!uiBoot) { uiBoot = data.ui.bootId || null; uiSeq = Math.max(uiSeq, data.ui.seq || 0); } }
       const name = data.userName || '';
@@ -3482,7 +3477,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const actsHtml = primary
       ? `<div class="w-acts">${stepBtnHtml(primary, 0, 'primary')}${secondary.length ? `<details class="w-more"><summary>${escapeHtml(t('today.more'))}</summary>${secondary.map((p, i) => stepBtnHtml(p, i + 1, '')).join('')}</details>` : ''}</div>`
       : '';
-    const qa = waitingOnly ? '' : `<div class="qa-bar" aria-label="${t('qa.aria')}"><button type="button" data-qa="done" title="${t('qa.done_title')}">${t('qa.done')}<span class="kbd">C</span></button><button type="button" data-qa="snooze" title="${t('qa.snooze_title')}">${t('qa.snooze')}<span class="kbd">S</span></button><button type="button" data-qa="ask" title="${t('qa.ask_title')}">${t('qa.ask')}</button><button type="button" data-qa="useless" class="qa-useless" title="${t('qa.useless_title')}">${t('qa.useless')}</button></div>`;
+    const qa = waitingOnly ? '' : `<div class="qa-bar" aria-label="${t('qa.aria')}"><div class="qa-bar-in"><button type="button" data-qa="done" title="${t('qa.done_title')}">${t('qa.done')}<span class="kbd">C</span></button><button type="button" data-qa="snooze" title="${t('qa.snooze_title')}">${t('qa.snooze')}<span class="kbd">S</span></button><button type="button" data-qa="ask" title="${t('qa.ask_title')}">${t('qa.ask')}</button><button type="button" data-qa="useless" class="qa-useless" title="${t('qa.useless_title')}">${t('qa.useless')}</button></div></div>`;
     const rails = waitingOnly ? '' : `<div class="swipe-rails" role="group" aria-label="${escapeHtml(t('qa.swipe_aria'))}"><div class="swipe-rail left"><button type="button" data-qa="done" aria-label="${escapeHtml(t('qa.done_aria'))}">${escapeHtml(t('qa.done'))}</button><button type="button" data-qa="snooze" aria-label="${escapeHtml(t('qa.snooze_aria'))}">${escapeHtml(t('qa.snooze'))}</button></div><div class="swipe-rail right"><button type="button" data-qa="ask" aria-label="${escapeHtml(t('qa.ask_aria'))}">${escapeHtml(t('qa.ask'))}</button></div></div>`;
     return `
       <article class="tile work swipeable ${big ? 'size-wide' : 'size-normal'}${waitingOnly ? ' waiting-only' : ''}${hasFace ? ' has-face' : ''}" data-idx="${idx}">
@@ -4410,6 +4405,10 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     html += '</div>';
     html += renderOffHours(offCards, cards);
     html += '<div id="todayChatSlot"></div>';
+    // Same paint as last time: keep the live tiles (and hover / scroll / chat) instead of rebuilding, which would
+    // replay enter animations and look like the done-today tile is flashing.
+    if (html === lastCardListHtml && container.querySelector('#todayChatSlot, .grid-main, .tile')) return;
+    lastCardListHtml = html;
     // Keep the one live chat (open state, transcript, in-flight reply) across refreshes: it is a single node that
     // lives in the dock slot, or beside an open card. Rebuild the grid around it.
     let liveChat = $('todayChat');

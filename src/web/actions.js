@@ -30,7 +30,17 @@ export function githubFromUrl(u) {
 const S = { type: 'string' }
 const gmailTarget = { url: { ...S, description: 'Gmail 条目链接（odm_card_list items[].url）' }, message_id: { ...S, description: '或直接给 message id' } }
 const msgId = a => a.message_id || gmailIdFromUrl(a.url)
-const ghT = a => { const g = githubFromUrl(a.url) || {}; return { owner: a.owner || g.owner, repo: a.repo || g.repo, number: Number(a.number || g.number) || null } }
+/** Resolve a GitHub issue/PR target. An explicit number wins over the number in url, so a focused-card URL cannot override the issue the user named. */
+export function githubTarget(a = {}) {
+  const g = githubFromUrl(a.url) || {}
+  const owner = a.owner || g.owner || null
+  const repo = a.repo || g.repo || null
+  const explicit = a.number != null && a.number !== '' ? Number(a.number) : NaN
+  const number = Number.isFinite(explicit) && explicit > 0 ? explicit : (Number(g.number) || null)
+  return { owner, repo, number, kind: g.kind || null }
+}
+const ghT = githubTarget
+
 const slT = a => { const s = slackFromUrl(a.url) || {}; return { channel: a.channel || s.channel, ts: a.timestamp || a.ts || s.ts, thread_ts: a.thread_ts || s.thread_ts || s.ts } }
 const need = (cond, msg) => { if (!cond) throw new Error(msg) }
 

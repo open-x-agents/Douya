@@ -583,7 +583,7 @@ export async function registerBotTools(ctx, opts = {}) {
     for (const [name, def] of Object.entries(ACTIONS)) {
       register(() => defineTool({
         name: `odm_act_${name}`,
-        description: `${def.desc}${def.risk === 'confirm' ? ' — 只生成待确认卡片，用户点确认后才执行' : ' — 立即执行，可撤销'}。可带 cardId 关联卡片，title 用于展示。`,
+        description: `${def.desc}${def.risk === 'confirm' ? ' — 只生成待确认卡片，用户点确认后才执行' : ' — 立即执行，可撤销'}。可带 cardId 关联卡片，title 用于展示。${/^github_/.test(name) ? ' 若用户点名的 issue/PR 编号与当前卡片不同，必须传用户点名的 number（及正确 url），不要只用卡片链接。summary/preview 与你告诉用户的目标必须是同一处。' : ''}`,
         parameters: { ...def.params, cardId: { type: 'string', description: '相关卡片 id' }, title: { type: 'string', description: '条目标题（展示用）' } },
         output,
         async execute(args) {

@@ -1983,17 +1983,41 @@
     .today-chat.open .today-chat-sheet{transform:none}
     .tile-zoom-overlay{transition:none!important}
   }
-  /* dock fit: header + message list + composer always inside the viewport; only the message list scrolls.
-     --dock-fit is measured by fitTodayChat() (space left above the composer); fallbacks keep the old caps. */
+  /* Open Today chat is a full-viewport warm-glass panel (not a centered sheet over Today).
+     Header + list + chips + composer live inside it; only #todayChatMsgs scrolls
+     (min-height:0 + overflow-y:auto + overscroll-behavior:contain, same as the #185 scroll fix).
+     Desktop content is a centered 820px column. in-zoom is unchanged. */
+  html.chat-full,html.chat-full body,html.chat-full .views,html.chat-full #v-today{overflow:hidden}
+  #v-today .today-chat.open:not(.in-zoom)::before{display:none}
   .today-chat-sheet{min-height:0}
-  .today-chat-msgs{flex:1 1 auto;overscroll-behavior:contain}
-  .today-chat.open:not(.in-zoom) .today-chat-sheet{max-height:min(720px,78vh,var(--dock-fit,78vh))}
-  .today-chat.open:not(.in-zoom) .today-chat-msgs{min-height:min(280px,calc(var(--dock-fit,100vh) - 76px))}
-  @media (max-width:620px){
-    .today-chat.open:not(.in-zoom) .today-chat-sheet{max-height:min(86vh,820px,var(--dock-fit,86vh))}
-    .today-chat.open:not(.in-zoom) .today-chat-msgs{min-height:min(52vh,calc(var(--dock-fit,100vh) - 64px))}
+  .today-chat-msgs{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+  .today-chat.open:not(.in-zoom){
+    position:fixed;inset:0;z-index:800;margin:0;padding:0;
+    display:flex;flex-direction:column;pointer-events:auto;
+    background:rgba(248,247,244,.86);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
   }
-  @media (max-height:640px){#v-today .today-chat.open:not(.in-zoom){padding-top:12px}}
+  .today-chat.open:not(.in-zoom) .today-chat-sheet{
+    flex:1 1 auto;min-height:0;max-height:none;max-width:none;width:100%;margin:0;
+    border-radius:0;border:0;box-shadow:none;background:transparent;backdrop-filter:none;
+    opacity:1;transform:none;overflow:hidden;
+  }
+  .today-chat.open:not(.in-zoom) .today-chat-msgs{
+    flex:1 1 auto;min-height:0;max-height:none;overflow-y:auto;overscroll-behavior:contain;padding:16px 20px;
+  }
+  .today-chat.open:not(.in-zoom) .today-chat-head{padding:14px 20px 12px;background:transparent}
+  .today-chat.open:not(.in-zoom) .today-chat-input{
+    flex-shrink:0;padding:8px 20px max(16px,env(safe-area-inset-bottom))!important;background:transparent;
+  }
+  .today-chat.open:not(.in-zoom) .today-chat-head,
+  .today-chat.open:not(.in-zoom) .today-chat-msgs,
+  .today-chat.open:not(.in-zoom) .chat-ctx,
+  .today-chat.open:not(.in-zoom) .chat-chips,
+  .today-chat.open:not(.in-zoom) .composer-tip,
+  .today-chat.open:not(.in-zoom) .composer-attach,
+  .today-chat.open:not(.in-zoom) .today-chat-input .input-wrap{
+    max-width:820px;width:100%;margin-left:auto;margin-right:auto;box-sizing:border-box;
+  }
+  .today-chat.in-zoom .today-chat-msgs{min-height:0;overflow-y:auto;overscroll-behavior:contain}
   .brief{margin:0 0 16px;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.72);border:1px solid rgba(0,0,0,.06)}
   .brief.compact{margin:0;padding:10px 12px;background:rgba(255,255,255,.55)}
   .brief-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:12px;color:var(--ink3);margin-bottom:6px}
@@ -2665,7 +2689,11 @@
   const MD_DRAFT_OUTRO = /(草稿(在上面|如上|还没发|先放这)|还没(发|提交|发出)|确认(执行|发送)(后|才)|待确认(卡片|卡)|你说发|要发的话|发出去之前)/;
   function mdDraftTarget(intro) {
     const t = String(intro || '');
-    const ref = t.match(/(?:PR|pr|Issue|issue)\s*#\s*\d+/) || t.match(/[\w.-]+\/[\w.-]+#\d+/) || t.match(/#\d+/);
+    const url = t.match(/github\.com\/([\w.-]+)\/([\w.-]+)\/(?:issues|pull)\/(\d+)/i);
+    if (url) return { kind: 'github', label: `${url[1]}/${url[2]}#${url[3]}` };
+    const full = t.match(/[\w.-]+\/[\w.-]+#\d+/);
+    if (full) return { kind: 'github', label: full[0] };
+    const ref = t.match(/(?:PR|pr|Issue|issue)\s*#\s*\d+/) || t.match(/#\d+/);
     if (ref) return { kind: 'github', label: ref[0].replace(/\s+/g, ' ') };
     if (/邮件|email|Email|Gmail/.test(t)) return { kind: 'email', label: '邮件' };
     if (/Slack|slack|频道|#[a-z][\w-]+/.test(t)) return { kind: 'slack', label: 'Slack' };
@@ -4246,7 +4274,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     wrap.innerHTML = `
       <div class="today-chat-sheet" id="todayChatSheet">
         <div class="today-chat-head"><b data-i18n="dock.head">Douya</b><small data-i18n="dock.head_sub">Open Digital Mate · long-term memory</small><button class="x" id="todayChatClose" type="button" data-i18n="dock.close" data-i18n-attr="aria-label" aria-label="Collapse chat">✕</button></div>
-        <div class="today-chat-msgs" id="todayChatMsgs"></div>
+        <div class="today-chat-msgs" id="todayChatMsgs" tabindex="0"></div>
       </div>
       <div class="today-chat-input">
         <div class="chat-ctx" id="chatCtx" hidden><span data-i18n="chat.ctx_label">Talking about</span><b></b><button type="button" id="chatCtxClear" data-i18n="chat.ctx_clear" data-i18n-attr="aria-label" aria-label="Stop focusing this card">✕</button></div>
@@ -4274,9 +4302,9 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     bindDockFit(wrap);
     return wrap;
   }
-  // ===== Dock fit + stick-to-bottom =====
-  // The sticky dock cannot rise above its container (the card list), so a tall sheet pushed the composer below the
-  // fold on short windows. fitTodayChat() measures the room left and caps the sheet; only #todayChatMsgs scrolls.
+  // ===== Dock stick-to-bottom + open-state chrome =====
+  // The open Today chat is a position:fixed full-viewport panel; only #todayChatMsgs scrolls.
+  // fitTodayChat() is a no-op in that mode (and in-zoom). It remains so ResizeObserver / resize hooks stay safe.
   let todayChatPinned = true; // user is at (or near) the newest message
   const DOCK_STICK_PX = 80;
   function todayChatNearBottom(el) { return el.scrollHeight - el.scrollTop - el.clientHeight <= DOCK_STICK_PX; }
@@ -4288,17 +4316,15 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     todayChatPinned = true;
   }
   function fitTodayChat() {
-    const chat = $('todayChat'), sheet = $('todayChatSheet'), view = views.today;
-    if (!chat || !sheet || !view) return;
-    if (chat.classList.contains('in-zoom')) { chat.style.removeProperty('--dock-fit'); return; }
-    if (!chat.classList.contains('open')) return;
-    let host = chat.parentElement;
-    while (host && host !== view && getComputedStyle(host).display === 'contents') host = host.parentElement;
-    const vr = view.getBoundingClientRect();
-    const top = Math.max(vr.top, host ? host.getBoundingClientRect().top : vr.top);
-    const chrome = chat.getBoundingClientRect().height - sheet.getBoundingClientRect().height; // padding + sheet margin + composer
-    const fit = Math.max(160, Math.floor(vr.bottom - top - chrome - 8));
-    if (chat.style.getPropertyValue('--dock-fit') !== fit + 'px') chat.style.setProperty('--dock-fit', fit + 'px');
+    const chat = $('todayChat');
+    if (!chat) return;
+    // Full-viewport open panel and in-zoom both size the list with flex + min-height:0; no --dock-fit cap.
+    chat.style.removeProperty('--dock-fit');
+  }
+  function syncChatFullClass() {
+    const chat = $('todayChat');
+    const full = !!(chat && chat.classList.contains('open') && !chat.classList.contains('in-zoom'));
+    document.documentElement.classList.toggle('chat-full', full);
   }
   let dockFitRaf = 0, dockWinBound = false;
   function queueDockFit() {
@@ -4359,6 +4385,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     host.appendChild(chat);
     // in-zoom needs the sheet visible beside the card; do NOT flip the dock preference.
     chat.classList.add('in-zoom', 'open');
+    syncChatFullClass();
     ensureInlineBotHistory();
     fitTodayChat(); stickTodayChat(true);
   }
@@ -4371,6 +4398,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (slot && chat.parentElement !== slot) slot.appendChild(chat);
     // Preference was snapshotted at zoom open; closeTileZoom restores it, then we sync the class.
     applyDockOpenState();
+    syncChatFullClass();
   }
 
   function renderCardList(cards) {
@@ -4497,6 +4525,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (fresh) setupTodayChatInput();
     if (chatDockWanted) liveChat.classList.add('open');
     else liveChat.classList.remove('open');
+    syncChatFullClass();
   }
 
 
@@ -4519,9 +4548,10 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   }
   function applyDockOpenState() {
     const wrap = $('todayChat'); if (!wrap) return;
-    if (wrap.classList.contains('in-zoom')) return; // zoom owns visibility
+    if (wrap.classList.contains('in-zoom')) { syncChatFullClass(); return; } // zoom owns visibility
     if (chatDockWanted) wrap.classList.add('open');
     else wrap.classList.remove('open');
+    syncChatFullClass();
   }
   /** byUser = explicit click/focus/send on the dock. While in-zoom, byUser only keeps the sheet usable — does not claim the dock. */
   function openTodayChat(opts = {}) {
@@ -4529,6 +4559,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (opts.byUser && chatInZoom()) {
       // Typing / sending beside a card: keep the borrowed sheet open, leave dock preference alone.
       if (wrap) wrap.classList.add('open');
+      syncChatFullClass();
       if (opts.contextual) paintDockCue();
       return;
     }
@@ -4536,6 +4567,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     else if (!chatDockWanted && !opts.force) return;
     if (!wrap) return;
     wrap.classList.add('open');
+    syncChatFullClass();
     ensureInlineBotHistory();
     const settle = () => { fitTodayChat(); stickTodayChat(true); };
     requestAnimationFrame(settle); setTimeout(settle, 420);
@@ -4547,6 +4579,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     setChatDockWanted(false);
     const wrap = $('todayChat');
     if (wrap) wrap.classList.remove('open');
+    syncChatFullClass();
     try { $('todayChatInput')?.blur(); } catch (_) {}
   }
 
@@ -5656,6 +5689,33 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     d.textContent = text;
     return d;
   }
+  /** Canonical send target from the pending action (preview.to / summary), not from draft prose. */
+  function actionToLabel(a) {
+    const to = a && a.preview && (Array.isArray(a.preview.to) ? a.preview.to[0] : a.preview.to);
+    if (to) return String(to);
+    const m = String((a && a.summary) || '').match(/[\w.-]+\/[\w.-]+#\d+/);
+    return m ? m[0] : '';
+  }
+  function syncDraftTargetFromAction(container, action) {
+    const label = actionToLabel(action);
+    if (!label || !container) return;
+    const el = action && action.id ? container.querySelector(`[data-action-id="${CSS.escape(String(action.id))}"]`) : null;
+    let n = el ? el.previousElementSibling : null;
+    while (n) {
+      if (n.matches && n.matches('.bubble.me, .z-msg.me')) break;
+      const drafts = n.querySelectorAll ? n.querySelectorAll('.md-draft') : [];
+      if (drafts.length) {
+        drafts.forEach(d => {
+          if (d.dataset.target === label) return;
+          d.dataset.target = label;
+          const b = d.querySelector('.md-draft-to b');
+          if (b) b.textContent = label;
+        });
+        break;
+      }
+      n = n.previousElementSibling;
+    }
+  }
   function actionCardEl(a) {
     const el = document.createElement('div');
     el.className = `act-card act-${a.status}`;
@@ -5705,6 +5765,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     for (const a of (r.actions || []).filter(filter).reverse()) {
       if (container.querySelector(`[data-action-id="${a.id}"]`)) continue;
       container.appendChild(actionCardEl(a));
+      syncDraftTargetFromAction(container, a);
     }
     container.scrollTop = container.scrollHeight;
   }
@@ -6371,7 +6432,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         const list = await actionsApi({ op: 'list' }).catch(() => ({}));
         const a = ((list && list.actions) || []).find(x => x.id === r.actionId);
         const target = ctx.container || $('todayChatMsgs');
-        if (a && target) { target.appendChild(actionCardEl(a)); target.scrollTop = target.scrollHeight; }
+        if (a && target) { target.appendChild(actionCardEl(a)); syncDraftTargetFromAction(target, a); target.scrollTop = target.scrollHeight; }
         return { ok: true, message: '已生成「待你确认」草稿，在下方卡片里确认前不会发出' };
       },
     };

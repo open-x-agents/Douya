@@ -1984,15 +1984,20 @@
     .tile-zoom-overlay{transition:none!important}
   }
   /* dock fit: header + message list + composer always inside the viewport; only the message list scrolls.
-     --dock-fit is measured by fitTodayChat() (space left above the composer); fallbacks keep the old caps. */
+     --dock-fit is measured by fitTodayChat() (space left above the composer); fallbacks keep the old caps.
+     The open sheet is height:auto + max-height only, so a flex:1 1 auto child keeps a content-sized
+     min-height (Safari especially) and never becomes a scrollport — wheel then scrolls #v-today
+     (scrollbar at the window edge). Zero the list min-height and cap it below the sheet so the
+     panel itself scrolls with wheel/trackpad and keyboard. */
   .today-chat-sheet{min-height:0}
-  .today-chat-msgs{flex:1 1 auto;overscroll-behavior:contain}
+  .today-chat-msgs{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}
   .today-chat.open:not(.in-zoom) .today-chat-sheet{max-height:min(720px,78vh,var(--dock-fit,78vh))}
-  .today-chat.open:not(.in-zoom) .today-chat-msgs{min-height:min(280px,calc(var(--dock-fit,100vh) - 76px))}
+  .today-chat.open:not(.in-zoom) .today-chat-msgs{min-height:min(280px,calc(var(--dock-fit,100vh) - 76px));max-height:min(644px,calc(78vh - 76px),calc(var(--dock-fit,78vh) - 76px))}
   @media (max-width:620px){
     .today-chat.open:not(.in-zoom) .today-chat-sheet{max-height:min(86vh,820px,var(--dock-fit,86vh))}
-    .today-chat.open:not(.in-zoom) .today-chat-msgs{min-height:min(52vh,calc(var(--dock-fit,100vh) - 64px))}
+    .today-chat.open:not(.in-zoom) .today-chat-msgs{min-height:min(52vh,calc(var(--dock-fit,100vh) - 64px));max-height:min(calc(86vh - 64px),calc(820px - 64px),calc(var(--dock-fit,86vh) - 64px))}
   }
+  .today-chat.in-zoom .today-chat-msgs{min-height:0;overflow-y:auto;overscroll-behavior:contain}
   @media (max-height:640px){#v-today .today-chat.open:not(.in-zoom){padding-top:12px}}
   .brief{margin:0 0 16px;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.72);border:1px solid rgba(0,0,0,.06)}
   .brief.compact{margin:0;padding:10px 12px;background:rgba(255,255,255,.55)}
@@ -4246,7 +4251,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     wrap.innerHTML = `
       <div class="today-chat-sheet" id="todayChatSheet">
         <div class="today-chat-head"><b data-i18n="dock.head">Douya</b><small data-i18n="dock.head_sub">Open Digital Mate · long-term memory</small><button class="x" id="todayChatClose" type="button" data-i18n="dock.close" data-i18n-attr="aria-label" aria-label="Collapse chat">✕</button></div>
-        <div class="today-chat-msgs" id="todayChatMsgs"></div>
+        <div class="today-chat-msgs" id="todayChatMsgs" tabindex="0"></div>
       </div>
       <div class="today-chat-input">
         <div class="chat-ctx" id="chatCtx" hidden><span data-i18n="chat.ctx_label">Talking about</span><b></b><button type="button" id="chatCtxClear" data-i18n="chat.ctx_clear" data-i18n-attr="aria-label" aria-label="Stop focusing this card">✕</button></div>

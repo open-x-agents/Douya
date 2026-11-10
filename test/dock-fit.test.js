@@ -11,10 +11,16 @@ test('open sheet is capped by the measured dock fit (desktop + phone)', () => {
   assert.match(html, /\.today-chat\.open:not\(\.in-zoom\) \.today-chat-sheet\{max-height:min\(86vh,820px,var\(--dock-fit,86vh\)\)\}/);
 });
 test('message-list floors never exceed the fit (min-height can not push the composer out)', () => {
-  assert.match(html, /\.today-chat\.open:not\(\.in-zoom\) \.today-chat-msgs\{min-height:min\(280px,calc\(var\(--dock-fit,100vh\) - 76px\)\)\}/);
-  assert.match(html, /\.today-chat\.open:not\(\.in-zoom\) \.today-chat-msgs\{min-height:min\(52vh,calc\(var\(--dock-fit,100vh\) - 64px\)\)\}/);
+  assert.match(html, /\.today-chat\.open:not\(\.in-zoom\) \.today-chat-msgs\{min-height:min\(280px,calc\(var\(--dock-fit,100vh\) - 76px\)\)/);
+  assert.match(html, /\.today-chat\.open:not\(\.in-zoom\) \.today-chat-msgs\{min-height:min\(52vh,calc\(var\(--dock-fit,100vh\) - 64px\)\)/);
   assert.match(html, /\.today-chat-sheet\{min-height:0\}/);
-  assert.match(html, /\.today-chat-msgs\{flex:1 1 auto;overscroll-behavior:contain\}/);
+  assert.match(html, /\.today-chat-msgs\{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain\}/);
+});
+test('open message list is a capped scrollport (wheel/trackpad/keyboard, not #v-today)', () => {
+  assert.match(html, /max-height:min\(644px,calc\(78vh - 76px\),calc\(var\(--dock-fit,78vh\) - 76px\)\)/);
+  assert.match(html, /max-height:min\(calc\(86vh - 64px\),calc\(820px - 64px\),calc\(var\(--dock-fit,86vh\) - 64px\)\)/);
+  assert.match(html, /\.today-chat\.in-zoom \.today-chat-msgs\{min-height:0;overflow-y:auto;overscroll-behavior:contain\}/);
+  assert.match(html, /id="todayChatMsgs" tabindex="0"/);
 });
 test('the dock-fit block is the last word in the stylesheet', () => {
   const end = html.indexOf('</style>');

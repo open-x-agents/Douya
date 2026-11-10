@@ -11,6 +11,30 @@ export const shHour = (now = Date.now()) => new Date(now + SH).getUTCHours()
 const shWeekday = (now = Date.now()) => new Date(now + SH).getUTCDay()
 const https = u => (typeof u === 'string' && /^https:\/\//.test(u) ? u : null)
 
+/** Action ledgers are stored with Chinese verb prefixes; map them when the page is English. */
+const DONE_EN = [
+  [/^评审评论\s+/, 'Reviewed '],
+  [/^评论\s+/, 'Commented on '],
+  [/^合并\s+(.+?)（([^）]+)）\s*$/, (_, repo, method) => `Merged ${repo} (${method})`],
+  [/^合并\s+/, 'Merged '],
+  [/^关闭\s+/, 'Closed '],
+  [/^重新打开\s+/, 'Reopened '],
+  [/^批准\s+/, 'Approved '],
+  [/^要求修改\s+/, 'Requested changes on '],
+  [/^回复邮件给\s+/, 'Replied to '],
+  [/^把邮件移到垃圾箱\s+/, 'Moved to trash '],
+  [/^在 Slack\s+(\S*)\s*回复$/, (_, ch) => `Replied in Slack ${ch}`.trim()],
+  [/^归档\s+/, 'Archived '],
+]
+export function localizeDoneText(text, lang = DEFAULT_LOCALE) {
+  const s = String(text || '')
+  if (!s || resolveLang(lang) !== 'en') return s
+  for (const [re, to] of DONE_EN) {
+    if (re.test(s)) return s.replace(re, to)
+  }
+  return s
+}
+
 /** Work-ish cards collapse after hours: code, chat and machine mail. Personal mail / tasks / views stay. */
 const WORK_GROUPS = new Set(['code', 'security', 'updates'])
 export function isWorkish(card) {
@@ -35,13 +59,13 @@ export function doneToday({ completions = [], itemStatus = {}, pendingActions = 
   const acts = Object.values(pendingActions || {}).filter(a => a && a.status === 'executed' && !a.undoneAt && today(a.executedAt))
   const count = cards.length + items.length + acts.length
   if (!count) return null
+  const locale = resolveLang(lang)
   const hi = []
-  for (const a of acts.sort((x, y) => String(y.executedAt).localeCompare(String(x.executedAt)))) hi.push({ kind: 'action', text: clip(a.summary || a.action, 60), url: null, at: a.executedAt })
-  for (const c of cards.sort((x, y) => String(y.at).localeCompare(String(x.at)))) hi.push({ kind: 'card', text: clip(c.title, 60), url: https(c.url), at: c.at })
-  for (const [u, v] of items.sort((x, y) => String(y[1].at).localeCompare(String(x[1].at)))) hi.push({ kind: 'item', text: clip(v.title || u, 60), url: https(u), at: v.at })
+  for (const a of acts.sort((x, y) => String(y.executedAt).localeCompare(String(x.executedAt)))) hi.push({ kind: 'action', text: clip(localizeDoneText(a.summary || a.action, locale), 60), url: null, at: a.executedAt })
+  for (const c of cards.sort((x, y) => String(y.at).localeCompare(String(x.at)))) hi.push({ kind: 'card', text: clip(localizeDoneText(c.title, locale), 60), url: https(c.url), at: c.at })
+  for (const [u, v] of items.sort((x, y) => String(y[1].at).localeCompare(String(x[1].at)))) hi.push({ kind: 'item', text: clip(localizeDoneText(v.title || u, locale), 60), url: https(u), at: v.at })
   const seen = new Set()
   const highlights = hi.filter(h => h.text && !seen.has(h.text) && seen.add(h.text)).slice(0, 5)
-  const locale = resolveLang(lang)
   const parts = []
   if (cards.length) parts.push(t('done.line_cards', locale, { n: cards.length }))
   if (items.length) parts.push(t('done.line_items', locale, { n: items.length }))

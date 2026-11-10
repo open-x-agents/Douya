@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
-import { isAfterHours, isWorkish, doneToday, greetingLine, shHour } from '../src/web/day-pulse.js'
+import { isAfterHours, isWorkish, doneToday, greetingLine, shHour, localizeDoneText } from '../src/web/day-pulse.js'
 import { validateUiOp, applyUiOp, cardKey } from '../src/ui/ops.js'
 import { hydrateFace, autoFace } from '../src/ui/face.js'
 
@@ -25,6 +25,7 @@ test('doneToday: only real completions of today; system marks, undone actions an
   const at = '2026-11-04T03:00:00Z', y = '2026-11-03T03:00:00Z'
   const d = doneToday({
     now: WED + 4 * 3600e3,
+    lang: 'zh',
     completions: [
       { cardId: 'c1', title: '合同确认', action: 'done', at, url: 'https://mail.google.com/x' },
       { cardId: 'c2', title: '昨天的', action: 'done', at: y },
@@ -45,6 +46,26 @@ test('doneToday: only real completions of today; system marks, undone actions an
   assert.deepEqual(d.highlights.map(h => h.text), ['归档 12 封促销', '合同确认', '审完 #1'])
   assert.deepEqual(d.cardIds, ['c1'])
   assert.equal(doneToday({ now: WED }), null)
+})
+
+test('doneToday English UI maps stored Chinese action verbs (评论/合并)', () => {
+  assert.equal(localizeDoneText('评论 Birfy/jitagent#16', 'en'), 'Commented on Birfy/jitagent#16')
+  assert.equal(localizeDoneText('合并 Birfy/jitagent#19（squash）', 'en'), 'Merged Birfy/jitagent#19 (squash)')
+  assert.equal(localizeDoneText('评论 Birfy/jitagent#16', 'zh'), '评论 Birfy/jitagent#16')
+  const at = '2026-11-04T03:00:00Z'
+  const d = doneToday({
+    now: WED + 4 * 3600e3,
+    lang: 'en',
+    pendingActions: {
+      a1: { status: 'executed', executedAt: at, summary: '评论 ThinkFlowLab/orbit#2116' },
+      a2: { status: 'executed', executedAt: at, summary: '合并 Birfy/jitagent#19（squash）' },
+    },
+  })
+  assert.deepEqual(d.highlights.map(h => h.text).sort(), [
+    'Commented on ThinkFlowLab/orbit#2116',
+    'Merged Birfy/jitagent#19 (squash)',
+  ].sort())
+  assert.equal(d.line, 'Douya ran 2 for you')
 })
 
 test('greeting line is built from live counts and stays honest when empty', () => {

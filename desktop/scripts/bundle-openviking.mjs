@@ -30,13 +30,10 @@ export const LOCAL_EMBED_SHA256 = 'ab9b81d9cd329c712eee379cf0068eabe6a5e2a01d0de
 export const LOCAL_EMBED_BYTES = 47886240
 export const LLAMA_CPP_PYTHON_VERSION = '0.3.36'
 // Official CPU wheels from the llama-cpp-python GitHub release (sha256 from the release digest).
-// macOS Intel has no recent wheel, so that job builds from the PyPI sdist.
+// macOS Intel has no recent wheel. The published v0.3.36 macosx_11_0_arm64 wheel is a
+// corrupt zip (sha256 matches the release digest, but entries cannot be extracted), so
+// both Mac jobs build from the PyPI sdist with MACOSX_DEPLOYMENT_TARGET=11.0.
 export const LLAMA_CPP_WHEELS = {
-  'darwin-arm64': {
-    name: 'llama_cpp_python-0.3.36-py3-none-macosx_11_0_arm64.whl',
-    sha256: '1bec5e1d9fc7c4919aaece647bbd3e1a7f36ac8fd2714c8cda7e6991a544557b',
-    bytes: 24928299,
-  },
   'linux-x64': {
     name: 'llama_cpp_python-0.3.36-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl',
     sha256: 'c8a3e98093e950d7a770f794842e36f2db82b2933e8762ed7b5ffd435011e8e4',
@@ -156,8 +153,12 @@ function installLlamaCppFromSource(python, site, platform, arch, reason) {
   console.log(`[bundle-ov] uv pip install llama-cpp-python==${LLAMA_CPP_PYTHON_VERSION} (source for ${platform}-${arch}${reason ? `: ${reason}` : ''})`)
   const env = {
     ...process.env,
-    CMAKE_ARGS: '-DGGML_METAL=OFF -DGGML_CUDA=OFF -DGGML_NATIVE=OFF -DGGML_BLAS=OFF',
+    CMAKE_ARGS: platform === 'darwin'
+      ? '-DGGML_METAL=OFF -DGGML_CUDA=OFF -DGGML_NATIVE=OFF -DGGML_BLAS=OFF -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0'
+      : '-DGGML_METAL=OFF -DGGML_CUDA=OFF -DGGML_NATIVE=OFF -DGGML_BLAS=OFF',
     FORCE_CMAKE: '1',
+    // Keep Intel (and any source fallback) loadable on macOS 11+, not only the CI runner's OS.
+    ...(platform === 'darwin' ? { MACOSX_DEPLOYMENT_TARGET: '11.0' } : {}),
   }
   run('uv', ['pip', 'install', '--python', python, '--target', site, `llama-cpp-python==${LLAMA_CPP_PYTHON_VERSION}`], { env })
   return 'source'

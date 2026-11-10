@@ -13,6 +13,7 @@
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { createWriteStream, existsSync, mkdirSync, rmSync, renameSync, readdirSync, statSync, writeFileSync, unlinkSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join, delimiter } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { pipeline } from 'node:stream/promises'
@@ -149,20 +150,10 @@ export function llamaCppWheelUrl(platform, arch) {
   return `https://github.com/abetlen/llama-cpp-python/releases/download/v${LLAMA_CPP_PYTHON_VERSION}/${spec.name}`
 }
 
-async function installLlamaCpp(python, site, platform, arch) {
-  const spec = llamaCppWheelSpec(platform, arch)
-  if (spec) {
-    const url = llamaCppWheelUrl(platform, arch)
-    const dest = join(dirname(site), spec.name)
-    console.log(`[bundle-ov] uv pip install llama-cpp-python==${LLAMA_CPP_PYTHON_VERSION} (CPU wheel ${spec.name})`)
-    await downloadAndVerify(url, dest, spec.sha256, spec.bytes)
-    run('uv', ['pip', 'install', '--python', python, '--target', site, dest])
-    try { unlinkSync(dest) } catch {}
-    return 'wheel'
-  }
+function installLlamaCppFromSource(python, site, platform, arch, reason) {
   // Install from PyPI only. Do not pass the HTML CPU wheel index: uv would pin
   // to that index, hide the sdist, and refuse macOS Intel with "no matching wheel".
-  console.log(`[bundle-ov] uv pip install llama-cpp-python==${LLAMA_CPP_PYTHON_VERSION} (source, no wheel for ${platform}-${arch})`)
+  console.log(`[bundle-ov] uv pip install llama-cpp-python==${LLAMA_CPP_PYTHON_VERSION} (source for ${platform}-${arch}${reason ? `: ${reason}` : ''})`)
   const env = {
     ...process.env,
     CMAKE_ARGS: '-DGGML_METAL=OFF -DGGML_CUDA=OFF -DGGML_NATIVE=OFF -DGGML_BLAS=OFF',
@@ -170,6 +161,29 @@ async function installLlamaCpp(python, site, platform, arch) {
   }
   run('uv', ['pip', 'install', '--python', python, '--target', site, `llama-cpp-python==${LLAMA_CPP_PYTHON_VERSION}`], { env })
   return 'source'
+}
+
+async function installLlamaCpp(python, site, platform, arch) {
+  const spec = llamaCppWheelSpec(platform, arch)
+  if (spec) {
+    const url = llamaCppWheelUrl(platform, arch)
+    const dest = join(tmpdir(), spec.name)
+    console.log(`[bundle-ov] uv pip install llama-cpp-python==${LLAMA_CPP_PYTHON_VERSION} (CPU wheel ${spec.name})`)
+    try {
+      await downloadAndVerify(url, dest, spec.sha256, spec.bytes)
+      const magic = readFileSync(dest).subarray(0, 4).toString('hex')
+      console.log(`[bundle-ov] wheel sha256 ok, ${statSync(dest).size} bytes, magic ${magic}`)
+      if (magic !== '504b0304') throw new Error(`wheel is not a zip (magic ${magic})`)
+      run('uv', ['pip', 'install', '--python', python, '--target', site, dest])
+      return 'wheel'
+    } catch (err) {
+      console.warn(`[bundle-ov] wheel install failed (${err.message}); falling back to a source build`)
+      return installLlamaCppFromSource(python, site, platform, arch, err.message)
+    } finally {
+      try { unlinkSync(dest) } catch {}
+    }
+  }
+  return installLlamaCppFromSource(python, site, platform, arch, '')
 }
 
 function walk(dir, visit) {

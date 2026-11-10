@@ -40,8 +40,8 @@ jobs:
         with:
           node-version: '22'
       - uses: astral-sh/setup-uv@v6
-      - name: CMake (macOS Intel; llama-cpp-python has no recent x64 wheel)
-        if: matrix.target == 'mac' && matrix.arch == 'x64'
+      - name: CMake (macOS; needed to build llama-cpp-python from source)
+        if: matrix.target == 'mac'
         working-directory: .
         run: brew install cmake ninja
       - run: npm ci --no-fund --no-audit

@@ -86,6 +86,7 @@ export const CARD_WORK_PROMPT = `你是「豆芽」背后的 Main Bot（Chief）
 - 「改标题 / 改成… / 下一步改成…」→ odm_card_update
 - 「这张卡换个样子 / 做成清单 / 突出谁在等 / 按时间排」→ odm_card_face（只选布局和要突出的条目，数据豆芽自己填）
 - 长期计划 / 健身 / 学习 / 兴趣 → odm_future_get 先读真实兴趣；odm_future_update propose 提案，用户同意才 create/accept。navigate page=future 看页面。信息不足先问，不编兴趣。
+- 和豆芽一起做 Future 的某一步（消息里带 plan/step id）→ 先 odm_future_get，给 2–3 个今天就能动手的具体做法，用现有工具落地（odm_github_* 查 issue/PR、起草文字、odm_timetable_update 排一段时间）；评论/发信/合并只走待确认卡片，绝不说已发出。用户说做完了或你用工具核实了 → odm_future_update op=step done=true，evidence 写一行结果（如 PR 链接），nextStep 写下一步；回复里说进度 n/m 和下一步。
 - 「排一下 / 挪一下 / 改时间表 / 这周跑步三次」→ odm_timetable_get（看 week[]）+ odm_timetable_update（对每个 date 各写一次）
 - 「加一张 / 记一下 / 待办」→ odm_card_create
 - 「刷新今日 / 重新汇聚」→ odm_digest_refresh
@@ -340,12 +341,14 @@ export async function registerBotTools(ctx, opts = {}) {
     }))
     register(() => defineTool({
       name: 'odm_future_update',
-      description: 'Manage Future plans. FIRST read odm_future_get. op=propose saves an inactive suggestion, not an accepted plan. Ground it in a returned memoryId or verbatim interestQuote from the user’s actual chat; NEVER invent interests. title, goal, step (one concrete action this week) required. Explain why the source supports the goal. op=create or accept requires explicit user agreement in the current conversation and userAgreed=true; otherwise only propose and ask. update changes title/goal; step text plus stepId edits an existing step, without stepId appends a next step; step toggles a stable stepId, archive ends a plan. Only act on user-requested edits. Read progress from plans on future turns; do not claim a save unless ok=true. No health/fitness prescription beyond the user’s stated goals.',
+      description: 'Manage Future plans. FIRST read odm_future_get. op=propose saves an inactive suggestion, not an accepted plan. Ground it in a returned memoryId or verbatim interestQuote from the user’s actual chat; NEVER invent interests. title, goal, step (one concrete action this week) required. Explain why the source supports the goal. op=create or accept requires explicit user agreement in the current conversation and userAgreed=true; otherwise only propose and ask. update changes title/goal; step text plus stepId edits an existing step, without stepId appends a next step; step toggles a stable stepId (done=true marks it finished; add evidence = one line of proof such as the PR URL, and nextStep = the next concrete action to queue it in the same call), archive ends a plan. Mark a step done only when the user says it is done or you verified it with a tool (e.g. found their PR); never for a send still waiting in a 待确认 card. Only act on user-requested edits. Read progress from plans on future turns; do not claim a save unless ok=true. No health/fitness prescription beyond the user’s stated goals.',
       parameters: {
         op: { type: 'string', required: true, enum: ['propose', 'create', 'accept', 'update', 'step', 'archive'] },
         id: { type: 'string' }, title: { type: 'string' }, goal: { type: 'string' }, step: { type: 'string' },
         memoryId: { type: 'string' }, interestQuote: { type: 'string' },
         stepId: { type: 'string' }, done: { type: 'boolean' }, userAgreed: { type: 'boolean' },
+        evidence: { type: 'string', description: 'op=step done=true: one-line result/proof, e.g. PR link' },
+        nextStep: { type: 'string', description: 'op=step done=true: optional next concrete step to append' },
       }, output,
       async execute(args) { try { return JSON.stringify(await router.futureApply(args, { by: 'chief' })) } catch (err) { return JSON.stringify({ ok: false, error: err.message }) } },
     }))

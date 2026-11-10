@@ -5032,7 +5032,10 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const live = newLiveTurn({ container: $('todayChatMsgs'), typingEl: typing, setLabel, bubbleClass: 'bubble bot', ctx: { container: $('todayChatMsgs'), sendPrompt: dockPrompt } });
       try {
         const ctx = chatCtx;
+        const hidden = pendingHiddenContext;
+        pendingHiddenContext = '';
         const ctxBody = ctx ? { cardId: ctx.isTT ? null : ctx.card.id, cardContext: ctx.isTT ? '当前在看：今天的时间表' : `当前在看卡片「${ctx.card.title || ''}」：${ctx.card.body || ''} ${ctx.card.url || ''}` } : {};
+        if (hidden) ctxBody.hiddenContext = hidden;
         const data = await sendChatResilient({ message: msg, attachments: atts, sessionId: BOT_SESSION, viewContext: viewContext(ctx ? 'card' : 'dock'), turn: live.id, ...ctxBody }, setLabel, { streaming: () => feedState.mode === 'sse' });
         if (ctx && data && data.status !== 'merged' && !data.error) { const ah = pending.length ? await attMetaForHistory(pending) : null; cardChatApi(ctx.key, { op: 'append', messages: [{ role: 'user', text: msg, ...(ah ? { attachments: ah } : {}) }, ...(data.text ? [{ role: 'assistant', text: data.text }] : [])] }); }
         live.finish();
@@ -6414,7 +6417,19 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   // buttons open links / cards, run view ops or send a prompt; a form draft only shows the existing 待你确认 card.
   const panelViews = new Map(); // surfaceId -> view, shown on 今天
   const PANEL_KEY = 'odm.panels.v1';
-  window.futureChat = text => { showView('today'); openTodayChat({ byUser: true }); const i = $('todayChatInput'); if (i) { i.value = text; i.dispatchEvent(new Event('input')); i.focus(); } };
+  let pendingHiddenContext = '';
+  window.futureChat = (text, opts = {}) => {
+    showView('today');
+    openTodayChat({ byUser: true });
+    pendingHiddenContext = typeof opts.hiddenContext === 'string' ? opts.hiddenContext : '';
+    const i = $('todayChatInput');
+    if (i) {
+      i.value = text;
+      i.dispatchEvent(new Event('input'));
+      if (opts.send) $('todayChatSend')?.click();
+      else i.focus();
+    }
+  };
   function dockPrompt(text) { const i = $('todayChatInput'); if (!i) return; if (currentView() !== 'today') showView('today'); i.value = String(text || ''); $('todayChatSend')?.click(); }
   function surfaceHost(ctx = {}) {
     return {

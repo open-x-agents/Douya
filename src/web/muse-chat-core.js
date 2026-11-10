@@ -304,6 +304,7 @@ export async function runMuseChatTurn(ctx, {
   cardId = null,
   cardContext = null,
   viewContext = '',
+  hiddenContext = '', // model-only instructions (not shown in the user's bubble)
   doneContext = '', // 【刚处理完】 recent sent replies / closed cards (server-built)
   attachments = null, // [{kind:'image'|'file', mediaType?, name, data: base64}]
   dshHome,
@@ -323,6 +324,8 @@ export async function runMuseChatTurn(ctx, {
   const T = timing || {}
   T.turnCallAt = Date.now()
   let outbound = text || (hasAttach ? '请看我附上的内容。' : '')
+  const hiddenText = hiddenContext ? cleanBlock(hiddenContext).slice(0, 3200) : ''
+  if (hiddenText) outbound = `${hiddenText}\n\n${outbound}`
   // Server-built snapshots already start with 【当前卡片】 and keep their line structure.
   const ctxText = cardContext ? cleanBlock(cardContext).slice(0, 3200) : ''
   if (ctxText) outbound = `${ctxText.startsWith('【当前卡片】') ? ctxText : `【当前卡片】${ctxText}`}\n\n${outbound}`

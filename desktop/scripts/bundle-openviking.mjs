@@ -28,7 +28,25 @@ export const LOCAL_EMBED_URL = 'https://huggingface.co/CompendiumLabs/bge-small-
 export const LOCAL_EMBED_SHA256 = 'ab9b81d9cd329c712eee379cf0068eabe6a5e2a01d0def61535eba9384085e2c'
 export const LOCAL_EMBED_BYTES = 47886240
 export const LLAMA_CPP_PYTHON_VERSION = '0.3.36'
-export const LLAMA_CPP_WHEEL_INDEX = 'https://abetlen.github.io/llama-cpp-python/whl/cpu'
+// Official CPU wheels from the llama-cpp-python GitHub release (sha256 from the release digest).
+// macOS Intel has no recent wheel, so that job builds from the PyPI sdist.
+export const LLAMA_CPP_WHEELS = {
+  'darwin-arm64': {
+    name: 'llama_cpp_python-0.3.36-py3-none-macosx_11_0_arm64.whl',
+    sha256: '1bec5e1d9fc7c4919aaece647bbd3e1a7f36ac8fd2714c8cda7e6991a544557b',
+    bytes: 24928299,
+  },
+  'linux-x64': {
+    name: 'llama_cpp_python-0.3.36-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl',
+    sha256: 'c8a3e98093e950d7a770f794842e36f2db82b2933e8762ed7b5ffd435011e8e4',
+    bytes: 27077498,
+  },
+  'win32-x64': {
+    name: 'llama_cpp_python-0.3.36-py3-none-win_amd64.whl',
+    sha256: 'ae5e88a2cf464e5a2dde7c8898c2d5c71cc24d03cac6396bf7509456bde0b9fb',
+    bytes: 7767370,
+  },
+}
 
 const TRIPLES = {
   'darwin-arm64': 'aarch64-apple-darwin',
@@ -117,31 +135,40 @@ async function downloadAndVerify(url, dest, sha256, expectedBytes) {
   }
 }
 
-export function hasLlamaCppWheel(platform, arch) {
-  // Official CPU wheels exist for linux x64/arm64, macOS arm64, and Windows x64.
-  // There is no recent macOS Intel wheel, so that job builds from source.
-  if (platform === 'darwin' && arch === 'x64') return false
-  return true
+export function llamaCppWheelSpec(platform, arch) {
+  return LLAMA_CPP_WHEELS[`${platform}-${arch}`] || null
 }
 
-function installLlamaCpp(python, site, platform, arch) {
-  const args = [
-    'pip', 'install', '--python', python, '--target', site,
-    '--extra-index-url', LLAMA_CPP_WHEEL_INDEX,
-    `llama-cpp-python==${LLAMA_CPP_PYTHON_VERSION}`,
-  ]
-  if (hasLlamaCppWheel(platform, arch)) {
-    console.log(`[bundle-ov] uv pip install llama-cpp-python==${LLAMA_CPP_PYTHON_VERSION} (CPU wheel)`)
-    run('uv', [...args, '--only-binary', 'llama-cpp-python'])
+export function hasLlamaCppWheel(platform, arch) {
+  return Boolean(llamaCppWheelSpec(platform, arch))
+}
+
+export function llamaCppWheelUrl(platform, arch) {
+  const spec = llamaCppWheelSpec(platform, arch)
+  if (!spec) return null
+  return `https://github.com/abetlen/llama-cpp-python/releases/download/v${LLAMA_CPP_PYTHON_VERSION}/${spec.name}`
+}
+
+async function installLlamaCpp(python, site, platform, arch) {
+  const spec = llamaCppWheelSpec(platform, arch)
+  if (spec) {
+    const url = llamaCppWheelUrl(platform, arch)
+    const dest = join(dirname(site), spec.name)
+    console.log(`[bundle-ov] uv pip install llama-cpp-python==${LLAMA_CPP_PYTHON_VERSION} (CPU wheel ${spec.name})`)
+    await downloadAndVerify(url, dest, spec.sha256, spec.bytes)
+    run('uv', ['pip', 'install', '--python', python, '--target', site, dest])
+    try { unlinkSync(dest) } catch {}
     return 'wheel'
   }
+  // Install from PyPI only. Do not pass the HTML CPU wheel index: uv would pin
+  // to that index, hide the sdist, and refuse macOS Intel with "no matching wheel".
   console.log(`[bundle-ov] uv pip install llama-cpp-python==${LLAMA_CPP_PYTHON_VERSION} (source, no wheel for ${platform}-${arch})`)
   const env = {
     ...process.env,
     CMAKE_ARGS: '-DGGML_METAL=OFF -DGGML_CUDA=OFF -DGGML_NATIVE=OFF -DGGML_BLAS=OFF',
     FORCE_CMAKE: '1',
   }
-  run('uv', args, { env })
+  run('uv', ['pip', 'install', '--python', python, '--target', site, `llama-cpp-python==${LLAMA_CPP_PYTHON_VERSION}`], { env })
   return 'source'
 }
 
@@ -226,7 +253,7 @@ async function main() {
   mkdirSync(site, { recursive: true })
   console.log(`[bundle-ov] uv pip install openviking==${OPENVIKING_VERSION}`)
   run('uv', ['pip', 'install', '--python', python, '--target', site, `openviking==${OPENVIKING_VERSION}`])
-  const llamaHow = installLlamaCpp(python, site, platform, arch)
+  const llamaHow = await installLlamaCpp(python, site, platform, arch)
 
   const modelsDir = join(out, 'models')
   mkdirSync(modelsDir, { recursive: true })

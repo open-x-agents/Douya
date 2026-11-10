@@ -12,8 +12,9 @@ import {
   waitForHealth,
 } from '../desktop/src/openviking.js'
 import {
-  archiveName, archiveUrl, hasLlamaCppWheel, LLAMA_CPP_PYTHON_VERSION, LOCAL_EMBED_BYTES,
-  LOCAL_EMBED_SHA256, LOCAL_EMBED_URL, OPENVIKING_VERSION, PBS_RELEASE,
+  archiveName, archiveUrl, hasLlamaCppWheel, llamaCppWheelUrl, LLAMA_CPP_PYTHON_VERSION,
+  LLAMA_CPP_WHEELS, LOCAL_EMBED_BYTES, LOCAL_EMBED_SHA256, LOCAL_EMBED_URL,
+  OPENVIKING_VERSION, PBS_RELEASE,
 } from '../desktop/scripts/bundle-openviking.mjs'
 import { messages } from '../desktop/src/server.js'
 
@@ -226,6 +227,12 @@ test('bundle script pins OpenViking, the official GGUF, and python-build-standal
   assert.equal(hasLlamaCppWheel('darwin', 'x64'), false)
   assert.equal(hasLlamaCppWheel('win32', 'x64'), true)
   assert.equal(hasLlamaCppWheel('linux', 'x64'), true)
+  assert.equal(llamaCppWheelUrl('darwin', 'x64'), null)
+  assert.match(llamaCppWheelUrl('darwin', 'arm64'), /macosx_11_0_arm64\.whl$/)
+  assert.match(llamaCppWheelUrl('win32', 'x64'), /win_amd64\.whl$/)
+  assert.match(llamaCppWheelUrl('linux', 'x64'), /manylinux2014_x86_64/)
+  assert.equal(LLAMA_CPP_WHEELS['darwin-arm64'].sha256, '1bec5e1d9fc7c4919aaece647bbd3e1a7f36ac8fd2714c8cda7e6991a544557b')
+  assert.equal(LLAMA_CPP_WHEELS['win32-x64'].sha256, 'ae5e88a2cf464e5a2dde7c8898c2d5c71cc24d03cac6396bf7509456bde0b9fb')
   assert.match(archiveName('darwin', 'arm64'), /aarch64-apple-darwin/)
   assert.match(archiveName('darwin', 'x64'), /x86_64-apple-darwin/)
   assert.match(archiveName('win32', 'x64'), /x86_64-pc-windows-msvc/)

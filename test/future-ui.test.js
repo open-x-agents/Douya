@@ -80,3 +80,29 @@ test('sidebar groups product pages before Sources and keeps Today selected', asy
   assert.match(nav[0][0], /class="nav on"/)
   assert.equal(nav.filter(match => match[0].includes('nav on')).length, 1)
 })
+
+test('next step offers Do this with Douya, seeds chat with plan/step context, and reports completion', async () => {
+  const active = { id: 'p1', status: 'active', title: 'Become a steady maintainer', goal: 'Land real fixes', basis: { source: 'user', text: 'I want to ship OSS' }, steps: [{ id: 's1', text: 'Turn orbit #2116 review into a PR', done: false }] }
+  let state = { ok: true, available: true, plans: [active] }
+  const listeners = {}, calls = [], root = { innerHTML: '', addEventListener: (name, fn) => { listeners[name] = fn } }
+  const window = { ODMi18n: { getLocale: () => 'en' }, addEventListener: () => {}, futureChat: (value, opts) => calls.push({ chat: value, opts }) }
+  const fetch = async () => ({ ok: true, json: async () => structuredClone(state) })
+  runInNewContext(source, { window, document: { getElementById: () => root }, fetch })
+  await window.loadFuture()
+  assert.match(root.innerHTML, /data-op="do"[^>]*>Do this with Douya/)
+  assert.match(root.innerHTML, /data-op="schedule"/)
+  const btn = op => ({ dataset: { op }, closest: sel => sel === '[data-step-id]' ? { dataset: { stepId: 's1' } } : { dataset: { plan: 'p1' } } })
+  listeners.click({ target: { closest: () => btn('do') } })
+  assert.equal(calls[0].opts.send, true)
+  for (const bit of ['plan p1', 'step s1', 'Land real fixes', 'I want to ship OSS', 'orbit #2116', 'odm_future_get', 'confirm card']) assert.ok(calls[0].chat.includes(bit), bit)
+  listeners.click({ target: { closest: () => btn('schedule') } })
+  assert.match(calls[1].chat, /timetable/)
+  // Douya marks it done from chat: the card shows proof, progress, a status line, and the new next step.
+  state = { ok: true, available: true, plans: [{ ...active, steps: [{ ...active.steps[0], done: true, evidence: 'PR #12 opened' }, { id: 's2', text: 'Address review on PR #12', done: false }] }] }
+  await window.loadFuture()
+  assert.match(root.innerHTML, /future-evidence">✓ PR #12 opened/)
+  assert.match(root.innerHTML, /1 \/ 2 steps complete/)
+  assert.match(root.innerHTML, /Step done: Turn orbit #2116 review into a PR · PR #12 opened Up next: Address review on PR #12/)
+  assert.match(root.innerHTML, /data-step-id="s2"/)
+  assert.doesNotMatch(root.innerHTML, /data-step-id="s1"/)
+})

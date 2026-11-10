@@ -165,3 +165,28 @@ test('creating a goal that is already proposed activates it instead of adding a 
   assert.equal(again.ok, false)
   assert.match(again.error, /already exists/)
 })
+
+test('Douya completes a step with evidence and queues the next one; progress comes back', async t => {
+  const { service, store, events } = await fixture(t)
+  const { plan } = await service.apply({ ...proposed, op: 'create', userAgreed: true })
+  const step = plan.steps[0]
+  const done = await service.apply({ op: 'step', id: plan.id, stepId: step.id, done: true, evidence: 'Read it: https://example.com/story', nextStep: 'Read the second paragraph aloud.' })
+  assert.equal(done.ok, true)
+  assert.equal(done.plan.steps[0].done, true)
+  assert.equal(done.plan.steps[0].evidence, 'Read it: https://example.com/story')
+  assert.equal(done.plan.steps[1].text, 'Read the second paragraph aloud.')
+  assert.deepEqual(done.progress, { done: 1, total: 2, percent: 50, next: { id: done.plan.steps[1].id, text: 'Read the second paragraph aloud.' } })
+  assert.equal(events.at(-1).reason, 'step')
+  assert.equal(store.get().futurePlans[0].steps.length, 2)
+  // Repeating the same call does not duplicate the queued step; unchecking drops the proof.
+  await service.apply({ op: 'step', id: plan.id, stepId: step.id, done: true, nextStep: 'Read the second paragraph aloud.' })
+  assert.equal(store.get().futurePlans[0].steps.length, 2)
+  const undone = await service.apply({ op: 'step', id: plan.id, stepId: step.id, done: false })
+  assert.equal(undone.plan.steps[0].evidence, undefined)
+  assert.equal(undone.progress.next.id, step.id)
+})
+test('the user checkbox path can record evidence but cannot complete a proposal', async t => {
+  const { service } = await fixture(t)
+  const { plan } = await service.apply(proposed)
+  assert.equal((await service.apply({ op: 'step', id: plan.id, stepId: plan.steps[0].id, done: true, evidence: 'x' }, { by: 'user' })).ok, false)
+})

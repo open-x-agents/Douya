@@ -131,6 +131,14 @@ required); `odm_future_update` proposes, accepts/creates, edits, checks/undoes a
 or archives. Suggestions stay inactive until you accept on the page or explicitly agree
 in chat. If interests are missing, Douya asks rather than assuming fitness or study goals.
 
+The next step on an active plan has **Do this with Douya / 和豆芽一起做**: it opens chat
+seeded with the plan, goal, reason, and step ids, and Douya proposes concrete moves with
+its existing tools (GitHub lookup, drafts, a timetable block via **Schedule it / 排进时间表**).
+Anything outbound stays a Confirm card. When the step is done, Douya calls
+`odm_future_update op=step done=true` with a one-line `evidence` (e.g. the PR link) and an
+optional `nextStep`; the card shows the proof, the new progress, and what is up next.
+The checkbox remains as a manual fallback.
+
 Plans and progress live in `futurePlans` in the existing host `state.json`
 (`$DSH_HOME/opendigitalmate/state.json`, or the configured host home), independently
 of digest cards; restart and re-digest preserve them. No extra service, scheduler, or

@@ -6414,7 +6414,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   // buttons open links / cards, run view ops or send a prompt; a form draft only shows the existing 待你确认 card.
   const panelViews = new Map(); // surfaceId -> view, shown on 今天
   const PANEL_KEY = 'odm.panels.v1';
-  window.futureChat = text => { showView('today'); openTodayChat({ byUser: true }); const i = $('todayChatInput'); if (i) { i.value = text; i.dispatchEvent(new Event('input')); i.focus(); } };
+  window.futureChat = (text, opts = {}) => { showView('today'); openTodayChat({ byUser: true }); const i = $('todayChatInput'); if (i) { i.value = text; i.dispatchEvent(new Event('input')); if (opts.send) $('todayChatSend')?.click(); else i.focus(); } };
   function dockPrompt(text) { const i = $('todayChatInput'); if (!i) return; if (currentView() !== 'today') showView('today'); i.value = String(text || ''); $('todayChatSend')?.click(); }
   function surfaceHost(ctx = {}) {
     return {

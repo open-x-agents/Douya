@@ -4,6 +4,11 @@ import { listOpenVikingMemories } from '../digest/openviking.js'
 
 const text = (value, max = 500) => typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : ''
 const fail = error => ({ ok: false, error })
+// What the chat and the card both report after a change: n of m done, and the step that is up next.
+export function progress(plan) {
+  const steps = plan?.steps || [], done = steps.filter(s => s.done).length, next = steps.find(s => !s.done)
+  return { done, total: steps.length, percent: Math.round(done / (steps.length || 1) * 100), next: next ? { id: next.id, text: next.text } : null }
+}
 export function createFutureService({ store, memories = listOpenVikingMemories, emit = () => {} }) {
   let queue = Promise.resolve()
   async function context() {
@@ -75,13 +80,22 @@ export function createFutureService({ store, memories = listOpenVikingMemories, 
         if (!step) return fail('Step not found.')
         step.done = input.done !== false
         step.doneAt = step.done ? now : null
+        // A finished step keeps one line of proof (e.g. the PR it produced); unchecking clears it.
+        const evidence = text(input.evidence, 240)
+        if (step.done && evidence) step.evidence = evidence
+        if (!step.done) delete step.evidence
+        const next = text(input.nextStep, 240)
+        if (next && step.done) {
+          if (plan.steps.length >= 100) return fail('Step limit reached (100).')
+          if (!plan.steps.some(s => !s.done && s.text === next)) plan.steps.push({ id: randomUUID(), text: next, done: false })
+        }
       } else if (op === 'archive') { plan.status = 'archived' }
       else return fail('Unknown plan operation.')
       plan.updatedAt = now
     }
     await store.save({ futurePlans: plans }, { futurePlans: true })
     emit({ kind: 'future', reason: op })
-    return { ok: true, plan: structuredClone(plan) }
+    return { ok: true, plan: structuredClone(plan), progress: progress(plan) }
   }
   return {
     async get() { return { ...snapshot(), ...await context() } },

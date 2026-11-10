@@ -1,0 +1,77 @@
+{
+  "name": "douya-desktop",
+  "productName": "Douya",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Douya / 豆芽 desktop shell (Electron) for Windows and macOS — opens the local Douya server in one window.",
+  "type": "module",
+  "main": "src/main.js",
+  "author": "open-x-agents",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "electron .",
+    "build:mac": "electron-builder --mac --publish never",
+    "build:win": "electron-builder --win --publish never",
+    "build:dir": "electron-builder --dir --publish never"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "ai.opendigitalmate.douya",
+    "productName": "Douya",
+    "copyright": "Apache-2.0 · open-x-agents",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**",
+      "package.json"
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity",
+      "identity": "-",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Douya uses the microphone only when you press the mic button to talk. 豆芽只在你按下麦克风按钮说话时使用麦克风。"
+      },
+      "hardenedRuntime": false
+    },
+    "dmg": {
+      "title": "Douya"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signtoolOptions": {
+        "publisherName": "Douya (self-signed)"
+      }
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Douya"
+    },
+    "linux": {
+      "target": [
+        "dir"
+      ]
+    }
+  }
+}

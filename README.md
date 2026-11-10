@@ -88,6 +88,26 @@ Default UI is **English**. Switch to 中文 in Settings or the sidebar control (
 
 ---
 
+## Desktop app
+
+A thin Electron shell for **macOS** and **Windows** in [`desktop/`](desktop/) (own `package.json`, so the root install stays small). It opens Douya in its own window: if a server already answers on `127.0.0.1:7777` with a working token it reuses it, otherwise it runs `scripts/start-dsh.mjs` for you and stops it on quit.
+
+```bash
+npm run desktop:dev          # run from this checkout
+npm run desktop:build:mac    # → desktop/dist/*.dmg (arm64 + x64, ad-hoc signed)
+npm run desktop:build:win    # → desktop/dist/*.exe (NSIS; build on Windows or CI)
+```
+
+| Setting | Default |
+| --- | --- |
+| `ODM_ROOT` — repo folder | this checkout, then `~/Documents/git/openDigitalMate`; else it asks once and remembers |
+| `DSH_BIN` — dsh binary | `$DSH_BIN`, then `~/Documents/git/dsh-rc5/bin/dsh`, then `dsh` on `PATH` |
+| `ODM_PORT` | `7777` |
+
+Installers are not notarized. First launch on macOS: right-click **Douya.app → Open** (or `xattr -dr com.apple.quarantine /Applications/Douya.app`). On Windows, SmartScreen shows **More info → Run anyway**. CI builds both on demand: the `desktop` workflow (manual, or a `desktop-v*` tag).
+
+---
+
 ## Architecture
 
 ```

@@ -13,3 +13,6 @@ data/
 node_modules/
 state.json
 vendor/ds-bot/node_modules/
+
+# Desktop shell (Electron) build output.
+desktop/dist/

@@ -1,7 +1,7 @@
 name: desktop
 
 # Builds the Electron desktop installers: macOS dmg (arm64 + x64), Windows nsis (x64).
-# Each job also builds a relocatable OpenViking runtime (CPython + openviking) into the app.
+# Each job also builds a relocatable OpenViking runtime (CPython + openviking + local GGUF + llama-cpp-python) into the app.
 # Manual or on a `desktop-v*` tag only — never on PRs, so PR CI stays fast.
 # No secrets, no notarization:
 # - macOS is ad-hoc signed (`mac.identity: "-"`), so Apple Silicon opens it instead of "damaged".
@@ -30,7 +30,7 @@ jobs:
             target: win
             arch: x64
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 75
     defaults:
       run:
         working-directory: desktop
@@ -40,6 +40,10 @@ jobs:
         with:
           node-version: '22'
       - uses: astral-sh/setup-uv@v6
+      - name: CMake (macOS Intel; llama-cpp-python has no recent x64 wheel)
+        if: matrix.target == 'mac' && matrix.arch == 'x64'
+        working-directory: .
+        run: brew install cmake ninja
       - run: npm ci --no-fund --no-audit
 
       - name: Bundle OpenViking

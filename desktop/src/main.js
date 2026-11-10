@@ -12,7 +12,7 @@ import {
 } from './server.js'
 import {
   bundledCommand, decideOpenViking, ensureOpenVikingConfig,
-  probeOpenVikingHealth, resolveBundledRuntime, sanitizeSpawnEnv, waitForHealth,
+  probeOpenVikingHealth, resolveBundledModel, resolveBundledRuntime, sanitizeSpawnEnv, waitForHealth,
 } from './openviking.js'
 
 const WARM_BG = '#f4f2ee' // dsh-muse-ui --bg
@@ -170,13 +170,18 @@ function stopChild(c, { onDone, timeoutMs = 4000 } = {}) {
 async function ensureMemory() {
   const portOpen = await isPortOpen(1933)
   const healthy = portOpen ? await probeOpenVikingHealth() : false
-  const runtime = resolveBundledRuntime(bundledOvRoot())
+  const ovRoot = bundledOvRoot()
+  const runtime = resolveBundledRuntime(ovRoot)
   const plan = decideOpenViking({ portOpen, healthy, bundled: Boolean(runtime) })
   if (plan.action === 'reuse') return
   if (plan.action === 'conflict') { ovNote = { kind: 'conflict' }; return }
   if (plan.action === 'skip') { ovNote = { kind: 'skip' }; return }
 
-  const cfg = ensureOpenVikingConfig({ homeDir: homeDir(), userDataDir: app.getPath('userData') })
+  const cfg = ensureOpenVikingConfig({
+    homeDir: homeDir(),
+    userDataDir: app.getPath('userData'),
+    bundledModelPath: resolveBundledModel(ovRoot),
+  })
   const cmd = bundledCommand(runtime, { confPath: cfg.confPath })
   mkdirSync(dirname(ovLogFile()), { recursive: true })
   const log = createWriteStream(ovLogFile(), { flags: 'w' })

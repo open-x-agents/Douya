@@ -10,16 +10,25 @@
  * Needs `uv` and `tar` on PATH. Run on the target OS/arch (or an arch-matched runner).
  * Unused Volcengine service SDKs pulled in by volcengine-python-sdk are pruned after install.
  */
+import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
-import { createWriteStream, existsSync, mkdirSync, rmSync, renameSync, readdirSync, statSync, writeFileSync, unlinkSync } from 'node:fs'
+import { createWriteStream, existsSync, mkdirSync, rmSync, renameSync, readdirSync, statSync, writeFileSync, unlinkSync, readFileSync } from 'node:fs'
 import { dirname, join, delimiter } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { pipeline } from 'node:stream/promises'
 import { Readable } from 'node:stream'
+import { LOCAL_EMBED_FILENAME, LOCAL_EMBED_MODEL } from '../src/openviking.js'
 
 export const PBS_RELEASE = '20261026'
 export const PYTHON_VERSION = '3.13.18'
 export const OPENVIKING_VERSION = '0.5.4'
+
+// Official OpenViking 0.5.4 local model (MIT, Chinese, 512-d). SHA-256 is the Hugging Face LFS oid.
+export const LOCAL_EMBED_URL = 'https://huggingface.co/CompendiumLabs/bge-small-zh-v1.5-gguf/resolve/main/bge-small-zh-v1.5-f16.gguf?download=true'
+export const LOCAL_EMBED_SHA256 = 'ab9b81d9cd329c712eee379cf0068eabe6a5e2a01d0def61535eba9384085e2c'
+export const LOCAL_EMBED_BYTES = 47886240
+export const LLAMA_CPP_PYTHON_VERSION = '0.3.36'
+export const LLAMA_CPP_WHEEL_INDEX = 'https://abetlen.github.io/llama-cpp-python/whl/cpu'
 
 const TRIPLES = {
   'darwin-arm64': 'aarch64-apple-darwin',
@@ -89,6 +98,51 @@ async function download(url, dest) {
     }
   }
   throw lastErr
+}
+
+export function sha256File(path) {
+  return createHash('sha256').update(readFileSync(path)).digest('hex')
+}
+
+async function downloadAndVerify(url, dest, sha256, expectedBytes) {
+  await download(url, dest)
+  const st = statSync(dest)
+  if (expectedBytes != null && st.size !== expectedBytes) {
+    throw new Error(`size mismatch for ${dest}: got ${st.size}, expected ${expectedBytes}`)
+  }
+  const got = sha256File(dest)
+  if (got !== sha256) {
+    try { unlinkSync(dest) } catch {}
+    throw new Error(`sha256 mismatch for ${dest}: got ${got}, expected ${sha256}`)
+  }
+}
+
+export function hasLlamaCppWheel(platform, arch) {
+  // Official CPU wheels exist for linux x64/arm64, macOS arm64, and Windows x64.
+  // There is no recent macOS Intel wheel, so that job builds from source.
+  if (platform === 'darwin' && arch === 'x64') return false
+  return true
+}
+
+function installLlamaCpp(python, site, platform, arch) {
+  const args = [
+    'pip', 'install', '--python', python, '--target', site,
+    '--extra-index-url', LLAMA_CPP_WHEEL_INDEX,
+    `llama-cpp-python==${LLAMA_CPP_PYTHON_VERSION}`,
+  ]
+  if (hasLlamaCppWheel(platform, arch)) {
+    console.log(`[bundle-ov] uv pip install llama-cpp-python==${LLAMA_CPP_PYTHON_VERSION} (CPU wheel)`)
+    run('uv', [...args, '--only-binary', 'llama-cpp-python'])
+    return 'wheel'
+  }
+  console.log(`[bundle-ov] uv pip install llama-cpp-python==${LLAMA_CPP_PYTHON_VERSION} (source, no wheel for ${platform}-${arch})`)
+  const env = {
+    ...process.env,
+    CMAKE_ARGS: '-DGGML_METAL=OFF -DGGML_CUDA=OFF -DGGML_NATIVE=OFF -DGGML_BLAS=OFF',
+    FORCE_CMAKE: '1',
+  }
+  run('uv', args, { env })
+  return 'source'
 }
 
 function walk(dir, visit) {
@@ -172,9 +226,19 @@ async function main() {
   mkdirSync(site, { recursive: true })
   console.log(`[bundle-ov] uv pip install openviking==${OPENVIKING_VERSION}`)
   run('uv', ['pip', 'install', '--python', python, '--target', site, `openviking==${OPENVIKING_VERSION}`])
+  const llamaHow = installLlamaCpp(python, site, platform, arch)
+
+  const modelsDir = join(out, 'models')
+  mkdirSync(modelsDir, { recursive: true })
+  const modelPath = join(modelsDir, LOCAL_EMBED_FILENAME)
+  console.log(`[bundle-ov] downloading ${LOCAL_EMBED_MODEL}`)
+  await downloadAndVerify(LOCAL_EMBED_URL, modelPath, LOCAL_EMBED_SHA256, LOCAL_EMBED_BYTES)
 
   pruneRuntime(out)
-  writeFileSync(join(out, 'VERSION'), `${OPENVIKING_VERSION}\npython ${PYTHON_VERSION}+${PBS_RELEASE}\n`)
+  writeFileSync(
+    join(out, 'VERSION'),
+    `${OPENVIKING_VERSION}\npython ${PYTHON_VERSION}+${PBS_RELEASE}\nembedding ${LOCAL_EMBED_MODEL} sha256:${LOCAL_EMBED_SHA256}\nllama-cpp-python ${LLAMA_CPP_PYTHON_VERSION} (${llamaHow})\n`,
+  )
   console.log(`[bundle-ov] ready at ${out}`)
 }
 

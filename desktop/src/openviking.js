@@ -8,6 +8,11 @@ export const OV_ORIGIN = `http://127.0.0.1:${OV_PORT}`
 export const OV_HEALTH_URL = `${OV_ORIGIN}/health`
 export const OV_VERSION = '0.5.4'
 
+// Official OpenViking 0.5.4 local GGUF (Chinese, 512-d, MIT). Shipped in the installer.
+export const LOCAL_EMBED_MODEL = 'bge-small-zh-v1.5-f16'
+export const LOCAL_EMBED_FILENAME = 'bge-small-zh-v1.5-f16.gguf'
+export const LOCAL_EMBED_DIMENSION = 512
+
 /** True when GET /health says the process is up (does not require embedding / VLM). */
 export function isOpenVikingHealthy(status, body) {
   if (Number(status) >= 400 || status == null) return false
@@ -32,8 +37,52 @@ export function decideOpenViking({ portOpen, healthy, bundled }) {
   return { action: 'skip' }
 }
 
-export function minimalOvConf({ workspace, host = '127.0.0.1', port = OV_PORT }) {
+export function bundledLocalEmbedding(modelPath) {
   return {
+    provider: 'local',
+    model: LOCAL_EMBED_MODEL,
+    dimension: LOCAL_EMBED_DIMENSION,
+    input: 'text',
+    model_path: modelPath,
+  }
+}
+
+/** True when the dense block is a user-chosen provider/model we must not replace. */
+export function isUserManagedEmbedding(dense = {}) {
+  if (dense.provider && dense.provider !== 'local') return true
+  if (dense.api_key) return true
+  if (dense.model && dense.model !== LOCAL_EMBED_MODEL) return true
+  return false
+}
+
+/**
+ * Fill in the shipped local model when embedding is unset. Never changes a
+ * user-managed provider, and never rewrites an existing model_path that still
+ * points at a file. Does not reindex or touch storage/workspace.
+ */
+export function applyBundledEmbedding(conf, modelPath, exists = existsSync) {
+  if (!modelPath || !conf) return { conf, changed: false }
+  const dense = conf.embedding?.dense || {}
+  if (isUserManagedEmbedding(dense)) return { conf, changed: false }
+  if (dense.model_path && exists(dense.model_path)) return { conf, changed: false }
+  const next = {
+    ...conf,
+    embedding: {
+      ...(conf.embedding || {}),
+      dense: { ...dense, ...bundledLocalEmbedding(modelPath) },
+    },
+  }
+  return { conf: next, changed: JSON.stringify(next) !== JSON.stringify(conf) }
+}
+
+export function resolveBundledModel(root, exists = existsSync) {
+  if (!root) return null
+  const modelPath = join(root, 'models', LOCAL_EMBED_FILENAME)
+  return exists(modelPath) ? modelPath : null
+}
+
+export function minimalOvConf({ workspace, host = '127.0.0.1', port = OV_PORT, modelPath } = {}) {
+  const conf = {
     server: { host, port },
     storage: {
       workspace,
@@ -41,6 +90,8 @@ export function minimalOvConf({ workspace, host = '127.0.0.1', port = OV_PORT })
       vectordb: { backend: 'local' },
     },
   }
+  if (modelPath) conf.embedding = { dense: bundledLocalEmbedding(modelPath) }
+  return conf
 }
 
 export function minimalOvcliConf({ url = OV_ORIGIN } = {}) {
@@ -57,12 +108,14 @@ export function modelsConfigured(conf) {
 }
 
 /**
- * Prefer an existing ~/.openviking/ov.conf (the owner's own server). Otherwise write a
- * minimal config under the app userData, and write ~/.openviking/ovcli.conf if missing
- * so the dsh-memory-plugin and `ov` point at 127.0.0.1:1933. Never overwrites existing files.
+ * Prefer an existing ~/.openviking/ov.conf (the owner's own server) and never rewrite it.
+ * Otherwise reuse or write a minimal config under the app userData. A new or embedding-less
+ * app-local conf can point at the shipped GGUF; a user-managed provider is left alone.
+ * Writes ~/.openviking/ovcli.conf if missing so the dsh-memory-plugin and `ov` point at
+ * 127.0.0.1:1933. Never overwrites ovcli.conf or a home ov.conf.
  */
 export function ensureOpenVikingConfig({
-  homeDir, userDataDir,
+  homeDir, userDataDir, bundledModelPath,
   exists = existsSync,
   read = (p) => readFileSync(p, 'utf8'),
   write = (p, s) => { mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, s) },
@@ -80,14 +133,27 @@ export function ensureOpenVikingConfig({
   let usedExisting = false
   let conf = null
 
+  const persist = (path, obj) => write(path, JSON.stringify(obj, null, 2) + '\n')
+
   if (homeDir && exists(homeConf)) {
+    // The owner's own server config: never rewrite it, even if embedding is missing.
     confPath = homeConf
     usedExisting = true
     try { conf = JSON.parse(read(homeConf)) } catch { conf = null }
+  } else if (exists(appConf)) {
+    confPath = appConf
+    usedExisting = true
+    try { conf = JSON.parse(read(appConf)) } catch { conf = null }
+    const applied = applyBundledEmbedding(conf || {}, bundledModelPath, exists)
+    if (conf && applied.changed) {
+      persist(appConf, applied.conf)
+      conf = applied.conf
+      wroteConf = true
+    }
   } else {
     mkdir(workspace)
-    conf = minimalOvConf({ workspace })
-    write(appConf, JSON.stringify(conf, null, 2) + '\n')
+    conf = minimalOvConf({ workspace, modelPath: bundledModelPath })
+    persist(appConf, conf)
     wroteConf = true
   }
 

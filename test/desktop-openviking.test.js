@@ -5,11 +5,16 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  OV_PORT, bundledCommand, decideOpenViking, ensureOpenVikingConfig,
-  isOpenVikingHealthy, minimalOvConf, modelsConfigured, resolveBundledRuntime,
-  sanitizeSpawnEnv, waitForHealth,
+  OV_PORT, LOCAL_EMBED_DIMENSION, LOCAL_EMBED_FILENAME, LOCAL_EMBED_MODEL,
+  applyBundledEmbedding, bundledCommand, decideOpenViking,
+  ensureOpenVikingConfig, isOpenVikingHealthy, isUserManagedEmbedding, minimalOvConf,
+  modelsConfigured, resolveBundledModel, resolveBundledRuntime, sanitizeSpawnEnv,
+  waitForHealth,
 } from '../desktop/src/openviking.js'
-import { archiveName, archiveUrl, OPENVIKING_VERSION, PBS_RELEASE } from '../desktop/scripts/bundle-openviking.mjs'
+import {
+  archiveName, archiveUrl, hasLlamaCppWheel, LLAMA_CPP_PYTHON_VERSION, LOCAL_EMBED_BYTES,
+  LOCAL_EMBED_SHA256, LOCAL_EMBED_URL, OPENVIKING_VERSION, PBS_RELEASE,
+} from '../desktop/scripts/bundle-openviking.mjs'
 import { messages } from '../desktop/src/server.js'
 
 test('isOpenVikingHealthy accepts /health payloads, rejects errors', () => {
@@ -64,6 +69,101 @@ test('ensureOpenVikingConfig writes a minimal app-local ov.conf when none exists
   assert.equal(conf.storage.agfs.backend, 'local')
   assert.equal(conf.storage.workspace, join(userData, 'openviking', 'data'))
   assert.equal(existsSync(conf.storage.workspace), true)
+  assert.equal(conf.embedding, undefined)
+})
+
+test('ensureOpenVikingConfig points a new app-local conf at the shipped GGUF', () => {
+  const home = mkdtempSync(join(tmpdir(), 'odm-ov-home-'))
+  const userData = mkdtempSync(join(tmpdir(), 'odm-ov-data-'))
+  const modelPath = join(userData, LOCAL_EMBED_FILENAME)
+  writeFileSync(modelPath, 'gguf-stub')
+  const got = ensureOpenVikingConfig({ homeDir: home, userDataDir: userData, bundledModelPath: modelPath })
+  assert.equal(got.wroteConf, true)
+  assert.equal(got.models.ok, true)
+  const conf = JSON.parse(readFileSync(got.confPath, 'utf8'))
+  assert.equal(conf.embedding.dense.provider, 'local')
+  assert.equal(conf.embedding.dense.model, LOCAL_EMBED_MODEL)
+  assert.equal(conf.embedding.dense.dimension, LOCAL_EMBED_DIMENSION)
+  assert.equal(conf.embedding.dense.input, 'text')
+  assert.equal(conf.embedding.dense.model_path, modelPath)
+})
+
+test('ensureOpenVikingConfig does not overwrite an existing app-local ov.conf', () => {
+  const home = mkdtempSync(join(tmpdir(), 'odm-ov-home-'))
+  const userData = mkdtempSync(join(tmpdir(), 'odm-ov-data-'))
+  const appDir = join(userData, 'openviking')
+  mkdirSync(appDir, { recursive: true })
+  const appConf = join(appDir, 'ov.conf')
+  const workspace = join(appDir, 'keep-data')
+  writeFileSync(appConf, JSON.stringify({
+    server: { host: '127.0.0.1', port: 1933 },
+    storage: { workspace, agfs: { backend: 'local' }, vectordb: { backend: 'local' } },
+    embedding: { dense: { provider: 'dashscope', model: 'text-embedding-v4', api_key: 'keep-me', dimension: 1024 } },
+  }) + '\n')
+  const modelPath = join(userData, LOCAL_EMBED_FILENAME)
+  writeFileSync(modelPath, 'gguf-stub')
+  const got = ensureOpenVikingConfig({ homeDir: home, userDataDir: userData, bundledModelPath: modelPath })
+  assert.equal(got.usedExisting, true)
+  assert.equal(got.wroteConf, false)
+  assert.equal(got.confPath, appConf)
+  const conf = JSON.parse(readFileSync(appConf, 'utf8'))
+  assert.equal(conf.storage.workspace, workspace)
+  assert.equal(conf.embedding.dense.provider, 'dashscope')
+  assert.equal(conf.embedding.dense.api_key, 'keep-me')
+  assert.equal(conf.embedding.dense.model_path, undefined)
+})
+
+test('ensureOpenVikingConfig fills a missing embedding on an existing app-local conf only', () => {
+  const home = mkdtempSync(join(tmpdir(), 'odm-ov-home-'))
+  const userData = mkdtempSync(join(tmpdir(), 'odm-ov-data-'))
+  const appDir = join(userData, 'openviking')
+  mkdirSync(join(appDir, 'data'), { recursive: true })
+  const appConf = join(appDir, 'ov.conf')
+  const workspace = join(appDir, 'data')
+  writeFileSync(appConf, JSON.stringify({
+    server: { host: '127.0.0.1', port: 1933 },
+    storage: { workspace, agfs: { backend: 'local' }, vectordb: { backend: 'local' } },
+  }) + '\n')
+  const modelPath = join(userData, LOCAL_EMBED_FILENAME)
+  writeFileSync(modelPath, 'gguf-stub')
+  const got = ensureOpenVikingConfig({ homeDir: home, userDataDir: userData, bundledModelPath: modelPath })
+  assert.equal(got.usedExisting, true)
+  assert.equal(got.wroteConf, true)
+  assert.equal(got.models.ok, true)
+  const conf = JSON.parse(readFileSync(appConf, 'utf8'))
+  assert.equal(conf.storage.workspace, workspace)
+  assert.equal(conf.embedding.dense.model_path, modelPath)
+  assert.equal(conf.embedding.dense.dimension, 512)
+})
+
+test('ensureOpenVikingConfig never rewrites ~/.openviking/ov.conf even when embedding is missing', () => {
+  const home = mkdtempSync(join(tmpdir(), 'odm-ov-home-'))
+  const userData = mkdtempSync(join(tmpdir(), 'odm-ov-data-'))
+  mkdirSync(join(home, '.openviking'))
+  const homeConf = join(home, '.openviking', 'ov.conf')
+  const original = JSON.stringify({ storage: { workspace: '/old' } })
+  writeFileSync(homeConf, original)
+  const modelPath = join(userData, LOCAL_EMBED_FILENAME)
+  writeFileSync(modelPath, 'gguf-stub')
+  const got = ensureOpenVikingConfig({ homeDir: home, userDataDir: userData, bundledModelPath: modelPath })
+  assert.equal(got.usedExisting, true)
+  assert.equal(got.wroteConf, false)
+  assert.equal(got.models.ok, false)
+  assert.equal(readFileSync(homeConf, 'utf8'), original)
+})
+
+test('applyBundledEmbedding leaves a user provider and an existing model_path alone', () => {
+  const p = '/tmp/does-not-matter.gguf'
+  assert.equal(isUserManagedEmbedding({ provider: 'volcengine', model: 'doubao-embedding-vision-251215' }), true)
+  const cloud = applyBundledEmbedding({ embedding: { dense: { provider: 'openai', model: 'text-embedding-3-small' } } }, p)
+  assert.equal(cloud.changed, false)
+  const existing = '/already/there.gguf'
+  const local = applyBundledEmbedding(
+    { embedding: { dense: { provider: 'local', model: LOCAL_EMBED_MODEL, model_path: existing } } },
+    p,
+    (x) => x === existing,
+  )
+  assert.equal(local.changed, false)
 })
 
 test('modelsConfigured requires an explicit provider or model', () => {
@@ -113,8 +213,19 @@ test('sanitizeSpawnEnv drops a duplicate Windows Path key', () => {
   assert.equal(nix.PATH, '/usr/bin:/opt/bin')
 })
 
-test('bundle script pins OpenViking and python-build-standalone URLs per OS/arch', () => {
+test('bundle script pins OpenViking, the official GGUF, and python-build-standalone URLs per OS/arch', () => {
   assert.equal(OPENVIKING_VERSION, '0.5.4')
+  assert.equal(LOCAL_EMBED_MODEL, 'bge-small-zh-v1.5-f16')
+  assert.equal(LOCAL_EMBED_FILENAME, 'bge-small-zh-v1.5-f16.gguf')
+  assert.equal(LOCAL_EMBED_DIMENSION, 512)
+  assert.match(LOCAL_EMBED_URL, /CompendiumLabs\/bge-small-zh-v1\.5-gguf/)
+  assert.equal(LOCAL_EMBED_SHA256, 'ab9b81d9cd329c712eee379cf0068eabe6a5e2a01d0def61535eba9384085e2c')
+  assert.equal(LOCAL_EMBED_BYTES, 47886240)
+  assert.equal(LLAMA_CPP_PYTHON_VERSION, '0.3.36')
+  assert.equal(hasLlamaCppWheel('darwin', 'arm64'), true)
+  assert.equal(hasLlamaCppWheel('darwin', 'x64'), false)
+  assert.equal(hasLlamaCppWheel('win32', 'x64'), true)
+  assert.equal(hasLlamaCppWheel('linux', 'x64'), true)
   assert.match(archiveName('darwin', 'arm64'), /aarch64-apple-darwin/)
   assert.match(archiveName('darwin', 'x64'), /x86_64-apple-darwin/)
   assert.match(archiveName('win32', 'x64'), /x86_64-pc-windows-msvc/)
@@ -144,6 +255,29 @@ test('main process reuses a healthy :1933, starts the bundle otherwise, and kill
   assert.match(main, /ovStartedByUs/)
   assert.match(main, /openviking\.log/)
   assert.match(main, /showMemoryNote/)
-  // Must not kill a server we did not start.
+  assert.match(main, /resolveBundledModel/)
+  assert.match(main, /bundledModelPath/)
+  // Must not kill a server we did not start, and must not rebuild vectors.
   assert.match(main, /Only the OpenViking process we started/)
+  assert.doesNotMatch(main, /reindex/)
+})
+
+test('resolveBundledModel only returns the shipped GGUF when the file exists', () => {
+  const root = mkdtempSync(join(tmpdir(), 'odm-ov-model-'))
+  assert.equal(resolveBundledModel(root), null)
+  mkdirSync(join(root, 'models'))
+  const path = join(root, 'models', LOCAL_EMBED_FILENAME)
+  writeFileSync(path, 'gguf-stub')
+  assert.equal(resolveBundledModel(root), path)
+})
+
+test('desktop README distinguishes the bundled local embedding from a separate VLM', () => {
+  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
+  assert.match(readme, /bge-small-zh-v1\.5-f16/)
+  assert.match(readme, /VLM \/ chat model is \*\*not\*\* shipped/)
+  assert.match(readme, /does not rebuild existing vectors/)
+  assert.match(readme, /memory extraction and summaries need a VLM/)
+  const en = messages('en')
+  assert.match(en.ovModels, /VLM \/ chat model is separate/)
+  assert.doesNotMatch(en.ovModels, /no embedding \/ VLM model is configured yet/)
 })

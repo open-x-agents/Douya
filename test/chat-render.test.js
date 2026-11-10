@@ -36,7 +36,7 @@ test('escaped "&gt;" and full-width "＞" quote markers are quotes too; nested q
 
 test('an outgoing draft (…评论如下：) becomes a draft block with its target and confirm/edit actions', () => {
   const out = renderMd(DRAFT)
-  assert.match(out, /<div class="md-draft" data-kind="github" data-target="PR #2353">/)
+  assert.match(out, /<div class="md-draft" data-kind="github" data-target="o\/r#2353">/)
   assert.match(out, /确认发送/)
   assert.match(out, /修改/)
   assert.match(out, /确认后才会发送/)
@@ -54,7 +54,7 @@ test('a quote without a draft intro stays a plain quote; html in quotes is escap
 
 test('a quote followed by 「草稿在上面，还没发…确认执行」 is a draft too, target from the outro', () => {
   const out = renderMd('> 这条我记着待审。想确认切分按 UTF-8 还是 UTF-16。\n>\n> 另外边界落在标签中间时怎么处理？\n\n草稿在上面，还没发。你说发，我就生成待确认卡片，你在豆芽点「确认执行」后才会提交到 [PR #2353](https://github.com/ThinkFlowLab/FlyBot/pull/2353)。')
-  assert.match(out, /<div class="md-draft" data-kind="github" data-target="PR #2353">/)
+  assert.match(out, /<div class="md-draft" data-kind="github" data-target="ThinkFlowLab\/FlyBot#2353">/)
   assert.doesNotMatch(out, /md-quote/)
   assert.match(out, /草稿在上面/) // the explanation stays visible under the card
 })
@@ -63,4 +63,16 @@ test('a reminder quote with no draft wording stays a plain quote', () => {
   const out = renderMd('今天先回 Fledge。\n\n> 先把卡在你这儿的那件事推完。')
   assert.match(out, /md-quote/)
   assert.doesNotMatch(out, /md-draft/)
+})
+
+test('draft target prefers a GitHub URL / owner/repo#N over a bare #N in the same intro', () => {
+  const out = renderMd('刚才在看 #16。发到 [Birfy/jitagent#19](https://github.com/Birfy/jitagent/issues/19) 的评论如下：\n\n> 请看这一步。')
+  assert.match(out, /<div class="md-draft" data-kind="github" data-target="Birfy\/jitagent#19">/)
+  assert.doesNotMatch(out, /data-target="#16"/)
+  assert.doesNotMatch(out, /data-target="#19"/)
+})
+
+test('a bare #N intro still becomes a github draft target', () => {
+  const out = renderMd('发到 #19 的评论如下：\n\n> 请看这一步。')
+  assert.match(out, /<div class="md-draft" data-kind="github" data-target="#19">/)
 })

@@ -10,6 +10,10 @@ import {
   isPortOpen, isRepoRoot, mergePath, messages, readLoginUrl, resolveDshBin, resolveRepoRoot,
   sanitizeBounds, tail, tokenWorks, waitForLogin,
 } from './server.js'
+import {
+  bundledCommand, decideOpenViking, ensureOpenVikingConfig,
+  probeOpenVikingHealth, resolveBundledRuntime, sanitizeSpawnEnv, waitForHealth,
+} from './openviking.js'
 
 const WARM_BG = '#f4f2ee' // dsh-muse-ui --bg
 const PORT = Number(process.env.ODM_PORT || DEFAULT_PORT)
@@ -19,11 +23,17 @@ const ALLOWED_PERMISSIONS = new Set(['media', 'clipboard-sanitized-write', 'noti
 let win = null
 let child = null
 let childDead = false
+let ovChild = null
+let ovDead = false
+let ovStartedByUs = false
+let ovNote = null // { kind: 'models' | 'failed' | 'conflict' | 'skip', detail? }
 let quitting = false
 
 const t = () => messages(app.getLocale())
 const settingsFile = () => join(app.getPath('userData'), 'settings.json')
 const logFile = () => join(app.getPath('logs'), 'server.log')
+const ovLogFile = () => join(app.getPath('logs'), 'openviking.log')
+const homeDir = () => process.env.HOME || process.env.USERPROFILE || ''
 
 function loadSettings() {
   try { return JSON.parse(readFileSync(settingsFile(), 'utf8')) } catch { return {} }
@@ -67,7 +77,7 @@ async function pickRepoRoot() {
 function startServer(root) {
   const settings = loadSettings()
   const PATH = mergePath(process.env.PATH, [loginShellPath(), ...COMMON_BIN_DIRS])
-  const env = { ...process.env, PATH, PORT: String(PORT) }
+  const env = sanitizeSpawnEnv({ ...process.env, PORT: String(PORT) }, { path: PATH })
   const dshBin = resolveDshBin({ saved: settings.dshBin })
   if (dshBin) env.DSH_BIN = dshBin
   // Prefer the user's Node (same one `npm start` uses); fall back to Electron's bundled Node.
@@ -140,16 +150,84 @@ function createWindow(url) {
   win.loadURL(url)
 }
 
+
+function bundledOvRoot() {
+  if (app.isPackaged) return join(process.resourcesPath, 'openviking')
+  return join(DEV_ROOT, 'desktop', 'resources', 'openviking')
+}
+
+function stopChild(c, { onDone, timeoutMs = 4000 } = {}) {
+  if (!c) { onDone?.(); return }
+  let finished = false
+  const done = () => { if (finished) return; finished = true; onDone?.() }
+  const force = setTimeout(() => { try { c.kill('SIGKILL') } catch {} }, timeoutMs)
+  const stuck = setTimeout(done, timeoutMs + 2000)
+  c.once('exit', () => { clearTimeout(force); clearTimeout(stuck); done() })
+  if (process.platform === 'win32') spawn('taskkill', ['/pid', String(c.pid), '/T', '/F'], { windowsHide: true })
+  else c.kill('SIGTERM')
+}
+
+async function ensureMemory() {
+  const portOpen = await isPortOpen(1933)
+  const healthy = portOpen ? await probeOpenVikingHealth() : false
+  const runtime = resolveBundledRuntime(bundledOvRoot())
+  const plan = decideOpenViking({ portOpen, healthy, bundled: Boolean(runtime) })
+  if (plan.action === 'reuse') return
+  if (plan.action === 'conflict') { ovNote = { kind: 'conflict' }; return }
+  if (plan.action === 'skip') { ovNote = { kind: 'skip' }; return }
+
+  const cfg = ensureOpenVikingConfig({ homeDir: homeDir(), userDataDir: app.getPath('userData') })
+  const cmd = bundledCommand(runtime, { confPath: cfg.confPath })
+  mkdirSync(dirname(ovLogFile()), { recursive: true })
+  const log = createWriteStream(ovLogFile(), { flags: 'w' })
+  const env = sanitizeSpawnEnv({ ...process.env, ...cmd.env })
+  ovDead = false
+  ovStartedByUs = true
+  ovChild = spawn(cmd.exe, cmd.args, { cwd: cmd.cwd, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+  ovChild.stdout.pipe(log)
+  ovChild.stderr.pipe(log)
+  ovChild.on('error', (err) => { log.write(`\n[desktop] openviking spawn failed: ${err.message}\n`); ovDead = true })
+  ovChild.on('exit', () => { ovDead = true; ovChild = null })
+  try {
+    await waitForHealth({ isDead: () => ovDead })
+    if (!cfg.models.ok) ovNote = { kind: 'models' }
+  } catch (err) {
+    ovNote = { kind: 'failed', detail: err.message }
+  }
+}
+
+function memoryNoteText(kind) {
+  const m = t()
+  if (kind === 'models') return m.ovModels
+  if (kind === 'failed') return m.ovFailed(ovLogFile())
+  if (kind === 'conflict') return m.ovConflict
+  if (kind === 'skip') return m.ovSkip
+  return ''
+}
+
+async function showMemoryNote() {
+  if (!ovNote) return
+  const message = memoryNoteText(ovNote.kind)
+  if (!message) return
+  await dialog.showMessageBox({ type: 'info', title: t().ovTitle, message, buttons: [t().ok], defaultId: 0 })
+}
+
 async function boot() {
   nativeTheme.themeSource = 'light' // the Muse palette is light/warm; keep native chrome light too
   const root = await pickRepoRoot()
   if (!root) return app.quit()
 
+  await ensureMemory()
+
   const portOpen = await isPortOpen(PORT)
   const login = readLoginUrl(root)
   const tokenOk = portOpen && login ? await tokenWorks(login.url) : false
   const plan = decideStartup({ portOpen, login, tokenOk, port: PORT })
-  if (plan.action === 'reuse') return createWindow(plan.url)
+  if (plan.action === 'reuse') {
+    createWindow(plan.url)
+    showMemoryNote()
+    return
+  }
   if (plan.action === 'conflict') return showError(t().conflict(PORT))
 
   const since = Date.now()
@@ -157,6 +235,7 @@ async function boot() {
   try {
     const ready = await waitForLogin({ root, port: PORT, since, isDead: () => childDead })
     createWindow(ready.url)
+    showMemoryNote()
   } catch (err) {
     showError(err.code === 'timeout' ? t().timeout : t().exited)
   }
@@ -175,13 +254,14 @@ if (!app.requestSingleInstanceLock()) {
   // Stop only the server we started; a reused one belongs to whoever ran it.
   app.on('before-quit', (event) => {
     quitting = true
-    if (!child || childDead) return
+    const liveDsh = child && !childDead
+    const liveOv = ovStartedByUs && ovChild && !ovDead
+    if (!liveDsh && !liveOv) return
     event.preventDefault()
-    const c = child
-    const force = setTimeout(() => { try { c.kill('SIGKILL') } catch {} ; app.exit(0) }, 4000)
-    c.once('exit', () => { clearTimeout(force); app.exit(0) })
-    // start-dsh forwards SIGTERM to dsh; Windows has no signals, so end the whole tree.
-    if (process.platform === 'win32') spawn('taskkill', ['/pid', String(c.pid), '/T', '/F'], { windowsHide: true })
-    else c.kill('SIGTERM')
+    let left = (liveDsh ? 1 : 0) + (liveOv ? 1 : 0)
+    const done = () => { if (--left <= 0) app.exit(0) }
+    if (liveDsh) stopChild(child, { onDone: done })
+    // Only the OpenViking process we started; a reused one on :1933 stays up.
+    if (liveOv) stopChild(ovChild, { onDone: done })
   })
 }

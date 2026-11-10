@@ -16,3 +16,10 @@ vendor/ds-bot/node_modules/
 
 # Desktop shell (Electron) build output.
 desktop/dist/
+
+# OpenViking runtime filled in by desktop/scripts/bundle-openviking.mjs (CI / pack).
+desktop/resources/openviking/py/
+desktop/resources/openviking/lib/
+desktop/resources/openviking/python/
+desktop/resources/openviking/site-packages/
+desktop/resources/openviking/VERSION

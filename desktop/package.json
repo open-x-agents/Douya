@@ -3,7 +3,7 @@
   "productName": "Douya",
   "version": "0.1.0",
   "private": true,
-  "description": "Douya / 豆芽 desktop shell (Electron) for Windows and macOS — opens the local Douya server in one window.",
+  "description": "Douya / \u8c46\u82bd desktop shell (Electron) for Windows and macOS \u2014 opens the local Douya server in one window.",
   "type": "module",
   "main": "src/main.js",
   "author": "open-x-agents",
@@ -12,7 +12,8 @@
     "dev": "electron .",
     "build:mac": "electron-builder --mac --publish never",
     "build:win": "electron-builder --win --publish never",
-    "build:dir": "electron-builder --dir --publish never"
+    "build:dir": "electron-builder --dir --publish never",
+    "bundle:ov": "node ./scripts/bundle-openviking.mjs"
   },
   "devDependencies": {
     "electron": "^45.2.3",
@@ -21,7 +22,7 @@
   "build": {
     "appId": "ai.opendigitalmate.douya",
     "productName": "Douya",
-    "copyright": "Apache-2.0 · open-x-agents",
+    "copyright": "Apache-2.0 \u00b7 open-x-agents",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -43,7 +44,7 @@
       "category": "public.app-category.productivity",
       "identity": "-",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Douya uses the microphone only when you press the mic button to talk. 豆芽只在你按下麦克风按钮说话时使用麦克风。"
+        "NSMicrophoneUsageDescription": "Douya uses the microphone only when you press the mic button to talk. \u8c46\u82bd\u53ea\u5728\u4f60\u6309\u4e0b\u9ea6\u514b\u98ce\u6309\u94ae\u8bf4\u8bdd\u65f6\u4f7f\u7528\u9ea6\u514b\u98ce\u3002"
       },
       "hardenedRuntime": false
     },
@@ -72,6 +73,16 @@
       "target": [
         "dir"
       ]
-    }
+    },
+    "extraResources": [
+      {
+        "from": "resources/openviking",
+        "to": "openviking",
+        "filter": [
+          "**/*",
+          "!README.md"
+        ]
+      }
+    ]
   }
 }

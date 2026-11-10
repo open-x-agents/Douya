@@ -92,8 +92,13 @@ Default UI is **English**. Switch to 中文 in Settings or the sidebar control (
 
 A thin Electron shell for **macOS** and **Windows** in [`desktop/`](desktop/) (own `package.json`, so the root install stays small). It opens Douya in its own window: if a server already answers on `127.0.0.1:7777` with a working token it reuses it, otherwise it runs `scripts/start-dsh.mjs` for you and stops it on quit.
 
+The installers also bundle a relocatable [OpenViking](https://docs.openviking.ai) memory server (CPython 3.13 + `openviking`). If `127.0.0.1:1933/health` is already healthy, the app reuses that server and leaves it alone; otherwise it starts the bundled one with a data directory under the app's userData, writes a minimal `ov.conf` / `ovcli.conf` when none exist, and stops only the process it started. You do not need to install `uv` or `openviking` separately. An embedding / VLM model is **not** shipped — list and forget still work; chat auto-recall needs a model in `~/.openviking/ov.conf` (see [Long-term memory](#long-term-memory)). The bundled OpenViking runtime is AGPL-3.0 (upstream).
+
+Prerequisites on the machine: **Node.js** and **dsh**, plus the `openDigitalMate` folder (the app looks in the usual places, or asks once).
+
 ```bash
 npm run desktop:dev          # run from this checkout
+npm --prefix desktop run bundle:ov   # fill desktop/resources/openviking (needed before packing)
 npm run desktop:build:mac    # → desktop/dist/*.dmg (arm64 + x64, ad-hoc signed)
 npm run desktop:build:win    # → desktop/dist/*.exe (NSIS; build on Windows or CI)
 ```
@@ -104,7 +109,7 @@ npm run desktop:build:win    # → desktop/dist/*.exe (NSIS; build on Windows or
 | `DSH_BIN` — dsh binary | `$DSH_BIN`, then `~/Documents/git/dsh-rc5/bin/dsh`, then `dsh` on `PATH` |
 | `ODM_PORT` | `7777` |
 
-Installers are not notarized. First launch on macOS: right-click **Douya.app → Open** (or `xattr -dr com.apple.quarantine /Applications/Douya.app`). On Windows, SmartScreen shows **More info → Run anyway**. CI builds both on demand: the `desktop` workflow (manual, or a `desktop-v*` tag).
+Installers are not notarized. First launch on macOS: right-click **Douya.app → Open** (or `xattr -dr com.apple.quarantine /Applications/Douya.app`). On Windows, SmartScreen shows **More info → Run anyway**. CI builds both on demand: the `desktop` workflow (manual, or a `desktop-v*` tag) and tags `desktop-v*`.
 
 ---
 
@@ -174,6 +179,8 @@ the plan — progress survives the next digest.
 Douya uses **[OpenViking](https://docs.openviking.net/en/agent-integrations/17-dsh)** via [`@openviking/dsh-memory-plugin`](https://www.npmjs.com/package/@openviking/dsh-memory-plugin) (~0.5.33): auto-recall, session capture, and `mcp__openviking__*` tools in chat. **Memories** glimpse + Chief digest read the same server (`viking://~/memories`), ranked achievement-first. Forget uses the server `DELETE /api/v1/fs` (same as MCP `forget`).
 
 ### 1. OpenViking server (minimal local)
+
+The **desktop installers already include** this server — skip this step if you are using the Mac or Windows app. For `npm start` (or a server you run yourself):
 
 ```bash
 # needs uv + embedding/VLM models configured by the wizard — see OpenViking quickstart

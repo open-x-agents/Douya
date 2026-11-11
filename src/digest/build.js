@@ -277,7 +277,7 @@ export function attachHarvestLinks(card, items = [], toLink = it => ({ title: it
   }
   if (!add.length) return 0
   const block = ll || ((card.blocks ||= []).push({ type: 'link-list', links: [] }), card.blocks.at(-1))
-  block.links = [...add, ...(block.links || [])].slice(0, Math.max((block.links || []).length, 40))
+  block.links = [...add, ...(block.links || [])].slice(0, 40)
   return add.length
 }
 

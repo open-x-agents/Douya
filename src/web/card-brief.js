@@ -38,6 +38,34 @@ export function toolSucceeded(res) {
   return true
 }
 
+/** File entries from a list-files payload (array, or `{ files: [...] }`). */
+export function fileListOf(files) {
+  if (Array.isArray(files)) return files
+  if (Array.isArray(files?.files)) return files.files
+  return []
+}
+
+function looksLikePatchOrFiles(d) {
+  if (!d) return false
+  if (Array.isArray(d)) return d.some(f => f && (f.filename || f.patch || f.diff || f.blob_url))
+  if (typeof d !== 'object') return false
+  if (isPatchShaped(d)) return true
+  if (d.patch || d.diff || d.hunks) return true
+  if (Array.isArray(d.files) && looksLikePatchOrFiles(d.files)) return true
+  return looksLikePatchOrFiles(d.details) || looksLikePatchOrFiles(d.data)
+}
+
+/** Concrete evidence the PR is readable: real metadata, a patch/diff, or at least one file. */
+export function hasPrReadEvidence(issue, files) {
+  if (isGithubResource(issue) && (issue.number || issue.html_url || issue.pull_request || issue.issue_url || issue.head || issue.base || (issue.title && issue.state))) return true
+  if (looksLikePatchOrFiles(issue)) return true
+  return fileListOf(files).some(f => f && (f.filename || f.patch || f.diff || f.blob_url))
+}
+
+export function isNotFoundError(err) {
+  return /404|not\s*found|does not exist|不存在/i.test(String(err || ''))
+}
+
 const RISK = [
   [/(^|\/)(migrations?|schema|alembic)\b|\.sql$/i, '动了数据库迁移 / schema'],
   [/(auth|permission|acl|security|token|secret|crypto|oauth)/i, '涉及鉴权 / 安全'],
@@ -138,16 +166,16 @@ export async function fetchPrBrief(client, target) {
   ])
   const failure = issue?.__error || '拿不到这个 PR'
   if (classifyBlock({ error: failure }).blocked) return { blocked: true, error: blockedNote('zh', { site: 'GitHub' }) }
-  // A successful Composio call with a patch-shaped `data.details` (no number/title/html_url)
-  // still means the PR exists and is readable. Do not treat missing metadata as 404.
-  if (issue?.__error) return { error: failure }
+  // A successful call with patch/diff/file evidence (or real PR metadata) means the PR is readable,
+  // even when number/title/html_url are missing. An empty or unrelated successful body is uncertainty,
+  // not a 404 and not proof the PR exists.
+  if (issue?.__error) return { error: failure, ...(isNotFoundError(failure) ? { notFound: true } : {}) }
+  const fl = fileListOf(files)
   if (!issue?.number) {
-    if (issue && issue.__ok === false) return { error: failure }
-    if (!issue) return { error: failure }
+    if (!issue || !hasPrReadEvidence(issue, files)) return { error: '拿不到这个 PR' }
     issue.number = number
     issue.html_url = issue.html_url || `https://github.com/${owner}/${repo}/pull/${number}`
   }
-  const fl = Array.isArray(files) ? files : Array.isArray(files?.files) ? files.files : []
   const sha = (fl.map(f => (String(f.blob_url || '').match(/\/blob\/([0-9a-f]{40})\//) || [])[1]).find(Boolean)) || null
   let checks = []
   if (sha) {

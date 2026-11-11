@@ -2,7 +2,7 @@
 
 ### Douya / 豆芽 — a Muse-style coworker for your desktop
 
-[![License](https://img.shields.io/badge/license-Apache--2.0-0B3D2E?style=flat-square)](./LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-0B3D2E?style=flat-square)]
 [![Node](https://img.shields.io/badge/node-ESM-1B6B4A?style=flat-square)](#run-from-source)
 [![dsh](https://img.shields.io/badge/host-dsh%20odm%20profile-0E4D8C?style=flat-square)](https://github.com/deepseek-ai/dsh)
 [![UI](https://img.shields.io/badge/UI-EN%20%2F%20中文-5B21B6?style=flat-square)](#language)
@@ -28,7 +28,7 @@ Douya is a **desktop-first** Electron app for **Windows, macOS, and Linux**. The
 
 Less is more · ship via PR into `main` (never push `main` directly).
 
-**Repo:** [open-x-agents/openDigitalMate](https://github.com/open-x-agents/openDigitalMate) · **License:** Apache-2.0
+**Repo:** [open-x-agents/openDigitalMate](https://github.com/open-x-agents/openDigitalMate) · the root and desktop `package.json` files list `license` as `Apache-2.0`
 
 ---
 
@@ -52,7 +52,7 @@ On Linux pick **one** format, not both: `.deb` on Ubuntu/Debian, AppImage on oth
 
 Installers are not warning-free. macOS is ad-hoc signed and **not notarized** (right-click **Douya.app → Open**, or `xattr -dr com.apple.quarantine /Applications/Douya.app`). Windows is **self-signed** (SmartScreen: More info → Run anyway). Linux packages are **unsigned**.
 
-The machine still needs **Node.js**, **[dsh](https://github.com/deepseek-ai/dsh)**, and a checkout of this repo (the app reuses `127.0.0.1:7777` if it is already up, otherwise it starts `scripts/start-dsh.mjs` from that folder).
+The installer is a shell, not a self-contained server. It always needs a checkout of this repo (a folder that contains `scripts/start-dsh.mjs`; the app looks in the usual places or asks once). If nothing already answers on `127.0.0.1:7777` with a working token, it starts that script from the checkout and therefore needs **[dsh](https://github.com/deepseek-ai/dsh)** (`$DSH_BIN`, then `~/Documents/git/dsh-rc5/bin/dsh`, then `dsh` on `PATH`). A separate Node.js install is not required: the app prefers `node` on `PATH`, otherwise it runs the start script with Electron’s bundled Node.
 
 Installers bundle OpenViking **0.5.4**, relocatable CPython, `llama-cpp-python`, and the local `bge-small-zh-v1.5-f16` embedding GGUF (Chinese-optimized; English is weaker). Semantic auto-recall can work **without a cloud key or Ollama**. A VLM / chat model is **not** shipped — chat still needs a supported provider, and memory extraction and summaries need a VLM. The app does not rebuild existing vectors, and it does not move an existing OpenViking workspace for you. Details: [docs/install.md](docs/install.md), [docs/memory.md](docs/memory.md).
 
@@ -136,4 +136,4 @@ Local-only: the UI binds to `127.0.0.1`.
 
 ## License
 
-Apache-2.0, plus the upstream licenses of bundled runtimes (OpenViking is AGPL-3.0; the shipped embedding GGUF and `llama-cpp-python` are MIT). See [LICENSE](./LICENSE) and [docs/install.md](docs/install.md).
+The root and desktop `package.json` files list `license` as `Apache-2.0`. This tree does not add a separate license grant file. Bundled runtimes keep their upstream terms: OpenViking is AGPL-3.0; the shipped embedding GGUF and `llama-cpp-python` are MIT. See [docs/install.md](docs/install.md).

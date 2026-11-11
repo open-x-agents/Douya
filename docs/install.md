@@ -44,13 +44,11 @@ Installers are not warning-free, and they are not notarized.
 
 ## What the machine must already have
 
-The Electron window is only a shell. It still needs:
+The Electron window is only a shell, not a self-contained server.
 
-- **Node.js**
-- **[dsh](https://github.com/deepseek-ai/dsh)** (`$DSH_BIN`, then `~/Documents/git/dsh-rc5/bin/dsh`, then `dsh` on `PATH`)
-- A checkout of **openDigitalMate** (`ODM_ROOT`, then `~/Documents/git/openDigitalMate`; otherwise the app asks once and remembers in its settings)
-
-If something already answers on `127.0.0.1:7777` with a working token, the app reuses it. Otherwise it runs `scripts/start-dsh.mjs` from that checkout and stops that child on quit.
+- A **checkout of this repo is always required.** `boot()` calls `pickRepoRoot()` and quits if it cannot find a folder that contains `scripts/start-dsh.mjs` (`isRepoRoot`). It checks `ODM_ROOT`, a remembered path in userData `settings.json`, `~/Documents/git/openDigitalMate`, then `~/openDigitalMate`; otherwise it asks once and remembers. Even when it reuses an already-running server, it still reads the login token from `<repo>/.odm-data/dsh-web.url`.
+- **[dsh](https://github.com/deepseek-ai/dsh) is required to start the server.** If `127.0.0.1:7777` already has a working token, the app reuses that process. Otherwise it runs `scripts/start-dsh.mjs` from the checkout (`desktop/src/main.js` `startServer`) and stops only that child on quit. The start script spawns `dsh --profile odm --no-open --port …`. The shell sets `DSH_BIN` from `$DSH_BIN`, a remembered path, or `~/Documents/git/dsh-rc5/bin/dsh` when that file exists; otherwise `start-dsh.mjs` looks for `dsh` on `PATH`.
+- **A separate Node.js install is not required.** `startServer` prefers `node` on `PATH` (plus the login-shell PATH so GUI launches can see it). If none is found, it runs the start script with Electron’s bundled Node (`process.execPath` and `ELECTRON_RUN_AS_NODE=1`). `start-dsh.mjs` may still call `npm install` only when `vendor/ds-bot` is missing `deep-view`.
 
 You also need a **chat model provider** (for example DeepSeek) in Settings. Connect sources through Composio only if you want them. See the root README’s [Configure AI + Composio](../README.md#configure-ai--composio).
 

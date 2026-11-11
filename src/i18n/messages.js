@@ -235,6 +235,7 @@ export const messages = {
 
     'act.pending': 'Awaiting confirm',
     'act.running': 'Running…',
+    'act.running_n': 'Running… {done}/{total}',
     'act.executed': 'Done',
     'act.failed': 'Failed',
     'act.cancelled': 'Cancelled',
@@ -865,6 +866,7 @@ export const messages = {
 
     'act.pending': '待你确认',
     'act.running': '执行中…',
+    'act.running_n': '执行中… {done}/{total}',
     'act.executed': '已执行',
     'act.failed': '执行失败',
     'act.cancelled': '已取消',

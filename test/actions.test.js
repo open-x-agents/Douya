@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { readFileSync } from 'node:fs'
 import { createActionService, githubTarget } from '../src/web/actions.js'
 
 function fakes(labels = ['INBOX', 'UNREAD']) {
@@ -85,4 +86,74 @@ test('github_comment summary and preview use the same resolved target as the exe
   const c = await f.svc.userOp({ op: 'confirm', id: r.actionId })
   assert.equal(c.action.status, 'executed')
   assert.deepEqual(f.calls[0], ['GITHUB_CREATE_AN_ISSUE_COMMENT', { owner: 'Birfy', repo: 'jitagent', issue_number: 19, body: '请看这一步' }])
+})
+
+test('gmail_archive_many overlaps per-message Gmail calls and records progress', async () => {
+  let inflight = 0, maxInflight = 0, progressSeen = []
+  let state = { completions: [], pendingActions: {} }
+  const store = {
+    get: () => state,
+    save: async s => {
+      state = s
+      const a = Object.values(s.pendingActions || {})[0]
+      if (a?.progress) progressSeen.push({ ...a.progress })
+    },
+  }
+  const client = {
+    async executeAction(slug, args) {
+      inflight++
+      maxInflight = Math.max(maxInflight, inflight)
+      await new Promise(r => setTimeout(r, 25))
+      inflight--
+      if (slug === 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID') return { successful: true, data: { labelIds: ['INBOX'] } }
+      return { successful: true, data: {} }
+    },
+  }
+  const { createActionService } = await import('../src/web/actions.js')
+  const svc = createActionService({ store, getClient: () => client })
+  const items = ['aa', 'bb', 'cc', 'dd', 'ee', 'ff'].map(id => ({ url: `https://mail.google.com/mail/u/0/#inbox/${id}` }))
+  const p = await svc.request('gmail_archive_many', { items }, { hold: true })
+  assert.equal(p.pending, true)
+  assert.equal(maxInflight, 0)
+  const c = await svc.userOp({ op: 'confirm', id: p.actionId })
+  assert.equal(c.success, true)
+  assert.equal(c.action.status, 'executed')
+  assert.match(c.action.note, /已处理 6 封/)
+  assert.ok(maxInflight > 1, `expected overlapping Gmail calls, max was ${maxInflight}`)
+  assert.ok(maxInflight <= 4, `concurrency cap is 4, max was ${maxInflight}`)
+  assert.ok(progressSeen.some(p => p.total === 6 && p.done > 0), 'progress was persisted while running')
+  const last = progressSeen.at(-1)
+  assert.equal(last?.done, 6)
+  assert.equal(last?.failed, 0)
+})
+
+test('gmail_archive_many keeps successful undos when some messages fail', async () => {
+  let state = { completions: [], pendingActions: {} }
+  const store = { get: () => state, save: async s => { state = s } }
+  const client = {
+    async executeAction(slug, args) {
+      if (args.message_id === 'bad' && slug === 'GMAIL_ADD_LABEL_TO_EMAIL') throw new Error('429 rate limit')
+      if (slug === 'GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID') return { successful: true, data: { labelIds: ['INBOX'] } }
+      return { successful: true, data: {} }
+    },
+  }
+  const svc = createActionService({ store, getClient: () => client })
+  const items = ['ok1', 'bad', 'ok2'].map(id => ({ url: `https://mail.google.com/mail/u/0/#inbox/${id}` }))
+  const p = await svc.request('gmail_archive_many', { items }, { hold: true })
+  const c = await svc.userOp({ op: 'confirm', id: p.actionId })
+  assert.equal(c.success, true)
+  assert.match(c.action.note, /已处理 2 封/)
+  assert.match(c.action.note, /1 封失败/)
+  assert.match(c.action.note, /429/)
+  const u = await svc.userOp({ op: 'undo', id: p.actionId })
+  assert.equal(u.action.status, 'undone')
+})
+
+test('confirm card flips the 待你确认 chip to 执行中 and can show n/m progress', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  assert.match(html, /runningLabel/)
+  assert.match(html, /act\.running_n/)
+  assert.match(html, /classList\.add\('act-running'\)/)
+  assert.match(html, /if \(st\) st\.textContent = t\('act\.running'\)/)
+  assert.match(html, /cur\.status === 'running'/)
 })

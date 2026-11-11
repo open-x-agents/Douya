@@ -158,6 +158,22 @@ function ok(res) {
   return res
 }
 
+/** Max in-flight Gmail label ops for a many-action. Each item is still fetch-then-modify. */
+export const MANY_CONCURRENCY = 4
+
+async function mapLimit(items, limit, fn) {
+  const out = new Array(items.length)
+  let i = 0
+  const n = Math.min(Math.max(1, limit), Math.max(1, items.length))
+  await Promise.all(Array.from({ length: n }, async () => {
+    while (i < items.length) {
+      const idx = i++
+      out[idx] = await fn(items[idx], idx)
+    }
+  }))
+  return out
+}
+
 /** Gmail label change that only touches labels that actually change, so undo is exact. */
 async function runLabels(client, spec) {
   need(spec.message_id, '缺邮件 id（给 url 或 message_id）')
@@ -180,12 +196,12 @@ async function runLabels(client, spec) {
  */
 export function createActionService({ store, getClient, log = () => {}, onOutcome = null }) {
   const save = async mutate => { const state = store.get(); mutate(state); await store.save(state); return state }
-  const pub = a => a && ({ prepId: a.prepId || null, id: a.id, action: a.action, risk: a.risk, status: a.status, summary: a.summary, preview: a.preview || null, cardId: a.cardId || null, createdAt: a.createdAt, executedAt: a.executedAt || null, undoneAt: a.undoneAt || null, error: a.error || null, note: a.note || null, canUndo: !!a.undo && a.status === 'executed' })
+  const pub = a => a && ({ prepId: a.prepId || null, id: a.id, action: a.action, risk: a.risk, status: a.status, summary: a.summary, preview: a.preview || null, cardId: a.cardId || null, createdAt: a.createdAt, executedAt: a.executedAt || null, undoneAt: a.undoneAt || null, error: a.error || null, note: a.note || null, progress: a.progress || null, canUndo: !!a.undo && a.status === 'executed' })
   const ledger = (state, a, verb) => {
     state.completions = [...(state.completions || []), { id: `cmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, kind: 'action', action: verb, actionName: a.action, actionId: a.id, title: a.summary, cardId: a.cardId || null, by: a.confirmedBy || 'bot', at: new Date().toISOString() }].slice(-500)
   }
 
-  async function execute(a) {
+  async function execute(a, { onProgress } = {}) {
     const def = ACTIONS[a.action]
     const client = getClient()
     if (!client) throw new Error('Composio 未配置：请到豆芽「配置」页填写 API Key，并在「信源状态」页连接信源')
@@ -193,9 +209,25 @@ export function createActionService({ store, getClient, log = () => {}, onOutcom
     if (def.many) {
       const specs = def.many(a.input)
       need(specs.length, '没有可操作的邮件')
-      const undos = [], done = []
-      for (const spec of specs) { const r = await runLabels(client, spec); if (r.undo) undos.push(r.undo); done.push(spec.message_id) }
-      return { args: { message_ids: done }, res: { count: done.length }, undo: undos.length ? { batch: undos } : null, note: `已处理 ${done.length} 封` }
+      const undos = [], done = [], errors = []
+      let finished = 0
+      const report = () => { try { return onProgress?.({ done: finished, total: specs.length, ok: done.length, failed: errors.length }) } catch { /* progress is best-effort */ } }
+      await report()
+      await mapLimit(specs, MANY_CONCURRENCY, async (spec) => {
+        try {
+          const r = await runLabels(client, spec)
+          if (r.undo) undos.push(r.undo)
+          done.push(spec.message_id)
+        } catch (e) {
+          errors.push({ message_id: spec.message_id, error: clip(e.message, 120) })
+        } finally {
+          finished += 1
+          await report()
+        }
+      })
+      if (!done.length) throw new Error(errors[0]?.error || '没有可操作的邮件')
+      const failNote = errors.length ? `，${errors.length} 封失败：${errors.map(e => e.error).join('；')}` : ''
+      return { args: { message_ids: done, failed_ids: errors.map(e => e.message_id) }, res: { count: done.length, failed: errors.length }, undo: undos.length ? { batch: undos } : null, note: `已处理 ${done.length} 封${failNote}` }
     }
     const args = def.args(a.input)
     const res = ok(await client.executeAction(def.slug, args))
@@ -249,11 +281,21 @@ export function createActionService({ store, getClient, log = () => {}, onOutcom
         if (a.status !== 'pending') return { success: false, error: `状态是 ${a.status}，不能再执行`, action: pub(a) }
         const def = ACTIONS[a.action]
         if (dryRun) return { success: true, dryRun: true, slug: def.slug || null, args: def.args ? def.args(a.input) : def.many ? def.many(a.input) : def.labels(a.input), action: pub(a) }
-        const next = { ...a, status: 'running', confirmedBy: 'user', confirmedAt: new Date().toISOString() }
+        const next = { ...a, status: 'running', confirmedBy: 'user', confirmedAt: new Date().toISOString(), progress: null }
         await save(s => { s.pendingActions[id] = next })
+        let progressQ = Promise.resolve()
+        const onProgress = (progress) => {
+          progressQ = progressQ.then(async () => {
+            await save(s => {
+              const cur = s.pendingActions[id]
+              if (cur && cur.status === 'running') s.pendingActions[id] = { ...cur, progress }
+            })
+          })
+          return progressQ
+        }
         try {
-          const r = await execute(next)
-          Object.assign(next, { status: 'executed', executedAt: new Date().toISOString(), args: r.args, undo: r.undo, result: clip(JSON.stringify(r.res?.data ?? r.res ?? {}), 600) })
+          const r = await execute(next, { onProgress })
+          Object.assign(next, { status: 'executed', executedAt: new Date().toISOString(), args: r.args, undo: r.undo, note: r.note || null, result: clip(JSON.stringify(r.res?.data ?? r.res ?? {}), 600) })
         } catch (e) { Object.assign(next, { status: 'failed', error: clip(e.message, 300) }) }
         let outcome = null
         await save(s => {

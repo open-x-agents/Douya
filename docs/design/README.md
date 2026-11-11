@@ -11,3 +11,5 @@ Architecture: Muse UI ↔ Chief / bots ↔ OpenViking ↔ Sources.
 Principles: less is more · bilingual EN/中文 · ship via PR into `main`.
 
 `three-pages.jpg` is the contact sheet from the design deck (Future · Today · Memories).
+
+Product docs start at the root [README](../../README.md).

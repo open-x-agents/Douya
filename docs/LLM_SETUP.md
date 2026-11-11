@@ -1,5 +1,7 @@
 # LLM / Chat setup (dsh Muse)
 
+For install and first-run, start at the root [README](../README.md). This page is only the model and config files.
+
 Chat goes through **ds-bot Chief** inside `dsh --profile odm`, not the old standalone `scripts/server.js` ask loop.
 
 ## What must be set

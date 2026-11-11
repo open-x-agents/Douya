@@ -15,6 +15,9 @@
 
 ## 本地怎么跑
 
+日常开发入口见 [develop.md](develop.md)。下面这条命令就是根目录的 `npm test`。层数和条数会随仓库增长；L0 那一行里 569 / 369 是 2026-11-02 的实测快照，不是永远的当前数。
+
+
 ```sh
 node --test 'test/**/*.test.js' 'acceptance-cases/**/*.test.js'   # L0：单元测试 + 验收用例（不联网，不需要 key）
 node --test test/*.test.js           # 只跑 test/ 顶层的扁平 glob，条数比上面少（子目录不进）：它不是 L0

@@ -1380,22 +1380,34 @@ export function generateClusterCards(grouped) {
         card.blocks.push({ type: 'avatars', urls: contributors });
       }
       
-      // Deep links: up to 5 real items (tile shows 1–3; zoom shows all). Carry author for face「谁在等」.
-      const topLinks = (cluster.topItems || cluster.items || []).slice(0, 5).map(item => ({
+      // Deep links: harvested GitHub PR/issue URLs first (not only the 3–5 topItems, which
+      // notification mail can outrank), then other top items. Tile still shows 1–3.
+      const asLink = item => ({
         title: item.title,
         url: item.url,
         type: item.type,
         from: item.metadata?.author || item.metadata?.user?.login || null,
         at: item.updatedAt || item.createdAt || null,
-      })).filter(l => l.url);
+      })
+      const allItems = cluster.items?.length ? cluster.items : (cluster.topItems || [])
+      const harvest = allItems.filter(i => i.url && /github\.com\/[^/]+\/[^/]+\/(pull|issues)\/\d+/.test(i.url))
+      const review = harvest.filter(i => /pr-review|pr-assigned/.test(String(i.type || '')))
+      const otherGh = harvest.filter(i => !review.includes(i))
+      const fromTop = (cluster.topItems || cluster.items || []).slice(0, 5).map(asLink).filter(l => l.url)
+      const seen = new Set()
+      const topLinks = []
+      for (const l of [...review, ...otherGh].map(asLink).concat(fromTop)) {
+        if (!l.url || seen.has(l.url)) continue
+        seen.add(l.url)
+        topLinks.push(l)
+      }
       if (topLinks.length > 0) {
-        card.blocks.push({ type: 'link-list', links: topLinks });
+        card.blocks.push({ type: 'link-list', links: topLinks.slice(0, 40) });
       }
 
       // Concrete next action + 1–3 deep-link buttons (never invent URLs)
       const actions = [];
       // Look across every item: topItems is only the 3 tile links and notification mails outrank PRs there.
-      const allItems = cluster.items?.length ? cluster.items : (cluster.topItems || []);
       const reviewPRs = allItems.filter(i => i.type === 'pr-review' && i.url).slice(0, 2);
       if (reviewPRs.length > 0) {
         reviewPRs.forEach(pr => {

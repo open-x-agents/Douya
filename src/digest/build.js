@@ -238,6 +238,7 @@ function buildOnce(snaps, candidatesBy, plan, { today, now = Date.now(), lang = 
   const gh = snaps.github?.all || snaps.github?.items || []
   let cited = 0
   if (gh.length) for (const card of cards) if (card.source === 'github') {
+    cited += attachHarvestLinks(card, gh, linkOf)
     cited += linkCitedNums(card, gh, linkOf)
     if (!card.nextAction) card.nextAction = t('card.open_repo', resolveLang(lang))
   }
@@ -246,6 +247,40 @@ function buildOnce(snaps, candidatesBy, plan, { today, now = Date.now(), lang = 
 
 const repoIn = u => (String(u || '').match(/github\.com\/([^/]+\/[^/#?]+)/) || [])[1] || null
 const numIn = u => (String(u || '').match(/\/(?:pull|issues)\/(\d+)/) || [])[1] || null
+const cardRepo = (card, links = []) => repoIn(card?.url) || links.map(l => repoIn(l?.url)).find(Boolean) || null
+/**
+ * Persist canonical GitHub PR/issue URLs from harvested github:pr:* (and issue) items onto the
+ * repo card. Notification mail often lands first as a Gmail link; without this the card keeps
+ * only those plus a stale face.focus, and Chief never sees https://github.com/OWNER/REPO/pull/N.
+ * Mutates card; returns how many links it added.
+ */
+export function attachHarvestLinks(card, items = [], toLink = it => ({ title: it.title, url: it.url, type: it.type })) {
+  const ll = (card.blocks || []).find(b => b?.type === 'link-list')
+  const links = ll?.links || []
+  const repo = cardRepo(card, links)
+  if (!repo) return 0
+  const haveUrl = new Set(links.map(l => l.url).filter(Boolean))
+  const haveNum = new Set(links.map(l => numIn(l.url)).filter(Boolean))
+  const rank = (it) => {
+    const t = String(it.type || '')
+    if (/pr-review|pr-assigned/.test(t)) return 0
+    if (/\/pull\//.test(String(it.url || '')) || /pr/i.test(t)) return 1
+    return 2
+  }
+  const add = []
+  for (const it of [...items].filter(x => repoIn(x.url) === repo && numIn(x.url)).sort((a, b) => rank(a) - rank(b))) {
+    const n = numIn(it.url)
+    if (haveUrl.has(it.url) || haveNum.has(n)) continue
+    haveUrl.add(it.url); haveNum.add(n)
+    const link = toLink(it)
+    if (link?.url) add.push(link)
+  }
+  if (!add.length) return 0
+  const block = ll || ((card.blocks ||= []).push({ type: 'link-list', links: [] }), card.blocks.at(-1))
+  block.links = [...add, ...(block.links || [])].slice(0, 40)
+  return add.length
+}
+
 /**
  * A #N in a card's next step / title must be a link the user can see on that card. Cited items
  * that the card's link list dropped (it is capped) are moved to the front; a number with no item
@@ -255,7 +290,7 @@ const numIn = u => (String(u || '').match(/\/(?:pull|issues)\/(\d+)/) || [])[1] 
 export function linkCitedNums(card, items = [], toLink = it => ({ title: it.title, url: it.url })) {
   const ll = (card.blocks || []).find(b => b?.type === 'link-list')
   const links = ll?.links || []
-  const repo = repoIn(links[0]?.url || card.url)
+  const repo = cardRepo(card, links)
   if (!repo) return 0
   const have = new Set(links.map(l => numIn(l.url)).filter(Boolean))
   const want = [...new Set([...numsIn(card.nextAction), ...numsIn(card.title)])].filter(n => !have.has(n))

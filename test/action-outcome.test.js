@@ -2,7 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createActionService } from '../src/web/actions.js'
-import { applyActionOutcome, touchedUrls } from '../src/web/action-effects.js'
+import { applyActionOutcome, touchedUrls, resolveActionCard, backfillOutcomes } from '../src/web/action-effects.js'
+import { prepareCardActions } from '../src/web/card-prep.js'
 import { buildSnapshot } from '../src/digest/snapshot.js'
 import { doneToday } from '../src/web/day-pulse.js'
 import { cardSnapshotText } from '../src/web/card-snapshot.js'
@@ -153,4 +154,104 @@ test('general chat history: a stale 「还没发出去」 is followed by what ac
   assert.equal(out.length, 5); assert.match(out[2].content, /^✓ 已发送 · \d{2}:\d{2}　回复邮件给 fledge@example\.com/); assert.equal(out[3].content, '今天还有什么')
   assert.equal(annotateHistoryWithOutcomes(msgs, {}, { now }).length, 4)
   assert.equal(annotateHistoryWithOutcomes(msgs, { a1: { ...acts.a1, status: 'pending' } }, { now }).length, 4, 'still pending → no line')
+})
+
+
+const FLEDGE = 'https://mail.google.com/mail/u/0/#inbox/1a1c80548981a254'
+const OTHER = 'https://mail.google.com/mail/u/0/#inbox/bbb222ccc333ddd4'
+const groupCard = () => ({
+  id: 'email_group_action_2026-11-11', type: 'email-group', source: 'gmail', sourceId: 'gmail:group:action:2026-11-11',
+  status: 'active', waiting: 'you', title: '需要你处理', nextAction: '回信 [Fledge] 今日摘要 · 2026-11-11',
+  blocks: [{ type: 'link-list', links: [
+    { title: '[Fledge] 今日摘要 · 2026-11-11', url: FLEDGE, type: 'email', from: 'Fledge' },
+    { title: '另一封还要回的信', url: OTHER, type: 'email', from: 'Ada' },
+  ] }],
+})
+
+test('confirmed reply on a mail group marks only that thread; other actionable mail stays open', async () => {
+  const store = memStore({ cards: [groupCard()], itemStatus: {}, completions: [], cardChats: { 'gmail:group:action': [{ role: 'assistant', text: '草稿如下，还没发出去' }] }, pendingActions: {} })
+  const svc = createActionService({ store, getClient: () => ({ executeAction: async () => ({ successful: true, data: { id: 'm2' } }) }), onOutcome: applyActionOutcome })
+  const p = await svc.request('gmail_reply', { recipient_email: 'fledge@example.com', subject: 'Re: 今日摘要', thread_id: '1a1c80548981a254', body: '收到', cardId: 'email_group_action_2026-11-11' }, { cardId: 'email_group_action_2026-11-11' })
+  const r = await svc.userOp({ op: 'confirm', id: p.actionId })
+  assert.equal(r.success, true)
+  assert.equal(r.outcome.cardDone, false)
+  assert.deepEqual(r.outcome.marked, 1)
+  const s = store.get()
+  assert.equal(s.itemStatus[FLEDGE].status, 'done')
+  assert.equal(s.itemStatus[OTHER], undefined)
+  assert.equal(s.cards[0].status, 'active')
+  assert.equal(s.cards[0].waiting, 'you', 'other mail still needs the user')
+  assert.equal(s.cardChats['gmail:group:action'].length, 2, 'transcript kept; outcome line appended')
+  const steps = prepareCardActions(s.cards[0], { itemStatus: s.itemStatus })
+  assert.ok(steps.some(st => st.id === 'reply-first' && /另一封还要回的信/.test(st.prompt || st.label || '')), 'reply CTA moves to the remaining mail')
+  assert.ok(!steps.some(st => /Fledge/.test(st.prompt || st.label || '')), 'stale Fledge reply CTA is gone')
+})
+
+test('failed confirm does not mark the item or close the group card', async () => {
+  const store = memStore({ cards: [groupCard()], itemStatus: {}, completions: [], cardChats: { k: [{ role: 'assistant', text: '待确认' }] }, pendingActions: {} })
+  const svc = createActionService({ store, getClient: () => ({ executeAction: async () => { throw new Error('Gmail 403') } }), onOutcome: applyActionOutcome })
+  const p = await svc.request('gmail_reply', { recipient_email: 'fledge@example.com', thread_id: '1a1c80548981a254', body: 'x', subject: 'Re' }, { cardId: 'email_group_action_2026-11-11' })
+  const r = await svc.userOp({ op: 'confirm', id: p.actionId })
+  assert.equal(r.success, false)
+  const s = store.get()
+  assert.equal(s.itemStatus[FLEDGE], undefined)
+  assert.equal(s.cards[0].status, 'active')
+  assert.equal(s.cards[0].waiting, 'you')
+  assert.ok(Object.values(s.cardChats).some(arr => arr.some(m => m.text === '待确认')), 'existing chat is kept')
+})
+
+test('executed reply without cardId still syncs the unique matching group thread', () => {
+  const st = { cards: [groupCard()], itemStatus: {}, completions: [], cardChats: { 'gmail:group:action': [{ role: 'user', text: '发吧' }] }, pendingActions: {} }
+  const a = { id: 'a9', action: 'gmail_reply', status: 'executed', summary: '回复邮件给 fledge@example.com', input: { thread_id: '1a1c80548981a254', recipient_email: 'fledge@example.com', body: '收到' }, executedAt: '2026-11-11T01:47:00Z' }
+  assert.equal(resolveActionCard(st, a)?.id, 'email_group_action_2026-11-11')
+  const o = applyActionOutcome(st, a, { now: new Date('2026-11-11T01:47:00Z'), chat: true })
+  assert.equal(o.cardDone, false)
+  assert.deepEqual(o.marked, [FLEDGE])
+  assert.equal(st.itemStatus[FLEDGE].by, 'action')
+  assert.equal(st.cards[0].status, 'active')
+  assert.equal(st.cardChats['gmail:group:action'].some(m => m.role === 'user' && m.text === '发吧'), true)
+})
+
+test('already-replied rematch: executed send with no cardId is applied on backfill without extra chat', () => {
+  const prior = [{ role: 'assistant', text: '这封已经在 09:47 回过了，不重复发' }]
+  const st = {
+    cards: [groupCard()], itemStatus: {}, completions: [], cardChats: { 'gmail:group:action': prior.slice() },
+    pendingActions: {
+      a1: { id: 'a1', action: 'gmail_reply', status: 'executed', outcomeAt: '2026-11-11T01:47:05Z', executedAt: '2026-11-11T01:47:00Z', summary: '回复邮件给 fledge@example.com', input: { thread_id: '1a1c80548981a254', body: '收到' } },
+    },
+  }
+  const r1 = backfillOutcomes(st, { now: new Date('2026-11-11T02:00:00Z') })
+  assert.equal(r1[0].marked, 1)
+  assert.equal(r1[0].cardDone, false)
+  assert.equal(st.itemStatus[FLEDGE].status, 'done')
+  assert.equal(st.cards[0].status, 'active')
+  assert.deepEqual(st.cardChats['gmail:group:action'], prior, 'no extra chat line on rematch')
+  assert.deepEqual(backfillOutcomes(st, { now: new Date('2026-11-11T02:00:00Z') }), [], 'idempotent')
+  const steps = prepareCardActions(st.cards[0], { itemStatus: st.itemStatus })
+  assert.ok(!steps.some(st => /Fledge/.test(st.prompt || st.label || '')))
+})
+
+test('resolveActionCard follows a merged single mail card into the group', () => {
+  const group = groupCard()
+  const legacy = { id: 'email_action_old', type: 'email-action', status: 'merged', mergedInto: group.id, blocks: [{ type: 'link-list', links: [{ url: FLEDGE, title: 'Fledge' }] }] }
+  const st = { cards: [group, legacy], itemStatus: {}, completions: [], cardChats: {} }
+  const a = { cardId: 'email_action_old', input: { thread_id: '1a1c80548981a254' } }
+  assert.equal(resolveActionCard(st, a).id, group.id)
+})
+
+test('last remaining mail on the group card is tucked after a successful reply', () => {
+  const card = groupCard()
+  card.blocks[0].links = [card.blocks[0].links[0]]
+  const st = { cards: [card], itemStatus: {}, completions: [], cardChats: {} }
+  const o = applyActionOutcome(st, { id: 'a', action: 'gmail_reply', status: 'executed', cardId: card.id, summary: '回复邮件给 fledge', input: { thread_id: '1a1c80548981a254' } })
+  assert.equal(o.cardDone, true)
+  assert.equal(st.cards[0].status, 'done')
+  assert.equal(st.itemStatus[FLEDGE].status, 'done')
+})
+
+test('getToday rematches outcomes and requestAction falls back to the open card', () => {
+  const api = readFileSync(new URL('../src/web/api.js', import.meta.url), 'utf8')
+  assert.match(api, /backfillOutcomes\(state\)/)
+  assert.match(api, /const cur = this\.currentCard\(\)/)
+  assert.match(api, /cardId = cur\.card\.id/)
 })

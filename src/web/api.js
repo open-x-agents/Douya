@@ -18,7 +18,7 @@ import { cardSnapshotText, cardFull } from './card-snapshot.js';
 import { createUiService } from '../ui/service.js';
 import { createChatDisplay, attachmentMeta } from './chat-display.js';
 import { callbackUrlFor, callbackPage } from './composio-callback.js';
-import { applyActionOutcome, recentOutcomesText, annotateHistoryWithOutcomes } from './action-effects.js';
+import { applyActionOutcome, backfillOutcomes, recentOutcomesText, annotateHistoryWithOutcomes } from './action-effects.js';
 import { briefTarget, fetchPrBrief } from './card-brief.js';
 import { prepareCardActions, pickNextThing, daySummaryLine, tomorrowMorning, snoozeUntilFor } from './card-prep.js';
 import { hydrateFace, autoFace } from '../ui/face.js';
@@ -960,7 +960,13 @@ export function createApiRouter(ctx) {
       return { success: true, kind: 'act', action: (listed.actions || []).find(a => a.id === r.actionId) || null };
     },
     /** Bot-side: request an action (never confirms an outgoing one). */
-    async requestAction(action, input = {}, opts = {}) { return actionService.request(action, input, opts); },
+    async requestAction(action, input = {}, opts = {}) {
+      let cardId = opts.cardId || input.cardId || null;
+      if (!cardId) {
+        try { const cur = this.currentCard(); if (cur?.found && cur.card?.id) cardId = cur.card.id; } catch {}
+      }
+      return actionService.request(action, input, { ...opts, cardId });
+    },
     /** User-side: list / confirm / cancel / undo (HTTP route only, behind owner auth). */
     async actionsOp(body = {}) { return actionService.userOp(body); },
 
@@ -1015,8 +1021,9 @@ export function createApiRouter(ctx) {
         const state = store.get();
         // All items done → card done (face already says 都处理完了). Survives until genuinely new items reopen it.
         {
+          const synced = backfillOutcomes(state);
           const cleared = sweepClearedCards(state, { by: 'system' });
-          if (cleared.length) await store.save(state);
+          if (synced.length || cleared.length) await store.save(state);
         }
         const cards = state.cards || [];
         

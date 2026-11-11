@@ -7,6 +7,7 @@
  * nothing left is tucked into 今天搞定了什么. A failed send keeps the action pending with its reason.
  */
 import { setItemStatus, cardItemUrls } from '../host/store.js'
+import { gmailIdFromUrl } from './actions.js'
 import { cardClearance, completeClearedCard } from './card-clearance.js'
 import { chatKeysOf, stripDay } from '../host/reconcile.js'
 import { doneVerb, doneVerbMap, formatOutcomeText, formatHistoryOutcome, hhmmFor, resolveLang, DEFAULT_LOCALE } from '../i18n/index.js'
@@ -19,6 +20,24 @@ const CLOSED = new Set(['done', 'dismissed'])
 
 export const hhmm = (d = new Date(), lang = 'zh') => hhmmFor(lang, d)
 
+const gmailIdOf = (u) => gmailIdFromUrl(u) || (String(u || '').match(/\/([A-Za-z0-9]{10,})$/) || [])[1] || null
+
+function actionTargetIds(a) {
+  const inp = a?.input || {}
+  const ids = new Set()
+  const add = (v) => { const s = String(v || '').trim(); if (s) ids.add(s) }
+  add(inp.thread_id); add(inp.thread_ts); add(inp.message_id); add(gmailIdOf(inp.url))
+  for (const it of Array.isArray(inp.items) ? inp.items : []) { add(it?.message_id); add(gmailIdOf(it?.url)) }
+  for (const id of a?.args?.message_ids || []) add(id)
+  return ids
+}
+
+function urlMatchesId(u, id) {
+  if (!id) return false
+  const sid = String(id)
+  return gmailIdOf(u) === sid || u.includes(sid) || u.includes('p' + sid.replaceAll('.', ''))
+}
+
 /** The card's own item URLs this action touched (never invents one outside the card, except an explicit url). */
 export function touchedUrls(card, a) {
   const inp = a?.input || {}
@@ -26,11 +45,33 @@ export function touchedUrls(card, a) {
   const out = new Set()
   for (const it of Array.isArray(inp.items) ? inp.items : []) if (it?.url) out.add(it.url)
   if (inp.url) out.add(inp.url)
-  const tid = String(inp.thread_id || inp.thread_ts || inp.message_id || '')
-  if (tid) for (const u of links) if (u.includes(tid) || u.includes('p' + tid.replace('.', ''))) out.add(u)
+  const ids = actionTargetIds(a)
+  if (ids.size) for (const u of links) if ([...ids].some(id => urlMatchesId(u, id))) out.add(u)
   if (inp.number) for (const u of links) if (new RegExp(`/(pull|issues)/${Number(inp.number)}(?:$|[/?#])`).test(u)) out.add(u)
   if (!out.size && links.length === 1) out.add(links[0])
+  const allowed = new Set(a?.args?.message_ids || [])
+  if (allowed.size) return [...out].filter(u => [...allowed].some(id => urlMatchesId(u, id)))
   return [...out]
+}
+
+const HIDDEN = new Set(['merged', 'deleted', 'archived'])
+
+/** The live Today card this action should update (id, merged-into, or a unique URL/thread match). */
+export function resolveActionCard(state, a) {
+  const cards = state?.cards || []
+  const usable = (c) => c && !HIDDEN.has(c.status)
+  let byId = a?.cardId ? cards.find(c => c.id === a.cardId) : null
+  if (byId?.status === 'merged' && byId.mergedInto) byId = cards.find(c => c.id === byId.mergedInto) || byId
+  if (usable(byId) && touchedUrls(byId, a).length) return byId
+  const matches = cards.filter(c => usable(c) && touchedUrls(c, a).length)
+  const live = matches.filter(c => c.status !== 'done' && c.status !== 'dismissed')
+  const unique = (list) => {
+    if (list.length === 1) return list[0]
+    const singles = list.filter(c => c.type === 'email-action')
+    if (singles.length === 1) return singles[0]
+    return null
+  }
+  return unique(live) || unique(matches) || (usable(byId) ? byId : null)
 }
 
 /** The zoom-chat key the client uses for this card (an existing transcript wins). */
@@ -49,7 +90,7 @@ export function chatKeyOf(card, cardChats = {}) {
  */
 export function applyActionOutcome(state, a, { now = new Date(), chat = true, lang = DEFAULT_LOCALE } = {}) {
   const locale = resolveLang(lang)
-  const card = (state.cards || []).find(c => c.id === a.cardId) || null
+  const card = resolveActionCard(state, a)
   const ok = a.status === 'executed'
   const marked = []
   let cardDone = false
@@ -67,12 +108,19 @@ export function applyActionOutcome(state, a, { now = new Date(), chat = true, la
       if (clr.kind === 'cleared') {
         cardDone = completeClearedCard(state, card, { by: 'action', at: now.toISOString() })
       } else {
-        // Reply / comment / review handed the ball back — stop treating the card as "waiting on you".
+        // Reply / comment / review handed the ball back — but only leave "waiting on you" when
+        // nothing on this card still needs the user (a mail group may have other open threads).
         const handBack = /^(gmail_reply|gmail_send_email|slack_reply|github_comment|github_review)$/.test(a.action)
-        if (handBack && card.waiting === 'you') {
+        if (handBack && card.waiting === 'you' && !(clr.needYou || []).length) {
           card.waiting = 'others'
           card.updatedAt = now.toISOString()
           if (card.nextAction) card.nextAction = ''
+        } else if (card.nextAction) {
+          const titles = marked.map(url => ((card.blocks || []).find(b => b?.type === 'link-list')?.links || []).find(l => l?.url === url)?.title).filter(Boolean)
+          if (titles.some(title => card.nextAction.includes(title))) {
+            card.nextAction = clr.needYou?.[0]?.title ? clr.needYou[0].title : ''
+            card.updatedAt = now.toISOString()
+          }
         }
       }
     }
@@ -121,10 +169,15 @@ export function backfillOutcomes(state, { now = new Date(), hours = 48 } = {}) {
   const since = now.getTime() - hours * 3600e3
   const done = []
   for (const a of Object.values(state?.pendingActions || {})) {
-    if (!a || a.status !== 'executed' || a.undoneAt || a.outcomeAt) continue
+    if (!a || a.status !== 'executed' || a.undoneAt) continue
     if (!(Date.parse(a.executedAt || '') >= since)) continue
+    const card = resolveActionCard(state, a)
+    if (!card) continue
+    const urls = HANDLES.has(a.action) ? touchedUrls(card, a) : []
+    const already = urls.length > 0 && urls.every(u => CLOSED.has(state.itemStatus?.[u]?.status))
+    if (a.outcomeAt && (already || !urls.length)) continue
     const o = applyActionOutcome(state, a, { now: new Date(a.executedAt), chat: false })
-    a.outcomeAt = now.toISOString()
+    a.outcomeAt = a.outcomeAt || now.toISOString()
     done.push({ id: a.id, action: a.action, marked: o.marked.length, cardDone: o.cardDone })
   }
   return done

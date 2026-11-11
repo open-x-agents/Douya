@@ -144,6 +144,12 @@ test('desktop package stays out of the root install and ships the agreed scripts
   assert.equal(desk.build.mac.identity, '-') // ad-hoc: arm64 opens instead of "damaged"
   assert.deepEqual(desk.build.linux.target, ['AppImage', 'deb'])
   assert.ok(desk.scripts['build:linux'])
+  // electron-builder's deb target requires a maintainer email.
+  // Contact is the published GitHub / commit author email, not an invented address.
+  assert.equal(desk.author.name, 'open-x-agents')
+  assert.equal(desk.author.email, 'birfychen@gmail.com')
+  assert.equal(desk.build.linux.maintainer, 'open-x-agents <birfychen@gmail.com>')
+  assert.equal(desk.homepage, 'https://github.com/open-x-agents/openDigitalMate')
 })
 
 test('the window keeps renderer hardening on', () => {

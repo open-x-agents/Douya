@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { ownReplyFromRecords, runMuseChatTurn } from '../src/web/muse-chat-core.js'
+import { ownReplyFromRecords, runMuseChatTurn, turnWorkFromRecords, NO_REPLY_ERROR, SILENT_TURN_ERROR } from '../src/web/muse-chat-core.js'
 
 // 2026-11-04 09:31 Asia/Shanghai, Chief private session session-a70c2ab4:
 // 「你是谁」 then 「在干嘛」 while turn 30 was still running. The session log kept
@@ -277,3 +277,116 @@ test('hiddenContext is prepended for the model and kept off the display record',
   assert.doesNotMatch(recorded[0].items[0].text, /odm_future_get/)
 })
 
+
+test('intermediate assistant and tool events mean the turn is still working', () => {
+  const open = [
+    user(1, '都开始吧', 'req'),
+    turnStart(2),
+    { event: { seq: 3, time: 3, type: 'tool/call', data: { name: 'bash' } } },
+    assistant(4, '先跑测试'),
+  ]
+  const work = turnWorkFromRecords(open, { afterSeq: 0, requestId: 'req', outbound: '都开始吧' })
+  assert.equal(work.settled, false)
+  assert.equal(work.working, true)
+  assert.equal(work.open, true)
+  const done = [...open, turnEnd(5, 'completed')]
+  const finished = turnWorkFromRecords(done, { afterSeq: 0, requestId: 'req', outbound: '都开始吧' })
+  assert.equal(finished.settled, true)
+  assert.equal(finished.working, false)
+  assert.equal(finished.text, '先跑测试')
+})
+
+test('a long open turn past waitMs is not reported as no reply', { timeout: 12_000 }, async () => {
+  const session = queuedSession()
+  let released
+  const started = new Promise(r => { released = r })
+  const resultP = chiefCall(session.controller({
+    stampId: true,
+    async onPrompt() {
+      session.append('tool/call', { name: 'bash' })
+      released()
+      await new Promise(r => setTimeout(r, 600))
+      session.finish('测完了')
+    },
+  }), '都开始吧', { waitMs: 200, viewContext: '' })
+  await started
+  const result = await resultP
+  assert.equal(result.ok, true)
+  assert.equal(result.text, '测完了')
+  assert.equal(result.error, undefined)
+})
+
+test('a follow-up queued behind an open turn does not fail after waitMs', { timeout: 12_000 }, async () => {
+  const session = queuedSession()
+  let firstPrompted
+  const gate = new Promise(r => { firstPrompted = r })
+  const first = chiefCall(session.controller({
+    stampId: true,
+    async onPrompt() { session.append('tool/call', { name: 'bash' }); firstPrompted() },
+  }), '都开始吧', { waitMs: 200, viewContext: '' })
+  await gate
+  let secondSettled = false
+  const second = chiefCall(session.controller({ stampId: true }), '？', { waitMs: 200, viewContext: '' }).then(r => { secondSettled = true; return r })
+  await new Promise(r => setTimeout(r, 350))
+  assert.equal(secondSettled, false, 'follow-up must keep waiting while the first turn is open')
+  session.finish('先做完了')
+  const a = await first
+  assert.equal(a.ok, true)
+  assert.equal(a.text, '先做完了')
+  session.finish('问号的回复')
+  const b = await second
+  assert.equal(b.ok, true)
+  assert.equal(b.text, '问号的回复')
+})
+
+test('true silence after waitMs is a clear error, not a stale TIMEOUT and not a finished no-reply', { timeout: 8_000 }, async () => {
+  const { mkdtemp, mkdir, writeFile } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const home = await mkdtemp(join(tmpdir(), 'odm-chat-silent-'))
+  await mkdir(join(home, 'bot', 'logs'), { recursive: true })
+  await writeFile(join(home, 'bot', 'logs', 'diagnostics.jsonl'), JSON.stringify({
+    time: Date.now() - 3600_000, level: 'error', sessionId: 'chief', code: 'TIMEOUT', text: 'TIMEOUT',
+  }) + '\n')
+  const session = queuedSession()
+  const result = await runMuseChatTurn({
+    sessionController: {
+      async resolveAgent() { return { status: 'idle', session: { seq: 1 }, whenIdle() { return Promise.resolve() } } },
+      async prompt() { /* swallowed; no turn starts */ },
+      async page() { return { records: [], hasMore: false } },
+    },
+  }, { message: '都开始吧', dshHome: home, botId: 'chief', log() {}, waitMs: 250, viewContext: '' })
+  assert.equal(result.ok, false)
+  assert.equal(result.code, 'silent')
+  assert.equal(result.error, SILENT_TURN_ERROR)
+  assert.notEqual(result.error, 'TIMEOUT')
+  assert.notEqual(result.error, NO_REPLY_ERROR)
+})
+
+test('a still-running turn ignores a fresh diagnostics TIMEOUT for this session', { timeout: 12_000 }, async () => {
+  const { mkdtemp, mkdir, writeFile } = await import('node:fs/promises')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const home = await mkdtemp(join(tmpdir(), 'odm-chat-stale-'))
+  await mkdir(join(home, 'bot', 'logs'), { recursive: true })
+  await writeFile(join(home, 'bot', 'logs', 'diagnostics.jsonl'), JSON.stringify({
+    time: Date.now(), level: 'error', sessionId: 'chief', code: 'TIMEOUT', text: 'TIMEOUT',
+  }) + '\n')
+  const session = queuedSession()
+  let released
+  const started = new Promise(r => { released = r })
+  const resultP = runMuseChatTurn({ sessionController: session.controller({
+    stampId: true,
+    async onPrompt() {
+      session.append('tool/call', { name: 'bash' })
+      released()
+      await new Promise(r => setTimeout(r, 500))
+      session.finish('还在跑，写完了')
+    },
+  }) }, { message: '都开始吧', dshHome: home, botId: 'chief', log() {}, waitMs: 200, viewContext: '' })
+  await started
+  const result = await resultP
+  assert.equal(result.ok, true)
+  assert.equal(result.text, '还在跑，写完了')
+  assert.notEqual(result.error, 'TIMEOUT')
+})

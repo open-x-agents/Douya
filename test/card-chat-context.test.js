@@ -71,6 +71,8 @@ test('progress labels name the source being queried', () => {
   assert.equal(progressLabel('odm_slack_search_messages'), '正在查 Slack…')
   assert.equal(progressLabel('odm_current_card'), '正在看卡片…')
   assert.equal(progressLabel('bash'), '正在跑命令…')
+  assert.equal(progressLabel('bash', 'en'), 'Running a command…')
+  assert.equal(progressLabel('', 'en'), 'Douya is still working…')
 })
 
 test('Session.toolHistory compat is added only when missing, on the prototype, once', () => {

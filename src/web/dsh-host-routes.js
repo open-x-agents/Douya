@@ -458,8 +458,8 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     path: '/api/opendigitalmate/chat-progress',
     methods: ['GET', 'POST'],
     requestBody: 'buffered',
-    fetch: async () => {
-      try { return json(await chatProgress(ctx, { dshHome })) }
+    fetch: async (request) => {
+      try { return json(await chatProgress(ctx, { dshHome, lang: langParam(request) })) }
       catch (err) { return json({ running: null, error: String(err?.message || err) }) }
     },
   }, 'opendigitalmate: chat-progress')

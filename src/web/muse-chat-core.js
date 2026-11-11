@@ -246,6 +246,65 @@ export function ownReplyFromRecords(records, { afterSeq = -1, requestId = '', ou
   return { settled: false }
 }
 
+/** Session / tool / assistant events that mean this turn is still doing work. */
+export const TURN_ACTIVITY_RE = /^(turn\/start|assistant\/message|assistant\/chunk|text-chunks|tool\/call|tool\/result|llm\/retry|llm\/error|step\/start|step\/end)$/
+
+export function sessionTurnOpen(records = []) {
+  const types = records.map(r => eventOf(r).type)
+  return types.lastIndexOf('turn/start') > types.lastIndexOf('turn/end')
+}
+
+function eventTimeOf(record) {
+  const ev = eventOf(record)
+  const t = Number(ev?.time ?? record?.time)
+  return Number.isFinite(t) && t > 0 ? t : null
+}
+
+/**
+ * Whether this prompt's turn (or the open turn it is queued behind) is still working.
+ * Intermediate assistant / tool events count as activity. A stale diagnostics lastTurnError
+ * from an earlier turn is not consulted here.
+ */
+export function turnWorkFromRecords(records, { afterSeq = -1, requestId = '', outbound = '', handoff = false, ownIds = null, agent = null } = {}) {
+  const list = Array.isArray(records) ? records : []
+  const reply = ownReplyFromRecords(list, { afterSeq, requestId, outbound, handoff, ownIds })
+  const userIdx = findPromptUser(list, { afterSeq, requestId, outbound, handoff })
+  let lastActivityAt = null, lastActivityType = null, ended = !!reply.settled, turnError = null
+  const start = userIdx >= 0 ? userIdx : 0
+  for (let i = start; i < list.length; i++) {
+    const ev = eventOf(list[i])
+    if (userIdx >= 0 && i > userIdx && isForeignUser(ev, requestId, ownIds)) { ended = true; break }
+    if (TURN_ACTIVITY_RE.test(ev.type || '') || ev.type === 'user/message') {
+      lastActivityAt = eventTimeOf(list[i]) ?? lastActivityAt
+      lastActivityType = ev.type
+    }
+    if (userIdx >= 0 && i > userIdx) {
+      if (ev.type === 'llm/error' || ev.type === 'error') {
+        const msg = ev.data?.error || ev.data?.message || ev.data?.text
+        if (msg) turnError = String(msg)
+      }
+      if (ev.type === 'turn/end' && endsReply(ev.data?.reason)) {
+        const reason = ev.data?.reason
+        if (reason && /timeout|error|fail/i.test(JSON.stringify(reason))) {
+          turnError = turnError || reason.message || (reason.kind && reason.kind !== 'completed' ? String(reason.kind) : null)
+        }
+        ended = true
+        break
+      }
+    }
+  }
+  const open = userIdx >= 0 && !reply.settled && !ended
+  const queuedBehind = userIdx < 0 && !reply.settled && (agent?.status === 'running' || sessionTurnOpen(list))
+  const working = !reply.settled && (open || queuedBehind || agent?.status === 'running' || sessionTurnOpen(list))
+  return {
+    settled: !!reply.settled, text: reply.text, found: userIdx >= 0, open, ended, working,
+    lastActivityAt, lastActivityType, turnError,
+  }
+}
+
+export const NO_REPLY_ERROR = 'Bot 没有产生新回复'
+export const SILENT_TURN_ERROR = '这次对话没有新的动静，也没有完成的回复'
+
 // Newest page first, then older pages until this prompt's cursor is on the page. One huge tool turn
 // or one long streamed reply would otherwise push the user message out of the tail the reply is read from.
 // `afterSeq < 0` is an unread cursor (a fresh part after a handoff): read that tail only.
@@ -426,11 +485,15 @@ export async function runMuseChatTurn(ctx, {
       } finally { pendingSteers-- }
     })
   }
+  // waitMs is a silence budget, not a wall-clock cap. While the turn is open, the agent is
+  // running, or intermediate assistant / tool events keep arriving, keep waiting.
   const budget = Number.isFinite(waitMs) && waitMs > 0 ? waitMs : 180_000
-  const deadline = Date.now() + budget
   let reply = ''
+  let endedEmpty = false
+  let turnError = null
+  let lastWorkAt = Date.now()
   let pageErrLogged = false
-  while (Date.now() < deadline) {
+  for (;;) {
     const checkAt = Date.now()
     const now = (await resolveChief(dshHome, promptTo)).sessionId
     if (now && now !== sessionId) {
@@ -440,21 +503,30 @@ export async function runMuseChatTurn(ctx, {
       afterSeq = await cursorSeq(ctx, sessionId)
       try { onSession?.(now) } catch {}
     }
+    let work = { working: false, settled: false }
+    let agent = null
     try {
       T.polls = (T.polls || 0) + 1
       const records = await pageEvents(ctx, sessionId, afterSeq)
+      agent = await liveAgent(ctx, sessionId)
       // Read this prompt's turn even while a later queued turn is still running.
       // whenIdle stays pending until that later turn finishes, so it is only a wake-up.
-      const found = ownReplyFromRecords(records, { afterSeq, requestId, outbound, handoff: T.handoff === true, ownIds: steerIds })
-      if (found.settled && pendingSteers === 0 && (!steeredAt || checkAt > steeredAt)) {
-        reply = found.text
+      work = turnWorkFromRecords(records, { afterSeq, requestId, outbound, handoff: T.handoff === true, ownIds: steerIds, agent })
+      if (work.working) lastWorkAt = Date.now()
+      else if (work.lastActivityAt) lastWorkAt = Math.max(lastWorkAt, work.lastActivityAt)
+      if (work.turnError) turnError = work.turnError
+      if (work.settled && pendingSteers === 0 && (!steeredAt || checkAt > steeredAt)) {
+        reply = work.text || ''
+        endedEmpty = !reply
+        if (work.turnError) turnError = work.turnError
         lane?.closeSteer?.()
         break
       }
     } catch (err) {
       if (!pageErrLogged) { pageErrLogged = true; log(`[muse-chat] page failed: ${err?.message || err}`) }
     }
-    const agent = await liveAgent(ctx, sessionId)
+    if (!work.working && Date.now() - lastWorkAt >= budget) break
+    if (!agent) try { agent = await liveAgent(ctx, sessionId) } catch {}
     if (agent?.status === 'running' && typeof agent.whenIdle === 'function') {
       await Promise.race([agent.whenIdle(), new Promise(r => setTimeout(r, 400))])
     } else {
@@ -464,8 +536,15 @@ export async function runMuseChatTurn(ctx, {
 
   lane?.closeSteer?.()
   if (!reply) {
-    const why = await lastTurnError(dshHome, sessionId, T.turnCallAt || 0)
-    return { ok: false, error: why || 'Bot 没有产生新回复', botId: sessionId, sessionId }
+    // Only a diagnostic logged after this turn started, and only once the turn has ended
+    // (or this-turn records already named an error). Never reuse an earlier lastTurnError
+    // while the bot is still working, and never present a still-open turn as "no reply".
+    const why = endedEmpty || turnError
+      ? (turnError || await lastTurnError(dshHome, sessionId, T.turnCallAt || T.promptAt || 0))
+      : ''
+    const code = endedEmpty ? 'no_reply' : (why ? 'turn_error' : 'silent')
+    const error = endedEmpty ? (why || NO_REPLY_ERROR) : (why || SILENT_TURN_ERROR)
+    return { ok: false, error, code, botId: sessionId, sessionId }
   }
   T.detectedAt = Date.now()
   try { Object.assign(T, await turnBreakdown(ctx, sessionId, T.promptAt)) } catch (err) { T.breakdownError = String(err?.message || err) }
@@ -571,34 +650,39 @@ export function summarizeTiming(T) {
 }
 
 const TOOL_LABEL = [
-  [/^odm_github_|^odm_act_github_/, '正在查 GitHub…'],
-  [/^odm_gmail_|^odm_act_gmail_/, '正在查邮件…'],
-  [/^odm_slack_|^odm_act_slack_/, '正在查 Slack…'],
-  [/^odm_(card|current_card|today|completions)/, '正在看卡片…'],
-  [/^odm_digest/, '正在重新汇聚…'],
-  [/^bash$/, '正在跑命令…'],
-  [/^web_fetch|^web_search/, '正在查网页…'],
+  [/^odm_github_|^odm_act_github_/, { zh: '正在查 GitHub…', en: 'Checking GitHub…' }],
+  [/^odm_gmail_|^odm_act_gmail_/, { zh: '正在查邮件…', en: 'Checking mail…' }],
+  [/^odm_slack_|^odm_act_slack_/, { zh: '正在查 Slack…', en: 'Checking Slack…' }],
+  [/^odm_(card|current_card|today|completions)/, { zh: '正在看卡片…', en: 'Looking at the card…' }],
+  [/^odm_digest/, { zh: '正在重新汇聚…', en: 'Refreshing Today…' }],
+  [/^bash$/, { zh: '正在跑命令…', en: 'Running a command…' }],
+  [/^web_fetch|^web_search/, { zh: '正在查网页…', en: 'Checking the web…' }],
 ]
-export function progressLabel(name) {
-  for (const [re, label] of TOOL_LABEL) if (re.test(name || '')) return label
-  return name ? `正在调用 ${String(name).replace(/^odm_/, '')}…` : '豆芽正在想…'
+const locOf = (lang) => (String(lang || '').startsWith('en') ? 'en' : 'zh')
+export function progressLabel(name, lang = 'zh') {
+  const loc = locOf(lang)
+  for (const [re, label] of TOOL_LABEL) if (re.test(name || '')) return label[loc] || label.zh
+  if (!name) return loc === 'en' ? 'Douya is still working…' : '豆芽正在想…'
+  return loc === 'en' ? `Calling ${String(name).replace(/^odm_/, '')}…` : `正在调用 ${String(name).replace(/^odm_/, '')}…`
 }
 
-/** What Chief is doing right now (for the 豆芽正在想… indicator). */
-export async function chatProgress(ctx, { dshHome, botId = null } = {}) {
+/** What Chief is doing right now (for the 豆芽正在想… / still-working indicator). */
+export async function chatProgress(ctx, { dshHome, botId = null, lang = 'zh' } = {}) {
   const { sessionId } = await resolveChief(dshHome, botId)
   if (!sessionId || !ctx?.sessionController?.page) return { running: false }
   const { agent, records } = await tailRecords(ctx, sessionId, 8)
   const types = records.map(r => r.type)
   const running = agent?.status === 'running' || types.lastIndexOf('turn/start') > types.lastIndexOf('turn/end')
   if (!running) return { running: false }
-  let label = '豆芽正在想…', tools = 0
+  const loc = locOf(lang)
+  const thinking = loc === 'en' ? 'Douya is still working…' : '豆芽正在想…'
+  let label = thinking, tools = 0
   const lastStart = types.lastIndexOf('turn/start')
   for (const r of records.slice(Math.max(0, lastStart))) {
-    if (r.type === 'tool/call') { tools++; label = progressLabel(r.data?.name) }
-    else if (r.type === 'tool/result') label = '豆芽正在想…'
-    else if (r.type === 'llm/retry') label = '模型响应慢，正在重试…'
-    else if (/text-chunks|assistant\/chunk/.test(r.type || '') && label === '豆芽正在想…') label = '正在写回复…'
+    if (r.type === 'tool/call') { tools++; label = progressLabel(r.data?.name, lang) }
+    else if (r.type === 'tool/result') label = thinking
+    else if (r.type === 'llm/retry') label = loc === 'en' ? 'The model is slow; retrying…' : '模型响应慢，正在重试…'
+    else if (/text-chunks|assistant\/chunk/.test(r.type || '') && label === thinking) label = loc === 'en' ? 'Writing a reply…' : '正在写回复…'
   }
   return { running: true, label, tools }
 }

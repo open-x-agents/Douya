@@ -5802,9 +5802,23 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   class ChatFail extends Error {}
   async function postChatOnce(body) {
     const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), 240000);
+    // Do not abort a still-working turn (long coding/test turns often exceed 4 minutes).
+    // Only abort after 4 minutes with no in-progress signal from chat-progress.
+    let lastWork = Date.now();
+    let finished = false;
+    const tick = (async () => {
+      while (!finished) {
+        await sleep(5000);
+        if (finished) return;
+        try {
+          const r = await fetch('/api/opendigitalmate/chat-progress', { method: 'POST', cache: 'no-store', headers: odmHeaders() }).then(x => x.json());
+          if (r && r.running) lastWork = Date.now();
+        } catch (_) {}
+        if (Date.now() - lastWork >= 240000) { ctl.abort(); return; }
+      }
+    })();
     try {
-      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-odm-sent-at': String(Date.now()) }, body: JSON.stringify(body), signal: ctl.signal });
+      const res = await fetch('/api/chat', { method: 'POST', headers: odmHeaders({ 'Content-Type': 'application/json', 'x-odm-sent-at': String(Date.now()) }), body: JSON.stringify(body), signal: ctl.signal });
       // Auth wall: without the current dsh login cookie every API returns 401. Don't pretend it's a flaky network.
       if (res.status === 401 || res.status === 403) throw new ChatFail('登录已失效或未登录。请让主人在这台电脑上重新打开豆芽登录链接（终端：open "$(cat .odm-data/dsh-web.url)"），不要用过期分享链接。');
       if (res.status >= 500) throw Object.assign(new Error('http ' + res.status), { net: true });
@@ -5813,7 +5827,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       if (e instanceof ChatFail) throw e;
       if (e.name === 'AbortError') e.timeout = true; else e.net = true;
       throw e;
-    } finally { clearTimeout(t); }
+    } finally { finished = true; }
   }
   async function chatHistoryWhenUp(maxMs) {
     const end = Date.now() + maxMs;
@@ -5839,7 +5853,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       await sleep(900);
       while (!stop) {
         try {
-          const r = await fetch('/api/opendigitalmate/chat-progress', { method: 'POST', cache: 'no-store' }).then(x => x.json());
+          const r = await fetch('/api/opendigitalmate/chat-progress', { method: 'POST', cache: 'no-store', headers: odmHeaders() }).then(x => x.json());
           if (!stop && r && r.running && r.label && r.label !== last) { last = r.label; onStatus(r.label); }
         } catch (_) {}
         await sleep(1200);
@@ -5856,13 +5870,13 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   async function sendChatResilientInner(body, onStatus = () => {}) {
     try { return await postChatOnce(body); }
     catch (e) {
-      if (e.timeout) throw new ChatFail('豆芽这次想得太久（超过 4 分钟）还没回来。');
-      onStatus('连接断了，正在重连豆芽…');
+      if (e.timeout) throw new ChatFail(t('chat.wait_too_long'));
+      onStatus(t('chat.reconnect'));
       let hist = await chatHistoryWhenUp(45000);
-      if (!hist) throw new ChatFail('连不上豆芽服务（可能正在重启，或网络断了）。');
+      if (!hist) throw new ChatFail(t('chat.offline'));
       let r = replyFor(hist, body.message);
       if (r.seen) {
-        onStatus('豆芽已经收到这条，正在取回答…');
+        onStatus(t('chat.got_it_waiting'));
         let last = null;
         const end = Date.now() + 120000;
         while (Date.now() < end) {
@@ -5873,11 +5887,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
           r = replyFor(hist, body.message);
         }
         if (r.reply) return { text: r.reply, recovered: true };
-        throw new ChatFail('豆芽收到了消息，但回答还没回来。');
+        throw new ChatFail(t('chat.no_reply_yet'));
       }
-      onStatus('重新发送中…');
+      onStatus(t('chat.resending'));
       try { return await postChatOnce(body); }
-      catch (e2) { throw new ChatFail(e2.timeout ? '重发后等待超时。' : '重发也没连上豆芽（服务可能正在重启）。'); }
+      catch (e2) { throw new ChatFail(e2.timeout ? t('chat.resend_timeout') : t('chat.resend_fail')); }
     }
   }
   // Error bubble with a 重试 button; `retry` re-runs the same send.

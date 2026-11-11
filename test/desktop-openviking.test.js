@@ -227,6 +227,7 @@ test('bundle script pins OpenViking, the official GGUF, and python-build-standal
   assert.equal(hasLlamaCppWheel('darwin', 'x64'), false)
   assert.equal(hasLlamaCppWheel('win32', 'x64'), true)
   assert.equal(hasLlamaCppWheel('linux', 'x64'), true)
+  assert.equal(hasLlamaCppWheel('linux', 'arm64'), false)
   assert.equal(llamaCppWheelUrl('darwin', 'arm64'), null)
   assert.equal(llamaCppWheelUrl('darwin', 'x64'), null)
   assert.match(llamaCppWheelUrl('win32', 'x64'), /win_amd64\.whl$/)
@@ -237,7 +238,32 @@ test('bundle script pins OpenViking, the official GGUF, and python-build-standal
   assert.match(archiveName('darwin', 'x64'), /x86_64-apple-darwin/)
   assert.match(archiveName('win32', 'x64'), /x86_64-pc-windows-msvc/)
   assert.match(archiveUrl('linux', 'x64'), new RegExp(PBS_RELEASE))
+  assert.match(archiveName('linux', 'x64'), /x86_64-unknown-linux-gnu/)
+  assert.match(archiveName('linux', 'arm64'), /aarch64-unknown-linux-gnu/)
+  assert.equal(llamaCppWheelUrl('linux', 'arm64'), null)
   assert.throws(() => archiveName('win32', 'arm64'))
+})
+
+test('desktop workflow builds Windows, macOS, and Linux packages with the same OpenViking bundle', () => {
+  const yml = readFileSync(new URL('../.github/workflows/desktop.yml', import.meta.url), 'utf8')
+  assert.match(yml, /tags: \['desktop-v\*'\]/)
+  assert.doesNotMatch(yml, /pull_request/)
+  for (const bit of [
+    'macos-latest', 'macos-15-intel', 'windows-latest', 'ubuntu-latest', 'ubuntu-24.04-arm',
+    'target: linux', 'arch: arm64', 'platform: linux', 'platform: darwin', 'platform: win32',
+  ]) assert.match(yml, new RegExp(bit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), bit)
+  assert.match(yml, /--platform \$\{\{ matrix\.platform \}\} --arch \$\{\{ matrix\.arch \}\}/)
+  assert.match(yml, /\*\.AppImage/)
+  assert.match(yml, /\*\.deb/)
+  assert.match(yml, /SHA256SUMS/)
+  assert.match(yml, /Linux packages are unsigned/)
+  // Official v0.3.36 macos arm64 wheel stays skipped; Mac jobs still source-build with cmake.
+  assert.match(yml, /CMake \(macOS; needed to build llama-cpp-python from source\)/)
+  assert.match(yml, /if: matrix\.target == 'mac'/)
+  const src = readFileSync(new URL('../desktop/scripts/bundle-openviking.mjs', import.meta.url), 'utf8')
+  assert.match(src, /published v0\.3\.36 macosx_11_0_arm64 wheel is a/)
+  assert.match(src, /corrupt zip/)
+  assert.ok(!src.split('const TRIPLES')[0].includes("'darwin-arm64'"), 'official macos arm64 llama wheel stays unlisted')
 })
 
 test('desktop package ships the OpenViking extraResources and message keys stay bilingual', () => {

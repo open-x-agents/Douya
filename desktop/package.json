@@ -3,7 +3,7 @@
   "productName": "Douya",
   "version": "0.1.0",
   "private": true,
-  "description": "Douya / \u8c46\u82bd desktop shell (Electron) for Windows and macOS \u2014 opens the local Douya server in one window.",
+  "description": "Douya / \u8c46\u82bd desktop shell (Electron) for Windows, macOS, and Linux \u2014 opens the local Douya server in one window.",
   "type": "module",
   "main": "src/main.js",
   "author": "open-x-agents",
@@ -12,6 +12,7 @@
     "dev": "electron .",
     "build:mac": "electron-builder --mac --publish never",
     "build:win": "electron-builder --win --publish never",
+    "build:linux": "electron-builder --linux --publish never",
     "build:dir": "electron-builder --dir --publish never",
     "bundle:ov": "node ./scripts/bundle-openviking.mjs"
   },
@@ -63,8 +64,11 @@
     },
     "linux": {
       "target": [
-        "dir"
-      ]
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office",
+      "executableName": "douya"
     },
     "extraResources": [
       {

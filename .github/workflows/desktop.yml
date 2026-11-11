@@ -1,0 +1,92 @@
+name: desktop
+
+# Builds the Electron desktop installers: macOS dmg (arm64 + x64), Windows nsis (x64).
+# Each job also builds a relocatable OpenViking runtime (CPython + openviking + local GGUF + llama-cpp-python) into the app.
+# Manual or on a `desktop-v*` tag only — never on PRs, so PR CI stays fast.
+# No secrets, no notarization:
+# - macOS is ad-hoc signed (`mac.identity: "-"`), so Apple Silicon opens it instead of "damaged".
+# - Windows is signed with a self-signed cert minted in this job; its private key never leaves the runner.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['desktop-v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: mac
+            arch: arm64
+          - os: macos-15-intel
+            target: mac
+            arch: x64
+          - os: windows-latest
+            target: win
+            arch: x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: astral-sh/setup-uv@v6
+      - name: CMake (macOS; needed to build llama-cpp-python from source)
+        if: matrix.target == 'mac'
+        working-directory: .
+        run: brew install cmake ninja
+      - run: npm ci --no-fund --no-audit
+
+      - name: Bundle OpenViking
+        run: node scripts/bundle-openviking.mjs --out resources/openviking --platform ${{ matrix.target == 'mac' && 'darwin' || 'win32' }} --arch ${{ matrix.arch }}
+
+      - name: Self-signed code-signing cert (Windows, per build)
+        if: matrix.target == 'win'
+        shell: pwsh
+        run: |
+          $pass = [guid]::NewGuid().ToString('N')
+          $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=Douya (self-signed)' `
+            -KeyUsage DigitalSignature -KeyAlgorithm RSA -KeyLength 3072 -HashAlgorithm SHA256 `
+            -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddYears(2)
+          $pfx = Join-Path $env:RUNNER_TEMP 'douya-selfsigned.pfx'
+          Export-PfxCertificate -Cert $cert -FilePath $pfx -Password (ConvertTo-SecureString $pass -AsPlainText -Force) | Out-Null
+          Export-Certificate -Cert $cert -FilePath dist-cert.cer | Out-Null
+          echo "::add-mask::$pass"
+          "CSC_LINK=$pfx" >> $env:GITHUB_ENV
+          "CSC_KEY_PASSWORD=$pass" >> $env:GITHUB_ENV
+
+      - name: Build installer
+        run: npx electron-builder --${{ matrix.target }} --${{ matrix.arch }} --publish never
+
+      - name: Check signatures
+        shell: bash
+        run: |
+          if [ "${{ matrix.target }}" = mac ]; then
+            app=$(ls -d dist/mac*/Douya.app | head -1)
+            # Ad-hoc sign the bundled CPython / native libs, then the app again.
+            find "$app/Contents/Resources/openviking" \( -type f -perm +111 -o -name '*.so' -o -name '*.dylib' -o -name 'python*' \) -print0 2>/dev/null \
+              | xargs -0 -I{} codesign --force --sign - --timestamp=none "{}" || true
+            codesign --force --deep --sign - --timestamp=none "$app"
+            codesign --verify --deep --strict "$app" && codesign -dv "$app" 2>&1 | grep -E 'Signature|Identifier|Format'
+          else
+            pwsh -c 'Get-ChildItem dist/*.exe, dist/win-unpacked/Douya.exe | Get-AuthenticodeSignature | Format-Table Status, @{n="Signer";e={$_.SignerCertificate.Subject}}, Path -AutoSize | Out-String -Width 200'
+            mv dist-cert.cer dist/Douya-selfsigned.cer
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: douya-${{ matrix.target }}-${{ matrix.arch }}
+          path: |
+            desktop/dist/*.dmg
+            desktop/dist/*.exe
+            desktop/dist/*.cer
+          if-no-files-found: error

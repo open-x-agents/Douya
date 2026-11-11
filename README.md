@@ -88,6 +88,31 @@ Default UI is **English**. Switch to 中文 in Settings or the sidebar control (
 
 ---
 
+## Desktop app
+
+A thin Electron shell for **macOS** and **Windows** in [`desktop/`](desktop/) (own `package.json`, so the root install stays small). It opens Douya in its own window: if a server already answers on `127.0.0.1:7777` with a working token it reuses it, otherwise it runs `scripts/start-dsh.mjs` for you and stops it on quit.
+
+The installers also bundle a relocatable [OpenViking](https://docs.openviking.ai) memory server (CPython 3.13 + `openviking`) and a local Chinese embedding model (`bge-small-zh-v1.5-f16` GGUF, 512 dimensions, MIT, plus `llama-cpp-python`). If `127.0.0.1:1933/health` is already healthy, the app reuses that server and leaves it alone; otherwise it starts the bundled one with a data directory under the app's userData, writes a minimal `ov.conf` / `ovcli.conf` when none exist, and stops only the process it started. A new app-local config points at the shipped GGUF, so semantic auto-recall works offline with no API key and no Ollama install. An existing `~/.openviking/ov.conf` or a config that already names a provider is left unchanged; the app does not rebuild existing vectors on its own. A VLM / chat model is **not** shipped and is still required for memory extraction and summaries — see [Long-term memory](#long-term-memory). You do not need to install `uv` or `openviking` separately. The bundled OpenViking runtime is AGPL-3.0 (upstream).
+
+Prerequisites on the machine: **Node.js** and **dsh**, plus the `openDigitalMate` folder (the app looks in the usual places, or asks once).
+
+```bash
+npm run desktop:dev          # run from this checkout
+npm --prefix desktop run bundle:ov   # fill desktop/resources/openviking (needed before packing)
+npm run desktop:build:mac    # → desktop/dist/*.dmg (arm64 + x64, ad-hoc signed)
+npm run desktop:build:win    # → desktop/dist/*.exe (NSIS; build on Windows or CI)
+```
+
+| Setting | Default |
+| --- | --- |
+| `ODM_ROOT` — repo folder | this checkout, then `~/Documents/git/openDigitalMate`; else it asks once and remembers |
+| `DSH_BIN` — dsh binary | `$DSH_BIN`, then `~/Documents/git/dsh-rc5/bin/dsh`, then `dsh` on `PATH` |
+| `ODM_PORT` | `7777` |
+
+Installers are not notarized. First launch on macOS: right-click **Douya.app → Open** (or `xattr -dr com.apple.quarantine /Applications/Douya.app`). On Windows, SmartScreen shows **More info → Run anyway**. CI builds both on demand: the `desktop` workflow (manual, or a `desktop-v*` tag) and tags `desktop-v*`.
+
+---
+
 ## Architecture
 
 ```
@@ -155,6 +180,8 @@ Douya uses **[OpenViking](https://docs.openviking.net/en/agent-integrations/17-d
 
 ### 1. OpenViking server (minimal local)
 
+The **desktop installers already include** this server — skip this step if you are using the Mac or Windows app. For `npm start` (or a server you run yourself):
+
 ```bash
 # needs uv + embedding/VLM models configured by the wizard — see OpenViking quickstart
 uv tool install openviking --upgrade
@@ -191,7 +218,7 @@ Remove legacy `dsh-memory` from the profile once OpenViking is healthy. While th
 
 **Recall page (in `dsh-muse-ui`).** Memories read as a short title plus plain sentences — no `viking://` URIs, marker tokens or markdown (`packages/dsh-muse-ui/memory-present.js`, served to the page as `/api/opendigitalmate/memory-present.js`). Open a tile to read the whole memory; **Add photo** (png / jpeg / gif / webp, ≤ 5 MB) stores the image **in OpenViking** as a resource under `viking://resources/recall/<memory>/` (memories reject binary writes) and appends `![caption](viking://resources/recall/…)` to the memory, so chat sees the same link. The host only adds `GET|POST /api/opendigitalmate/memories/image` (proxy restricted to `viking://resources/recall/`); forgetting a memory deletes its photos too.
 
-`openviking-server doctor` may warn that embedding / VLM are missing. **Memories list + forget** still work over the filesystem API; semantic auto-recall / search need a working embedding (local GGUF via `openviking[local-embed]`, Ollama, or a cloud key).
+The **desktop installers** ship that local GGUF and `llama-cpp-python`, and a new app-local `ov.conf` points at the file in the app bundle (no first-run download). A VLM / chat model is still separate: auto-recall and search use the embedding model; memory extraction and summaries need a VLM in `ov.conf` if you want them. For `npm start` (or a server you run yourself), semantic auto-recall needs a working embedding — the same local GGUF via `openviking[local-embed]`, Ollama, or a cloud key. `openviking-server doctor` may still warn that a VLM is missing. **Memories list + forget** still work over the filesystem API without either model. Changing the embedding model or dimension can make existing vector collections incompatible; reindex only if you choose to (`ov reindex … --mode vectors_only --force`). The app will not do that automatically.
 
 ---
 

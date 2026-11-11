@@ -24,7 +24,10 @@
     "start:dsbot": "dsh --profile odm --no-open --port 7777",
     "dev": "node scripts/server.js 7777",
     "demo": "node scripts/demo.mjs",
-    "start:standalone": "node scripts/server.js"
+    "start:standalone": "node scripts/server.js",
+    "desktop:dev": "npm --prefix desktop install --no-fund --no-audit && npm --prefix desktop run dev",
+    "desktop:build:mac": "npm --prefix desktop install --no-fund --no-audit && npm --prefix desktop run build:mac",
+    "desktop:build:win": "npm --prefix desktop install --no-fund --no-audit && npm --prefix desktop run build:win"
   },
   "keywords": [
     "dsh-plugin",

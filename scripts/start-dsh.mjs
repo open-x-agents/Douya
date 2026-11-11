@@ -10,6 +10,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { applyLlmEnv, ensureAgentDefaultModel, ensureProfileDeepseekCatalog, DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_LEGACY_MODELS } from '../src/web/llm-env.js'
 import { syncBotModels } from '../src/web/dsbot-chat.js'
+import { dshLogPath, linkDir, mergePathEnv, uniquePathEnv, userHome } from './start-dsh-util.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const HOME = join(ROOT, '.odm-data')
@@ -20,7 +21,8 @@ const DSH_BIN_CANDIDATES = [
   join('/workspace/dsh-rc5/prefix/bin', 'dsh'),
   'dsh',
 ].filter(Boolean)
-const DSH_LOG = '/tmp/odm-dsh.log'
+const HOME_DIR = userHome()
+const DSH_LOG = dshLogPath()
 const URL_FILE = join(HOME, 'dsh-web.url')
 
 mkdirSync(HOME, { recursive: true })
@@ -55,19 +57,13 @@ function ensureVendorDsBotDeps() {
 }
 ensureVendorDsBotDeps()
 
-// Link user odm profile + shared node_modules if present (Mac layout).
-const userProfile = join(process.env.HOME || '', '.dsh/profiles/odm')
+// Link user odm profile + shared node_modules if present (symlink, or a junction / copy on Windows).
+const userProfile = join(HOME_DIR, '.dsh/profiles/odm')
 const profileLink = join(DSH_HOME, 'profiles', 'odm')
-const userMods = join(process.env.HOME || '', '.dsh/profiles/node_modules')
+const userMods = join(HOME_DIR, '.dsh/profiles/node_modules')
 const modsLink = join(DSH_HOME, 'profiles', 'node_modules')
-try {
-  if (existsSync(userProfile) && !existsSync(profileLink)) {
-    spawn('ln', ['-sfn', userProfile, profileLink], { stdio: 'ignore' })
-  }
-  if (existsSync(userMods) && !existsSync(modsLink)) {
-    spawn('ln', ['-sfn', userMods, modsLink], { stdio: 'ignore' })
-  }
-} catch {}
+linkDir(userProfile, profileLink)
+linkDir(userMods, modsLink)
 
 let chatModel = DEEPSEEK_DEFAULT_MODEL
 try {
@@ -96,12 +92,7 @@ try {
     const bundles = pkg?.dsh?.profile?.bundles || []
     const deps = pkg?.dependencies || {}
     const hasOv = bundles.includes('@openviking/dsh-memory-plugin') || deps['@openviking/dsh-memory-plugin']
-    if (!hasOv) {
-      console.warn('[start-dsh] @openviking/dsh-memory-plugin not in odm profile — chat long-term memory off.')
-      console.warn('  Install: dsh plugin --profile odm add @openviking/dsh-memory-plugin@0.5.33')
-      console.warn('  Server:  openviking-server   (local default http://127.0.0.1:1933)')
-      console.warn('  Config:  ~/.openviking/ovcli.conf  → { "url": "http://127.0.0.1:1933" }')
-    } else {
+    if (hasOv) {
       const ovUrl = process.env.OPENVIKING_URL || process.env.OPENVIKING_BASE_URL || 'http://127.0.0.1:1933'
       console.log(`🧠 Long-term memory: OpenViking → ${ovUrl} (Muse Glimpse reads viking://~/memories)`)
     }
@@ -135,16 +126,40 @@ const dshBin = DSH_BIN_CANDIDATES.find(b => {
     return existsSync(b)
   } catch { return false }
 }) || 'dsh'
-const pathEnv = [
+
+// Fresh machines: add the memory plugin so the bundled OpenViking server is actually used.
+try {
+  const profilePkg = join(userProfile, 'package.json')
+  if (existsSync(profilePkg)) {
+    const pkg = JSON.parse(readFileSync(profilePkg, 'utf8'))
+    const bundles = pkg?.dsh?.profile?.bundles || []
+    const deps = pkg?.dependencies || {}
+    const hasOv = bundles.includes('@openviking/dsh-memory-plugin') || deps['@openviking/dsh-memory-plugin']
+    if (!hasOv) {
+      console.warn('[start-dsh] @openviking/dsh-memory-plugin not in odm profile — trying to add it.')
+      const add = spawnSync(dshBin, ['plugin', '--profile', 'odm', 'add', '@openviking/dsh-memory-plugin@0.5.33'], {
+        encoding: 'utf8', env: process.env, timeout: 120_000,
+      })
+      if (add.status !== 0) {
+        console.warn('[start-dsh] auto-add failed — chat long-term memory stays off until you run:')
+        console.warn('  dsh plugin --profile odm add @openviking/dsh-memory-plugin@0.5.33')
+        if (add.stderr) process.stderr.write(add.stderr)
+      } else {
+        console.log('[start-dsh] added @openviking/dsh-memory-plugin@0.5.33 to the odm profile')
+      }
+    }
+  }
+} catch (err) { console.warn(`[start-dsh] memory plugin auto-add skipped: ${err?.message || err}`) }
+
+const pathEnv = mergePathEnv(process.env.PATH || process.env.Path, [
   join('/workspace/dsh-rc5/prefix/bin'),
   dirname(dshBin),
-  process.env.PATH || '',
-].filter(Boolean).join(':')
+])
 
 const log = createWriteStream(DSH_LOG, { flags: 'w' })
 const child = spawn(dshBin, ['--profile', 'odm', '--no-open', '--port', String(PORT)], {
   cwd: ROOT,
-  env: { ...process.env, PATH: pathEnv, DSH_HOME, ODM_MUSE_URL: process.env.ODM_MUSE_URL, DSBOT_URL: process.env.DSBOT_URL },
+  env: uniquePathEnv({ ...process.env, DSH_HOME, ODM_MUSE_URL: process.env.ODM_MUSE_URL, DSBOT_URL: process.env.DSBOT_URL }, pathEnv),
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 child.stdout.pipe(log)

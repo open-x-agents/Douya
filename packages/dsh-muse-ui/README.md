@@ -11,7 +11,7 @@ Replaces the stock dsh web shell and serves Muse at `/api/opendigitalmate/app`. 
 | **Today** | Current affairs — finish something, state writes back |
 | **Memories / Recall** | Readable recalls & achievements with photos (OpenViking) |
 | **Sources / Settings** | Connect apps, keys, language, digest prefs |
-| **Future** *(coming)* | Long-term plans from interests — consent first |
+| **Future / 未来** | Long-term plans from interests — consent first; propose, then accept |
 
 Shared memory under everything: Muse UI ↔ Chief/bots ↔ OpenViking ↔ Sources.
 

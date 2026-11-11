@@ -1,9 +1,9 @@
 # openDigitalMate
 
-### Douya / 豆芽 — a Muse-style coworker that lives in your browser
+### Douya / 豆芽 — a Muse-style coworker for your desktop
 
-[![License](https://img.shields.io/badge/license-Apache--2.0-0B3D2E?style=flat-square)](./LICENSE)
-[![Node](https://img.shields.io/badge/node-ESM-1B6B4A?style=flat-square)](#requirements)
+[![License](https://img.shields.io/badge/license-Apache--2.0-0B3D2E?style=flat-square)]
+[![Node](https://img.shields.io/badge/node-ESM-1B6B4A?style=flat-square)](#run-from-source)
 [![dsh](https://img.shields.io/badge/host-dsh%20odm%20profile-0E4D8C?style=flat-square)](https://github.com/deepseek-ai/dsh)
 [![UI](https://img.shields.io/badge/UI-EN%20%2F%20中文-5B21B6?style=flat-square)](#language)
 
@@ -17,45 +17,50 @@ One product. Three pages. Shared memory underneath.
 | --- | --- | --- |
 | Long-term plans grown from your interests — fitness, study, craft. Propose first; **consent before work**. | Current affairs from mail, PRs, Slack, calendar. Finish something and the state writes back everywhere. | Readable memories & achievements — human sentences, photos welcome. Achievements surface first. |
 
-**Shipped today:** Today, Sources, Future / 未来 (propose, accept, then step or archive), Settings, Memories / Recall (readable tiles + photos), dock chat with Chief, Confirm-gated sends.
+Douya is a **desktop-first** Electron app for **Windows, macOS, and Linux**. The UI is bilingual EN / 中文. Mobile apps were cancelled. It is not a fully offline product: chat and many features need a supported model provider, and sources need [Composio](https://app.composio.dev) plus your consent for anything outbound.
 
 ```
   Muse UI  ──▶  Chief / source bots  ──▶  OpenViking  ──▶  Sources
   (Today ·     (merge, rank,          (shared            (Gmail · Slack ·
    Memories ·   plan, chat)            memory)             GitHub · Calendar)
-   …Future)
+   Future)
 ```
 
-Less is more · bilingual EN / 中文 · ship via PR into `main` (never push `main` directly).
+Less is more · ship via PR into `main` (never push `main` directly).
 
-**Repo:** [open-x-agents/openDigitalMate](https://github.com/open-x-agents/openDigitalMate) · **License:** Apache-2.0
+**Repo:** [open-x-agents/openDigitalMate](https://github.com/open-x-agents/openDigitalMate) · the root and desktop `package.json` files list `license` as `Apache-2.0`
 
 ---
 
-## Surfaces
+## Download the desktop app
 
-| Surface | What it does |
+Current desktop packages: **[desktop-v0.1.0-rc7](https://github.com/open-x-agents/openDigitalMate/releases/tag/desktop-v0.1.0-rc7)** (prerelease, built from `92d751b0`).
+
+Do **not** use [github.com/open-x-agents/openDigitalMate/releases/latest](https://github.com/open-x-agents/openDigitalMate/releases/latest) for the app. That “latest” badge is **[v0.1.0](https://github.com/open-x-agents/openDigitalMate/releases/tag/v0.1.0)** (2026-10-30), an earlier stable source/tag release **without** these installers.
+
+| Platform | File |
 | --- | --- |
-| **Today** | Hero (“what now”), timetable, digest cards with prep, “what got done” tuck, real completion feedback |
-| **Memories** (回忆 / Recall) | Readable tiles with photos — achievements first; open one to read it all or add a photo; same `viking://~/memories` store |
-| **Pending confirm** | Outbound mail / comments / archives leave only after you click Confirm |
-| **Dock chat** | Talk with Douya (Chief). Confirmed sends echo into card chat + general chat |
-| **Sources** | Connect GitHub, Gmail, Slack, Calendar, … via Composio |
-| **Desktop UX** | Hover/swipe actions, IME-safe shortcuts (`J` `K` `E` `C` `S` `?`), two-column zoom |
+| Windows x64 | [Douya-0.1.0-win-x64-Setup.exe](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/Douya-0.1.0-win-x64-Setup.exe) · [self-signed .cer](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/Douya-0.1.0-win-x64-selfsigned.cer) (public cert only) |
+| macOS Apple Silicon | [Douya-0.1.0-mac-arm64.dmg](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/Douya-0.1.0-mac-arm64.dmg) |
+| macOS Intel | [Douya-0.1.0-mac-x64.dmg](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/Douya-0.1.0-mac-x64.dmg) |
+| Linux x64 | [AppImage](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/Douya-0.1.0-linux-x64.AppImage) or [`.deb`](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/douya-desktop_0.1.0_amd64.deb) |
+| Linux arm64 | [AppImage](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/Douya-0.1.0-linux-arm64.AppImage) or [`.deb`](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/douya-desktop_0.1.0_arm64.deb) |
 
-Local-only: binds to `127.0.0.1`.
+Checksums: [SHA256SUMS](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/SHA256SUMS).
+
+On Linux pick **one** format, not both: `.deb` on Ubuntu/Debian, AppImage on other distributions. Match your CPU (x64 vs arm64). The AppImage needs `libfuse.so.2` to run in place (`chmod +x` first); if FUSE is missing, use `--appimage-extract-and-run`. Do not pass `--no-sandbox`.
+
+Installers are not warning-free. macOS is ad-hoc signed and **not notarized** (right-click **Douya.app → Open**, or `xattr -dr com.apple.quarantine /Applications/Douya.app`). Windows is **self-signed** (SmartScreen: More info → Run anyway). Linux packages are **unsigned**.
+
+The installer is a shell, not a self-contained server. It always needs a checkout of this repo (a folder that contains `scripts/start-dsh.mjs`; the app looks in the usual places or asks once). If nothing already answers on `127.0.0.1:7777` with a working token, it starts that script from the checkout and therefore needs **[dsh](https://github.com/deepseek-ai/dsh)** (`$DSH_BIN`, then `~/Documents/git/dsh-rc5/bin/dsh`, then `dsh` on `PATH`). A separate Node.js install is not required: the app prefers `node` on `PATH`, otherwise it runs the start script with Electron’s bundled Node.
+
+Installers bundle OpenViking **0.5.4**, relocatable CPython, `llama-cpp-python`, and the local `bge-small-zh-v1.5-f16` embedding GGUF (Chinese-optimized; English is weaker). Semantic auto-recall can work **without a cloud key or Ollama**. A VLM / chat model is **not** shipped — chat still needs a supported provider, and memory extraction and summaries need a VLM. The app does not rebuild existing vectors, and it does not move an existing OpenViking workspace for you. Details: [docs/install.md](docs/install.md), [docs/memory.md](docs/memory.md).
+
+This rc also includes the long-running chat wait: if Chief is still working, the UI keeps waiting instead of reporting no reply after a few minutes. A turn that stays marked running can keep you waiting; hangs are not all detected.
 
 ---
 
-## Requirements
-
-- Node.js (ESM)
-- [`dsh`](https://github.com/deepseek-ai/dsh) on `PATH`, with an `odm` profile that includes ds-bot + this host plugin + `dsh-muse-ui`
-- API keys: an LLM provider (DeepSeek recommended) + [Composio](https://app.composio.dev)
-
----
-
-## Quick start
+## Run from source
 
 ```bash
 npm install
@@ -76,212 +81,43 @@ On macOS you can put that behind a system-wide hotkey — see [docs/mac-shortcut
 
 ### Configure AI + Composio
 
-1. **Settings** → pick provider (e.g. DeepSeek), paste key, Save
-2. Paste **Composio** key, Save, connect GitHub / Gmail / Slack / Calendar
+1. **Settings** → pick a provider (e.g. DeepSeek), paste the key, Save
+2. Paste a **Composio** key, Save, then connect GitHub / Gmail / Slack / Calendar (and only the apps you want)
 3. **Today** → **Refresh now**
 
-Keys also work from `.env` (`DEEPSEEK_API_KEY` / `COMPOSIO_API_KEY`) or `.odm-data/config.json` (gitignored). DeepSeek needs a real key — OpenAI-only setups make Chief say “No model is available”.
+Outbound mail, comments, and archives stay pending until you click **Confirm**. Keys also work from `.env` (`DEEPSEEK_API_KEY` / `COMPOSIO_API_KEY`) or `.odm-data/config.json` (gitignored). DeepSeek needs a real key — an OpenAI-only setup makes Chief say “No model is available”. Source checkout and packing the app: [docs/develop.md](docs/develop.md). Model details: [docs/LLM_SETUP.md](docs/LLM_SETUP.md).
 
 ### Language
 
-Default UI is **English**. Switch to 中文 in Settings or the sidebar control (`localStorage` key `odm.lang`). Digest card *bodies* stay as the bots wrote them.
+Default UI is **English**. Switch to 中文 in Settings or the sidebar (`localStorage` key `odm.lang`). Digest card *bodies* stay as the bots wrote them.
 
 ---
 
-## Desktop app
+## Memory in brief
 
-A thin Electron shell for **macOS**, **Windows**, and **Linux** in [`desktop/`](desktop/) (own `package.json`, so the root install stays small). It opens Douya in its own window: if a server already answers on `127.0.0.1:7777` with a working token it reuses it, otherwise it runs `scripts/start-dsh.mjs` for you and stops it on quit.
+Douya uses **[OpenViking](https://docs.openviking.net/en/agent-integrations/17-dsh)** via [`@openviking/dsh-memory-plugin`](https://www.npmjs.com/package/@openviking/dsh-memory-plugin) (~0.5.33). Chat auto-recall, the Memories / Recall page, and Future’s grounding share `viking://~/memories`.
 
-The installers also bundle a relocatable [OpenViking](https://docs.openviking.ai) memory server (CPython 3.13 + `openviking`) and a local Chinese embedding model (`bge-small-zh-v1.5-f16` GGUF, 512 dimensions, MIT, plus `llama-cpp-python`). If `127.0.0.1:1933/health` is already healthy, the app reuses that server and leaves it alone; otherwise it starts the bundled one with a data directory under the app's userData, writes a minimal `ov.conf` / `ovcli.conf` when none exist, and stops only the process it started. A new app-local config points at the shipped GGUF, so semantic auto-recall works offline with no API key and no Ollama install. An existing `~/.openviking/ov.conf` or a config that already names a provider is left unchanged; the app does not rebuild existing vectors on its own. A VLM / chat model is **not** shipped and is still required for memory extraction and summaries — see [Long-term memory](#long-term-memory). You do not need to install `uv` or `openviking` separately. The bundled OpenViking runtime is AGPL-3.0 (upstream).
+Desktop installers already include the server and the local GGUF; a new app-local `ov.conf` points at the shipped file, and `~/.openviking/ovcli.conf` is created only if it is missing. An existing `~/.openviking/ov.conf` is left alone. The app does not rebuild existing vectors. For `npm start`, you run or reuse a server on `127.0.0.1:1933` yourself — see [docs/memory.md](docs/memory.md).
 
-Prerequisites on the machine: **Node.js** and **dsh**, plus the `openDigitalMate` folder (the app looks in the usual places, or asks once).
+---
 
-```bash
-npm run desktop:dev          # run from this checkout
-npm --prefix desktop run bundle:ov   # fill desktop/resources/openviking (needed before packing)
-npm run desktop:build:mac    # → desktop/dist/*.dmg (arm64 + x64, ad-hoc signed)
-npm run desktop:build:win    # → desktop/dist/*.exe (NSIS; build on Windows or CI)
-npm run desktop:build:linux  # → desktop/dist/*.AppImage and *.deb (x64 + arm64; build on Linux or CI)
-```
+## What you can do here
 
-| Setting | Default |
+| Surface | What it actually does |
 | --- | --- |
-| `ODM_ROOT` — repo folder | this checkout, then `~/Documents/git/openDigitalMate`; else it asks once and remembers |
-| `DSH_BIN` — dsh binary | `$DSH_BIN`, then `~/Documents/git/dsh-rc5/bin/dsh`, then `dsh` on `PATH` |
-| `ODM_PORT` | `7777` |
+| **Today** | Hero, timetable, digest cards, prepared next steps, “what got done” |
+| **Future / 未来** | Propose a plan from a memory or a stated interest; accept before work; tick or complete a step (including **Do this with Douya**); archive. Progress lives in host `state.json` and survives a restart |
+| **Memories / Recall** | Readable tiles + photos (≤ 5 MB), achievements first; forget removes the memory and its photos |
+| **Sources** | Connect apps via Composio. Coverage and limits: [docs/sources/connected-scans.md](docs/sources/connected-scans.md) |
+| **Dock chat** | Talk with Chief. Confirmed sends can echo into card chat and general chat |
 
-Installers are not notarized. First launch on macOS: right-click **Douya.app → Open** (or `xattr -dr com.apple.quarantine /Applications/Douya.app`). On Windows, SmartScreen shows **More info → Run anyway**. Linux packages are unsigned: mark the AppImage executable (`chmod +x Douya-*.AppImage`) or install the `.deb` with `sudo dpkg -i Douya-*.deb`. CI builds all three platforms on a `desktop-v*` tag or a manual run of the `desktop` workflow.
-
----
-
-## Architecture
-
-```
-┌─────────────┐     ┌──────────────────┐     ┌──────────────┐
-│  Muse UI    │ ◀── │  Chief / bots    │ ◀── │  Sources     │
-│  dsh-muse-ui│     │  merge · chat    │     │  Composio    │
-└──────┬──────┘     └────────┬─────────┘     └──────────────┘
-       │                     │
-       │              ┌──────▼──────┐
-       └─────────────▶│ OpenViking  │  shared store
-                      │ memories    │  viking://~/memories
-                      └─────────────┘
-```
-
-- **Muse UI** (`packages/dsh-muse-ui`) — desktop-first shell: Future, Today, Memories, Sources, Settings.
-- **Chief / source bots** — channel bots propose when accounts are ACTIVE and snapshots are non-empty; Chief merges, ranks, and owns dock chat. Empty snapshots skip the bot. Calendar is aux fetch only.
-- **OpenViking** — durable memory for chat recall, Memories glimpse, and the memories Future plans are grounded in.
-- **Sources** — live connectors via Composio; bounded YouTube subscription and recent-content scans, with explicit unsupported/error rows. See [scan coverage and limits](docs/sources/connected-scans.md). Nothing outbound without Confirm.
-
-### Bot routing — who does what
-
-| When | Who | Why |
-| --- | --- | --- |
-| ACTIVE Composio account for Gmail / GitHub / Slack **and** live items | **Source bot** | Owns that channel’s candidate cards |
-| Snapshot empty (all done / nothing new) | **Skip** source bot | No wasted LLM turn; strip shows skipped |
-| Calendar connected | **Aux fetch** only | Feeds hero + timetable; no source bot |
-| Account connected but not ACTIVE | Strip **failed** | Reconnect in Sources |
-| ≥1 candidate from source bots | **Chief** merge | Dedupe, rank, headline, timeline |
-| Zero candidates after source passes | **Skip Chief** | Default empty plan; still refresh hero/timetable |
-
-Source bots never chat with you. Chief never re-fetches a channel during merge. Dock chat always goes to Chief.
+Local-only: the UI binds to `127.0.0.1`.
 
 ---
 
-## Future — long-term plans
+## Docs
 
-Muse’s **Future / 未来** page turns real interests into a goal, a quoted reason it fits,
-step progress, and one concrete action for this week. Ask Chief to plan with you:
-`odm_future_get` reads plans + OpenViking filesystem memories (no semantic embedding
-required); `odm_future_update` proposes, accepts/creates, edits, checks/undoes a step,
-or archives. Suggestions stay inactive until you accept on the page or explicitly agree
-in chat. If interests are missing, Douya asks rather than assuming fitness or study goals.
-
-The next step on an active plan has **Do this with Douya / 和豆芽一起做**: it opens chat
-with a short natural sentence about the step. Plan/step ids and tool instructions go as
-hidden context (not shown in the transcript). Douya proposes concrete moves with
-its existing tools (GitHub lookup, drafts, a timetable block via **Schedule it / 排进时间表**).
-Anything outbound stays a Confirm card. When the step is done, Douya calls
-`odm_future_update op=step done=true` with a one-line `evidence` (e.g. the PR link) and an
-optional `nextStep`; the card shows the proof, the new progress, and what is up next.
-The checkbox remains as a manual fallback.
-
-Plans and progress live in `futurePlans` in the existing host `state.json`
-(`$DSH_HOME/opendigitalmate/state.json`, or the configured host home), independently
-of digest cards; restart and re-digest preserve them. No extra service, scheduler, or
-OpenViking writes. Chrome is EN/ZH; plan text stays in the language you used.
-
-On the page a plan starts from a real memory (回忆) or an interest you say out loud: propose
-first, work only after you agree. Tick a step off, undo it, add the next one, or archive (归档)
-the plan — progress survives the next digest.
-
-## Long-term memory
-
-Douya uses **[OpenViking](https://docs.openviking.net/en/agent-integrations/17-dsh)** via [`@openviking/dsh-memory-plugin`](https://www.npmjs.com/package/@openviking/dsh-memory-plugin) (~0.5.33): auto-recall, session capture, and `mcp__openviking__*` tools in chat. **Memories** glimpse + Chief digest read the same server (`viking://~/memories`), ranked achievement-first. Forget uses the server `DELETE /api/v1/fs` (same as MCP `forget`).
-
-### 1. OpenViking server (minimal local)
-
-The **desktop installers already include** this server — skip this step if you are using the Mac, Windows, or Linux app. For `npm start` (or a server you run yourself):
-
-```bash
-# needs uv + embedding/VLM models configured by the wizard — see OpenViking quickstart
-uv tool install openviking --upgrade
-openviking-server init
-openviking-server doctor
-openviking-server
-# → http://127.0.0.1:1933   curl http://127.0.0.1:1933/health
-```
-
-### 2. CLI connection (`ovcli.conf`)
-
-```bash
-npm install -g @openviking/cli
-# or write the file directly for local no-auth mode:
-mkdir -p ~/.openviking
-cat > ~/.openviking/ovcli.conf <<'JSON'
-{ "url": "http://127.0.0.1:1933" }
-JSON
-```
-
-Remote / managed: set `api_key` (and optional `account` / `user`), or export `OPENVIKING_URL` + `OPENVIKING_API_KEY`.
-
-### 3. dsh odm profile plugin
-
-```bash
-dsh plugin --profile odm add @openviking/dsh-memory-plugin@0.5.33
-# package.json dsh.profile.bundles should list "@openviking/dsh-memory-plugin"
-# optional cordis.patch.yml knobs:
-# - id: openviking-memory-runtime
-#   config: { recallMaxTokens: 2000, scoreThreshold: 0.35, captureToolResults: true }
-```
-
-Remove legacy `dsh-memory` from the profile once OpenViking is healthy. While the server is down, Muse still falls back to the old SQLite `memory.db` for Glimpse only (chat auto-recall needs the server).
-
-**Recall page (in `dsh-muse-ui`).** Memories read as a short title plus plain sentences — no `viking://` URIs, marker tokens or markdown (`packages/dsh-muse-ui/memory-present.js`, served to the page as `/api/opendigitalmate/memory-present.js`). Open a tile to read the whole memory; **Add photo** (png / jpeg / gif / webp, ≤ 5 MB) stores the image **in OpenViking** as a resource under `viking://resources/recall/<memory>/` (memories reject binary writes) and appends `![caption](viking://resources/recall/…)` to the memory, so chat sees the same link. The host only adds `GET|POST /api/opendigitalmate/memories/image` (proxy restricted to `viking://resources/recall/`); forgetting a memory deletes its photos too.
-
-The **desktop installers** ship that local GGUF and `llama-cpp-python`, and a new app-local `ov.conf` points at the file in the app bundle (no first-run download). A VLM / chat model is still separate: auto-recall and search use the embedding model; memory extraction and summaries need a VLM in `ov.conf` if you want them. For `npm start` (or a server you run yourself), semantic auto-recall needs a working embedding — the same local GGUF via `openviking[local-embed]`, Ollama, or a cloud key. `openviking-server doctor` may still warn that a VLM is missing. **Memories list + forget** still work over the filesystem API without either model. Changing the embedding model or dimension can make existing vector collections incompatible; reindex only if you choose to (`ov reindex … --mode vectors_only --force`). The app will not do that automatically.
-
----
-
-## Muse UI plugin
-
-The shell is a separate dsh client plugin: [`dsh-muse-ui`](./packages/dsh-muse-ui). The host package keeps APIs / digests / bots; the UI plugin replaces the stock shell and serves Muse at `/api/opendigitalmate/app`.
-
-```bash
-# from this checkout (Mac / Linux):
-dsh plugin --profile odm add link:$(pwd)/packages/dsh-muse-ui
-# package.json dsh.profile.bundles should list both:
-#   "opendigitalmate"
-#   "dsh-muse-ui"
-```
-
-Restart dsh after adding. Without `dsh-muse-ui`, the stock dsh shell stays; host APIs still work.
-
----
-
-## Digests & actions
-
-1. Source bots propose → Chief merges into Today (legacy pipeline is fallback).
-2. Cards carry prepared steps (open, snooze, ask Douya, or a write).
-3. A write creates a **pending** action. Confirm runs via Composio; Cancel drops; Undo when the provider allows.
-4. On success: item marked done, may tuck into “What got done today”, and a `✓ Sent · HH:MM` line lands in card + general chat.
-
-Optional schedule: `DIGEST_SCHEDULE=08:00`, `ENABLE_DIGEST=true`.
-
-### Site blocks
-
-Some sites — Cloudflare-fronted ones in particular — answer automated or personal-assistant traffic with an intercept page instead of the content. When that happens Douya says one plain sentence — “This site blocked this request; I won't try to get around it.” — on the card brief or as the first line in chat, and that is all it does about it.
-
-It does not get around the block:
-
-- no different domain,
-- no mirror or reader proxy (such as `r.jina.ai`),
-- no different User-Agent,
-- no `bash` + `curl` retry.
-
-The intercept page's HTML is not repeated and the body is not guessed; if you need the content, open the link and paste the points back.
-
-This is inferred from the intercept page: it says this one request was blocked, not what the site's policy is.
-
----
-
-## Development
-
-```bash
-npm test
-```
-
-| Path | Role |
-| --- | --- |
-| `packages/dsh-muse-ui/` | Muse shell (Today · Memories · Sources · Settings) |
-| `src/i18n/` | en/zh chrome |
-| `src/web/api.js` | Router / standalone HTTP |
-| `src/web/dsh-host-routes.js` | Routes on the dsh process |
-| `src/web/action-effects.js` | Confirmed-send outcome sync |
-| `src/digest/` | Snapshot / build / runner / bot routing |
-| `docs/design/` | Product narrative art (Future · Today · Memories) |
-
-Restart after pulls: `npm start` or `scripts/.odm-restart.sh`.
+[Index](docs/README.md) · [Install & data](docs/install.md) · [Memory](docs/memory.md) · [Develop](docs/develop.md) · [Testing](docs/testing.md) · [Architecture](docs/architecture.md) · [Design](docs/design/README.md)
 
 ---
 
@@ -290,16 +126,6 @@ Restart after pulls: `npm start` or `scripts/.odm-restart.sh`.
 - **Localhost only** — other machines cannot open the UI
 - Never commit `.env`, `.odm-data/`, or the token URL file
 - Outbound actions require an explicit Confirm click
-
----
-
-## Status
-
-**Shipped:** multi-bot digests with skip-empty routing, desktop Muse UX, pending-confirm sends, outcome sync, EN/中文 chrome, OpenViking memory + Memories/Recall (readable tiles + photos), Muse UI as `dsh-muse-ui`, Sources logos & Composio catalog, consent-first Future plans (#137).
-
-**Evolving:** denser mobile polish, richer source coverage.
-
----
 
 ## Contributing
 
@@ -310,4 +136,4 @@ Restart after pulls: `npm start` or `scripts/.odm-restart.sh`.
 
 ## License
 
-Apache-2.0
+The root and desktop `package.json` files list `license` as `Apache-2.0`. This tree does not add a separate license grant file. Bundled runtimes keep their upstream terms: OpenViking is AGPL-3.0; the shipped embedding GGUF and `llama-cpp-python` are MIT. See [docs/install.md](docs/install.md).

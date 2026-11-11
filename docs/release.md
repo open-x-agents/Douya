@@ -1,4 +1,13 @@
-# 发版：每天一个版本
+# 发版：两种 tag，不要混
+
+桌面安装包和源码版不是同一条发版线。
+
+- **`v*`**（目前的稳定版：[v0.1.0](https://github.com/open-x-agents/openDigitalMate/releases/tag/v0.1.0)）：下面这份 `release.yml` 每天打的源码 / changelog 版。GitHub 的 [/releases/latest](https://github.com/open-x-agents/openDigitalMate/releases/latest) 指向这里，**没有** Windows / macOS / Linux 安装包。
+- **`desktop-v*`**（当前预发布：[desktop-v0.1.0-rc7](https://github.com/open-x-agents/openDigitalMate/releases/tag/desktop-v0.1.0-rc7)）：`.github/workflows/desktop.yml` 在 `desktop-v*` tag 或手动触发时打的 Electron 安装包。要装桌面应用，请用这个页面，不要用 Latest。
+
+下面是 `v*` 那条线怎么跑。
+
+## 每天一个 `v*` 版本
 
 `.github/workflows/release.yml` 每天 02:00（Asia/Shanghai）自己跑一次，也接受手动触发。它不需要人点任何按钮。
 

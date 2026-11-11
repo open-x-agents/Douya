@@ -1,5 +1,7 @@
 # CHANGELOG
 
+This file is written by the daily `v*` workflow (`.github/workflows/release.yml`). The latest stable `v*` tag is [v0.1.0](https://github.com/open-x-agents/openDigitalMate/releases/tag/v0.1.0). Desktop installers are a separate prerelease, **[desktop-v0.1.0-rc7](https://github.com/open-x-agents/openDigitalMate/releases/tag/desktop-v0.1.0-rc7)** — see [docs/release.md](docs/release.md). GitHub “Latest” points at `v0.1.0`, not the desktop packages.
+
 每天一个补丁版本，由 `.github/workflows/release.yml` 发布；条目取自当天的提交标题。
 
 ## v0.1.0 — 2026-10-30

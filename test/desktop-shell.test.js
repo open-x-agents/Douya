@@ -137,11 +137,19 @@ test('desktop package stays out of the root install and ships the agreed scripts
   const root = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   const desk = JSON.parse(readFileSync(new URL('../desktop/package.json', import.meta.url), 'utf8'))
   assert.ok(!('electron' in (root.devDependencies || {})) && !('electron' in (root.dependencies || {})))
-  for (const s of ['desktop:dev', 'desktop:build:mac', 'desktop:build:win']) assert.ok(root.scripts[s], `missing ${s}`)
+  for (const s of ['desktop:dev', 'desktop:build:mac', 'desktop:build:win', 'desktop:build:linux']) assert.ok(root.scripts[s], `missing ${s}`)
   // one arch per build: CI passes --arm64 / --x64 so each DMG carries its own OpenViking runtime
   assert.deepEqual(desk.build.mac.target, ['dmg'])
   assert.equal(desk.build.win.target[0].target, 'nsis')
   assert.equal(desk.build.mac.identity, '-') // ad-hoc: arm64 opens instead of "damaged"
+  assert.deepEqual(desk.build.linux.target, ['AppImage', 'deb'])
+  assert.ok(desk.scripts['build:linux'])
+  // electron-builder's deb target requires a maintainer email.
+  // Contact is the published GitHub / commit author email, not an invented address.
+  assert.equal(desk.author.name, 'open-x-agents')
+  assert.equal(desk.author.email, 'birfychen@gmail.com')
+  assert.equal(desk.build.linux.maintainer, 'open-x-agents <birfychen@gmail.com>')
+  assert.equal(desk.homepage, 'https://github.com/open-x-agents/openDigitalMate')
 })
 
 test('the window keeps renderer hardening on', () => {

@@ -1,11 +1,13 @@
 name: desktop
 
-# Builds the Electron desktop installers: macOS dmg (arm64 + x64), Windows nsis (x64).
-# Each job also builds a relocatable OpenViking runtime (CPython + openviking + local GGUF + llama-cpp-python) into the app.
+# Builds the Electron desktop installers: macOS dmg (arm64 + x64), Windows nsis (x64),
+# Linux AppImage + deb (x64 + arm64). Each job also builds a relocatable OpenViking
+# runtime (CPython + openviking + local GGUF + llama-cpp-python) into the app.
 # Manual or on a `desktop-v*` tag only — never on PRs, so PR CI stays fast.
 # No secrets, no notarization:
 # - macOS is ad-hoc signed (`mac.identity: "-"`), so Apple Silicon opens it instead of "damaged".
 # - Windows is signed with a self-signed cert minted in this job; its private key never leaves the runner.
+# - Linux packages are unsigned.
 on:
   workflow_dispatch:
   push:
@@ -23,12 +25,23 @@ jobs:
           - os: macos-latest
             target: mac
             arch: arm64
+            platform: darwin
           - os: macos-15-intel
             target: mac
             arch: x64
+            platform: darwin
           - os: windows-latest
             target: win
             arch: x64
+            platform: win32
+          - os: ubuntu-latest
+            target: linux
+            arch: x64
+            platform: linux
+          - os: ubuntu-24.04-arm
+            target: linux
+            arch: arm64
+            platform: linux
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75
     defaults:
@@ -44,10 +57,14 @@ jobs:
         if: matrix.target == 'mac'
         working-directory: .
         run: brew install cmake ninja
+      - name: Build tools (Linux; needed if llama-cpp-python builds from source)
+        if: matrix.target == 'linux'
+        working-directory: .
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build build-essential
       - run: npm ci --no-fund --no-audit
 
       - name: Bundle OpenViking
-        run: node scripts/bundle-openviking.mjs --out resources/openviking --platform ${{ matrix.target == 'mac' && 'darwin' || 'win32' }} --arch ${{ matrix.arch }}
+        run: node scripts/bundle-openviking.mjs --out resources/openviking --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
 
       - name: Self-signed code-signing cert (Windows, per build)
         if: matrix.target == 'win'
@@ -68,6 +85,7 @@ jobs:
         run: npx electron-builder --${{ matrix.target }} --${{ matrix.arch }} --publish never
 
       - name: Check signatures
+        if: matrix.target != 'linux'
         shell: bash
         run: |
           if [ "${{ matrix.target }}" = mac ]; then
@@ -82,6 +100,22 @@ jobs:
             mv dist-cert.cer dist/Douya-selfsigned.cer
           fi
 
+      - name: Checksum installers
+        shell: bash
+        run: |
+          node -e '
+            const fs = require("fs"), crypto = require("crypto"), path = require("path");
+            const dist = "dist";
+            const files = fs.readdirSync(dist).filter((f) => /\.(dmg|exe|cer|AppImage|deb)$/.test(f)).sort();
+            if (!files.length) throw new Error("no installer artifacts to checksum");
+            const lines = files.map((f) => {
+              const h = crypto.createHash("sha256").update(fs.readFileSync(path.join(dist, f))).digest("hex");
+              return h + "  " + f;
+            });
+            fs.writeFileSync(path.join(dist, "SHA256SUMS"), lines.join("\n") + "\n");
+            console.log(lines.join("\n"));
+          '
+
       - uses: actions/upload-artifact@v4
         with:
           name: douya-${{ matrix.target }}-${{ matrix.arch }}
@@ -89,4 +123,7 @@ jobs:
             desktop/dist/*.dmg
             desktop/dist/*.exe
             desktop/dist/*.cer
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+            desktop/dist/SHA256SUMS
           if-no-files-found: error

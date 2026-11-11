@@ -27,7 +27,8 @@
     "start:standalone": "node scripts/server.js",
     "desktop:dev": "npm --prefix desktop install --no-fund --no-audit && npm --prefix desktop run dev",
     "desktop:build:mac": "npm --prefix desktop install --no-fund --no-audit && npm --prefix desktop run build:mac",
-    "desktop:build:win": "npm --prefix desktop install --no-fund --no-audit && npm --prefix desktop run build:win"
+    "desktop:build:win": "npm --prefix desktop install --no-fund --no-audit && npm --prefix desktop run build:win",
+    "desktop:build:linux": "npm --prefix desktop install --no-fund --no-audit && npm --prefix desktop run build:linux"
   },
   "keywords": [
     "dsh-plugin",

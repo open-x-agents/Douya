@@ -90,7 +90,7 @@ Default UI is **English**. Switch to 中文 in Settings or the sidebar control (
 
 ## Desktop app
 
-A thin Electron shell for **macOS** and **Windows** in [`desktop/`](desktop/) (own `package.json`, so the root install stays small). It opens Douya in its own window: if a server already answers on `127.0.0.1:7777` with a working token it reuses it, otherwise it runs `scripts/start-dsh.mjs` for you and stops it on quit.
+A thin Electron shell for **macOS**, **Windows**, and **Linux** in [`desktop/`](desktop/) (own `package.json`, so the root install stays small). It opens Douya in its own window: if a server already answers on `127.0.0.1:7777` with a working token it reuses it, otherwise it runs `scripts/start-dsh.mjs` for you and stops it on quit.
 
 The installers also bundle a relocatable [OpenViking](https://docs.openviking.ai) memory server (CPython 3.13 + `openviking`) and a local Chinese embedding model (`bge-small-zh-v1.5-f16` GGUF, 512 dimensions, MIT, plus `llama-cpp-python`). If `127.0.0.1:1933/health` is already healthy, the app reuses that server and leaves it alone; otherwise it starts the bundled one with a data directory under the app's userData, writes a minimal `ov.conf` / `ovcli.conf` when none exist, and stops only the process it started. A new app-local config points at the shipped GGUF, so semantic auto-recall works offline with no API key and no Ollama install. An existing `~/.openviking/ov.conf` or a config that already names a provider is left unchanged; the app does not rebuild existing vectors on its own. A VLM / chat model is **not** shipped and is still required for memory extraction and summaries — see [Long-term memory](#long-term-memory). You do not need to install `uv` or `openviking` separately. The bundled OpenViking runtime is AGPL-3.0 (upstream).
 
@@ -101,6 +101,7 @@ npm run desktop:dev          # run from this checkout
 npm --prefix desktop run bundle:ov   # fill desktop/resources/openviking (needed before packing)
 npm run desktop:build:mac    # → desktop/dist/*.dmg (arm64 + x64, ad-hoc signed)
 npm run desktop:build:win    # → desktop/dist/*.exe (NSIS; build on Windows or CI)
+npm run desktop:build:linux  # → desktop/dist/*.AppImage and *.deb (x64 + arm64; build on Linux or CI)
 ```
 
 | Setting | Default |
@@ -109,7 +110,7 @@ npm run desktop:build:win    # → desktop/dist/*.exe (NSIS; build on Windows or
 | `DSH_BIN` — dsh binary | `$DSH_BIN`, then `~/Documents/git/dsh-rc5/bin/dsh`, then `dsh` on `PATH` |
 | `ODM_PORT` | `7777` |
 
-Installers are not notarized. First launch on macOS: right-click **Douya.app → Open** (or `xattr -dr com.apple.quarantine /Applications/Douya.app`). On Windows, SmartScreen shows **More info → Run anyway**. CI builds both on demand: the `desktop` workflow (manual, or a `desktop-v*` tag) and tags `desktop-v*`.
+Installers are not notarized. First launch on macOS: right-click **Douya.app → Open** (or `xattr -dr com.apple.quarantine /Applications/Douya.app`). On Windows, SmartScreen shows **More info → Run anyway**. Linux packages are unsigned: mark the AppImage executable (`chmod +x Douya-*.AppImage`) or install the `.deb` with `sudo dpkg -i Douya-*.deb`. CI builds all three platforms on a `desktop-v*` tag or a manual run of the `desktop` workflow.
 
 ---
 
@@ -180,7 +181,7 @@ Douya uses **[OpenViking](https://docs.openviking.net/en/agent-integrations/17-d
 
 ### 1. OpenViking server (minimal local)
 
-The **desktop installers already include** this server — skip this step if you are using the Mac or Windows app. For `npm start` (or a server you run yourself):
+The **desktop installers already include** this server — skip this step if you are using the Mac, Windows, or Linux app. For `npm start` (or a server you run yourself):
 
 ```bash
 # needs uv + embedding/VLM models configured by the wizard — see OpenViking quickstart

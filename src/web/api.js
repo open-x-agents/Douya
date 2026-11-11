@@ -1644,7 +1644,7 @@ export function createApiRouter(ctx) {
       if (!id) return { found: false, error: '当前没有打开的卡片对话；用 odm_card_find 找卡片' };
       const card = (st.cards || []).find(c => c.id === id);
       if (!card) return { found: false, error: `找不到卡片 ${id}` };
-      return { found: true, card: cardFull(card, st.itemStatus || {}) };
+      return { found: true, card: cardFull(card, st.itemStatus || {}, st.pendingActions || {}) };
     },
 
     async listCompletions() {

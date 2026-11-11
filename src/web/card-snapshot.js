@@ -50,9 +50,65 @@ export function relatedActions(card, actions = {}, { max = 5, sinceMs = 24 * 360
     .slice(0, max)
 }
 
+const prNumOf = (url, title = '', summary = '') => {
+  const fromUrl = (String(url || '').match(/\/(?:pull|issues)\/(\d+)/) || [])[1]
+  if (fromUrl) return fromUrl
+  const t = `${title || ''} ${summary || ''}`
+  return (t.match(/\b(?:PR|Issue) #(\d+)\b/i) || t.match(/\(PR #(\d+)\)/) || [])[1] || null
+}
+
+function executedHandles(card, actions = {}, sinceMs = 48 * 3600e3) {
+  const out = new Set()
+  for (const a of relatedActions(card, actions, { max: 40, sinceMs })) {
+    if (!a || a.status !== 'executed' || a.undoneAt) continue
+    if (!/^(github_comment|github_review|github_merge|github_close_issue)$/.test(a.action || '')) continue
+    const url = a.input?.url
+    const n = a.input?.number != null && a.input.number !== '' ? String(a.input.number) : prNumOf(url, a.summary)
+    if (url) out.add(url)
+    if (n) out.add(String(n))
+  }
+  return out
+}
+
+/** Mark items already handled by an executed review/comment and put still-open PRs first. */
+export function decorateCardItems(items = [], card, itemStatus = {}, actions = {}) {
+  const handled = executedHandles(card, actions)
+  const decorated = items.map((it) => {
+    const n = prNumOf(it.url, it.title)
+    const canonical = n && card ? [...(card.blocks || []).flatMap(b => b?.type === 'link-list' ? (b.links || []) : [])].find(l => prNumOf(l.url) === n && /\/pull\/|\/issues\//.test(l.url || '')) : null
+    const st = (it.status === 'done' || it.status === 'dismissed')
+      ? it.status
+      : (itemStatus?.[it.url]?.status === 'done' || itemStatus?.[it.url]?.status === 'dismissed')
+        ? itemStatus[it.url].status
+        : (canonical && (itemStatus?.[canonical.url]?.status === 'done' || itemStatus?.[canonical.url]?.status === 'dismissed'))
+          ? itemStatus[canonical.url].status
+          : (handled.has(it.url) || (n && handled.has(n)) ? 'done' : 'open')
+    return st === it.status ? it : { ...it, status: st }
+  })
+  const rank = (it) => {
+    if (it.status !== 'open') return 2
+    const typ = String(it.type || '')
+    if (/pr-review|pr-assigned/.test(typ)) return 0
+    if (/\/pull\//.test(String(it.url || '')) || /\bpr/i.test(typ)) return 0
+    return 1
+  }
+  return [...decorated].sort((a, b) => rank(a) - rank(b))
+}
+
+function cardLinkLine(card, items = []) {
+  const u = card?.url
+  if (!u) return null
+  if (!/github\.com\/[^/]+\/[^/]+\/(pull|issues)\/\d+/.test(u)) return u
+  const n = prNumOf(u)
+  const it = items.find(i => i.url === u || prNumOf(i.url, i.title) === n)
+  if (it && it.status === 'open') return u
+  const repo = (u.match(/github\.com\/([^/]+\/[^/]+)/) || [])[1]
+  return repo ? `https://github.com/${repo}` : u
+}
+
 export function cardSnapshotText(card, itemStatus = {}, { maxItems = 12, textChars = 160, maxChars = 2600, actions = {} } = {}) {
   if (!card) return ''
-  const items = cardItems(card, itemStatus)
+  const items = decorateCardItems(cardItems(card, itemStatus), card, itemStatus, actions)
   const open = items.filter(i => i.status === 'open').length
   const lines = [
     `【当前卡片】id=${card.id} · 来源 ${card.source || '-'} · 类型 ${card.type || '-'}${card.status && card.status !== 'active' ? ` · 状态 ${card.status}` : ''}`,
@@ -62,7 +118,8 @@ export function cardSnapshotText(card, itemStatus = {}, { maxItems = 12, textCha
   const nums = cardNumbers(card)
   if (nums.length) lines.push(`数字：${nums.join(' · ')}`)
   if (card.nextAction) lines.push(`下一步：${cut(card.nextAction, 120)}`)
-  if (card.url) lines.push(`链接：${card.url}`)
+  const link = cardLinkLine(card, items)
+  if (link) lines.push(`链接：${link}`)
   if (items.length) {
     lines.push(`相关条目（共 ${items.length} 条，${open} 条待处理${items.length > maxItems ? `，下面列前 ${maxItems} 条` : ''}）：`)
     items.slice(0, maxItems).forEach((it, i) => {
@@ -83,7 +140,7 @@ export function cardSnapshotText(card, itemStatus = {}, { maxItems = 12, textCha
 }
 
 /** Full card for the odm_current_card tool (bounded). */
-export function cardFull(card, itemStatus = {}) {
+export function cardFull(card, itemStatus = {}, actions = {}) {
   if (!card) return null
   return {
     id: card.id, sourceId: card.sourceId, source: card.source, type: card.type, status: card.status || 'active',
@@ -91,7 +148,7 @@ export function cardFull(card, itemStatus = {}) {
     nextAction: card.nextAction || null, why: card.why || null, waiting: card.waiting || null,
     numbers: cardNumbers(card),
     actions: (card.actions || []).map(a => ({ label: a.label, url: a.value || a.url || null })),
-    items: cardItems(card, itemStatus).slice(0, 60).map(i => ({ ...i, text: i.text ? String(i.text).slice(0, 1500) : null })),
+    items: decorateCardItems(cardItems(card, itemStatus), card, itemStatus, actions).slice(0, 60).map(i => ({ ...i, text: i.text ? String(i.text).slice(0, 1500) : null })),
     updatedAt: card.updatedAt || null,
   }
 }

@@ -164,6 +164,16 @@ export function githubNotifRepo(title, from = '') {
   return null
 }
 
+/** Canonical PR URL from a GitHub notification subject: "[owner/repo] … (PR #N)" or "PR #N". */
+export function githubNotifPr(title, from = '') {
+  const repo = githubNotifRepo(title, from)
+  if (!repo) return null
+  const t = String(title || '')
+  const m = t.match(/\((?:PR|Pull [Rr]equest) #(\d+)\)/) || t.match(/\bPR #(\d+)\b/)
+  if (!m) return null
+  return { repo, number: Number(m[1]), url: `https://github.com/${repo}/pull/${m[1]}` }
+}
+
 /** Repo key of a project-cluster card (sourceId github:cluster:owner/repo or its github.com URL). */
 export function repoKeyOfCard(card) {
   const sid = String(card?.sourceId || '')
@@ -202,6 +212,11 @@ export function foldGithubNotifsIntoRepos(cards = []) {
       const card = byRepo.get(repo)
       let ll = (card.blocks || []).find(b => b.type === 'link-list')
       if (!ll) { ll = { type: 'link-list', links: [] }; (card.blocks ||= []).push(ll) }
+      const pr = githubNotifPr(it.title, it.metadata?.from || it.body)
+      const hasPr = pr && (ll.links || []).some(l => l.url === pr.url || (String(l.url || '').match(/\/pull\/(\d+)/) || [])[1] === String(pr.number))
+      if (pr && pr.repo === repo && !hasPr) {
+        ll.links = [...(ll.links || []), { title: clip(clean(it.title), 90), url: pr.url, type: 'pr', from: nameOf(it.metadata?.from || it.body), at: it.createdAt || null, mergedFrom: 'gmail' }].slice(0, MAX_GROUP_LINKS)
+      }
       if (!(ll.links || []).some(l => l.url === it.url)) {
         ll.links = [...(ll.links || []), { ...emailLink(it), mergedFrom: 'gmail' }].slice(0, MAX_GROUP_LINKS)
       }

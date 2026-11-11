@@ -6,16 +6,36 @@ import { blockedNote, classifyBlock } from '../sources/blocked.js'
 
 const clip = (s, n) => { s = String(s ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s }
 const ghRef = url => { const m = String(url || '').match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/); return m ? { owner: m[1], repo: m[2], number: Number(m[3]) } : null }
+/** A GitHub issue/PR/check object, as opposed to a patch or wrapper. */
+export function isGithubResource(d) {
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return false
+  return !!(d.number || d.html_url || d.check_runs || d.pull_request || d.issue_url || (d.title && d.state) || d.head || d.base)
+}
+
+/** Composio sometimes puts a unified-diff / files payload in `details` with no number/title/html_url. */
+export function isPatchShaped(d) {
+  if (!d || typeof d !== 'object' || Array.isArray(d) || isGithubResource(d)) return false
+  return !!(d.patch || d.diff || d.hunks || (Array.isArray(d.files) && !d.number && !d.html_url))
+}
+
 /** Composio wraps tool output differently per tool/version; dig out the payload. */
 export const payload = res => {
   let d = res?.data ?? res
   for (let i = 0; i < 3 && d && typeof d === 'object' && !Array.isArray(d); i++) {
-    if (d.number || d.check_runs || d.html_url) break // already the GitHub object
-    const inner = [d.response_data, d.data, d.details].find(x => x && typeof x === 'object')
+    if (isGithubResource(d)) break
+    const inner = [d.response_data, d.data, d.details].find(x => x && typeof x === 'object' && !isPatchShaped(x))
     if (inner === undefined) break
     d = inner
   }
   return d
+}
+
+export function toolSucceeded(res) {
+  if (!res || res.__error) return false
+  if (res.successful === false) return false
+  if (res.successful === true) return true
+  if (res.error) return false
+  return true
 }
 
 const RISK = [
@@ -101,7 +121,15 @@ export function briefTarget(card, itemStatus = {}) {
  * view (title/state/body/draft/merged), the file list (+/−, paths, head sha in blob_url), reviewers, reviews, check runs. */
 export async function fetchPrBrief(client, target) {
   const { owner, repo, number } = target
-  const exec = (slug, args) => client.executeAction(slug, args).then(payload).catch(e => ({ __error: e.message }))
+  const exec = async (slug, args) => {
+    try {
+      const res = await client.executeAction(slug, args)
+      if (!toolSucceeded(res)) return { __error: String(res?.error || res?.__error || 'successful=false') }
+      const body = payload(res)
+      if (Array.isArray(body)) return body
+      return body && typeof body === 'object' ? { ...body, __ok: true } : { __ok: true }
+    } catch (e) { return { __error: e.message } }
+  }
   const [issue, files, requested, reviews] = await Promise.all([
     exec('GITHUB_GET_AN_ISSUE', { owner, repo, issue_number: number }),
     exec('GITHUB_LIST_PULL_REQUESTS_FILES', { owner, repo, pull_number: number, per_page: 100 }),
@@ -110,7 +138,15 @@ export async function fetchPrBrief(client, target) {
   ])
   const failure = issue?.__error || '拿不到这个 PR'
   if (classifyBlock({ error: failure }).blocked) return { blocked: true, error: blockedNote('zh', { site: 'GitHub' }) }
-  if (!issue || issue.__error || !issue.number) return { error: failure }
+  // A successful Composio call with a patch-shaped `data.details` (no number/title/html_url)
+  // still means the PR exists and is readable. Do not treat missing metadata as 404.
+  if (issue?.__error) return { error: failure }
+  if (!issue?.number) {
+    if (issue && issue.__ok === false) return { error: failure }
+    if (!issue) return { error: failure }
+    issue.number = number
+    issue.html_url = issue.html_url || `https://github.com/${owner}/${repo}/pull/${number}`
+  }
   const fl = Array.isArray(files) ? files : Array.isArray(files?.files) ? files.files : []
   const sha = (fl.map(f => (String(f.blob_url || '').match(/\/blob\/([0-9a-f]{40})\//) || [])[1]).find(Boolean)) || null
   let checks = []

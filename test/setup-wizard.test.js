@@ -218,6 +218,28 @@ test('update LLM + Composio through existing store paths; testComposio uses the 
   }
 })
 
+test('saving Composio without retyping the key keeps the saved key (#217)', async () => {
+  const { router, configStore } = await makeRouter({})
+  await router.updateComposioConfig({ apiKey: CP_KEY, entityId: 'default' })
+  assert.equal(configStore.get().composioApiKey, CP_KEY)
+
+  // Wizard Test / Settings Save with only the masked placeholder send no apiKey.
+  const onlyEntity = await router.updateComposioConfig({ entityId: 'me' })
+  assert.equal(onlyEntity.success, true)
+  assert.equal(configStore.get().composioApiKey, CP_KEY)
+  assert.equal(configStore.get().composioEntityId, 'me')
+  assert.match(onlyEntity.apiKeyMasked, /\.\.\./)
+
+  for (const apiKey of ['', '   ', configStore.getMaskedKey()]) {
+    await router.updateComposioConfig({ apiKey, entityId: 'me' })
+    assert.equal(configStore.get().composioApiKey, CP_KEY)
+  }
+
+  // A real new key still replaces it.
+  await router.updateComposioConfig({ apiKey: ' ' + CP_KEY + '_new ', entityId: 'me' })
+  assert.equal(configStore.get().composioApiKey, CP_KEY + '_new')
+})
+
 test('existing install with a saved model does not auto-open just for a missing Composio key', async () => {
   const { router } = await makeRouter({
     updatedAt: '2026-11-12T00:00:00Z',

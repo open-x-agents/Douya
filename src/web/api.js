@@ -1932,11 +1932,15 @@ export function createApiRouter(ctx) {
      */
     async updateComposioConfig(data) {
       try {
-        const { apiKey, entityId } = data;
+        const { apiKey, entityId } = data || {};
+        // Only replace the key when a real one is given; a missing, empty, or
+        // masked placeholder ("abcd...wxyz") keeps the saved key (#217).
+        const given = typeof apiKey === 'string' ? apiKey.trim() : '';
+        const keepKey = !given || given.includes('...');
 
         // Save to config store (flat keys for compatibility)
         await configStore.save({
-          composioApiKey: apiKey,
+          ...(keepKey ? {} : { composioApiKey: given }),
           composioEntityId: entityId || 'default',
         });
 

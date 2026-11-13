@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Run Open Digital Mate on ds-bot framework
+ * Run Douya on ds-bot framework
  * This is the proper way to run the plugin with full ds-bot capabilities
  */
 
@@ -11,7 +11,7 @@ import * as odmPlugin from './index.js';
 const PORT = process.env.PORT || 7777;
 const DSH_HOME = process.env.DSH_HOME || './.dsh';
 
-console.log('🚀 Starting Open Digital Mate on ds-bot...');
+console.log('🚀 Starting Douya on ds-bot...');
 console.log(`📁 DSH Home: ${DSH_HOME}`);
 
 // Create Cordis context
@@ -22,7 +22,7 @@ ctx.plugin(dsBot, {
   home: DSH_HOME,
 });
 
-// Install Open Digital Mate plugin
+// Install Douya plugin
 ctx.plugin(odmPlugin, {
   home: process.env.ODM_HOME || './.odm-data',
   composioApiKey: process.env.COMPOSIO_API_KEY,
@@ -35,7 +35,7 @@ ctx.plugin(odmPlugin, {
 ctx.start();
 
 console.log('✅ ds-bot runtime started');
-console.log('📊 Open Digital Mate plugin loaded');
+console.log('📊 Douya plugin loaded');
 console.log(`🌐 HTTP server should be available at http://localhost:${PORT}`);
 console.log('');
 console.log('Press Ctrl+C to stop');

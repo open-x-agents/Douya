@@ -50,8 +50,8 @@ function runProbe(args, env = CLEAN_ENV) {
 }
 
 test('the argument parser keeps the repo allowlist and the window it was given', () => {
-  const options = parseArgs(['--repo', 'open-x-agents/openDigitalMate', '--since', '24h', '--json']);
-  assert.deepEqual(options.repos, ['open-x-agents/openDigitalMate']);
+  const options = parseArgs(['--repo', 'open-x-agents/Douya', '--since', '24h', '--json']);
+  assert.deepEqual(options.repos, ['open-x-agents/Douya']);
   assert.equal(options.since, '24h');
   assert.equal(options.json, true);
   assert.equal(options.fixture, null);
@@ -69,7 +69,7 @@ test('an unknown flag is a refusal, not a silent default', () => {
 });
 
 test('a malformed repo or an unreadable --since is refused before any request', () => {
-  assert.throws(() => parseRepos('openDigitalMate'), UsageError);
+  assert.throws(() => parseRepos('Douya'), UsageError);
   assert.throws(() => parseRepos('open-x-agents/'), UsageError);
   assert.throws(() => parseSince('yesterday', NOW), UsageError);
 });
@@ -84,7 +84,7 @@ test('--since 24h means the day before now, and an ISO instant is kept as it is'
 test('the probe reports the window, the counts and the watermark path', async (t) => {
   const dir = tempDir(t);
   const { source, fake } = fixtureSource('ok');
-  const payload = await probe({ source, dir, since: SINCE, repos: ['open-x-agents/openDigitalMate'], now: NOW });
+  const payload = await probe({ source, dir, since: SINCE, repos: ['open-x-agents/Douya'], now: NOW });
 
   assert.equal(payload.source, 'github');
   assert.match(payload.since, CANONICAL);
@@ -95,7 +95,7 @@ test('the probe reports the window, the counts and the watermark path', async (t
   assert.equal(payload.created, 1);
   assert.equal(payload.appended, 4);
   assert.equal(payload.events, 1);
-  assert.deepEqual(payload.refs, ['github:pr/open-x-agents/openDigitalMate/41']);
+  assert.deepEqual(payload.refs, ['github:pr/open-x-agents/Douya/41']);
   assert.equal(payload.complete, true);
   assert.deepEqual(payload.missing, []);
   assert.equal(payload.gap_text, '');
@@ -153,7 +153,7 @@ test('the probe names the missing source when the read fails', (t) => {
 
 test('a missing token is a named gap, not a crash', (t) => {
   const dir = tempDir(t);
-  const run = runProbe(['--repo', 'open-x-agents/openDigitalMate', '--dir', dir, '--json']);
+  const run = runProbe(['--repo', 'open-x-agents/Douya', '--dir', dir, '--json']);
 
   assert.equal(run.status, 0, run.stderr);
   const payload = JSON.parse(run.stdout);
@@ -165,7 +165,7 @@ test('a missing token is a named gap, not a crash', (t) => {
 
 test('the text output carries the window, the counts and the watermark path', (t) => {
   const dir = tempDir(t);
-  const run = runProbe(['--fixture', 'test/fixtures/github/ok', '--dir', dir, '--repo', 'open-x-agents/openDigitalMate']);
+  const run = runProbe(['--fixture', 'test/fixtures/github/ok', '--dir', dir, '--repo', 'open-x-agents/Douya']);
 
   assert.equal(run.status, 0, run.stderr);
   assert.match(run.stdout, /since\s+2026-/);

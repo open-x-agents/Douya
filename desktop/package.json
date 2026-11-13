@@ -3,14 +3,14 @@
   "productName": "Douya",
   "version": "0.1.0",
   "private": true,
-  "description": "Douya / \u8c46\u82bd desktop shell (Electron) for Windows, macOS, and Linux \u2014 opens the local Douya server in one window.",
+  "description": "Douya / \u8c46\u82bd \u2014 a desktop personal assistant for Windows, macOS, and Linux.",
   "type": "module",
   "main": "src/main.js",
   "author": {
     "name": "open-x-agents",
     "email": "birfychen@gmail.com"
   },
-  "homepage": "https://github.com/open-x-agents/openDigitalMate",
+  "homepage": "https://github.com/open-x-agents/Douya",
   "license": "Apache-2.0",
   "scripts": {
     "dev": "electron .",
@@ -48,7 +48,8 @@
       "hardenedRuntime": false
     },
     "dmg": {
-      "title": "Douya"
+      "title": "Douya",
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
     },
     "win": {
       "target": [
@@ -66,7 +67,8 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "shortcutName": "Douya"
+      "shortcutName": "Douya",
+      "artifactName": "${productName}-${version}-win-${arch}-Setup.${ext}"
     },
     "linux": {
       "target": [
@@ -85,6 +87,9 @@
           "app-runtime/**"
         ]
       }
-    ]
+    ],
+    "appImage": {
+      "artifactName": "${productName}-${version}-linux-${arch}.${ext}"
+    }
   }
 }

@@ -1,4 +1,4 @@
-# Open Digital Mate host plugin (API / digest / bots). Muse UI is the separate dsh-muse-ui plugin.
+# Douya host plugin (API / digest / bots). Muse UI is the separate dsh-muse-ui plugin.
 - insert:
     - id: opendigitalmate
       name: opendigitalmate

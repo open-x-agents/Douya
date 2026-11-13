@@ -107,8 +107,8 @@ plugins:
 ```javascript
 import { defineAgent } from 'ds-bot';
 
-export const openDigitalMateAgent = defineAgent({
-  name: 'OpenDigitalMate',
+export const douyaAgent = defineAgent({
+  name: 'Douya',
   description: '数字同事：管理任务、日程、GitHub、邮件',
   
   tools: [

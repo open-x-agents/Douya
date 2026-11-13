@@ -109,7 +109,7 @@ message += context.connectedSources.map(s => `${s.slug} (${s.identity})`).join('
 ```bash
 export COMPOSIO_API_KEY=your_key_here
 export COMPOSIO_ENTITY_ID=default
-cd /path/to/openDigitalMate
+cd /path/to/Douya
 git checkout cursor/redesign-card-ui-e793
 git pull origin cursor/redesign-card-ui-e793  # 應該是 5d9db2c
 npm start
@@ -214,7 +214,7 @@ curl -s http://localhost:7777/api/chat \
      "cards": [
        {
          "type": "info",
-         "title": "openDigitalMate",  // ← 真實倉庫名
+         "title": "Douya",  // ← 真實倉庫名
          "description": "...",
          "url": "https://github.com/..."
        }

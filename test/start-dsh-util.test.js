@@ -120,7 +120,7 @@ test('ensureOdmProfile creates a writable odm profile and links bundled plugins'
     mkdirSync(dirname(join(runtime, rel)), { recursive: true })
     writeFileSync(join(runtime, rel), rel.endsWith('.json') ? '{"name":"x"}' : '// x\n')
   }
-  writeFileSync(join(runtime, 'package.json'), JSON.stringify({ name: 'opendigitalmate' }))
+  writeFileSync(join(runtime, 'package.json'), JSON.stringify({ name: 'douya' }))
 
   const first = ensureOdmProfile({ dshHome, runtimeRoot: runtime })
   assert.equal(first.action, 'created')

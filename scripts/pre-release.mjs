@@ -195,7 +195,7 @@ function stepCleanInstall() {
   }
 
   try {
-    const out = run('node', ['-e', "import('opendigitalmate').then((m) => console.log(typeof m.apply, m.name))"], { cwd: app });
+    const out = run('node', ['-e', "import('douya').then((m) => console.log(typeof m.apply, m.name))"], { cwd: app });
     if (!out.includes('function')) return report('干净安装', false, `import 成功但没有 apply 导出：${out}`);
     return report('干净安装', true, `装进去能加载：${out.trim()}`);
   } catch (error) {

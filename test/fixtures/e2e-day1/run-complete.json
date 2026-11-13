@@ -15,7 +15,7 @@
     {
       "at": "2026-10-31T00:44:10Z",
       "method": "GET",
-      "url": "https://api.github.com/repos/open-x-agents/openDigitalMate/pulls?state=open"
+      "url": "https://api.github.com/repos/open-x-agents/Douya/pulls?state=open"
     }
   ],
   "steps": [

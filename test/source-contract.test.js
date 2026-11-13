@@ -104,28 +104,28 @@ test('the source layer contains no request that is not a GET', () => {
 });
 
 test("the github ref names the repo, so two repos' number 10 never collide", () => {
-  const mine = githubRef({ object: 'issue', repo: 'open-x-agents/openDigitalMate', number: 10 });
+  const mine = githubRef({ object: 'issue', repo: 'open-x-agents/Douya', number: 10 });
   const other = githubRef({ object: 'issue', repo: 'ThinkFlowLab/FlyBot', number: 10 });
 
   assert.notEqual(mine, other);
-  assert.equal(parseGithubRef(mine).repo, 'open-x-agents/openDigitalMate');
+  assert.equal(parseGithubRef(mine).repo, 'open-x-agents/Douya');
   assert.equal(parseGithubRef(other).repo, 'ThinkFlowLab/FlyBot');
 });
 
 test('a ref round-trips through parse and back, and a malformed ref is refused', () => {
-  const ref = githubRef({ object: 'pr', repo: 'open-x-agents/openDigitalMate', number: 10 });
+  const ref = githubRef({ object: 'pr', repo: 'open-x-agents/Douya', number: 10 });
   const parsed = parseGithubRef(ref);
 
-  assert.deepEqual(parsed, { object: 'pr', repo: 'open-x-agents/openDigitalMate', number: 10 });
+  assert.deepEqual(parsed, { object: 'pr', repo: 'open-x-agents/Douya', number: 10 });
   assert.equal(githubRef(parsed), ref);
   assert.equal(eventIdForRef(ref), eventIdForRef(githubRef(parsed)));
   assert.match(eventIdForRef(ref), /^evt_[A-Za-z0-9_-]{1,64}$/);
 
   for (const malformed of [
     'github:pr/41',
-    'github:pr/open-x-agents/openDigitalMate/10#',
-    'github:merge/open-x-agents/openDigitalMate/10',
-    'github:pr/open-x-agents/openDigitalMate/0',
+    'github:pr/open-x-agents/Douya/10#',
+    'github:merge/open-x-agents/Douya/10',
+    'github:pr/open-x-agents/Douya/0',
     'not-a-ref',
     '',
   ]) {
@@ -146,5 +146,5 @@ test('a failed run still says, in words, which source is missing and why', () =>
   assert.equal(missing('rate_limit', { retryAfterMs: 30_000 }), 'GitHub 限流，30 秒后再取');
   assert.equal(missing('timeout'), 'GitHub 超时，这一份缺了');
   assert.equal(missing('http', { status: 500 }), 'GitHub 报错（HTTP 500）');
-  assert.equal(missing('partial', { ref: 'github:pr/open-x-agents/openDigitalMate/10' }), 'GitHub 有一项没取到：github:pr/open-x-agents/openDigitalMate/10');
+  assert.equal(missing('partial', { ref: 'github:pr/open-x-agents/Douya/10' }), 'GitHub 有一项没取到：github:pr/open-x-agents/Douya/10');
 });

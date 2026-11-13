@@ -2,8 +2,8 @@
 
 桌面安装包和源码版不是同一条发版线。
 
-- **`v*`**（目前的稳定版：[v0.1.0](https://github.com/open-x-agents/openDigitalMate/releases/tag/v0.1.0)）：下面这份 `release.yml` 每天打的源码 / changelog 版。GitHub 的 [/releases/latest](https://github.com/open-x-agents/openDigitalMate/releases/latest) 指向这里，**没有** Windows / macOS / Linux 安装包。
-- **`desktop-v*`**（当前预发布：[desktop-v0.1.0-rc7](https://github.com/open-x-agents/openDigitalMate/releases/tag/desktop-v0.1.0-rc7)）：`.github/workflows/desktop.yml` 在 `desktop-v*` tag 或手动触发时打的 Electron 安装包。要装桌面应用，请用这个页面，不要用 Latest。
+- **`v*`**（源码 / changelog 线，较早的一份是 [v0.1.0](https://github.com/open-x-agents/Douya/releases/tag/v0.1.0)）：下面这份 `release.yml` 每天打的版本，**没有** Windows / macOS / Linux 安装包。
+- **`desktop-v*`**（当前桌面版：[desktop-v0.1.0](https://github.com/open-x-agents/Douya/releases/tag/desktop-v0.1.0)）：`.github/workflows/desktop.yml` 在 `desktop-v*` tag 或手动触发时打的 Electron 安装包。GitHub 的 [/releases/latest](https://github.com/open-x-agents/Douya/releases/latest) 指向这份桌面发布。要装应用，请用这个页面。
 
 下面是 `v*` 那条线怎么跑。
 

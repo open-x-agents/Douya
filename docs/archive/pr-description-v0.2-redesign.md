@@ -1,8 +1,8 @@
-# Open Digital Mate v0.2.0 - Redesign & Composio Integration
+# Douya v0.2.0 - Redesign & Composio Integration
 
 ## Summary
 
-This PR introduces a major redesign of Open Digital Mate with a card-based UI and Composio integration for multi-source information aggregation.
+This PR introduces a major redesign of Douya with a card-based UI and Composio integration for multi-source information aggregation.
 
 ## ✨ New Features
 

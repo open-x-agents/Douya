@@ -12,36 +12,36 @@
           "number": 41,
           "title": "Wire the morning brief",
           "state": "open",
-          "html_url": "https://github.com/open-x-agents/openDigitalMate/pull/41",
-          "repository_url": "https://api.github.com/repos/open-x-agents/openDigitalMate",
-          "repository": { "full_name": "open-x-agents/openDigitalMate" },
+          "html_url": "https://github.com/open-x-agents/Douya/pull/41",
+          "repository_url": "https://api.github.com/repos/open-x-agents/Douya",
+          "repository": { "full_name": "open-x-agents/Douya" },
           "user": { "login": "Birfy" },
           "assignees": [{ "login": "Birfy" }],
           "created_at": "2026-10-29T10:00:00Z",
           "updated_at": "2026-10-30T09:15:00Z",
           "pull_request": {
-            "url": "https://api.github.com/repos/open-x-agents/openDigitalMate/pulls/41"
+            "url": "https://api.github.com/repos/open-x-agents/Douya/pulls/41"
           }
         }
       ]
     },
     {
-      "path": "/repos/open-x-agents/openDigitalMate/pulls/41",
+      "path": "/repos/open-x-agents/Douya/pulls/41",
       "json": {
         "number": 41,
         "title": "Wire the morning brief",
         "state": "open",
-        "html_url": "https://github.com/open-x-agents/openDigitalMate/pull/41",
+        "html_url": "https://github.com/open-x-agents/Douya/pull/41",
         "user": { "login": "Birfy" },
         "assignees": [{ "login": "Birfy" }],
         "head": { "sha": "1111111111111111111111111111111111111111" },
-        "base": { "repo": { "full_name": "open-x-agents/openDigitalMate" } },
+        "base": { "repo": { "full_name": "open-x-agents/Douya" } },
         "created_at": "2026-10-29T10:00:00Z",
         "updated_at": "2026-10-30T09:15:00Z"
       }
     },
     {
-      "path": "/repos/open-x-agents/openDigitalMate/commits/1111111111111111111111111111111111111111/check-runs",
+      "path": "/repos/open-x-agents/Douya/commits/1111111111111111111111111111111111111111/check-runs",
       "json": {
         "total_count": 2,
         "check_runs": [
@@ -63,7 +63,7 @@
       }
     },
     {
-      "path": "/repos/open-x-agents/openDigitalMate/issues/41/comments",
+      "path": "/repos/open-x-agents/Douya/issues/41/comments",
       "json": [
         {
           "id": 9001,

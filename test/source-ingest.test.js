@@ -9,7 +9,7 @@ import { ingestSource } from '../src/sources/ingest.js';
 import { createEventStore } from '../src/core/store.js';
 import { explain } from '../src/core/ledger.js';
 
-const REF = 'github:pr/open-x-agents/openDigitalMate/10';
+const REF = 'github:pr/open-x-agents/Douya/10';
 const EVENT_ID = eventIdForRef(REF);
 const SINCE = '2026-10-29T09:00:00Z';
 const UNTIL = '2026-10-30T09:00:00Z';
@@ -19,12 +19,12 @@ function pullRequest(overrides = {}) {
   return {
     source: 'github',
     object: 'pr',
-    repo: 'open-x-agents/openDigitalMate',
+    repo: 'open-x-agents/Douya',
     number: 10,
-    external_id: 'open-x-agents/openDigitalMate/10',
+    external_id: 'open-x-agents/Douya/10',
     ref: REF,
     title: '阶段一 · 信源适配器契约',
-    project: 'openDigitalMate',
+    project: 'Douya',
     people: ['Birfy'],
     at: '2026-10-30T12:51:12Z',
     due_at: null,
@@ -33,7 +33,7 @@ function pullRequest(overrides = {}) {
     state: 'open',
     read_scope: 'metadata',
     excerpt: '阶段一 · 信源适配器契约 · open · CI success',
-    html_url: 'https://github.com/open-x-agents/openDigitalMate/pull/10',
+    html_url: 'https://github.com/open-x-agents/Douya/pull/10',
     why: ['assigned'],
     ci: { state: 'success', name: 'tests', at: '2026-10-30T12:51:27Z' },
     latest_comment: { id: 9001, author: 'Birfy', at: '2026-10-30T14:21:12Z', body: '这一页先这样' },
@@ -115,7 +115,7 @@ test('one observation becomes one event and four evidence rows', async (t) => {
   assert.equal(quote.ref, REF);
   // 事件 source 是不可变的：created_at 与身份串，不写标题 / 状态 / CI。
   assert.equal(quote.at, '2026-10-30T09:00:00.000Z');
-  assert.equal(quote.excerpt, 'open-x-agents/openDigitalMate pr #10');
+  assert.equal(quote.excerpt, 'open-x-agents/Douya pr #10');
   assert.equal(quote.read_scope, 'metadata');
 
   const rows = await ledgerLines(dir);
@@ -351,8 +351,8 @@ test('two pages of one window are written once each', async (t) => {
   const other = pullRequest({
     object: 'issue',
     number: 11,
-    ref: 'github:issue/open-x-agents/openDigitalMate/11',
-    external_id: 'open-x-agents/openDigitalMate/11',
+    ref: 'github:issue/open-x-agents/Douya/11',
+    external_id: 'open-x-agents/Douya/11',
     title: '一个问题',
     ci: null,
     latest_comment: null,

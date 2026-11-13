@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Standalone server for Open Digital Mate web interface
+ * Standalone server for Douya web interface
  * Run with: node scripts/server.js [port]
  */
 
@@ -26,7 +26,7 @@ const config = {
   log: msg => console.log(`[ODM] ${msg}`),
 };
 
-console.log('🚀 Starting Open Digital Mate server...');
+console.log('🚀 Starting Douya server...');
 console.log(`📁 Data directory: ${config.home}`);
 
 const runtime = createRuntime(null, config);

@@ -113,9 +113,9 @@ Use ds-bot mode if you need:
 ### Option 1: Mount as Plugin
 ```javascript
 // In your ds-bot config
-import * as openDigitalMate from 'opendigitalmate';
+import * as douya from 'douya';
 
-ctx.plugin(openDigitalMate, {
+ctx.plugin(douya, {
   home: './.odm-data',
   composioApiKey: process.env.COMPOSIO_API_KEY,
 });

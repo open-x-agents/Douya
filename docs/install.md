@@ -1,24 +1,22 @@
 # Install the desktop app
 
-Douya / 豆芽 is an Electron shell around a local dsh server. This page is the packaged app: download, first launch, signing, and where data lives. To run from a git checkout only, see [develop.md](develop.md) and the root [README](../README.md#run-from-source).
+Douya / 豆芽 is a desktop personal assistant for Windows, macOS, and Linux: an Electron shell around a local dsh server. This page is the packaged app: download, first launch, signing, and where data lives. To run from a git checkout only, see [develop.md](develop.md) and the root [README](../README.md#develop).
 
 ## Which release to download
 
-Use **[desktop-v0.1.0-rc7](https://github.com/open-x-agents/openDigitalMate/releases/tag/desktop-v0.1.0-rc7)** (prerelease, commit `92d751b034ccb19b556afbf2a8ff9ee5c2f6d5aa`).
+Use the **[latest desktop release](https://github.com/open-x-agents/Douya/releases/latest)** (**[desktop-v0.1.0](https://github.com/open-x-agents/Douya/releases/tag/desktop-v0.1.0)**). Verify downloads with [SHA256SUMS](https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/SHA256SUMS) on that same release.
 
-GitHub’s **[Latest](https://github.com/open-x-agents/openDigitalMate/releases/latest)** release is **[v0.1.0](https://github.com/open-x-agents/openDigitalMate/releases/tag/v0.1.0)** (2026-10-30). That is the last stable `v*` source/tag from the daily `release.yml` workflow. It does **not** contain Windows, macOS, or Linux installers. Do not treat Latest as the desktop app.
-
-Verify downloads with [SHA256SUMS](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/SHA256SUMS) on that same prerelease.
+The earlier source-only tag **[v0.1.0](https://github.com/open-x-agents/Douya/releases/tag/v0.1.0)** (2026-10-30) has no installers.
 
 ## Packages
 
 | Platform | Arch | Download |
 | --- | --- | --- |
-| Windows | x64 | [Douya-0.1.0-win-x64-Setup.exe](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/Douya-0.1.0-win-x64-Setup.exe) and the public [Douya-0.1.0-win-x64-selfsigned.cer](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/Douya-0.1.0-win-x64-selfsigned.cer) |
-| macOS | arm64 (Apple Silicon) | [Douya-0.1.0-mac-arm64.dmg](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/Douya-0.1.0-mac-arm64.dmg) |
-| macOS | x64 (Intel) | [Douya-0.1.0-mac-x64.dmg](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/Douya-0.1.0-mac-x64.dmg) |
-| Linux | x64 | [Douya-0.1.0-linux-x64.AppImage](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/Douya-0.1.0-linux-x64.AppImage) **or** [douya-desktop_0.1.0_amd64.deb](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/douya-desktop_0.1.0_amd64.deb) |
-| Linux | arm64 | [Douya-0.1.0-linux-arm64.AppImage](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/Douya-0.1.0-linux-arm64.AppImage) **or** [douya-desktop_0.1.0_arm64.deb](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/douya-desktop_0.1.0_arm64.deb) |
+| Windows | x64 | [Douya-0.1.0-win-x64-Setup.exe](https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-win-x64-Setup.exe) and the public [Douya-0.1.0-win-x64-selfsigned.cer](https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-win-x64-selfsigned.cer) |
+| macOS | arm64 (Apple Silicon) | [Douya-0.1.0-mac-arm64.dmg](https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-mac-arm64.dmg) |
+| macOS | x64 (Intel) | [Douya-0.1.0-mac-x64.dmg](https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-mac-x64.dmg) |
+| Linux | x64 | [Douya-0.1.0-linux-x64.AppImage](https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-linux-x64.AppImage) **or** [douya-desktop_0.1.0_amd64.deb](https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/douya-desktop_0.1.0_amd64.deb) |
+| Linux | arm64 | [Douya-0.1.0-linux-arm64.AppImage](https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-linux-arm64.AppImage) **or** [douya-desktop_0.1.0_arm64.deb](https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/douya-desktop_0.1.0_arm64.deb) |
 
 On Linux, the AppImage and the `.deb` are **alternatives**. Install one, not both. Prefer the `.deb` on Ubuntu/Debian; use the AppImage on other distributions. Pick the file that matches your CPU.
 
@@ -50,7 +48,7 @@ The packaged app is self-contained for startup: it ships the Douya server (`scri
 - **dsh** is started from `app-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js`, using a **vanilla Node 24.22.1** binary also shipped in `app-runtime/node`. (dsh’s native loader rejects Electron 45.2.3’s Node fingerprint; `ELECTRON_RUN_AS_NODE` is only a last-resort fallback.) A user `node` on `PATH` is not required. The dsh picker from earlier builds is kept only as a last-resort fallback.
 - Runtime data is **not** written into the install folder (that path is read-only under Program Files). The app sets `ODM_DATA_DIR` and `DSH_HOME` to writable folders under userData, provisions the `odm` profile from the bundle, and reads the login token from `ODM_DATA_DIR/dsh-web.url`.
 
-You also need a **chat model provider** (for example DeepSeek). Connect sources through Composio only if you want them. See the root README’s [Configure AI + Composio](../README.md#configure-ai--composio).
+You also need a **chat model provider** (for example DeepSeek). Connect sources through Composio only if you want them. See the root README’s [First launch](../README.md#first-launch).
 
 On a first launch where no chat model is saved, a **setup wizard** opens and asks only for the model API and, optionally, a Composio project API key. Composio can be skipped. The same wizard is also in Settings. Keys are written to `ODM_DATA_DIR/config.json` (under userData in the packaged app; `.odm-data/config.json` in a source checkout), the same file Settings already uses, and synced into `$DSH_HOME/.credentials.yaml` so dsh can use them without a restart.
 
@@ -60,7 +58,7 @@ Each installer includes the official MCP Memory server [`@modelcontextprotocol/s
 
 This is **not** a bundled chat model. Chat still needs a supported provider (the first-run wizard). Memory needs no embedding key and no Ollama. More: [memory.md](memory.md).
 
-This rc keeps waiting while a Muse turn is still working, instead of reporting no reply after a short wall-clock timeout. A turn that stays marked `running` can keep you waiting; that is not a guarantee every hang is detected.
+Chat keeps waiting while a Muse turn is still working, instead of reporting no reply after a short wall-clock timeout. A turn that stays marked `running` can keep you waiting; that is not a guarantee every hang is detected.
 
 ## Where config and data live
 

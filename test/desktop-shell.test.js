@@ -94,7 +94,10 @@ test('resolveRepoRoot / resolveDshBin: env first, then saved, then the usual Mac
   const start = (dir) => join(dir, 'scripts', 'start-dsh.mjs')
   assert.equal(resolveRepoRoot({ env: { ODM_ROOT: '/a' }, saved: '/b', exists: has([start('/a'), start('/b')]) }), '/a')
   assert.equal(resolveRepoRoot({ env: {}, saved: '/b', devRoot: '/c', exists: has([start('/b'), start('/c')]) }), '/b')
+  assert.equal(resolveRepoRoot({ env: { HOME: '/h' }, exists: has([start('/h/Documents/git/Douya')]) }), '/h/Documents/git/Douya')
+  // Existing checkouts that still use the old folder name remain discoverable.
   assert.equal(resolveRepoRoot({ env: { HOME: '/h' }, exists: has([start('/h/Documents/git/openDigitalMate')]) }), '/h/Documents/git/openDigitalMate')
+  assert.equal(resolveRepoRoot({ env: { HOME: '/h' }, exists: has([start('/h/Documents/git/Douya'), start('/h/Documents/git/openDigitalMate')]) }), '/h/Documents/git/Douya')
   assert.equal(resolveRepoRoot({ env: {}, exists: () => false }), null)
   assert.equal(isRepoRoot('', () => true), false)
 
@@ -169,7 +172,13 @@ test('desktop package stays out of the root install and ships the agreed scripts
   assert.equal(desk.author.name, 'open-x-agents')
   assert.equal(desk.author.email, 'birfychen@gmail.com')
   assert.equal(desk.build.linux.maintainer, 'open-x-agents <birfychen@gmail.com>')
-  assert.equal(desk.homepage, 'https://github.com/open-x-agents/openDigitalMate')
+  assert.equal(desk.homepage, 'https://github.com/open-x-agents/Douya')
+  assert.equal(desk.build.productName, 'Douya')
+  assert.equal(desk.build.appId, 'ai.opendigitalmate.douya')
+  assert.equal(desk.build.dmg.artifactName, '${productName}-${version}-mac-${arch}.${ext}')
+  assert.equal(desk.build.nsis.artifactName, '${productName}-${version}-win-${arch}-Setup.${ext}')
+  assert.equal(desk.build.appImage.artifactName, '${productName}-${version}-linux-${arch}.${ext}')
+  assert.equal(desk.build.nsis.shortcutName, 'Douya')
 })
 
 test('the window keeps renderer hardening on', () => {

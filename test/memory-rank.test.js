@@ -11,7 +11,7 @@ import {
 test('routine timezone / UI prefs detected', () => {
   assert.equal(isRoutinePreference({ text: 'User timezone is Asia/Shanghai', tags: ['preference'] }), true)
   assert.equal(isRoutinePreference({ text: 'UI language is English', tags: 'preference' }), true)
-  assert.equal(isRoutinePreference({ text: 'Shipped openDigitalMate logos fix', tags: ['achievement'] }), false)
+  assert.equal(isRoutinePreference({ text: 'Shipped Douya logos fix', tags: ['achievement'] }), false)
   assert.equal(isRoutinePreference({ text: 'Prefer lean slices only', tags: ['decision'] }), false)
 })
 

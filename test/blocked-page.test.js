@@ -87,7 +87,7 @@ test('a blocked source gap says the sentence', () => {
 });
 
 test('a blocked PR fetch becomes the one sentence', async () => {
-  const target = { owner: 'open-x-agents', repo: 'openDigitalMate', number: 117 };
+  const target = { owner: 'open-x-agents', repo: 'Douya', number: 117 };
   const blockedClient = {
     executeAction: async () => {
       throw new Error(`Composio 403: Sorry, you have been blocked ${CLOUDFLARE_PAGE}`);
@@ -110,7 +110,7 @@ test('a blocked PR fetch becomes the one sentence', async () => {
   const card = {
     id: 'c1',
     source: 'github',
-    blocks: [{ type: 'link-list', links: [{ url: 'https://github.com/open-x-agents/openDigitalMate/pull/117', type: 'pr' }] }],
+    blocks: [{ type: 'link-list', links: [{ url: 'https://github.com/open-x-agents/Douya/pull/117', type: 'pr' }] }],
   };
   const state = { cards: [card], itemStatus: {} };
   const router = createApiRouter({

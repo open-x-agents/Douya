@@ -18,8 +18,8 @@ Shared memory under everything: Muse UI ↔ Chief/bots ↔ MCP Memory ↔ Source
 ## Install (odm profile)
 
 ```bash
-# from a checkout of openDigitalMate, or after publishing:
-dsh plugin --profile odm add link:/path/to/openDigitalMate/packages/dsh-muse-ui
+# from a checkout of Douya, or after publishing:
+dsh plugin --profile odm add link:/path/to/Douya/packages/dsh-muse-ui
 # package.json dsh.profile.bundles should list "dsh-muse-ui"
 # keep "opendigitalmate" for the API/digest host
 ```

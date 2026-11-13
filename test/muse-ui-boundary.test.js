@@ -52,7 +52,7 @@ test('positive: muse plugin serves app + ui-renderer + logo; HTML is Douya', asy
   const html = await app.text()
   assert.equal(app.status, 200)
   assert.match(app.headers.get('content-type') || '', /text\/html/)
-  assert.match(html, /Douya|豆芽|Open Digital Mate/)
+  assert.match(html, /Douya|豆芽|Douya/)
 
   const present = await handlers[MUSE_MEMORY_PRESENT_PATH]()
   assert.equal(present.status, 200)

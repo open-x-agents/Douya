@@ -104,7 +104,7 @@ export function createGithubSource({
     return {
       Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github+json',
-      'User-Agent': 'opendigitalmate',
+      'User-Agent': 'douya',
     };
   }
 

@@ -24,7 +24,7 @@
     "dsh-plugin",
     "deepseek-harness",
     "muse",
-    "opendigitalmate"
+    "douya"
   ],
   "license": "Apache-2.0",
   "dsh": {

@@ -9,7 +9,7 @@ export const messages = {
     'youtube.new_videos': '{n} new videos from subscriptions',
     'youtube.watch': 'Watch latest video',
     'sources.not_scanned': 'Connected · not scanned yet',
-    'app.title': 'Douya · Open Digital Mate',
+    'app.title': 'Douya',
     'nav.today': 'Today',
     'nav.sources': 'Sources',
     'nav.settings_group': 'Settings',
@@ -461,7 +461,7 @@ export const messages = {
     'source.calendar': 'Calendar',
 
     'dock.head': 'Douya',
-    'dock.head_sub': 'Open Digital Mate · long-term memory',
+    'dock.head_sub': 'Desktop personal assistant · long-term memory',
     'dock.close': 'Collapse chat',
 
     'chip.day_most': 'What\'s still most important today?',
@@ -691,7 +691,7 @@ export const messages = {
     'youtube.new_videos': '订阅频道有 {n} 个新视频',
     'youtube.watch': '观看最新视频',
     'sources.not_scanned': '已连接 · 暂不扫描',
-    'app.title': '豆芽 · Open Digital Mate',
+    'app.title': '豆芽',
     'nav.today': '今天',
     'nav.sources': '信源状态',
     'nav.settings_group': '设置',
@@ -1143,7 +1143,7 @@ export const messages = {
     'source.calendar': '日历',
 
     'dock.head': '豆芽',
-    'dock.head_sub': '数字同事 · 有长期记忆',
+    'dock.head_sub': '桌面版个人助手 · 有长期记忆',
     'dock.close': '收起对话',
 
     'chip.day_most': '今天还剩什么最重要？',

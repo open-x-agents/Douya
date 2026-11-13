@@ -37,7 +37,7 @@ Environment knobs used by the desktop shell (and useful when spawning it from th
 
 | Setting | Default |
 | --- | --- |
-| `ODM_ROOT` | this checkout, then (when packaged) the bundled `app-runtime`, then `~/Documents/git/openDigitalMate` |
+| `ODM_ROOT` | this checkout, then (when packaged) the bundled `app-runtime`, then `~/Documents/git/Douya` (and `~/Documents/git/openDigitalMate` as a fallback) |
 | `DSH_BIN` | `$DSH_BIN`, then (when packaged) the bundled dsh JS entry, then `~/Documents/git/dsh-rc5/bin/dsh`, then `dsh` on `PATH` |
 | `ODM_PORT` | `7777` |
 | `ODM_DATA_DIR` | (packaged) `userData/odm-data`; (source) `<repo>/.odm-data` |
@@ -62,7 +62,7 @@ npm run desktop:build:win    # stages app-runtime, then → desktop/dist/*.exe (
 npm run desktop:build:linux  # stages app-runtime, then → desktop/dist/*.AppImage and *.deb (build on Linux or CI)
 ```
 
-CI builds installers only on a `desktop-v*` tag or a manual run of the `desktop` workflow — not on every PR. Official installers are published on [desktop-v0.1.0-rc7](https://github.com/open-x-agents/openDigitalMate/releases/tag/desktop-v0.1.0-rc7). How `v*` and `desktop-v*` differ: [release.md](release.md).
+CI builds installers only on a `desktop-v*` tag or a manual run of the `desktop` workflow — not on every PR. Official installers are published on [desktop-v0.1.0](https://github.com/open-x-agents/Douya/releases/tag/desktop-v0.1.0). How `v*` and `desktop-v*` differ: [release.md](release.md).
 
 ## Layout
 

@@ -234,3 +234,32 @@ test('My Day timetable empty states, actions and lock chrome go through i18n', (
   assert.match(t('tt.lock_toast', 'en'), /locked/i)
   assert.match(t('tile.tt.tz_note', 'en'), /Asia\/Shanghai/)
 })
+
+test('snooze sheet, snooze toasts and the done badge go through i18n', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of [
+    "'推迟到…'",
+    '<h4>推迟「',
+    '>1 小时后<small>',
+    '>明天<small>明早 9 点再出现',
+    '>下周<small>七天后再看',
+    'class="ss-cancel">取消<',
+    "'明早 9 点再提醒你'",
+    "'没推迟成'",
+    "'✓ 搞定了'",
+  ]) {
+    assert.ok(!html.includes(s), `hardcoded zh copy left in snooze chrome: ${s}`)
+  }
+  assert.match(html, /t\('snooze\.sheet_title'/)
+  assert.match(html, /t\('snooze\.cancel'\)/)
+  assert.match(html, /t\(SNOOZE_LABEL_KEY\[prepId\]/)
+  assert.match(t('snooze.sheet_title', 'en', { title: 'Reply' }), /Snooze “Reply”/)
+  assert.equal(t('snooze.sheet_title', 'zh', { title: '回复' }), '推迟「回复」')
+  assert.equal(t('snooze.opt_week', 'en'), 'Next week')
+  assert.equal(t('snooze.toast_tomorrow', 'zh'), '明早 9 点再提醒你')
+  assert.match(t('snooze.toast_1h', 'en'), /hour/)
+  assert.equal(t('snooze.done_badge', 'en'), '✓ Done')
+  for (const k of ['snooze.sheet_aria', 'snooze.opt_1h', 'snooze.opt_1h_hint', 'snooze.opt_tomorrow', 'snooze.opt_tomorrow_hint', 'snooze.opt_week_hint', 'snooze.cancel', 'snooze.toast_week', 'snooze.failed']) {
+    assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
+  }
+})

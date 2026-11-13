@@ -3697,7 +3697,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
 
 
   // ===== UX interact pack: swipe / hover QA, snooze presets, empty CTAs, dock cue =====
-  const SNOOZE_LABEL = { 'snooze': '明早 9 点再提醒你', 'snooze:tomorrow': '明早 9 点再提醒你', 'snooze:1h': '一小时后再看', 'snooze:week': '下周同一时间再看' };
+  const SNOOZE_LABEL_KEY = { 'snooze': 'snooze.toast_tomorrow', 'snooze:tomorrow': 'snooze.toast_tomorrow', 'snooze:1h': 'snooze.toast_1h', 'snooze:week': 'snooze.toast_week' };
   function closeSnoozeSheet() {
     const el = document.querySelector('.snooze-sheet');
     if (!el) return;
@@ -3708,12 +3708,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (!card || !card.id) return;
     closeSnoozeSheet();
     const el = document.createElement('div');
-    el.className = 'snooze-sheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', '推迟到…');
-    el.innerHTML = `<div class="ss-panel"><h4>推迟「${escapeHtml(clip(card.title, 18))}」</h4><div class="ss-opts">
-      <button type="button" data-snooze="snooze:1h">1 小时后<small>先把眼前这件做完</small></button>
-      <button type="button" data-snooze="snooze:tomorrow">明天<small>明早 9 点再出现</small></button>
-      <button type="button" data-snooze="snooze:week">下周<small>七天后再看</small></button>
-    </div><button type="button" class="ss-cancel">取消</button></div>`;
+    el.className = 'snooze-sheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', t('snooze.sheet_aria'));
+    el.innerHTML = `<div class="ss-panel"><h4>${escapeHtml(t('snooze.sheet_title', { title: clip(card.title, 18) }))}</h4><div class="ss-opts">
+      <button type="button" data-snooze="snooze:1h">${escapeHtml(t('snooze.opt_1h'))}<small>${escapeHtml(t('snooze.opt_1h_hint'))}</small></button>
+      <button type="button" data-snooze="snooze:tomorrow">${escapeHtml(t('snooze.opt_tomorrow'))}<small>${escapeHtml(t('snooze.opt_tomorrow_hint'))}</small></button>
+      <button type="button" data-snooze="snooze:week">${escapeHtml(t('snooze.opt_week'))}<small>${escapeHtml(t('snooze.opt_week_hint'))}</small></button>
+    </div><button type="button" class="ss-cancel">${escapeHtml(t('snooze.cancel'))}</button></div>`;
     document.body.appendChild(el);
     requestAnimationFrame(() => el.classList.add('open'));
     el.addEventListener('click', e => { if (e.target === el || e.target.classList.contains('ss-cancel')) closeSnoozeSheet(); });
@@ -3744,17 +3744,17 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       dest.classList.add('just-tucked');
       setTimeout(() => dest.classList.remove('just-tucked'), 800);
     }
-    const badge = document.createElement('div'); badge.className = 'done-badge'; badge.textContent = '✓ 搞定了';
+    const badge = document.createElement('div'); badge.className = 'done-badge'; badge.textContent = t('snooze.done_badge');
     tile.appendChild(badge); sprout(badge);
   }
   async function runQuickSnooze(card, prepId = 'snooze:tomorrow') {
     const cardId = card.id;
     const r = await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardId, prepId }) }).then(x => x.json()).catch(e => ({ success: false, error: e.message }));
-    if (!r.success) { showUiToast(r.error || '没推迟成'); return; }
+    if (!r.success) { showUiToast(r.error || t('snooze.failed')); return; }
     softHaptic('snooze');
     const tile = document.querySelector(`.tile.work[data-id="${CSS.escape(cardId)}"]`);
     if (tile) { tile.classList.add('leaving'); await sleep(280); }
-    showUiToast(SNOOZE_LABEL[prepId] || SNOOZE_LABEL.snooze, null, { label: t('toast.undo'), onClick: async () => { await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardId, prepId: 'unsnooze' }) }); loadToday(); } });
+    showUiToast(t(SNOOZE_LABEL_KEY[prepId] || SNOOZE_LABEL_KEY.snooze), null, { label: t('toast.undo'), onClick: async () => { await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardId, prepId: 'unsnooze' }) }); loadToday(); } });
     loadToday().catch(() => {});
   }
   async function runQuickDone(card) {

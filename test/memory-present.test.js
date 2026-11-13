@@ -23,10 +23,10 @@ test('presentMemoryText: short one-liner stays title-only', () => {
 
 test('presentMemoryText: long paragraph splits on sentence', () => {
   const p = presentMemoryText(
-    'Shipped Memory Glimpse ranking for OpenDigitalMate. Achievements now surface before routine timezone prefs on tip 743877b Asia/Shanghai box test with extra verification notes that keep going for a while.',
+    'Shipped Memory Glimpse ranking for Douya. Achievements now surface before routine timezone prefs on tip 743877b Asia/Shanghai box test with extra verification notes that keep going for a while.',
   )
   assert.ok(p.title.length <= 72)
-  assert.match(p.title, /Shipped Memory Glimpse|Achievements|OpenDigitalMate/i)
+  assert.match(p.title, /Shipped Memory Glimpse|Achievements|Douya/i)
   assert.ok(p.summary.length > 0)
 })
 

@@ -27,7 +27,7 @@ node scripts/pre-release.mjs --install-only   # 只跑干净安装：pack → �
 node test/e2e/real-model.e2e.mjs    # 只跑真实模型那一段，需要 MODEL_API_KEY
 node test/e2e/refusal.e2e.mjs --list --partition=tune   # 只列拒绝类题集的 id：不联网、不要 key（见下节）
 node scripts/enqueue-guard.mjs --pr 12        # L5：对一个真 PR 跑准入（需要 GITHUB_TOKEN）
-node scripts/source-probe.mjs --repo open-x-agents/openDigitalMate   # L1：用真 token 跑一次 GitHub 只读摄取
+node scripts/source-probe.mjs --repo open-x-agents/Douya   # L1：用真 token 跑一次 GitHub 只读摄取
 ```
 
 真实模型那段读三个环境变量：`MODEL_API_KEY`（必填）、`MODEL_BASE_URL`（默认 `https://api.deepseek.com/v1`）、`MODEL_NAME`（默认 `deepseek-chat`）。**没有 key 就失败，不跳过** —— 会跳过的那道闸等于没有。

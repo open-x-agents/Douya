@@ -2,7 +2,7 @@
 
 ## Why
 
-`openDigitalMate` is a Feishu plugin that depends on [`ds-bot`](https://github.com/Fei2411/DS-Bot)
+`Douya` is a Feishu plugin that depends on [`ds-bot`](https://github.com/Fei2411/DS-Bot)
 as a peer. This repository vendors a full runnable copy of the `ds-bot` package so
 in-repo development and review do not require the private `niuypei/DS-Bot` clone.
 
@@ -55,8 +55,8 @@ In a DSH profile `package.json`:
 ```json
 {
   "dependencies": {
-    "ds-bot": "link:../openDigitalMate/vendor/ds-bot",
-    "opendigitalmate": "link:../openDigitalMate"
+    "ds-bot": "link:../Douya/vendor/ds-bot",
+    "opendigitalmate": "link:../Douya"
   }
 }
 ```

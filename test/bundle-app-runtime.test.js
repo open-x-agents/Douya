@@ -13,7 +13,7 @@ function fakeRepo() {
   const root = mkdtempSync(join(tmpdir(), 'odm-bundle-src-'))
   for (const f of RUNTIME_FILES) {
     const body = f === 'package.json'
-      ? JSON.stringify({ name: 'opendigitalmate', version: '0.1.0', devDependencies: { playwright: '1' }, optionalDependencies: { x: '1' } }, null, 2)
+      ? JSON.stringify({ name: 'douya', version: '0.1.0', devDependencies: { playwright: '1' }, optionalDependencies: { x: '1' } }, null, 2)
       : '# ' + f + '\n'
     writeFileSync(join(root, f), body)
   }
@@ -60,7 +60,7 @@ test('shouldCopy keeps the runtime tree and drops tests, desktop, docs, .git, se
 })
 
 test('applyBundledDeps pins the dsh CLI at the root and drops dev/optional', () => {
-  const next = applyBundledDeps({ name: 'opendigitalmate', devDependencies: { playwright: '1' }, optionalDependencies: { x: '1' } })
+  const next = applyBundledDeps({ name: 'douya', devDependencies: { playwright: '1' }, optionalDependencies: { x: '1' } })
   assert.equal(next.dependencies['@deepseek-ai/dsh'], ROOT_PACKAGES['@deepseek-ai/dsh'])
   assert.equal(next.dependencies['@modelcontextprotocol/server-memory'], '2.1.1')
   assert.equal(BUNDLED_PACKAGES[MEMORY_PLUGIN], MEMORY_PLUGIN_VERSION)

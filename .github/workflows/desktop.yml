@@ -85,7 +85,8 @@ jobs:
             codesign --verify --deep --strict "$app" && codesign -dv "$app" 2>&1 | grep -E 'Signature|Identifier|Format'
           else
             pwsh -c 'Get-ChildItem dist/*.exe, dist/win-unpacked/Douya.exe | Get-AuthenticodeSignature | Format-Table Status, @{n="Signer";e={$_.SignerCertificate.Subject}}, Path -AutoSize | Out-String -Width 200'
-            mv dist-cert.cer dist/Douya-selfsigned.cer
+            ver=$(node -p "require('./package.json').version")
+            mv dist-cert.cer "dist/Douya-${ver}-win-${{ matrix.arch }}-selfsigned.cer"
           fi
 
       - name: Checksum installers

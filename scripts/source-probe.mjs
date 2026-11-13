@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // 信源探针：用 token 跑一次 GitHub 只读摄取，把这次读到了什么打到 stdout。
 //
-//   node scripts/source-probe.mjs --repo open-x-agents/openDigitalMate
-//   node scripts/source-probe.mjs --repo open-x-agents/openDigitalMate --since 24h --json
+//   node scripts/source-probe.mjs --repo open-x-agents/Douya
+//   node scripts/source-probe.mjs --repo open-x-agents/Douya --since 24h --json
 //   node scripts/source-probe.mjs --fixture test/fixtures/github/ok --since 2026-10-29T00:00:00Z --dir /tmp/probe
 //
 // 它只做三件事：把参数变成一次 ingestSource()、把结果按人 / 机器两种形状打出来、

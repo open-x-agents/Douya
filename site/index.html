@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en" data-lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Douya / 豆芽 — a desktop personal assistant</title>
+  <meta name="description" content="Douya / 豆芽 is a desktop personal assistant for Windows, macOS, and Linux." />
+  <meta property="og:title" content="Douya / 豆芽" />
+  <meta property="og:description" content="A desktop personal assistant for Windows, macOS, and Linux." />
+  <meta property="og:image" content="img/today.jpg" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='28'>🌱</text></svg>" />
+  <style>
+    :root {
+      --ink: #2c241c;
+      --ink2: #5c5248;
+      --ink3: #8a7e72;
+      --paper: #f6f0e6;
+      --paper2: #efe6d8;
+      --glass: rgba(255, 251, 245, 0.66);
+      --glass-solid: #fffbf5;
+      --line: rgba(90, 60, 30, 0.11);
+      --line-strong: rgba(90, 60, 30, 0.2);
+      --clay: #9a5a32;
+      --clay-deep: #7c4526;
+      --clay-soft: #f3e4d6;
+      --shadow: 0 18px 48px -24px rgba(80, 50, 20, 0.28), 0 1px 0 rgba(255,255,255,0.7) inset;
+      --ease: cubic-bezier(.22, .61, .36, 1);
+    }
+    * { box-sizing: border-box }
+    html, body { margin: 0 }
+    body {
+      color: var(--ink);
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(1200px 640px at 50% -8%, #fffaf3 0%, transparent 62%),
+        radial-gradient(800px 500px at 100% 20%, #f0e0cc 0%, transparent 50%),
+        radial-gradient(700px 480px at 0% 80%, #eadcc8 0%, transparent 46%),
+        var(--paper);
+      -webkit-font-smoothing: antialiased;
+      min-height: 100%;
+    }
+    a { color: var(--clay); text-decoration-thickness: 1px; text-underline-offset: 3px }
+    a:hover { color: var(--clay-deep) }
+    .wrap { width: min(1080px, calc(100% - 40px)); margin: 0 auto }
+    header.top {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 22px 0 8px; gap: 16px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none }
+    .brand .mark {
+      width: 32px; height: 32px; border-radius: 10px;
+      background: linear-gradient(180deg, #f7efe4, #e8d3bc);
+      border: 1px solid var(--line);
+      display: grid; place-items: center; font-size: 18px;
+      box-shadow: var(--shadow);
+    }
+    .brand b { font-size: 17px; letter-spacing: -0.02em }
+    .brand small { display: block; color: var(--ink3); font-size: 11.5px; font-weight: 500; letter-spacing: 0.02em }
+    .lang {
+      display: inline-flex; padding: 3px; border-radius: 999px;
+      background: var(--glass); border: 1px solid var(--line);
+      backdrop-filter: blur(16px) saturate(1.2);
+    }
+    .lang button {
+      appearance: none; border: 0; background: transparent; color: var(--ink2);
+      font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 999px; cursor: pointer;
+    }
+    .lang button[aria-pressed="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(80,50,20,.1) }
+    .hero { padding: 36px 0 20px; text-align: center }
+    .hero h1 {
+      margin: 0 0 12px; font-size: clamp(32px, 5vw, 52px); line-height: 1.15;
+      letter-spacing: -0.035em; font-weight: 650;
+    }
+    .hero .pitch {
+      margin: 0 auto 28px; max-width: 640px; font-size: 18.5px; color: var(--ink2); line-height: 1.55;
+    }
+    .cta { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 11px 18px; border-radius: 12px; font: inherit; font-size: 14.5px; font-weight: 600;
+      text-decoration: none; border: 1px solid transparent; transition: transform .15s var(--ease), background .15s;
+    }
+    .btn:hover { transform: translateY(-1px) }
+    .btn.primary { background: var(--clay); color: #fffaf3; box-shadow: 0 8px 20px -10px var(--clay) }
+    .btn.primary:hover { background: var(--clay-deep); color: #fff }
+    .btn.ghost {
+      background: var(--glass); color: var(--ink); border-color: var(--line);
+      backdrop-filter: blur(16px);
+    }
+    .shot {
+      margin: 28px auto 0; max-width: 920px; padding: 10px;
+      background: var(--glass); border: 1px solid var(--line); border-radius: 22px;
+      box-shadow: var(--shadow); backdrop-filter: blur(20px) saturate(1.15);
+    }
+    .shot img { display: block; width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--line) }
+    .note { margin: 14px auto 0; max-width: 720px; text-align: center; font-size: 13px; color: var(--ink3) }
+    section { padding: 36px 0 }
+    section h2 { margin: 0 0 8px; font-size: 24px; letter-spacing: -0.03em }
+    section .lead { margin: 0 0 22px; color: var(--ink2); max-width: 640px }
+    .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px }
+    .card {
+      background: var(--glass); border: 1px solid var(--line); border-radius: 18px;
+      padding: 20px 22px; box-shadow: var(--shadow); backdrop-filter: blur(16px) saturate(1.15);
+    }
+    .card h3 { margin: 0 0 6px; font-size: 16.5px; letter-spacing: -0.02em }
+    .card p { margin: 0; color: var(--ink2); font-size: 14.5px }
+    .downloads { display: grid; gap: 8px }
+    .dl {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 14px 18px; border-radius: 14px;
+      background: var(--glass); border: 1px solid var(--line);
+      backdrop-filter: blur(16px);
+    }
+    .dl b { display: block; font-size: 14.5px }
+    .dl span { color: var(--ink3); font-size: 12.5px }
+    .dl .links { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end }
+    .chip {
+      display: inline-flex; align-items: center; padding: 5px 11px; border-radius: 999px;
+      background: var(--clay-soft); color: var(--clay-deep); text-decoration: none;
+      font-size: 12.5px; font-weight: 600; border: 1px solid transparent;
+    }
+    .chip:hover { border-color: var(--line-strong); color: var(--clay-deep) }
+    .wizard {
+      display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 24px; align-items: center;
+    }
+    .wizard img {
+      width: 100%; height: auto; border-radius: 18px; border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+    ol.steps { margin: 0; padding: 0 0 0 20px; color: var(--ink2) }
+    ol.steps li { margin: 0 0 10px }
+    .privacy, .dev {
+      background: var(--glass); border: 1px solid var(--line); border-radius: 18px;
+      padding: 22px 24px; box-shadow: var(--shadow); backdrop-filter: blur(16px);
+    }
+    pre {
+      margin: 12px 0 0; padding: 14px 16px; overflow: auto;
+      background: #2c241c; color: #f6f0e6; border-radius: 12px;
+      font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    footer.foot {
+      padding: 28px 0 48px; color: var(--ink3); font-size: 13px;
+      display: flex; flex-wrap: wrap; gap: 10px 18px; justify-content: space-between;
+    }
+    [data-lang="en"] [lang="zh"], [data-lang="zh"] [lang="en"] { display: none }
+    html[data-lang="zh"] { font-size: 16px }
+    @media (max-width: 760px) {
+      .cards, .wizard { grid-template-columns: 1fr }
+      .dl { flex-direction: column; align-items: flex-start }
+      .dl .links { justify-content: flex-start }
+      .hero { padding-top: 20px }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <a class="brand" href="#">
+        <span class="mark" aria-hidden="true">🌱</span>
+        <span>
+          <b>Douya / 豆芽</b>
+          <small lang="en">Desktop personal assistant</small>
+          <small lang="zh">桌面版个人助手</small>
+        </span>
+      </a>
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+        <button type="button" data-set-lang="zh" aria-pressed="false">中文</button>
+      </div>
+    </header>
+
+    <div class="hero">
+      <h1 lang="en">A desktop personal assistant<br>for your everyday work.</h1>
+      <h1 lang="zh">面向日常工作的<br>桌面版个人助手。</h1>
+      <p class="pitch" lang="en">Douya / 豆芽 runs on Windows, macOS, and Linux. It brings today’s mail, GitHub, Slack, and calendar onto one page, keeps memory on your machine, and asks before anything goes outbound.</p>
+      <p class="pitch" lang="zh">豆芽运行在 Windows、macOS 和 Linux 上。它把今天的邮件、GitHub、Slack 和日程放在同一页，记忆留在本机，对外操作会先征得你的同意。</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/open-x-agents/Douya/releases/latest">
+          <span lang="en">Download Douya</span>
+          <span lang="zh">下载豆芽</span>
+        </a>
+        <a class="btn ghost" href="https://github.com/open-x-agents/Douya">GitHub</a>
+      </div>
+      <figure class="shot">
+        <img src="img/today.jpg" alt="Douya Today: a planned next step, finished work, and a chat box" width="1440" height="1100" />
+      </figure>
+      <p class="note" lang="en">The packaged app already includes the server and dsh. No git checkout, Node.js, or separate dsh install.</p>
+      <p class="note" lang="zh">安装包已内置服务和 dsh。不需要再克隆仓库，也不必单独安装 Node 或 dsh。</p>
+    </div>
+
+    <section id="download">
+      <h2 lang="en">Download</h2>
+      <h2 lang="zh">下载</h2>
+      <p class="lead" lang="en">Current release: <a href="https://github.com/open-x-agents/Douya/releases/tag/desktop-v0.1.0">desktop-v0.1.0</a>. Verify with <a href="https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/SHA256SUMS">SHA256SUMS</a>.</p>
+      <p class="lead" lang="zh">当前版本：<a href="https://github.com/open-x-agents/Douya/releases/tag/desktop-v0.1.0">desktop-v0.1.0</a>。校验文件见 <a href="https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/SHA256SUMS">SHA256SUMS</a>。</p>
+      <div class="downloads">
+        <div class="dl">
+          <div><b lang="en">Windows</b><b lang="zh">Windows</b><span>x64</span></div>
+          <div class="links">
+            <a class="chip" href="https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-win-x64-Setup.exe">Setup.exe</a>
+            <a class="chip" href="https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-win-x64-selfsigned.cer">.cer</a>
+          </div>
+        </div>
+        <div class="dl">
+          <div><b>macOS</b><span lang="en">Apple Silicon · Intel</span><span lang="zh">Apple Silicon · Intel</span></div>
+          <div class="links">
+            <a class="chip" href="https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-mac-arm64.dmg">arm64 .dmg</a>
+            <a class="chip" href="https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-mac-x64.dmg">x64 .dmg</a>
+          </div>
+        </div>
+        <div class="dl">
+          <div><b>Linux</b><span lang="en">x64 · arm64 · pick AppImage or .deb, not both</span><span lang="zh">x64 · arm64 · AppImage 与 .deb 二选一</span></div>
+          <div class="links">
+            <a class="chip" href="https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-linux-x64.AppImage">x64 AppImage</a>
+            <a class="chip" href="https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/douya-desktop_0.1.0_amd64.deb">amd64 .deb</a>
+            <a class="chip" href="https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-linux-arm64.AppImage">arm64 AppImage</a>
+            <a class="chip" href="https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/douya-desktop_0.1.0_arm64.deb">arm64 .deb</a>
+          </div>
+        </div>
+      </div>
+      <p class="note" lang="en">macOS is ad-hoc signed (right-click Douya.app → Open). Windows is self-signed (SmartScreen: More info → Run anyway). Linux packages are unsigned. The AppImage needs libfuse.so.2, or run with --appimage-extract-and-run. Do not pass --no-sandbox.</p>
+      <p class="note" lang="zh">macOS 为临时签名（右键 Douya.app → 打开）。Windows 为自签名（SmartScreen：更多信息 → 仍要运行）。Linux 包未签名。AppImage 需要 libfuse.so.2，或加 --appimage-extract-and-run。不要加 --no-sandbox。</p>
+    </section>
+
+    <section id="setup">
+      <h2 lang="en">First launch</h2>
+      <h2 lang="zh">第一次启动</h2>
+      <div class="wizard">
+        <div>
+          <p class="lead" lang="en">If no chat model is saved yet, a two-step wizard opens. You can also find it in Settings.</p>
+          <p class="lead" lang="zh">如果还没有配置聊天模型，会打开一个两步向导。以后也可以在设置里再改。</p>
+          <ol class="steps">
+            <li lang="en"><b>Model API</b> — pick a provider (DeepSeek is the default), paste a key, Save, optionally Test connection. Chat needs this.</li>
+            <li lang="zh"><b>模型 API</b> — 选择提供方（默认 DeepSeek），粘贴密钥，保存，也可先测连接。聊天必须这一步。</li>
+            <li lang="en"><b>Composio</b> (optional, can skip) — paste a project API key from the <a href="https://platform.composio.dev">Composio dashboard</a>, then connect GitHub, Gmail, Slack, or Calendar on Sources, only the apps you want.</li>
+            <li lang="zh"><b>Composio</b>（可选，可跳过）— 在 <a href="https://platform.composio.dev">Composio 控制台</a>复制项目 API 密钥并粘贴，然后在「信源」里按需连接 GitHub、Gmail、Slack 或日历。</li>
+          </ol>
+          <p class="lead" lang="en" style="margin-top:14px;margin-bottom:0">Outbound mail, comments, and archives stay pending until you click Confirm.</p>
+          <p class="lead" lang="zh" style="margin-top:14px;margin-bottom:0">对外发信、评论和归档会先挂起，等你点「确认」。</p>
+        </div>
+        <img data-wizard src="img/wizard-en.jpg" alt="First-run wizard: chat model step" width="1200" height="768" />
+      </div>
+    </section>
+
+    <section id="features">
+      <h2 lang="en">What Douya does</h2>
+      <h2 lang="zh">豆芽能做什么</h2>
+      <div class="cards">
+        <article class="card">
+          <h3 lang="en">Today</h3>
+          <h3 lang="zh">今日</h3>
+          <p lang="en">Aggregates mail, GitHub, Slack, and calendar into one daily page: a suggested next step, a timetable, digest cards, and what already got done.</p>
+          <p lang="zh">把邮件、GitHub、Slack 和日程汇总到一页：建议的下一步、日程表、摘要卡片，以及已经完成的事项。</p>
+        </article>
+        <article class="card">
+          <h3 lang="en">Chat</h3>
+          <h3 lang="zh">对话</h3>
+          <p lang="en">Talk with Douya from the dock or a card. Prepared outbound actions wait for an explicit Confirm.</p>
+          <p lang="zh">从底部对话栏或卡片里和豆芽聊天。准备好的对外操作会等你明确确认。</p>
+        </article>
+        <article class="card">
+          <h3 lang="en">Recall</h3>
+          <h3 lang="zh">回忆</h3>
+          <p lang="en">Local long-term memory via the official MCP Memory server — a JSONL knowledge graph on disk, no embeddings. Achievements surface first. Forget removes an observation or an entity. Photo attachments are not supported.</p>
+          <p lang="zh">用官方 MCP Memory 在本地记长期记忆：磁盘上的 JSONL 知识图谱，不做向量嵌入。成就会排在前面。「忘记」可删掉一条观察或整个实体。暂不支持给记忆配图。</p>
+        </article>
+        <article class="card">
+          <h3 lang="en">Future</h3>
+          <h3 lang="zh">未来</h3>
+          <p lang="en">Propose a plan from a memory or a stated interest; you accept before work starts. Tick a step, or complete one with Douya. Progress survives a restart.</p>
+          <p lang="zh">根据一段记忆或你说出的兴趣拟定计划，先征得同意再开始。可以勾掉一步，也可以和豆芽一起完成。进度重启后还在。</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="privacy">
+      <h2 lang="en">Privacy</h2>
+      <h2 lang="zh">隐私</h2>
+      <div class="privacy">
+        <p lang="en" style="margin:0;color:var(--ink2)">Your data stays on this machine, under the app’s user directory — <code>~/Library/Application Support/Douya</code> on macOS, <code>%APPDATA%\Douya</code> on Windows, <code>~/.config/Douya</code> on Linux. That includes config, the memory file, and the local runtime home. Nothing is written into the install folder. The UI binds to 127.0.0.1.</p>
+        <p lang="zh" style="margin:0;color:var(--ink2)">数据留在本机用户目录：macOS 为 <code>~/Library/Application Support/Douya</code>，Windows 为 <code>%APPDATA%\Douya</code>，Linux 为 <code>~/.config/Douya</code>。配置、记忆文件和本地运行时都在这里，不会写入安装目录。界面只绑定 127.0.0.1。</p>
+        <p lang="en" style="margin:12px 0 0;color:var(--ink2)">Chat and many features still call the model provider you configured. Connected sources go through Composio, and nothing is sent outbound until you consent. Douya is not a fully offline product.</p>
+        <p lang="zh" style="margin:12px 0 0;color:var(--ink2)">聊天和不少功能仍会调用你配置的模型服务。连接外部应用走 Composio，对外发送需你同意。豆芽不是完全离线的产品。</p>
+      </div>
+    </section>
+
+    <section id="dev">
+      <h2 lang="en">Develop</h2>
+      <h2 lang="zh">开发</h2>
+      <div class="dev">
+        <p lang="en" style="margin:0 0 8px;color:var(--ink2)">From a source checkout:</p>
+        <p lang="zh" style="margin:0 0 8px;color:var(--ink2)">从源码运行：</p>
+        <pre>npm install
+npm start
+# → dsh --profile odm --port 7777
+open "$(cat .odm-data/dsh-web.url)"   # token URL; bare :7777 returns 401</pre>
+        <p lang="en" style="margin:12px 0 0;color:var(--ink2)">Run <code>npm test</code>, branch from <code>main</code>, and open a PR. Never push <code>main</code> directly. More in the <a href="https://github.com/open-x-agents/Douya#develop">README</a> and <a href="https://github.com/open-x-agents/Douya/blob/main/docs/develop.md">docs/develop.md</a>.</p>
+        <p lang="zh" style="margin:12px 0 0;color:var(--ink2)">运行 <code>npm test</code>，从 <code>main</code> 拉分支并开 PR。不要直接推 <code>main</code>。详见 <a href="https://github.com/open-x-agents/Douya#develop">README</a> 和 <a href="https://github.com/open-x-agents/Douya/blob/main/docs/develop.md">docs/develop.md</a>。</p>
+      </div>
+    </section>
+
+    <footer class="foot">
+      <div lang="en">Apache-2.0 · <a href="https://github.com/open-x-agents/Douya">open-x-agents/Douya</a></div>
+      <div lang="zh">Apache-2.0 · <a href="https://github.com/open-x-agents/Douya">open-x-agents/Douya</a></div>
+      <div lang="en">English UI and 中文. Not a mobile app.</div>
+      <div lang="zh">界面支持英文和中文。没有移动端。</div>
+    </footer>
+  </div>
+  <script>
+    (function () {
+      var KEY = 'douya.site.lang';
+      var html = document.documentElement;
+      function apply(lang) {
+        lang = lang === 'zh' ? 'zh' : 'en';
+        html.setAttribute('data-lang', lang);
+        html.setAttribute('lang', lang === 'zh' ? 'zh-CN' : 'en');
+        document.querySelectorAll('[data-set-lang]').forEach(function (b) {
+          b.setAttribute('aria-pressed', b.getAttribute('data-set-lang') === lang ? 'true' : 'false');
+        });
+        var img = document.querySelector('img[data-wizard]');
+        if (img) {
+          img.src = lang === 'zh' ? 'img/wizard-zh.jpg' : 'img/wizard-en.jpg';
+          img.alt = lang === 'zh' ? '首次启动向导：配置聊天模型' : 'First-run wizard: chat model step';
+        }
+        try { localStorage.setItem(KEY, lang); } catch (e) {}
+      }
+      var saved;
+      try { saved = localStorage.getItem(KEY); } catch (e) {}
+      if (!saved) saved = (navigator.language || '').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en';
+      apply(saved);
+      document.querySelectorAll('[data-set-lang]').forEach(function (b) {
+        b.addEventListener('click', function () { apply(b.getAttribute('data-set-lang')); });
+      });
+    })();
+  </script>
+</body>
+</html>

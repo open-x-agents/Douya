@@ -303,7 +303,7 @@ export function writeManifest(outDir) {
 export function stageAppRuntime(repoRoot, outDir, { skipNpm = false, forceNpm = false } = {}) {
   if (!repoRoot || !outDir) throw new Error('repo root and output dir are required')
   if (!existsSync(join(repoRoot, 'scripts', 'start-dsh.mjs'))) {
-    throw new Error(`${repoRoot} is not an openDigitalMate root`)
+    throw new Error(`${repoRoot} is not a Douya root`)
   }
   mkdirSync(outDir, { recursive: true })
   stageSources(repoRoot, outDir)

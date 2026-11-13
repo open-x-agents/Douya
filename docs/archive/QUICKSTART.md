@@ -4,7 +4,7 @@
 
 ### 1. 拉取最新代碼
 ```bash
-cd /path/to/openDigitalMate
+cd /path/to/Douya
 git checkout cursor/redesign-card-ui-e793
 git pull origin cursor/redesign-card-ui-e793
 ```
@@ -97,7 +97,7 @@ npm start
 
 **預期：**
 - 調用 `github_list_repos`
-- 顯示真實倉庫列表（openDigitalMate, test-repo, ...）
+- 顯示真實倉庫列表（Douya, test-repo, ...）
 - 每個卡片顯示 stars, language, 更新時間
 
 ### 測試 3：無模型時的行為

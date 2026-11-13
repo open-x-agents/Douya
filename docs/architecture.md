@@ -1,13 +1,13 @@
 # 架构
 
-opendigitalmate 不是另起一个服务，而是 **ds-bot 的一个插件**：ds-bot 负责机器人、会话、模型和存储，这里只加「飞书这个入口」和「日历 / 日报这个业务」。
+豆芽（Douya）不是另起一个服务，而是 **ds-bot 的一个插件**（插件 id 仍是 `opendigitalmate`，以免已有安装升级失败）：ds-bot 负责机器人、会话、模型和存储，这里只加「飞书这个入口」和「日历 / 日报这个业务」。
 
 ## 位置
 
 ```
 DSH（DeepSeek Harness）
 └── ds-bot 插件（Bot 团队：roster / turns / groups / connectors）
-    └── opendigitalmate 插件（本项目）
+    └── opendigitalmate 插件（豆芽宿主，id 未改）
         ├── 飞书卡片发送        src/host/feishu.js
         ├── 日报组装 + 卡片      src/host/report.js, cards.js
         ├── 日程提醒规划 + 投递  src/host/reminders.js, index.js
@@ -198,7 +198,7 @@ canonical UTC 形状是 `/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/`，`due
 `scripts/source-probe.mjs`：拿真 token 跑一次 `ingestSource()`，把这次读到什么打到 stdout；缺源写在 `missing / gap_text` 里，不靠退出码。
 
 ```sh
-node scripts/source-probe.mjs --repo open-x-agents/openDigitalMate            # 默认 now-24h、系统临时目录
+node scripts/source-probe.mjs --repo open-x-agents/Douya            # 默认 now-24h、系统临时目录
 node scripts/source-probe.mjs --since 24h --dir /tmp/probe --json            # 机器读的形状
 node scripts/source-probe.mjs --fixture test/fixtures/github/ok --dir /tmp/p  # 离线重放，不联网
 ```
@@ -357,7 +357,7 @@ node scripts/source-probe.mjs --fixture test/fixtures/github/ok --dir /tmp/p  # 
 
 ## Muse 作为 dsh 主前端
 
-`opendigitalmate` 以 Host + Web client 双面插件挂进 `dsh --profile odm`：
+豆芽以 Host + Web client 双面插件挂进 `dsh --profile odm`（宿主插件 id 仍是 `opendigitalmate`）：
 
 - Host `cordis.patch.yml` 只插入 `opendigitalmate`
 - Muse UI 插件 `dsh-muse-ui`：`dsh.client` 把 `/` 重定向到 `/api/opendigitalmate/app`，并 `disable` 库存 `ui-layout` / `ui-sidebar` / `ui-conversation`

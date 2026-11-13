@@ -334,7 +334,7 @@ callLLMWithTools(llm, messages, tools=[5 個工具], sessionId)
         type: "info",
         title: "feat: add composio",
         description: "#42 · cursor/redesign-card-ui-e793",
-        url: "https://github.com/open-x-agents/openDigitalMate/pull/42"
+        url: "https://github.com/open-x-agents/Douya/pull/42"
       }]
     }
   ↓
@@ -544,7 +544,7 @@ plugins:
 
 ### 1. 在 Mac 上測試 ✅
 ```bash
-cd /path/to/openDigitalMate
+cd /path/to/Douya
 git checkout cursor/redesign-card-ui-e793
 git pull
 npm start
@@ -585,7 +585,7 @@ npm start
 
 ## 📎 參考鏈接
 
-- **PR #42:** https://github.com/open-x-agents/openDigitalMate/pull/42
+- **PR #42:** https://github.com/open-x-agents/Douya/pull/42
 - **Composio API Docs:** https://docs.composio.dev
 - **GitHub API (via Composio):** https://backend.composio.dev/api/v3/tools/execute/GITHUB_LIST_PULL_REQUESTS
 - **DeepSeek API:** https://api.deepseek.com/v1

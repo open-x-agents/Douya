@@ -132,7 +132,7 @@ export function createComposioApi(options = {}) {
       if (encoded !== null && encoded.length > 0) url.searchParams.set(key, encoded)
     }
 
-    const headers = { 'x-api-key': apiKey, 'user-agent': 'opendigitalmate' }
+    const headers = { 'x-api-key': apiKey, 'user-agent': 'douya' }
     if (body !== undefined) headers['content-type'] = 'application/json'
 
     let response

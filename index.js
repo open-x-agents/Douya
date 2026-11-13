@@ -1,4 +1,4 @@
-// Open Digital Mate, mounted on ds-bot: Feishu goes in and out, a daily report and the
+// Douya, mounted on ds-bot: Feishu goes in and out, a daily report and the
 // next meeting's reminder come back, and one panel reads the same store. This file only
 // wires the modules together; every decision lives in src/host/, which runs without DSH.
 

@@ -1,7 +1,7 @@
 // 一个最小的 GitHub REST 客户端：只有 api.github.com 可用的机器上也能跑。
 // 重试是常态而不是例外：这台机器连 api.github.com 会偶发 ECONNRESET。
 
-export const REPO = process.env.GITHUB_REPOSITORY || 'open-x-agents/openDigitalMate';
+export const REPO = process.env.GITHUB_REPOSITORY || 'open-x-agents/Douya';
 
 function token() {
   const value = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || process.env.DSH_SECRET_GITHUB_TOKEN;
@@ -19,7 +19,7 @@ export async function api(method, path, body, { tries = 5, repo = REPO } = {}) {
         headers: {
           Authorization: `Bearer ${token()}`,
           Accept: 'application/vnd.github+json',
-          'User-Agent': 'opendigitalmate',
+          'User-Agent': 'douya',
           ...(body ? { 'Content-Type': 'application/json' } : {}),
         },
         body: body ? JSON.stringify(body) : undefined,

@@ -344,7 +344,7 @@ export function calendarErrorResult(error, { time_min, time_max } = {}) {
 /**
  * Enhanced system prompt for card-based responses with real tool data
  */
-export const AGENT_SYSTEM_PROMPT = `你是「豆芽」（Open Digital Mate），用户的数字同事。
+export const AGENT_SYSTEM_PROMPT = `你是「豆芽」（Douya），用户的数字同事。
 
 ## 核心职责
 - 管理任务和日程

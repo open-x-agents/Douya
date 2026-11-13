@@ -1,6 +1,6 @@
 # Docs
 
-Start at the root [README](../README.md). This folder holds the rest, by audience. Chinese documents stay in Chinese.
+Start at the root [README](../README.md) or the bilingual [website](https://open-x-agents.github.io/Douya/). This folder holds the rest, by audience. Chinese documents stay in Chinese.
 
 ## Use the app
 

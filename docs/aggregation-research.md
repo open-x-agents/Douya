@@ -1,6 +1,6 @@
 # Aggregation Research: Personal Assistant AI Patterns
 
-Research conducted on leading personal assistant aggregation tools to inform Open Digital Mate's aggregation and triage design.
+Research conducted on leading personal assistant aggregation tools to inform Douya's aggregation and triage design.
 
 ## Tools Studied
 

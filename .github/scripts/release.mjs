@@ -19,7 +19,7 @@ import { checkVersionConsistency } from '../../scripts/pre-release.mjs';
 const REPO = process.env.GITHUB_REPOSITORY || '';
 const SUMMARY = process.env.GITHUB_STEP_SUMMARY;
 // 发布说明写在仓库外：它是工作流的中间产物，不该被 git 卷进版本提交。
-const NOTES_FILE = join(process.env.RUNNER_TEMP || tmpdir(), 'opendigitalmate-release-notes.md');
+const NOTES_FILE = join(process.env.RUNNER_TEMP || tmpdir(), 'douya-release-notes.md');
 
 function run(cmd, args, opts = {}) {
   return execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...opts }).trim();
@@ -57,8 +57,8 @@ function main() {
     return;
   }
 
-  run('git', ['config', 'user.name', 'opendigitalmate-bot']);
-  run('git', ['config', 'user.email', 'opendigitalmate-bot@users.noreply.github.com']);
+  run('git', ['config', 'user.name', 'douya-bot']);
+  run('git', ['config', 'user.email', 'douya-bot@users.noreply.github.com']);
 
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
   const current = trimVersion(pkg.version);

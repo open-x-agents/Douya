@@ -45,16 +45,16 @@ test('the doc carries no token value and no local absolute path', () => {
   assert.ok(!doc.includes('/Users/'), 'the doc must not carry a /Users/ path')
 })
 
-test('README links the doc inside the quick start section', () => {
+test('README links the doc from the develop section', () => {
   const lines = readme.split('\n')
   const linkAt = lines.findIndex((line) => line.includes('docs/mac-shortcut.md'))
   const warnedAt = lines.findIndex((line) => line.includes('Do not commit or paste the token URL'))
   const sectionAt = lines.findIndex((line) => line.trim() === '### Configure AI + Composio')
+  const developAt = lines.findIndex((line) => line.trim() === '## Develop')
   assert.notEqual(linkAt, -1, 'README does not link docs/mac-shortcut.md')
   assert.notEqual(warnedAt, -1, 'README lost the token-URL warning')
   assert.notEqual(sectionAt, -1, 'README lost the Configure AI + Composio section')
-  assert.ok(
-    linkAt > warnedAt && linkAt < sectionAt,
-    `README link at line ${linkAt + 1}, expected between line ${warnedAt + 1} and line ${sectionAt + 1}`,
-  )
+  assert.notEqual(developAt, -1, 'README lost the Develop section')
+  assert.ok(linkAt > developAt, 'mac-shortcut link should sit in Develop, with the token-URL warning')
+  assert.ok(warnedAt > developAt, 'token-URL warning should sit in Develop')
 })

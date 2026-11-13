@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Boot Open Digital Mate as the primary dsh web UI (replaces stock frontend).
+ * Boot Douya as the primary dsh web UI (replaces stock frontend).
  * One process: dsh --profile odm on PORT (default 7777).
  * Muse lives at /api/opendigitalmate/app (dsh-muse-ui client redirects / → there).
  */
@@ -127,7 +127,7 @@ process.env.ODM_MUSE_URL = `http://127.0.0.1:${PORT}`
 process.env.DSBOT_URL = process.env.ODM_MUSE_URL
 process.env.DSH_HOME = DSH_HOME
 
-console.log('🚀 Open Digital Mate — dsh web UI replaced by Muse')
+console.log('🚀 Douya — dsh web UI replaced by Muse')
 console.log(`📁 ODM data: ${HOME}`)
 console.log(`🧠 DSH_HOME: ${DSH_HOME}`)
 console.log(`🌐 http://127.0.0.1:${PORT}/  → redirects to Muse app`)

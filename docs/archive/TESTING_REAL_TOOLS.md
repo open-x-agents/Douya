@@ -69,7 +69,7 @@
 
 **預期：**
 - 調用 `github_list_repos`
-- 返回真實倉庫列表（openDigitalMate, ...）
+- 返回真實倉庫列表（Douya, ...）
 - 每個卡片顯示 stars, language, 更新時間
 
 ---

@@ -8,7 +8,7 @@ import { createFakeFetch, loadFixture } from './fixtures/github/fetch.mjs';
 const SINCE = new Date('2026-10-29T00:00:00Z');
 const NOW = Date.parse('2026-10-30T09:00:00Z');
 const SHA = '1111111111111111111111111111111111111111';
-const REPO = 'open-x-agents/openDigitalMate';
+const REPO = 'open-x-agents/Douya';
 
 function makeSource(routes, options = {}) {
   const fake = createFakeFetch(routes);
@@ -210,13 +210,13 @@ test('a broken subread keeps the pull request and names the gap', async () => {
   const result = await source.list(SINCE);
 
   assert.equal(result.events.length, 1);
-  assert.equal(result.events[0].ref, 'github:pr/open-x-agents/openDigitalMate/41');
+  assert.equal(result.events[0].ref, 'github:pr/open-x-agents/Douya/41');
   assert.equal(result.events[0].ci, null);
   assert.ok(
     result.partial.some(
       (gap) =>
         gap.kind === 'partial' &&
-        gap.ref === 'github:pr/open-x-agents/openDigitalMate/41',
+        gap.ref === 'github:pr/open-x-agents/Douya/41',
     ),
   );
 });
@@ -267,13 +267,13 @@ test('an assigned pull request becomes one observation with a stable ref', async
 
   assert.equal(result.events.length, 1);
   const [event] = result.events;
-  assert.equal(event.ref, 'github:pr/open-x-agents/openDigitalMate/41');
-  assert.equal(event.external_id, 'open-x-agents/openDigitalMate/41');
+  assert.equal(event.ref, 'github:pr/open-x-agents/Douya/41');
+  assert.equal(event.external_id, 'open-x-agents/Douya/41');
   assert.equal(event.object, 'pr');
   assert.equal(event.repo, REPO);
   assert.equal(event.number, 41);
   assert.equal(event.title, 'Wire the morning brief');
-  assert.equal(event.project, 'openDigitalMate');
+  assert.equal(event.project, 'Douya');
   assert.deepEqual(event.people, ['Birfy']);
   assert.deepEqual(event.why, ['assigned']);
   assert.equal(event.at, '2026-10-30T09:15:00Z');
@@ -336,7 +336,7 @@ test('an issue and a pull request with the same number stay two observations', a
   assert.deepEqual(
     result.events.map((event) => event.ref).sort(),
     [
-      'github:issue/open-x-agents/openDigitalMate/10',
+      'github:issue/open-x-agents/Douya/10',
       'github:pr/ThinkFlowLab/FlyBot/10',
     ],
   );
@@ -480,7 +480,7 @@ test('get returns null for an object that is gone, and refuses a malformed ref',
     },
   ]);
 
-  assert.equal(await source.get('github:pr/open-x-agents/openDigitalMate/99'), null);
+  assert.equal(await source.get('github:pr/open-x-agents/Douya/99'), null);
   await assert.rejects(
     () => source.get('github:pr/41'),
     (error) => error instanceof RangeError && error.code === 'E_BAD_REF',

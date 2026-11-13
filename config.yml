@@ -1,4 +1,4 @@
-# Open Digital Mate running on ds-bot
+# Douya running on ds-bot
 # Start with: npx cordis start --config config.yml
 
 host: 0.0.0.0
@@ -14,7 +14,7 @@ plugins:
     port: 7777
     selfUrl: http://localhost:7777
 
-  # Open Digital Mate plugin
+  # Douya plugin
   './index.js':
     home: ./.odm-data
     composioApiKey: ${COMPOSIO_API_KEY}

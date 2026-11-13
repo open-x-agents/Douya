@@ -73,17 +73,17 @@ test('same-day re-digest keeps mail already in the group', () => {
 import { foldGithubNotifsIntoRepos, githubNotifRepo, repoKeyOfCard, emailLink } from '../src/web/email-groups.js'
 
 test('foldGithubNotifsIntoRepos moves [owner/repo] mail into the matching project card and drops it from CI与代码通知', () => {
-  assert.equal(githubNotifRepo('[open-x-agents/openDigitalMate] Run failed: release - main', 'GitHub <notifications@github.com>'), 'open-x-agents/openDigitalMate')
+  assert.equal(githubNotifRepo('[open-x-agents/Douya] Run failed: release - main', 'GitHub <notifications@github.com>'), 'open-x-agents/Douya')
   assert.equal(githubNotifRepo('Hello', 'ann@x.com'), null)
   const repo = {
-    id: 'cluster_github_open-x-agents_openDigitalMate_1', type: 'project-cluster', source: 'github',
-    sourceId: 'github:cluster:open-x-agents/openDigitalMate', url: 'https://github.com/open-x-agents/openDigitalMate',
-    title: 'openDigitalMate', items: [], blocks: [{ type: 'link-list', links: [{ title: 'PR #160', url: 'https://github.com/open-x-agents/openDigitalMate/pull/160' }] }],
+    id: 'cluster_github_open-x-agents_Douya_1', type: 'project-cluster', source: 'github',
+    sourceId: 'github:cluster:open-x-agents/Douya', url: 'https://github.com/open-x-agents/Douya',
+    title: 'Douya', items: [], blocks: [{ type: 'link-list', links: [{ title: 'PR #160', url: 'https://github.com/open-x-agents/Douya/pull/160' }] }],
     clusterSize: 1, metadata: {},
   }
-  assert.equal(repoKeyOfCard(repo), 'open-x-agents/openDigitalMate')
+  assert.equal(repoKeyOfCard(repo), 'open-x-agents/Douya')
   const items = [
-    mail('1', '[open-x-agents/openDigitalMate] Run failed: release - main (e7daf11)', 'GitHub <notifications@github.com>'),
+    mail('1', '[open-x-agents/Douya] Run failed: release - main (e7daf11)', 'GitHub <notifications@github.com>'),
     mail('2', '[other/repo] PR run failed', 'GitHub <notifications@github.com>'),
     mail('3', 'CircleCI build failed', 'builds <noreply@circleci.com>'),
   ]
@@ -102,7 +102,7 @@ test('foldGithubNotifsIntoRepos moves [owner/repo] mail into the matching projec
   assert.equal(r.folded, 1)
   assert.ok(repo.blocks.find(b => b.type === 'link-list').links.some(l => /e7daf11/.test(l.title) && l.mergedFrom === 'gmail'))
   assert.equal(code.items.length, 2)
-  assert.ok(code.items.every(i => !/openDigitalMate/.test(i.title)))
+  assert.ok(code.items.every(i => !/Douya/.test(i.title)))
   assert.equal(code.metadata.count, 2)
 })
 

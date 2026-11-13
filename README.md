@@ -1,66 +1,62 @@
-# openDigitalMate
+# Douya
 
-### Douya / 豆芽 — a Muse-style coworker for your desktop
+**Douya / 豆芽** is a desktop personal assistant for Windows, macOS, and Linux.
 
-[![License](https://img.shields.io/badge/license-Apache--2.0-0B3D2E?style=flat-square)]
-[![Node](https://img.shields.io/badge/node-ESM-1B6B4A?style=flat-square)](#run-from-source)
-[![dsh](https://img.shields.io/badge/host-dsh%20odm%20profile-0E4D8C?style=flat-square)](https://github.com/deepseek-ai/dsh)
-[![UI](https://img.shields.io/badge/UI-EN%20%2F%20中文-5B21B6?style=flat-square)](#language)
+[Website](https://open-x-agents.github.io/Douya/) · [Download](https://github.com/open-x-agents/Douya/releases/latest) · [Docs](docs/README.md)
 
 <p align="center">
-  <img src="docs/design/three-pages.jpg" alt="Douya — Future · Today · Memories" width="920" />
+  <img src="site/img/today.jpg" alt="Douya Today — a morning digest with a planned next step, finished work, and chat" width="920" />
 </p>
 
-One product. Three pages. Shared memory underneath.
+It sits on your desktop and brings today’s mail, GitHub, Slack, and calendar onto one page. You can talk to it, keep a local memory, and grow longer-term plans — with your consent before anything goes outbound.
 
-| **Future** | **Today** | **Memories** |
-| --- | --- | --- |
-| Long-term plans grown from your interests — fitness, study, craft. Propose first; **consent before work**. | Current affairs from mail, PRs, Slack, calendar. Finish something and the state writes back everywhere. | Readable memories & achievements — human sentences, photos welcome. Achievements surface first. |
+The UI is bilingual, English and 中文. A chat model provider is required; the app is not fully offline. Connecting Gmail, GitHub, Slack, or calendar uses [Composio](https://app.composio.dev) and is optional.
 
-Douya is a **desktop-first** Electron app for **Windows, macOS, and Linux**. The UI is bilingual EN / 中文. Mobile apps were cancelled. It is not a fully offline product: chat and many features need a supported model provider, and sources need [Composio](https://app.composio.dev) plus your consent for anything outbound.
+## Download
 
-```
-  Muse UI  ──▶  Chief / source bots  ──▶  MCP Memory  ──▶  Sources
-  (Today ·     (merge, rank,          (shared            (Gmail · Slack ·
-   Memories ·   plan, chat)            knowledge graph)    GitHub · Calendar)
-   Future)
-```
-
-Less is more · ship via PR into `main` (never push `main` directly).
-
-**Repo:** [open-x-agents/openDigitalMate](https://github.com/open-x-agents/openDigitalMate) · the root and desktop `package.json` files list `license` as `Apache-2.0`
-
----
-
-## Download the desktop app
-
-Current desktop packages: **[desktop-v0.1.0-rc7](https://github.com/open-x-agents/openDigitalMate/releases/tag/desktop-v0.1.0-rc7)** (prerelease, built from `92d751b0`).
-
-Do **not** use [github.com/open-x-agents/openDigitalMate/releases/latest](https://github.com/open-x-agents/openDigitalMate/releases/latest) for the app. That “latest” badge is **[v0.1.0](https://github.com/open-x-agents/openDigitalMate/releases/tag/v0.1.0)** (2026-10-30), an earlier stable source/tag release **without** these installers.
+Current desktop packages: **[desktop-v0.1.0](https://github.com/open-x-agents/Douya/releases/tag/desktop-v0.1.0)** ([Latest](https://github.com/open-x-agents/Douya/releases/latest)). Checksums: [SHA256SUMS](https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/SHA256SUMS).
 
 | Platform | File |
 | --- | --- |
-| Windows x64 | [Douya-0.1.0-win-x64-Setup.exe](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/Douya-0.1.0-win-x64-Setup.exe) · [self-signed .cer](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/Douya-0.1.0-win-x64-selfsigned.cer) (public cert only) |
-| macOS Apple Silicon | [Douya-0.1.0-mac-arm64.dmg](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/Douya-0.1.0-mac-arm64.dmg) |
-| macOS Intel | [Douya-0.1.0-mac-x64.dmg](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/Douya-0.1.0-mac-x64.dmg) |
-| Linux x64 | [AppImage](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/Douya-0.1.0-linux-x64.AppImage) or [`.deb`](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/douya-desktop_0.1.0_amd64.deb) |
-| Linux arm64 | [AppImage](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/Douya-0.1.0-linux-arm64.AppImage) or [`.deb`](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/douya-desktop_0.1.0_arm64.deb) |
+| Windows x64 | [Douya-0.1.0-win-x64-Setup.exe](https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-win-x64-Setup.exe) · [self-signed .cer](https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-win-x64-selfsigned.cer) (public cert only) |
+| macOS Apple Silicon | [Douya-0.1.0-mac-arm64.dmg](https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-mac-arm64.dmg) |
+| macOS Intel | [Douya-0.1.0-mac-x64.dmg](https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-mac-x64.dmg) |
+| Linux x64 | [AppImage](https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-linux-x64.AppImage) or [`.deb`](https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/douya-desktop_0.1.0_amd64.deb) |
+| Linux arm64 | [AppImage](https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-linux-arm64.AppImage) or [`.deb`](https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/douya-desktop_0.1.0_arm64.deb) |
 
-Checksums: [SHA256SUMS](https://github.com/open-x-agents/openDigitalMate/releases/download/desktop-v0.1.0-rc7/SHA256SUMS).
+The installer already includes the Douya server and [dsh](https://github.com/deepseek-ai/dsh). You do not need a git checkout, a Node.js install, or a separate dsh. On first launch it writes data under the app’s user directory and opens a short setup wizard.
 
-On Linux pick **one** format, not both: `.deb` on Ubuntu/Debian, AppImage on other distributions. Match your CPU (x64 vs arm64). The AppImage needs `libfuse.so.2` to run in place (`chmod +x` first); if FUSE is missing, use `--appimage-extract-and-run`. Do not pass `--no-sandbox`.
+Installers are not warning-free. macOS is ad-hoc signed and not notarized (right-click **Douya.app → Open**, or `xattr -dr com.apple.quarantine /Applications/Douya.app`). Windows is self-signed (SmartScreen: More info → Run anyway). Linux packages are unsigned. On Linux pick **one** format: `.deb` on Ubuntu/Debian, AppImage elsewhere (`chmod +x` first; needs `libfuse.so.2`, or `--appimage-extract-and-run`). Do not pass `--no-sandbox`. Details: [docs/install.md](docs/install.md).
 
-Installers are not warning-free. macOS is ad-hoc signed and **not notarized** (right-click **Douya.app → Open**, or `xattr -dr com.apple.quarantine /Applications/Douya.app`). Windows is **self-signed** (SmartScreen: More info → Run anyway). Linux packages are **unsigned**.
+## First launch
 
-The packaged app ships the Douya server and **[dsh](https://github.com/deepseek-ai/dsh)** inside the installer. You do not need a git checkout, a Node.js install, or a separate dsh: on first launch it starts from the bundled runtime, writes data under the app’s userData folder, and opens the setup wizard for the model API (Composio is optional). Details: [docs/install.md](docs/install.md).
+### Configure AI + Composio
 
-Installers bundle the official [`@modelcontextprotocol/server-memory@2.1.1`](https://www.npmjs.com/package/@modelcontextprotocol/server-memory) (pure Node, no embeddings). Chat tools are `mcp__memory__*`. The graph is `$ODM_DATA_DIR/memory.jsonl` and is never written under `resources/`. A chat model is **not** shipped — the first-run wizard still asks for a provider. Details: [docs/install.md](docs/install.md), [docs/memory.md](docs/memory.md).
+A two-step wizard opens if no chat model is saved yet (it is also in Settings):
 
-This rc also includes the long-running chat wait: if Chief is still working, the UI keeps waiting instead of reporting no reply after a few minutes. A turn that stays marked running can keep you waiting; hangs are not all detected.
+1. **Model API** — pick a provider (DeepSeek is the default), paste a key, Save, optionally Test connection. This is required for chat.
+2. **Composio** (optional, can skip) — paste a **project** API key from the [Composio dashboard](https://platform.composio.dev) (Settings → Project Settings → API Keys). Then connect GitHub, Gmail, Slack, or Calendar on **Sources**, only the apps you want.
 
----
+Outbound mail, comments, and archives stay pending until you click **Confirm**.
 
-## Run from source
+## What you can do
+
+| | |
+| --- | --- |
+| **Today** | Aggregates mail, GitHub, Slack, and calendar into a daily page: a suggested next step, a timetable, digest cards, and what already got done. |
+| **Chat** | Talk with Douya from the dock or a card. Prepared outbound actions wait for an explicit Confirm. |
+| **Recall** | Local long-term memory via the official [`@modelcontextprotocol/server-memory`](https://www.npmjs.com/package/@modelcontextprotocol/server-memory) server (a JSONL knowledge graph on disk, no embeddings). Chat tools are `mcp__memory__*`. Achievements surface first. Forget removes an observation or an entity. Photo attachments are not supported. |
+| **Future** | Propose a plan from a memory or a stated interest; you accept before work starts. Tick a step, or complete one with Douya. Progress survives a restart. |
+
+The UI binds to `127.0.0.1`. More: [docs/memory.md](docs/memory.md), [docs/sources/connected-scans.md](docs/sources/connected-scans.md), [docs/LLM_SETUP.md](docs/LLM_SETUP.md).
+
+## Privacy
+
+Your data stays on this machine, under the app’s user directory — on macOS `~/Library/Application Support/Douya`, on Windows `%APPDATA%\Douya`, on Linux `~/.config/Douya`. That includes `odm-data/` (config and `memory.jsonl`) and `dsh-odm/` (the local runtime home). Nothing is written into the install folder.
+
+Chat and many features still call the model provider you configured. Connected sources go through Composio, and nothing is sent outbound until you consent. The UI is localhost-only.
+
+## Develop
 
 ```bash
 npm install
@@ -68,74 +64,19 @@ npm start
 # → node scripts/start-dsh.mjs → dsh --profile odm --port 7777
 ```
 
-The process writes a login URL (with token) to `.odm-data/dsh-web.url`. **Open that token URL** — bare `http://127.0.0.1:7777` returns 401.
+The process writes a login URL (with token) to `.odm-data/dsh-web.url`. Open that token URL — bare `http://127.0.0.1:7777` returns 401.
+
+> Do not commit or paste the token URL.
+>
+> On macOS you can put that behind a system-wide hotkey — see [docs/mac-shortcut.md](docs/mac-shortcut.md).
 
 ```bash
 open "$(cat .odm-data/dsh-web.url)"          # macOS
 # xdg-open "$(cat .odm-data/dsh-web.url)"   # Linux
 ```
 
-> Do not commit or paste the token URL into issues or chat logs.
-
-On macOS you can put that behind a system-wide hotkey — see [docs/mac-shortcut.md](docs/mac-shortcut.md).
-
-### Configure AI + Composio
-
-On a first run with no chat model saved, a two-step **setup wizard** opens (model API, then optional Composio). You can also open it from Settings. Composio has no one-click login for other apps: the wizard opens the [Composio dashboard](https://platform.composio.dev) so you can copy a **project** API key (Settings → Project Settings → API Keys) and paste it. Skip is allowed for Composio.
-
-1. **Settings** (or the wizard) → pick a provider (e.g. DeepSeek), paste the key, Save, optionally Test connection
-2. Paste a **Composio** project key, Save (and verify in the wizard), then connect GitHub / Gmail / Slack / Calendar on **Sources** (only the apps you want)
-3. **Today** → **Refresh now**
-
-Outbound mail, comments, and archives stay pending until you click **Confirm**. Keys also work from `.env` (`DEEPSEEK_API_KEY` / `COMPOSIO_API_KEY`) or `.odm-data/config.json` (gitignored). DeepSeek needs a real key — an OpenAI-only setup makes Chief say “No model is available”. Source checkout and packing the app: [docs/develop.md](docs/develop.md). Model details: [docs/LLM_SETUP.md](docs/LLM_SETUP.md).
-
-### Language
-
-Default UI is **English**. Switch to 中文 in Settings or the sidebar (`localStorage` key `odm.lang`). Digest card *bodies* stay as the bots wrote them.
-
----
-
-## Memory in brief
-
-Douya uses the official [`@modelcontextprotocol/server-memory`](https://www.npmjs.com/package/@modelcontextprotocol/server-memory) **2.1.1** knowledge graph. Chat auto-recall uses `mcp__memory__*` tools (`create_entities`, `add_observations`, `search_nodes`, `read_graph`, …). The Memories / Recall page, Chief digest, and Future’s grounding read the same JSONL, achievements first.
-
-Desktop installers already include the server and Node; the file is `$ODM_DATA_DIR/memory.jsonl`. For `npm start`, install the package once if it is not already in `node_modules` — see [docs/memory.md](docs/memory.md).
-
----
-
-## What you can do here
-
-| Surface | What it actually does |
-| --- | --- |
-| **Today** | Hero, timetable, digest cards, prepared next steps, “what got done” |
-| **Future / 未来** | Propose a plan from a memory or a stated interest; accept before work; tick or complete a step (including **Do this with Douya**); archive. Progress lives in host `state.json` and survives a restart |
-| **Memories / Recall** | Readable tiles, achievements first; forget removes an observation or entity |
-| **Sources** | Connect apps via Composio. Coverage and limits: [docs/sources/connected-scans.md](docs/sources/connected-scans.md) |
-| **Dock chat** | Talk with Chief. Confirmed sends can echo into card chat and general chat |
-
-Local-only: the UI binds to `127.0.0.1`.
-
----
-
-## Docs
-
-[Index](docs/README.md) · [Install & data](docs/install.md) · [Memory](docs/memory.md) · [Develop](docs/develop.md) · [Testing](docs/testing.md) · [Architecture](docs/architecture.md) · [Design](docs/design/README.md)
-
----
-
-## Security
-
-- **Localhost only** — other machines cannot open the UI
-- Never commit `.env`, `.odm-data/`, or the token URL file
-- Outbound actions require an explicit Confirm click
-
-## Contributing
-
-1. Branch from `main` — never push directly to `main`
-2. Keep tests green: `npm test`
-3. Open a PR with `Fixes #N`, a `Ran:` section, and the tip sha
-4. Merge only when the owner says so
+`npm test` runs the suite. Branch from `main`, keep tests green, and open a PR (`Fixes #N`, a `Ran:` section, the tip sha). Never push `main` directly. Further notes: [docs/develop.md](docs/develop.md), [docs/testing.md](docs/testing.md), [docs/architecture.md](docs/architecture.md).
 
 ## License
 
-The root and desktop `package.json` files list `license` as `Apache-2.0`. This tree does not add a separate license grant file. Bundled runtimes keep their upstream terms: `@modelcontextprotocol/server-memory` is MIT. See [docs/install.md](docs/install.md).
+The root and desktop `package.json` files list `license` as `Apache-2.0`. This tree does not add a separate license grant file. Bundled runtimes keep their upstream terms: `@modelcontextprotocol/server-memory` is MIT. Repo: [open-x-agents/Douya](https://github.com/open-x-agents/Douya).

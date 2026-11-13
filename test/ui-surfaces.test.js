@@ -271,3 +271,18 @@ test('times: bogus 1970 item dates are blank in views; Gmail ISO timestamps pars
   const t = hydrate(ok(spec([{ id: 't', type: 'Table', source: { card: 'fledge' }, columns: ['title', 'at'] }])), st)
   assert.equal(t.view.components.t.rows[0].cells.at, '')
 })
+
+test('renderer: view chrome follows ODMi18n (English) and keeps Chinese only as the no-runtime fallback', async () => {
+  const { messages } = await import('../src/i18n/messages.js')
+  const view = { title: 't', root: 'root', expired: true, refs: ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map(id => ({ id, title: id })), components: { root: { type: 'Column', children: ['l', 'f'] }, l: { type: 'List', rows: [] }, f: { type: 'Form', fields: [], submit: { kind: 'draft' } } } }
+  const opts = { placement: 'chat', onSave() {}, onPanel() {}, onClose() {} }
+  const zh = createRenderer(fakeDoc()).render(view, {}, opts).textContent
+  assert.ok(zh.includes('没有符合的条目') && zh.includes('保存为卡片'), 'fallback without runtime stays Chinese')
+  rendererSandbox.ODMi18n = { t: (k, vars) => { let s = messages.en[k] || k; for (const v of Object.keys(vars || {})) s = s.split('{' + v + '}').join(String(vars[v])); return s } }
+  try {
+    const en = createRenderer(fakeDoc()).render(view, {}, opts).textContent
+    for (const s of ['Nothing matches', 'Save as card', 'Pin to Today', 'Close', 'Made by Douya', 'Submit', 'This view has expired', '7 cards in total']) assert.ok(en.includes(s), `missing ${s}`)
+    assert.doesNotMatch(en, /[\u4e00-\u9fff]/, 'no Chinese chrome in English mode')
+  } finally { delete rendererSandbox.ODMi18n }
+  for (const k of Object.keys(messages.en).filter(k => k.startsWith('view.'))) assert.ok(messages.zh[k], `zh has ${k}`)
+})

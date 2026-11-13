@@ -5,11 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Douya / 豆芽 — a desktop personal assistant</title>
   <meta name="description" content="Douya / 豆芽 is a desktop personal assistant for Windows, macOS, and Linux." />
+  <link rel="canonical" href="https://open-x-agents.github.io/Douya/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://open-x-agents.github.io/Douya/" />
   <meta property="og:title" content="Douya / 豆芽" />
   <meta property="og:description" content="A desktop personal assistant for Windows, macOS, and Linux." />
-  <meta property="og:image" content="img/today.jpg" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='28'>🌱</text></svg>" />
+  <meta property="og:image" content="https://open-x-agents.github.io/Douya/img/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Douya / 豆芽" />
+  <meta name="twitter:description" content="A desktop personal assistant for Windows, macOS, and Linux." />
+  <meta name="twitter:image" content="https://open-x-agents.github.io/Douya/img/og-image.png" />
+  <meta name="theme-color" content="#f6f0e6" />
+  <link rel="icon" href="img/logo.svg" type="image/svg+xml" />
+  <link rel="icon" href="img/favicon.ico" sizes="any" />
+  <link rel="icon" href="img/favicon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png" sizes="180x180" />
+  <link rel="stylesheet" href="demo.css" />
+  <script>document.documentElement.classList.add('js');</script>
   <style>
+    html.js #demo-fallback { display: none }
+
     :root {
       --ink: #2c241c;
       --ink2: #5c5248;
@@ -48,12 +65,14 @@
     }
     .brand { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none }
     .brand .mark {
-      width: 32px; height: 32px; border-radius: 10px;
+      width: 36px; height: 36px; border-radius: 10px;
       background: linear-gradient(180deg, #f7efe4, #e8d3bc);
       border: 1px solid var(--line);
-      display: grid; place-items: center; font-size: 18px;
+      display: grid; place-items: center;
       box-shadow: var(--shadow);
+      overflow: hidden;
     }
+    .brand .mark img, .brand .mark-img { width: 30px; height: 30px; display: block }
     .brand b { font-size: 17px; letter-spacing: -0.02em }
     .brand small { display: block; color: var(--ink3); font-size: 11.5px; font-weight: 500; letter-spacing: 0.02em }
     .lang {
@@ -66,7 +85,11 @@
       font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 999px; cursor: pointer;
     }
     .lang button[aria-pressed="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(80,50,20,.1) }
-    .hero { padding: 36px 0 20px; text-align: center }
+    .lang button:focus-visible, .feat:focus-visible, .btn:focus-visible {
+      outline: 2px solid rgba(154, 90, 50, .55); outline-offset: 2px;
+    }
+    .hero { padding: 36px 0 12px; text-align: center }
+    .hero-logo { width: 88px; height: 88px; margin: 0 auto 16px; display: block }
     .hero h1 {
       margin: 0 0 12px; font-size: clamp(32px, 5vw, 52px); line-height: 1.15;
       letter-spacing: -0.035em; font-weight: 650;
@@ -79,6 +102,7 @@
       display: inline-flex; align-items: center; justify-content: center; gap: 8px;
       padding: 11px 18px; border-radius: 12px; font: inherit; font-size: 14.5px; font-weight: 600;
       text-decoration: none; border: 1px solid transparent; transition: transform .15s var(--ease), background .15s;
+      cursor: pointer; background: none; color: inherit;
     }
     .btn:hover { transform: translateY(-1px) }
     .btn.primary { background: var(--clay); color: #fffaf3; box-shadow: 0 8px 20px -10px var(--clay) }
@@ -88,7 +112,7 @@
       backdrop-filter: blur(16px);
     }
     .shot {
-      margin: 28px auto 0; max-width: 920px; padding: 10px;
+      margin: 28px auto 0; max-width: 980px; padding: 10px;
       background: var(--glass); border: 1px solid var(--line); border-radius: 22px;
       box-shadow: var(--shadow); backdrop-filter: blur(20px) saturate(1.15);
     }
@@ -97,6 +121,19 @@
     section { padding: 36px 0 }
     section h2 { margin: 0 0 8px; font-size: 24px; letter-spacing: -0.03em }
     section .lead { margin: 0 0 22px; color: var(--ink2); max-width: 640px }
+    .feats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px }
+    .feat {
+      display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+      background: var(--glass); border: 1px solid var(--line); border-radius: 18px;
+      padding: 18px 18px 16px; box-shadow: var(--shadow); backdrop-filter: blur(16px) saturate(1.15);
+      text-decoration: none; color: inherit; text-align: left;
+      transition: transform .15s var(--ease), border-color .15s;
+    }
+    .feat:hover { transform: translateY(-2px); border-color: var(--line-strong); color: inherit }
+    .feat img { width: 48px; height: 48px; display: block }
+    .feat h3 { margin: 4px 0 0; font-size: 16.5px; letter-spacing: -0.02em }
+    .feat p { margin: 0; color: var(--ink2); font-size: 14px; line-height: 1.5 }
+    .feat .jump { margin-top: 4px; font-size: 12px; font-weight: 600; color: var(--clay) }
     .cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px }
     .card {
       background: var(--glass); border: 1px solid var(--line); border-radius: 18px;
@@ -120,13 +157,6 @@
       font-size: 12.5px; font-weight: 600; border: 1px solid transparent;
     }
     .chip:hover { border-color: var(--line-strong); color: var(--clay-deep) }
-    .wizard {
-      display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 24px; align-items: center;
-    }
-    .wizard img {
-      width: 100%; height: auto; border-radius: 18px; border: 1px solid var(--line);
-      box-shadow: var(--shadow);
-    }
     ol.steps { margin: 0; padding: 0 0 0 20px; color: var(--ink2) }
     ol.steps li { margin: 0 0 10px }
     .privacy, .dev {
@@ -134,21 +164,32 @@
       padding: 22px 24px; box-shadow: var(--shadow); backdrop-filter: blur(16px);
     }
     pre {
-      margin: 12px 0 0; padding: 14px 16px; overflow: auto;
+      margin: 0; padding: 14px 16px; overflow: auto;
       background: #2c241c; color: #f6f0e6; border-radius: 12px;
-      font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
-    footer.foot {
-      padding: 28px 0 48px; color: var(--ink3); font-size: 13px;
-      display: flex; flex-wrap: wrap; gap: 10px 18px; justify-content: space-between;
+    .foot {
+      display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px;
+      padding: 28px 0 40px; border-top: 1px solid var(--line);
+      font-size: 13px; color: var(--ink3);
     }
+    .foot-brand { display: flex; align-items: center; gap: 8px; color: inherit; text-decoration: none }
+    .foot-brand img { width: 22px; height: 22px }
     [data-lang="en"] [lang="zh"], [data-lang="zh"] [lang="en"] { display: none }
     html[data-lang="zh"] { font-size: 16px }
-    @media (max-width: 760px) {
-      .cards, .wizard { grid-template-columns: 1fr }
+    @media (max-width: 820px) {
+      .feats { grid-template-columns: 1fr 1fr }
+    }
+    @media (max-width: 720px) {
+      .cards { grid-template-columns: 1fr }
+      .feats { grid-template-columns: 1fr }
       .dl { flex-direction: column; align-items: flex-start }
       .dl .links { justify-content: flex-start }
       .hero { padding-top: 20px }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .btn, .feat { transition: none }
+      .btn:hover, .feat:hover { transform: none }
     }
   </style>
 </head>
@@ -156,7 +197,7 @@
   <div class="wrap">
     <header class="top">
       <a class="brand" href="#">
-        <span class="mark" aria-hidden="true">🌱</span>
+        <span class="mark"><img src="img/logo.svg" alt="" width="30" height="30" /></span>
         <span>
           <b>Douya / 豆芽</b>
           <small lang="en">Desktop personal assistant</small>
@@ -170,6 +211,7 @@
     </header>
 
     <div class="hero">
+      <img class="hero-logo" src="img/logo.svg" alt="Douya / 豆芽" width="88" height="88" />
       <h1 lang="en">A desktop personal assistant<br>for your everyday work.</h1>
       <h1 lang="zh">面向日常工作的<br>桌面版个人助手。</h1>
       <p class="pitch" lang="en">Douya / 豆芽 runs on Windows, macOS, and Linux. It brings today’s mail, GitHub, Slack, and calendar onto one page, keeps memory on your machine, and asks before anything goes outbound.</p>
@@ -179,14 +221,554 @@
           <span lang="en">Download Douya</span>
           <span lang="zh">下载豆芽</span>
         </a>
+        <a class="btn ghost" href="#demo">
+          <span lang="en">Try the demo</span>
+          <span lang="zh">试用演示</span>
+        </a>
         <a class="btn ghost" href="https://github.com/open-x-agents/Douya">GitHub</a>
       </div>
-      <figure class="shot">
-        <img src="img/today.jpg" alt="Douya Today: a planned next step, finished work, and a chat box" width="1440" height="1100" />
-      </figure>
-      <p class="note" lang="en">The packaged app already includes the server and dsh. No git checkout, Node.js, or separate dsh install.</p>
-      <p class="note" lang="zh">安装包已内置服务和 dsh。不需要再克隆仓库，也不必单独安装 Node 或 dsh。</p>
     </div>
+
+    <!-- Interactive UI demo. Hidden until demo.js runs; noscript keeps a still. -->
+    <figure class="shot" id="demo-fallback">
+      <img src="img/today.jpg" alt="Douya Today: a planned next step, finished work, and a chat box" width="1440" height="1100" />
+    </figure>
+
+    <section class="dy-demo" id="demo" aria-labelledby="demo-title">
+      <div class="dy-demo-intro">
+        <h2 id="demo-title" lang="en">Try the interface</h2>
+        <h2 id="demo-title-zh" lang="zh">试试界面</h2>
+        <p lang="en">A walkthrough of the real app, with sample data. Click the sidebar, type in chat, or open the first-run wizard. Nothing is sent anywhere — replies are scripted, and there is no model call.</p>
+        <p lang="zh">这是正式应用的界面演示，数据都是示例。可以点侧栏、在对话里输入，或打开首次启动向导。内容不会发到任何地方，回复都是预设脚本，也不会调用模型。</p>
+      </div>
+
+      <div id="live-demo" class="dy-device" hidden aria-hidden="true" data-current-view="today">
+        <div class="dy-chrome">
+          <div class="dy-lights" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div class="dy-chrome-title">
+            <img src="img/logo.svg" alt="" width="18" height="18" />
+            <span>Douya</span>
+          </div>
+          <span class="dy-sample" lang="en">Sample walkthrough</span>
+          <span class="dy-sample" lang="zh">示例演示</span>
+          <button type="button" class="dy-wiz-launch" data-open-wizard>
+            <span lang="en">First-run wizard</span>
+            <span lang="zh">首次启动向导</span>
+          </button>
+        </div>
+        <div class="dy-app">
+          <aside class="dy-side">
+            <div class="dy-who">
+              <img src="img/logo.svg" alt="" width="26" height="26" />
+              <b>Douya</b>
+            </div>
+            <button type="button" class="dy-nav on" data-view="today" aria-current="page"><span lang="en">Today</span><span lang="zh">今日</span></button>
+            <button type="button" class="dy-nav" data-view="chat"><span lang="en">Chat</span><span lang="zh">对话</span></button>
+            <button type="button" class="dy-nav" data-view="memory"><span lang="en">Memories</span><span lang="zh">回忆</span></button>
+            <button type="button" class="dy-nav" data-view="future"><span lang="en">Future</span><span lang="zh">未来</span></button>
+            <div class="dy-grp"><span lang="en">Settings</span><span lang="zh">设置</span></div>
+            <button type="button" class="dy-nav" data-view="settings"><span lang="en">Settings</span><span lang="zh">设置</span></button>
+            <div class="dy-lang-row">
+              <span lang="en">Language</span><span lang="zh">语言</span>
+              <div class="dy-lang" role="group" aria-label="Language">
+                <button type="button" data-demo-lang="en" aria-pressed="true">EN</button>
+                <button type="button" data-demo-lang="zh" aria-pressed="false">中文</button>
+              </div>
+            </div>
+          </aside>
+
+          <div class="dy-views">
+            <!-- TODAY -->
+            <section class="dy-view on" data-view="today" aria-hidden="false" aria-label="Today">
+              <header class="dy-day-head">
+                <div>
+                  <div class="dy-day-date">
+                    <span lang="en">Friday, 13 Nov 2026 · From GitHub, Gmail, Slack, Calendar, YouTube (failed)</span>
+                    <span lang="zh">2026年11月13日 周五 · 来自 GitHub、Gmail、Slack、日历、YouTube（失败）</span>
+                  </div>
+                  <h1 lang="en">Good morning</h1>
+                  <h1 lang="zh">早上好</h1>
+                  <p class="dy-day-sum" lang="en">Good morning. 1 open today.</p>
+                  <p class="dy-day-sum" lang="zh">早上好。今天有 1 件待办。</p>
+                </div>
+                <div class="dy-day-side">
+                  <span class="dy-digest-status" lang="en">Refreshed · 10:34</span>
+                  <span class="dy-digest-status" lang="zh">已刷新 · 10:34</span>
+                  <button type="button" class="dy-btn-glow" id="dyRefresh">
+                    <span lang="en">Refresh now</span><span lang="zh">立即刷新</span>
+                  </button>
+                </div>
+              </header>
+
+              <div class="dy-fail" role="status">
+                <b lang="en">Couldn’t fetch</b>
+                <b lang="zh">未能抓取</b>
+                <span class="dy-fail-chip">YouTube</span>
+                <span lang="en">Listed so Today does not look healthier than it is.</span>
+                <span lang="zh">单独列出，避免今日页看起来一切正常。</span>
+              </div>
+
+              <div class="dy-pin" lang="en">+ Pin a line</div>
+              <div class="dy-pin" lang="zh">+ 钉一行</div>
+
+              <article class="dy-hero-plan">
+                <div class="dy-plan-kicker">
+                  <img src="img/logo.svg" alt="" width="36" height="36" />
+                  <span lang="en">On the plan · next</span>
+                  <span lang="zh">日程里 · 下一步</span>
+                </div>
+                <h3 lang="en">PR follow-ups</h3>
+                <h3 lang="zh">PR 跟进</h3>
+                <p class="dy-plan-when" lang="en">Next 14:00–15:00</p>
+                <p class="dy-plan-when" lang="zh">下一段 14:00–15:00</p>
+                <div class="dy-acts">
+                  <button type="button" class="dy-step primary" id="dyFinishPlan"><span lang="en">Finished</span><span lang="zh">完成</span></button>
+                  <button type="button" class="dy-step" id="dySeeSched"><span lang="en">See schedule</span><span lang="zh">查看时间表</span></button>
+                  <button type="button" class="dy-step" id="dyAskPlan"><span lang="en">Ask Douya</span><span lang="zh">问豆芽</span></button>
+                </div>
+              </article>
+
+              <div class="dy-tt-bar">
+                <span lang="en">No meetings · 1 PR</span>
+                <span lang="zh">没有会议 · 1 个 PR</span>
+                <button type="button" class="dy-tt-toggle" aria-expanded="false" aria-controls="dyTimetable">
+                  <span lang="en">Full day</span><span lang="zh">全天</span>
+                </button>
+              </div>
+              <div class="dy-timetable" id="dyTimetable" hidden>
+                <div class="dy-eyebrow" lang="en">My Day</div>
+                <div class="dy-eyebrow" lang="zh">今日日程</div>
+                <div class="dy-tt-strip" aria-hidden="true">
+                  <i class="gap" style="flex:8"></i>
+                  <i class="k-focus" style="flex:4"></i>
+                  <i class="k-meal" style="flex:2"></i>
+                  <i class="k-work" style="flex:3"></i>
+                  <i class="gap" style="flex:7"></i>
+                </div>
+                <ul class="dy-tt-list">
+                  <li>
+                    <time>09:00–12:00</time>
+                    <span lang="en">Focus · review open comments</span>
+                    <span lang="zh">专注 · 看还开着的评论</span>
+                    <em class="tag" lang="en">Focus</em><em class="tag" lang="zh">专注</em>
+                  </li>
+                  <li>
+                    <time>12:00–13:00</time>
+                    <span lang="en">Lunch</span>
+                    <span lang="zh">午餐</span>
+                    <em class="tag" lang="en">Meal</em><em class="tag" lang="zh">用餐</em>
+                  </li>
+                  <li>
+                    <time>14:00–15:00</time>
+                    <span lang="en">PR follow-ups · acme/app</span>
+                    <span lang="zh">PR 跟进 · acme/app</span>
+                    <em class="tag" lang="en">Work</em><em class="tag" lang="zh">工作</em>
+                  </li>
+                </ul>
+              </div>
+
+              <div class="dy-today-mid">
+              <div class="dy-wait">
+                <span lang="en">Waiting on others</span>
+                <span lang="zh">等别人</span>
+                <span class="pill" lang="en">1 open</span>
+                <span class="pill" lang="zh">1 个待处理</span>
+                <span>acme/app — open PR #42</span>
+              </div>
+
+              <article class="dy-done">
+                <div class="kicker" lang="en">What got done today</div>
+                <div class="kicker" lang="zh">今天已完成</div>
+                <h3 lang="en">2 done <small>Douya ran 2 for you</small></h3>
+                <h3 lang="zh">已完成 2 件 <small>豆芽替你做了 2 件</small></h3>
+                <ul>
+                  <li lang="en">Commented on acme/app#42</li>
+                  <li lang="zh">评论了 acme/app#42</li>
+                  <li lang="en">Replied to fledge@example.com · Re: Team needs your answer</li>
+                  <li lang="zh">回复了 fledge@example.com · Re: Team needs your answer</li>
+                </ul>
+              </article>
+              </div>
+
+              <div class="dy-dock">
+                <div class="dy-chips">
+                  <button type="button" class="dy-chip" data-prompt="plate" data-prompt-en="What's on my plate today?" data-prompt-zh="今天有什么待办？">
+                    <span lang="en">What’s on my plate today?</span><span lang="zh">今天有什么待办？</span>
+                  </button>
+                  <button type="button" class="dy-chip" data-prompt="done" data-prompt-en="What did I finish?" data-prompt-zh="我完成了什么？">
+                    <span lang="en">What did I finish?</span><span lang="zh">我完成了什么？</span>
+                  </button>
+                  <button type="button" class="dy-chip" data-prompt="draft" data-prompt-en="Draft a reply to the team email" data-prompt-zh="给团队邮件拟一封回复">
+                    <span lang="en">Draft a reply to the team email</span><span lang="zh">给团队邮件拟一封回复</span>
+                  </button>
+                </div>
+                <div class="dy-composer">
+                  <input id="dyTodayInput" type="text" maxlength="400" autocomplete="off" enterkeyhint="send"
+                    placeholder="Message Douya…" data-ph-en="Message Douya…" data-ph-zh="给豆芽发消息…" />
+                  <button class="dy-send" id="dyTodaySend" type="button" aria-label="Send" disabled>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <!-- CHAT -->
+            <section class="dy-view dy-chat-page" data-view="chat" aria-hidden="true" aria-label="Chat">
+              <header class="dy-chat-head">
+                <img src="img/logo.svg" alt="" width="28" height="28" />
+                <div>
+                  <b>Douya</b>
+                  <small lang="en">Desktop personal assistant · long-term memory</small>
+                  <small lang="zh">桌面版个人助手 · 长期记忆</small>
+                </div>
+              </header>
+              <div class="dy-msgs" id="dyMsgs" tabindex="0">
+                <div class="dy-msg bot">
+                  <span lang="en">Hi — this is a walkthrough. Pick a suggestion or type a question. Replies are scripted, and nothing is sent to a model. If I prepare an outbound mail or comment, it waits here until you click Confirm.</span>
+                  <span lang="zh">你好，这是一段演示。可以点建议问法，或自己打一个问题。回复都是预设脚本，不会发给模型。如果我准备了对外的邮件或评论，会先停在这里，等你点「确认」。</span>
+                </div>
+              </div>
+              <div class="dy-dock">
+                <div class="dy-chips">
+                  <button type="button" class="dy-chip" data-prompt="plate" data-prompt-en="What's on my plate today?" data-prompt-zh="今天有什么待办？">
+                    <span lang="en">What’s on my plate today?</span><span lang="zh">今天有什么待办？</span>
+                  </button>
+                  <button type="button" class="dy-chip" data-prompt="draft" data-prompt-en="Draft a reply to the team email" data-prompt-zh="给团队邮件拟一封回复">
+                    <span lang="en">Draft a reply to the team email</span><span lang="zh">给团队邮件拟一封回复</span>
+                  </button>
+                  <button type="button" class="dy-chip" data-prompt="memory" data-prompt-en="What do you remember about me?" data-prompt-zh="你还记得我什么？">
+                    <span lang="en">What do you remember about me?</span><span lang="zh">你还记得我什么？</span>
+                  </button>
+                </div>
+                <div class="dy-composer">
+                  <input id="dyChatInput" type="text" maxlength="400" autocomplete="off" enterkeyhint="send"
+                    placeholder="Message Douya…" />
+                  <button class="dy-send" id="dyChatSend" type="button" aria-label="Send" disabled>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <!-- RECALL -->
+            <section class="dy-view" data-view="memory" aria-hidden="true" aria-label="Recall">
+              <header class="dy-mem-hero">
+                <div>
+                  <div class="dy-eyebrow" lang="en">Recall</div>
+                  <div class="dy-eyebrow" lang="zh">回忆</div>
+                  <h1 lang="en">Moments worth keeping</h1>
+                  <h1 lang="zh">值得留下的时刻</h1>
+                  <p lang="en">Readable memories via the official MCP Memory server. Achievements come first. These three are sample entries — photo attachments are not supported yet.</p>
+                  <p lang="zh">通过官方 MCP Memory 保存可读的记忆。成就会排在前面。下面三条是示例；暂不支持给记忆配图。</p>
+                </div>
+                <div class="dy-mem-count"><b>3</b><span lang="en">kept</span><span lang="zh">条记忆</span></div>
+              </header>
+              <div class="dy-mem-grid">
+                <article class="dy-mem ach">
+                  <div class="mark" lang="en">Achievement</div>
+                  <div class="mark" lang="zh">成就</div>
+                  <h3 lang="en">Shipped Douya desktop v0.1.0</h3>
+                  <h3 lang="zh">发布了豆芽桌面版 v0.1.0</h3>
+                  <p lang="en">Windows, macOS, and Linux installers published on the GitHub release.</p>
+                  <p lang="zh">在 GitHub Release 上发布了 Windows、macOS 和 Linux 安装包。</p>
+                  <div class="meta" lang="en">12 Nov 2026</div>
+                  <div class="meta" lang="zh">2026年11月12日</div>
+                </article>
+                <article class="dy-mem">
+                  <div class="mark" lang="en">Preference</div>
+                  <div class="mark" lang="zh">偏好</div>
+                  <h3 lang="en">Prefers DeepSeek for chat</h3>
+                  <h3 lang="zh">聊天更喜欢用 DeepSeek</h3>
+                  <p lang="en">Default model is deepseek-flash. Set in the first-run wizard.</p>
+                  <p lang="zh">默认模型是 deepseek-flash，在首次启动向导里设定。</p>
+                  <div class="meta" lang="en">Everyday · quieter</div>
+                  <div class="meta" lang="zh">日常 · 较安静</div>
+                </article>
+                <article class="dy-mem">
+                  <div class="mark" lang="en">Interest</div>
+                  <div class="mark" lang="zh">兴趣</div>
+                  <h3 lang="en">Weekday evening runs</h3>
+                  <h3 lang="zh">工作日晚间跑步</h3>
+                  <p lang="en">Told Douya this is a long-term interest; it became a Future plan.</p>
+                  <p lang="zh">跟豆芽说过这是长期兴趣，后来变成了一项未来计划。</p>
+                  <div class="meta" lang="en">Linked to Future</div>
+                  <div class="meta" lang="zh">已关联到未来</div>
+                </article>
+              </div>
+            </section>
+
+            <!-- FUTURE -->
+            <section class="dy-view" data-view="future" aria-hidden="true" aria-label="Future">
+              <header class="dy-fut-head">
+                <div>
+                  <div class="dy-eyebrow" lang="en">Douya / Future</div>
+                  <div class="dy-eyebrow" lang="zh">豆芽 / 未来</div>
+                  <h1 lang="en">A little closer to your future.</h1>
+                  <h1 lang="zh">离想成为的自己，再近一点。</h1>
+                  <p lang="en">Long-term plans, one concrete step at a time. Nothing starts until you accept. Advance a step in chat, or tick it here.</p>
+                  <p lang="zh">长期计划，每周做得到的一小步。你接受之后才会开始。可以在对话里推进，也可以在这里勾掉。</p>
+                </div>
+              </header>
+              <h2 class="dy-eyebrow" style="margin:0 0 10px" lang="en">Your plans</h2>
+              <h2 class="dy-eyebrow" style="margin:0 0 10px" lang="zh">你的计划</h2>
+              <article class="dy-fut-card active">
+                <span class="dy-fut-tag"><span lang="en">In motion</span><span lang="zh">进行中</span></span>
+                <h2 lang="en">Weekday evening runs</h2>
+                <h2 lang="zh">工作日晚间跑步</h2>
+                <p class="dy-fut-goal" lang="en">Build a sustainable running habit on weeknights, starting small.</p>
+                <p class="dy-fut-goal" lang="zh">在工作日晚上养成跑得下去的习惯，从少量开始。</p>
+                <div class="dy-fut-basis">
+                  <b lang="en">Why this fits · from your memory</b>
+                  <b lang="zh">为什么适合你 · 来自回忆</b>
+                  <span lang="en">You told Douya evening runs are a long-term interest.</span>
+                  <span lang="zh">你跟豆芽说过，晚间跑步是长期兴趣。</span>
+                </div>
+                <progress max="3" value="1"></progress>
+                <div class="dy-fut-progress" data-progress-label>
+                  <span lang="en">1 / 3 steps complete</span>
+                  <span lang="zh">已完成 1 / 3 步</span>
+                  <span>33%</span>
+                </div>
+                <label class="dy-fut-step done"><input type="checkbox" checked><span lang="en">Buy comfortable running shoes</span><span lang="zh">买一双舒服的跑鞋</span></label>
+                <label class="dy-fut-step"><input type="checkbox"><span lang="en">Tuesday: 25-minute easy run</span><span lang="zh">周二：轻松跑 25 分钟</span></label>
+                <label class="dy-fut-step"><input type="checkbox"><span lang="en">Thursday: repeat, only if Tuesday felt fine</span><span lang="zh">周四：如果周二感觉不错，再跑一次</span></label>
+                <div class="dy-fut-actions">
+                  <button type="button" class="dy-fut-primary" data-future-chat>
+                    <span lang="en">Do this with Douya</span><span lang="zh">和豆芽一起做</span>
+                  </button>
+                </div>
+              </article>
+              <h2 class="dy-eyebrow" style="margin:18px 0 10px" lang="en">Suggestions · nothing starts until you accept</h2>
+              <h2 class="dy-eyebrow" style="margin:18px 0 10px" lang="zh">建议 · 接受后才会开始</h2>
+              <article class="dy-fut-card proposed">
+                <span class="dy-fut-tag"><span lang="en">For your consideration</span><span lang="zh">待你决定</span></span>
+                <h2 lang="en">Write a short weekly review</h2>
+                <h2 lang="zh">每周写一段简短回顾</h2>
+                <p class="dy-fut-goal" lang="en">Ten minutes on Friday to note what shipped and what’s next.</p>
+                <p class="dy-fut-goal" lang="zh">周五花十分钟，记下这周完成了什么、下一步是什么。</p>
+                <div class="dy-fut-actions">
+                  <button type="button" class="dy-fut-primary" data-accept-plan>
+                    <span lang="en">Accept plan</span><span lang="zh">接受计划</span>
+                  </button>
+                </div>
+              </article>
+            </section>
+
+            <!-- SETTINGS: local data + platforms -->
+            <section class="dy-view" data-view="settings" aria-hidden="true" aria-label="Settings">
+              <header class="dy-set-head">
+                <div>
+                  <div class="dy-eyebrow" lang="en">Settings</div>
+                  <div class="dy-eyebrow" lang="zh">设置</div>
+                  <h1 lang="en">On this machine</h1>
+                  <h1 lang="zh">都在这台电脑上</h1>
+                  <p lang="en">A snapshot of how the packaged app treats data and platforms. This demo does not write any of it.</p>
+                  <p lang="zh">这是安装后的应用如何存放数据和覆盖哪些平台。这段演示不会真正写入。</p>
+                </div>
+              </header>
+              <article class="dy-set-card">
+                <h3 lang="en">Local data and privacy</h3>
+                <h3 lang="zh">本地数据与隐私</h3>
+                <p lang="en">Your data stays under the app’s user directory — not in the install folder. The UI binds to 127.0.0.1. Chat still calls the model provider you configure, and connected sources go through Composio, only after you consent.</p>
+                <p lang="zh">数据留在本机用户目录，不会写入安装目录。界面只绑定 127.0.0.1。聊天仍会调用你配置的模型；连接外部应用走 Composio，对外发送需你同意。</p>
+                <ul>
+                  <li>macOS <code>~/Library/Application Support/Douya</code></li>
+                  <li>Windows <code>%APPDATA%\Douya</code></li>
+                  <li>Linux <code>~/.config/Douya</code></li>
+                </ul>
+              </article>
+              <article class="dy-set-card">
+                <h3 lang="en">Windows, macOS, and Linux</h3>
+                <h3 lang="zh">Windows、macOS 和 Linux</h3>
+                <p lang="en">Native installers for all three desktops. The package already includes the server and dsh — no extra Node or git checkout.</p>
+                <p lang="zh">三个桌面平台都有安装包。安装包已内置服务和 dsh，不必再装 Node 或克隆仓库。</p>
+                <div class="dy-plats">
+                  <span>Windows x64</span>
+                  <span>macOS Apple Silicon</span>
+                  <span>macOS Intel</span>
+                  <span>Linux x64</span>
+                  <span>Linux arm64</span>
+                </div>
+              </article>
+              <article class="dy-set-card">
+                <h3 lang="en">First-run wizard</h3>
+                <h3 lang="zh">首次启动向导</h3>
+                <p lang="en">If no chat model is saved yet, a two-step wizard opens: Model API, then optional Composio. You can also find it in Settings.</p>
+                <p lang="zh">如果还没有配置聊天模型，会打开一个两步向导：先配模型 API，Composio 可选。以后也可以在设置里再打开。</p>
+                <p style="margin-top:10px">
+                  <button type="button" class="dy-fut-primary" data-open-wizard>
+                    <span lang="en">Open the wizard</span><span lang="zh">打开向导</span>
+                  </button>
+                </p>
+              </article>
+            </section>
+          </div>
+        </div>
+
+        <!-- First-run wizard overlay (demo only: no network) -->
+        <div class="dy-wiz" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="dyWizTitle">
+          <div class="dy-wiz-card">
+            <div class="dy-wiz-top">
+              <div>
+                <h2 id="dyWizTitle" lang="en">Welcome to Douya</h2>
+                <h2 lang="zh">欢迎使用豆芽</h2>
+                <p class="dy-wiz-sub" lang="en">Two quick steps: your chat model, then Composio for sources. You can change these later in Settings.</p>
+                <p class="dy-wiz-sub" lang="zh">两步：先配聊天模型，再选配 Composio 连接信源。以后都可以在设置里改。</p>
+              </div>
+              <button type="button" class="dy-wiz-x" data-close-wizard aria-label="Close">×</button>
+            </div>
+            <div class="dy-wiz-steps">
+              <div class="dy-wiz-step on" id="dyWizStepModel"><b>1</b><span lang="en">Model</span><span lang="zh">模型</span></div>
+              <i></i>
+              <div class="dy-wiz-step" id="dyWizStepComposio"><b>2</b>Composio</div>
+            </div>
+            <form class="dy-wiz-pane on" id="dyWizPaneModel" action="#" method="dialog">
+              <h3 lang="en">Chat model</h3>
+              <h3 lang="zh">聊天模型</h3>
+              <p class="help" lang="en">Douya needs a model API key to talk with you. DeepSeek is the recommended default.</p>
+              <p class="help" lang="zh">豆芽需要一个模型 API 密钥才能和你对话。推荐默认使用 DeepSeek。</p>
+              <div class="dy-wiz-note" lang="en">This is a walkthrough. Do not paste a real key — nothing you type is saved or sent.</div>
+              <div class="dy-wiz-note" lang="zh">这是一段演示。请不要粘贴真实密钥：这里输入的内容不会被保存，也不会发送。</div>
+              <div class="field">
+                <label for="dyWizProvider" lang="en">Provider</label>
+                <label for="dyWizProvider" lang="zh">提供方</label>
+                <select id="dyWizProvider" autocomplete="off">
+                  <option value="deepseek" selected>DeepSeek</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="moonshot">Moonshot</option>
+                  <option value="zhipu">Zhipu</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="dyWizKey" lang="en">API Key</label>
+                <label for="dyWizKey" lang="zh">API 密钥</label>
+                <input id="dyWizKey" data-demo-secret type="text" autocomplete="off" spellcheck="false" placeholder="sk-•••••••• (demo)" />
+              </div>
+              <div class="field">
+                <label for="dyWizModel" lang="en">Model</label>
+                <label for="dyWizModel" lang="zh">模型</label>
+                <input id="dyWizModel" type="text" autocomplete="off" value="deepseek-flash" />
+              </div>
+              <div class="dy-wiz-actions">
+                <button type="button" class="dy-btn" id="dyWizSave"><span lang="en">Save</span><span lang="zh">保存</span></button>
+                <button type="button" class="dy-btn" id="dyWizTest"><span lang="en">Test connection</span><span lang="zh">测试连接</span></button>
+                <button type="button" class="dy-btn primary push" id="dyWizNext"><span lang="en">Next</span><span lang="zh">下一步</span></button>
+              </div>
+              <div class="dy-wiz-status" id="dyWizLlmStatus"><span lang="en"></span><span lang="zh"></span></div>
+            </form>
+            <form class="dy-wiz-pane" id="dyWizPaneComposio" action="#" method="dialog">
+              <h3>Composio</h3>
+              <p class="help" lang="en">Optional. A project API key lets you connect GitHub, Gmail, Slack, or Calendar on Sources. You can skip this and do it later.</p>
+              <p class="help" lang="zh">可选。填入项目 API 密钥后，就能在「信源」里连接 GitHub、Gmail、Slack 或日历。可以先跳过，以后再配。</p>
+              <div class="dy-wiz-note" lang="en">This is a walkthrough. Do not paste a real key — nothing you type is saved or sent.</div>
+              <div class="dy-wiz-note" lang="zh">这是一段演示。请不要粘贴真实密钥：这里输入的内容不会被保存，也不会发送。</div>
+              <div class="field">
+                <label for="dyWizCompKey" lang="en">Project API key</label>
+                <label for="dyWizCompKey" lang="zh">项目 API 密钥</label>
+                <input id="dyWizCompKey" data-demo-secret type="text" autocomplete="off" spellcheck="false" placeholder="•••••••• (demo)" />
+              </div>
+              <div class="dy-wiz-actions">
+                <button type="button" class="dy-btn" id="dyWizBack"><span lang="en">Back</span><span lang="zh">上一步</span></button>
+                <button type="button" class="dy-btn" id="dyWizCompSave"><span lang="en">Save</span><span lang="zh">保存</span></button>
+                <button type="button" class="dy-btn primary push" id="dyWizSkip" data-close-wizard>
+                  <span lang="en">Skip for now</span><span lang="zh">暂时跳过</span>
+                </button>
+              </div>
+              <div class="dy-wiz-status" id="dyWizCompStatus"><span lang="en"></span><span lang="zh"></span></div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <noscript>
+      <p class="note">The interactive demo needs JavaScript. The still above is Today in the packaged app.</p>
+    </noscript>
+    <p class="note" lang="en">The packaged app already includes the server and dsh. No git checkout, Node.js, or separate dsh install. The demo above uses sample data and never leaves your browser.</p>
+    <p class="note" lang="zh">安装包已内置服务和 dsh。不需要再克隆仓库，也不必单独安装 Node 或 dsh。上面的演示只用示例数据，不会离开你的浏览器。</p>
+
+    <section id="features">
+      <h2 lang="en">Core features</h2>
+      <h2 lang="zh">核心特性</h2>
+      <p class="lead" lang="en">What the current desktop app actually ships. Each card opens that part of the demo.</p>
+      <p class="lead" lang="zh">以下都是当前桌面版已经提供的能力。点一张卡片，演示会跳到对应的界面。</p>
+      <div class="feats">
+        <a class="feat" href="#demo" data-demo-view="today">
+          <img src="img/features/today.svg" alt="" width="48" height="48" />
+          <h3 lang="en">Today</h3>
+          <h3 lang="zh">今日</h3>
+          <p lang="en">Aggregates every Composio-connected source onto one page, and lists any source that couldn’t be fetched.</p>
+          <p lang="zh">汇总所有已连接的 Composio 信源到同一页，抓取失败的信源会单独列出来。</p>
+          <span class="jump" lang="en">Open in the demo</span>
+          <span class="jump" lang="zh">在演示里打开</span>
+        </a>
+        <a class="feat" href="#demo" data-demo-view="timetable">
+          <img src="img/features/timetable.svg" alt="" width="48" height="48" />
+          <h3 lang="en">My Day timetable</h3>
+          <h3 lang="zh">今日日程</h3>
+          <p lang="en">A timetable for the day: what’s next, what’s already done, and what’s coming.</p>
+          <p lang="zh">当天的时间表：下一步、已经完成的，以及后面的安排。</p>
+          <span class="jump" lang="en">Open in the demo</span>
+          <span class="jump" lang="zh">在演示里打开</span>
+        </a>
+        <a class="feat" href="#demo" data-demo-view="chat">
+          <img src="img/features/chat.svg" alt="" width="48" height="48" />
+          <h3 lang="en">Chat, with confirmation</h3>
+          <h3 lang="zh">对话，先确认再发送</h3>
+          <p lang="en">Talk with Douya from the dock or a card. Outbound mail, comments, and archives wait until you click Confirm.</p>
+          <p lang="zh">从底部对话栏或卡片里和豆芽聊天。对外发信、评论和归档会先挂起，等你点「确认」。</p>
+          <span class="jump" lang="en">Open in the demo</span>
+          <span class="jump" lang="zh">在演示里打开</span>
+        </a>
+        <a class="feat" href="#demo" data-demo-view="memory">
+          <img src="img/features/recall.svg" alt="" width="48" height="48" />
+          <h3 lang="en">Recall</h3>
+          <h3 lang="zh">回忆</h3>
+          <p lang="en">Human-readable local memories via the official MCP Memory server. Achievements surface first.</p>
+          <p lang="zh">用官方 MCP Memory 在本地保存可读的长期记忆。成就会排在前面。</p>
+          <span class="jump" lang="en">Open in the demo</span>
+          <span class="jump" lang="zh">在演示里打开</span>
+        </a>
+        <a class="feat" href="#demo" data-demo-view="future">
+          <img src="img/features/future.svg" alt="" width="48" height="48" />
+          <h3 lang="en">Future plans</h3>
+          <h3 lang="zh">未来计划</h3>
+          <p lang="en">Long-term plans you accept first, then advance through chat — or tick a step yourself.</p>
+          <p lang="zh">先接受长期计划，再通过对话往前推进，也可以自己勾掉一步。</p>
+          <span class="jump" lang="en">Open in the demo</span>
+          <span class="jump" lang="zh">在演示里打开</span>
+        </a>
+        <a class="feat" href="#demo" data-demo-view="wizard">
+          <img src="img/features/wizard.svg" alt="" width="48" height="48" />
+          <h3 lang="en">First-run wizard</h3>
+          <h3 lang="zh">首次启动向导</h3>
+          <p lang="en">Ready right after download. Two steps: a model API (required for chat), then optional Composio.</p>
+          <p lang="zh">下载后即可使用。两步：先配模型 API（聊天必须），Composio 可选。</p>
+          <span class="jump" lang="en">Open in the demo</span>
+          <span class="jump" lang="zh">在演示里打开</span>
+        </a>
+        <a class="feat" href="#demo" data-demo-view="settings">
+          <img src="img/features/privacy.svg" alt="" width="48" height="48" />
+          <h3 lang="en">Local data and privacy</h3>
+          <h3 lang="zh">本地数据与隐私</h3>
+          <p lang="en">Data stays under the app’s user directory on this machine. The UI binds to 127.0.0.1.</p>
+          <p lang="zh">数据留在本机用户目录。界面只绑定 127.0.0.1。</p>
+          <span class="jump" lang="en">Open in the demo</span>
+          <span class="jump" lang="zh">在演示里打开</span>
+        </a>
+        <a class="feat" href="#demo" data-demo-view="settings">
+          <img src="img/features/desktop.svg" alt="" width="48" height="48" />
+          <h3 lang="en">Windows, macOS, and Linux</h3>
+          <h3 lang="zh">Windows、macOS 和 Linux</h3>
+          <p lang="en">Native installers for all three desktops, with the server and dsh already inside the package.</p>
+          <p lang="zh">三个桌面平台都有安装包，服务和 dsh 已打在包里。</p>
+          <span class="jump" lang="en">Open in the demo</span>
+          <span class="jump" lang="zh">在演示里打开</span>
+        </a>
+      </div>
+    </section>
 
     <section id="download">
       <h2 lang="en">Download</h2>
@@ -195,7 +777,7 @@
       <p class="lead" lang="zh">当前版本：<a href="https://github.com/open-x-agents/Douya/releases/tag/desktop-v0.1.0">desktop-v0.1.0</a>。校验文件见 <a href="https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/SHA256SUMS">SHA256SUMS</a>。</p>
       <div class="downloads">
         <div class="dl">
-          <div><b lang="en">Windows</b><b lang="zh">Windows</b><span>x64</span></div>
+          <div><b>Windows</b><span>x64</span></div>
           <div class="links">
             <a class="chip" href="https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-win-x64-Setup.exe">Setup.exe</a>
             <a class="chip" href="https://github.com/open-x-agents/Douya/releases/download/desktop-v0.1.0/Douya-0.1.0-win-x64-selfsigned.cer">.cer</a>
@@ -225,52 +807,16 @@
     <section id="setup">
       <h2 lang="en">First launch</h2>
       <h2 lang="zh">第一次启动</h2>
-      <div class="wizard">
-        <div>
-          <p class="lead" lang="en">If no chat model is saved yet, a two-step wizard opens. You can also find it in Settings.</p>
-          <p class="lead" lang="zh">如果还没有配置聊天模型，会打开一个两步向导。以后也可以在设置里再改。</p>
-          <ol class="steps">
-            <li lang="en"><b>Model API</b> — pick a provider (DeepSeek is the default), paste a key, Save, optionally Test connection. Chat needs this.</li>
-            <li lang="zh"><b>模型 API</b> — 选择提供方（默认 DeepSeek），粘贴密钥，保存，也可先测连接。聊天必须这一步。</li>
-            <li lang="en"><b>Composio</b> (optional, can skip) — paste a project API key from the <a href="https://platform.composio.dev">Composio dashboard</a>, then connect GitHub, Gmail, Slack, or Calendar on Sources, only the apps you want.</li>
-            <li lang="zh"><b>Composio</b>（可选，可跳过）— 在 <a href="https://platform.composio.dev">Composio 控制台</a>复制项目 API 密钥并粘贴，然后在「信源」里按需连接 GitHub、Gmail、Slack 或日历。</li>
-          </ol>
-          <p class="lead" lang="en" style="margin-top:14px;margin-bottom:0">Outbound mail, comments, and archives stay pending until you click Confirm.</p>
-          <p class="lead" lang="zh" style="margin-top:14px;margin-bottom:0">对外发信、评论和归档会先挂起，等你点「确认」。</p>
-        </div>
-        <img data-wizard src="img/wizard-en.jpg" alt="First-run wizard: chat model step" width="1200" height="768" />
-      </div>
-    </section>
-
-    <section id="features">
-      <h2 lang="en">What Douya does</h2>
-      <h2 lang="zh">豆芽能做什么</h2>
-      <div class="cards">
-        <article class="card">
-          <h3 lang="en">Today</h3>
-          <h3 lang="zh">今日</h3>
-          <p lang="en">Aggregates mail, GitHub, Slack, and calendar into one daily page: a suggested next step, a timetable, digest cards, and what already got done.</p>
-          <p lang="zh">把邮件、GitHub、Slack 和日程汇总到一页：建议的下一步、日程表、摘要卡片，以及已经完成的事项。</p>
-        </article>
-        <article class="card">
-          <h3 lang="en">Chat</h3>
-          <h3 lang="zh">对话</h3>
-          <p lang="en">Talk with Douya from the dock or a card. Prepared outbound actions wait for an explicit Confirm.</p>
-          <p lang="zh">从底部对话栏或卡片里和豆芽聊天。准备好的对外操作会等你明确确认。</p>
-        </article>
-        <article class="card">
-          <h3 lang="en">Recall</h3>
-          <h3 lang="zh">回忆</h3>
-          <p lang="en">Local long-term memory via the official MCP Memory server — a JSONL knowledge graph on disk, no embeddings. Achievements surface first. Forget removes an observation or an entity. Photo attachments are not supported.</p>
-          <p lang="zh">用官方 MCP Memory 在本地记长期记忆：磁盘上的 JSONL 知识图谱，不做向量嵌入。成就会排在前面。「忘记」可删掉一条观察或整个实体。暂不支持给记忆配图。</p>
-        </article>
-        <article class="card">
-          <h3 lang="en">Future</h3>
-          <h3 lang="zh">未来</h3>
-          <p lang="en">Propose a plan from a memory or a stated interest; you accept before work starts. Tick a step, or complete one with Douya. Progress survives a restart.</p>
-          <p lang="zh">根据一段记忆或你说出的兴趣拟定计划，先征得同意再开始。可以勾掉一步，也可以和豆芽一起完成。进度重启后还在。</p>
-        </article>
-      </div>
+      <p class="lead" lang="en">If no chat model is saved yet, a two-step wizard opens. You can also find it in Settings. <a href="#demo" data-demo-view="wizard">Try it in the demo</a>.</p>
+      <p class="lead" lang="zh">如果还没有配置聊天模型，会打开一个两步向导。以后也可以在设置里再改。<a href="#demo" data-demo-view="wizard">在演示里试一下</a>。</p>
+      <ol class="steps">
+        <li lang="en"><b>Model API</b> — pick a provider (DeepSeek is the default), paste a key, Save, optionally Test connection. Chat needs this.</li>
+        <li lang="zh"><b>模型 API</b> — 选择提供方（默认 DeepSeek），粘贴密钥，保存，也可先测连接。聊天必须这一步。</li>
+        <li lang="en"><b>Composio</b> (optional, can skip) — paste a project API key from the <a href="https://platform.composio.dev">Composio dashboard</a>, then connect GitHub, Gmail, Slack, or Calendar on Sources, only the apps you want.</li>
+        <li lang="zh"><b>Composio</b>（可选，可跳过）— 在 <a href="https://platform.composio.dev">Composio 控制台</a>复制项目 API 密钥并粘贴，然后在「信源」里按需连接 GitHub、Gmail、Slack 或日历。</li>
+      </ol>
+      <p class="lead" style="margin-top:14px;margin-bottom:0" lang="en">Outbound mail, comments, and archives stay pending until you click Confirm.</p>
+      <p class="lead" style="margin-top:14px;margin-bottom:0" lang="zh">对外发信、评论和归档会先挂起，等你点「确认」。</p>
     </section>
 
     <section id="privacy">
@@ -300,6 +846,10 @@ open "$(cat .odm-data/dsh-web.url)"   # token URL; bare :7777 returns 401</pre>
     </section>
 
     <footer class="foot">
+      <a class="foot-brand" href="#">
+        <img src="img/logo.svg" alt="" width="22" height="22" />
+        <span>Douya / 豆芽</span>
+      </a>
       <div lang="en">Apache-2.0 · <a href="https://github.com/open-x-agents/Douya">open-x-agents/Douya</a></div>
       <div lang="zh">Apache-2.0 · <a href="https://github.com/open-x-agents/Douya">open-x-agents/Douya</a></div>
       <div lang="en">English UI and 中文. Not a mobile app.</div>
@@ -317,11 +867,9 @@ open "$(cat .odm-data/dsh-web.url)"   # token URL; bare :7777 returns 401</pre>
         document.querySelectorAll('[data-set-lang]').forEach(function (b) {
           b.setAttribute('aria-pressed', b.getAttribute('data-set-lang') === lang ? 'true' : 'false');
         });
-        var img = document.querySelector('img[data-wizard]');
-        if (img) {
-          img.src = lang === 'zh' ? 'img/wizard-zh.jpg' : 'img/wizard-en.jpg';
-          img.alt = lang === 'zh' ? '首次启动向导：配置聊天模型' : 'First-run wizard: chat model step';
-        }
+        document.querySelectorAll('#dyTodayInput, #dyChatInput').forEach(function (inp) {
+          inp.placeholder = lang === 'zh' ? '给豆芽发消息…' : 'Message Douya…';
+        });
         try { localStorage.setItem(KEY, lang); } catch (e) {}
       }
       var saved;
@@ -333,5 +881,6 @@ open "$(cat .odm-data/dsh-web.url)"   # token URL; bare :7777 returns 401</pre>
       });
     })();
   </script>
+  <script src="demo.js"></script>
 </body>
 </html>

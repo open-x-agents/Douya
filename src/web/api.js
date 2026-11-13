@@ -1748,12 +1748,27 @@ export function createApiRouter(ctx) {
      */
     async checkConfig() {
       const client = getComposioClient();
+      const { setupStatus, hasSavedConfig, COMPOSIO_DASHBOARD_URL } = await import('./setup-wizard.js');
+      const cfg = configStore?.get() || {};
+      const llmConfigured = !!configStore?.isLLMConfigured?.() || hasHostLlm();
+      const composioConfigured = !!(cfg.composioApiKey || process.env.COMPOSIO_API_KEY);
+      const wizardCompleted = !!cfg.setupWizardCompletedAt;
+      const status = setupStatus({
+        llmConfigured,
+        composioConfigured,
+        wizardCompleted,
+        hasSavedConfig: hasSavedConfig(cfg),
+      });
       return {
         configured: !!client,
-        composioApiKey: !!(configStore?.get()?.composioApiKey || process.env.COMPOSIO_API_KEY),
-        composioEntityId: configStore?.get()?.composioEntityId || process.env.COMPOSIO_ENTITY_ID || 'default',
-        digestSchedule: configStore?.get()?.digestSchedule || config?.digestSchedule || '08:00',
-        llmConfigured: !!configStore?.isLLMConfigured?.() || hasHostLlm(),
+        composioApiKey: composioConfigured,
+        composioEntityId: cfg.composioEntityId || process.env.COMPOSIO_ENTITY_ID || 'default',
+        digestSchedule: cfg.digestSchedule || config?.digestSchedule || '08:00',
+        llmConfigured,
+        wizardCompleted,
+        hasSavedConfig: status.hasSavedConfig,
+        needsSetup: status.needsSetup,
+        composioDashboardUrl: COMPOSIO_DASHBOARD_URL,
       };
     },
 
@@ -1935,6 +1950,7 @@ export function createApiRouter(ctx) {
         return {
           success: true,
           configured: !!client,
+          apiKeyMasked: configStore?.getMaskedKey?.() || null,
         };
       } catch (err) {
         console.error('[Composio] Update config error:', err);
@@ -2154,6 +2170,34 @@ export function createApiRouter(ctx) {
       } catch (error) {
         return { ok: false, error: error.message };
       }
+    },
+
+    /**
+     * POST /api/composio/test — live-validate a project API key (body.apiKey, or the saved one).
+     * Optional `fetchImpl` is for tests only; the HTTP route never forwards one.
+     * Never returns or logs the key.
+     */
+    async testComposio(data = {}, { fetchImpl } = {}) {
+      const { testComposioKey } = await import('./setup-wizard.js');
+      const given = typeof data?.apiKey === 'string' ? data.apiKey.trim() : '';
+      const saved = configStore?.get()?.composioApiKey || process.env.COMPOSIO_API_KEY || '';
+      const key = given && !given.includes('...') ? given : saved;
+      const result = await testComposioKey(key, fetchImpl ? { fetchImpl } : {});
+      const { ok, error, status } = result;
+      return { ok, error: error || undefined, status: status || undefined };
+    },
+
+    /**
+     * POST /api/setup/complete — mark the first-run wizard finished (or Composio skipped).
+     */
+    async completeSetup(data = {}) {
+      const skipped = !!data.skippedComposio;
+      await configStore.save({
+        setupWizardCompletedAt: new Date().toISOString(),
+        ...(skipped ? { setupWizardSkippedComposio: true } : {}),
+      });
+      const chk = await this.checkConfig();
+      return { success: true, skippedComposio: skipped, needsSetup: chk.needsSetup, wizardCompleted: true };
     },
 
     /**

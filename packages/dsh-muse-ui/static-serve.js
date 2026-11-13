@@ -14,8 +14,11 @@ export const MUSE_LOGO_PATH = '/api/opendigitalmate/logo'
 export const MUSE_MEMORY_PRESENT_PATH = '/api/opendigitalmate/memory-present.js'
 
 export async function readIndexHtml() {
-  const [html, css, js] = await Promise.all(['index.html', 'future.css', 'future.js'].map(file => readFile(join(STATIC, file), 'utf8')))
-  return html.replace('</head>', `<style>${css}</style></head>`).replace('</body>', `<script>${js}</script></body>`)
+  const files = ['index.html', 'future.css', 'future.js', 'setup-wizard.css', 'setup-wizard.js']
+  const [html, css, js, wizCss, wizJs] = await Promise.all(files.map(file => readFile(join(STATIC, file), 'utf8')))
+  return html
+    .replace('</head>', `<style>${css}</style><style>${wizCss}</style></head>`)
+    .replace('</body>', `<script>${js}</script><script>${wizJs}</script></body>`)
 }
 
 export async function readUiRendererJs() {

@@ -81,8 +81,10 @@ On macOS you can put that behind a system-wide hotkey — see [docs/mac-shortcut
 
 ### Configure AI + Composio
 
-1. **Settings** → pick a provider (e.g. DeepSeek), paste the key, Save
-2. Paste a **Composio** key, Save, then connect GitHub / Gmail / Slack / Calendar (and only the apps you want)
+On a first run with no chat model saved, a two-step **setup wizard** opens (model API, then optional Composio). You can also open it from Settings. Composio has no one-click login for other apps: the wizard opens the [Composio dashboard](https://platform.composio.dev) so you can copy a **project** API key (Settings → Project Settings → API Keys) and paste it. Skip is allowed for Composio.
+
+1. **Settings** (or the wizard) → pick a provider (e.g. DeepSeek), paste the key, Save, optionally Test connection
+2. Paste a **Composio** project key, Save (and verify in the wizard), then connect GitHub / Gmail / Slack / Calendar on **Sources** (only the apps you want)
 3. **Today** → **Refresh now**
 
 Outbound mail, comments, and archives stay pending until you click **Confirm**. Keys also work from `.env` (`DEEPSEEK_API_KEY` / `COMPOSIO_API_KEY`) or `.odm-data/config.json` (gitignored). DeepSeek needs a real key — an OpenAI-only setup makes Chief say “No model is available”. Source checkout and packing the app: [docs/develop.md](docs/develop.md). Model details: [docs/LLM_SETUP.md](docs/LLM_SETUP.md).

@@ -146,3 +146,29 @@ export function memorySourceKey(m) {
   if (typeof m?.id === 'number' || /^\d+$/.test(String(m?.id || ''))) return 'local'
   return 'unknown'
 }
+
+/**
+ * Decide what Recall should show for a listMemories payload.
+ * An unreachable service (available:false, no fallback rows) is not an empty library.
+ * Fallback rows (e.g. SQLite while OpenViking is down) still render as a ready list.
+ */
+export function presentMemoryList(data) {
+  const memories = Array.isArray(data?.memories) ? data.memories : []
+  const hasTotal = data != null && data.total != null
+  const total = hasTotal ? Number(data.total) || 0 : memories.length
+  const error = String(data?.error || data?.openviking?.error || '')
+  const available = data?.available
+
+  if (memories.length) {
+    return {
+      state: 'ready',
+      memories,
+      total: hasTotal ? total : memories.length,
+      error: available === false ? error : '',
+    }
+  }
+  if (available === false) {
+    return { state: 'unavailable', memories: [], total: 0, error }
+  }
+  return { state: 'empty', memories: [], total, error: '' }
+}

@@ -122,6 +122,12 @@
     section h2 { margin: 0 0 8px; font-size: 24px; letter-spacing: -0.03em }
     section .lead { margin: 0 0 22px; color: var(--ink2); max-width: 640px }
     .feats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px }
+    @media (min-width: 821px) {
+      .feats { grid-template-columns: repeat(6, 1fr) }
+      .feat { grid-column: span 2 }
+      /* Five cards: center the last two on the second row. */
+      .feats .feat:nth-child(4):nth-last-child(2) { grid-column: 2 / span 2 }
+    }
     .feat {
       display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
       background: var(--glass); border: 1px solid var(--line); border-radius: 18px;
@@ -159,10 +165,12 @@
     .chip:hover { border-color: var(--line-strong); color: var(--clay-deep) }
     ol.steps { margin: 0; padding: 0 0 0 20px; color: var(--ink2) }
     ol.steps li { margin: 0 0 10px }
-    .privacy, .dev {
+    .privacy {
       background: var(--glass); border: 1px solid var(--line); border-radius: 18px;
       padding: 22px 24px; box-shadow: var(--shadow); backdrop-filter: blur(16px);
     }
+    .dev-lite { text-align: center; padding: 8px 0 28px }
+    .dev-lite p { margin: 0; font-size: 14px; color: var(--ink3) }
     pre {
       margin: 0; padding: 14px 16px; overflow: auto;
       background: #2c241c; color: #f6f0e6; border-radius: 12px;
@@ -179,6 +187,7 @@
     html[data-lang="zh"] { font-size: 16px }
     @media (max-width: 820px) {
       .feats { grid-template-columns: 1fr 1fr }
+      .feats .feat:last-child:nth-child(odd) { grid-column: 1 / -1 }
     }
     @media (max-width: 720px) {
       .cards { grid-template-columns: 1fr }
@@ -238,8 +247,8 @@
       <div class="dy-demo-intro">
         <h2 id="demo-title" lang="en">Try the interface</h2>
         <h2 id="demo-title-zh" lang="zh">试试界面</h2>
-        <p lang="en">A walkthrough of the real app, with sample data. Click the sidebar, type in chat, or open the first-run wizard. Nothing is sent anywhere — replies are scripted, and there is no model call.</p>
-        <p lang="zh">这是正式应用的界面演示，数据都是示例。可以点侧栏、在对话里输入，或打开首次启动向导。内容不会发到任何地方，回复都是预设脚本，也不会调用模型。</p>
+        <p lang="en">Click around — this is the real interface, filled with sample data. Suggested questions play a prepared reply, and nothing leaves this page.</p>
+        <p lang="zh">点开看看吧。这是正式应用的界面，里面是示例数据。点建议问题会播一段准备好的回复，内容不会离开这个页面。</p>
       </div>
 
       <div id="live-demo" class="dy-device" hidden aria-hidden="true" data-current-view="today">
@@ -266,7 +275,6 @@
             <button type="button" class="dy-nav" data-view="chat"><span lang="en">Chat</span><span lang="zh">对话</span></button>
             <button type="button" class="dy-nav" data-view="memory"><span lang="en">Memories</span><span lang="zh">回忆</span></button>
             <button type="button" class="dy-nav" data-view="future"><span lang="en">Future</span><span lang="zh">未来</span></button>
-            <div class="dy-grp"><span lang="en">Settings</span><span lang="zh">设置</span></div>
             <button type="button" class="dy-nav" data-view="settings"><span lang="en">Settings</span><span lang="zh">设置</span></button>
             <div class="dy-lang-row">
               <span lang="en">Language</span><span lang="zh">语言</span>
@@ -304,8 +312,8 @@
                 <b lang="en">Couldn’t fetch</b>
                 <b lang="zh">未能抓取</b>
                 <span class="dy-fail-chip">YouTube</span>
-                <span lang="en">Listed so Today does not look healthier than it is.</span>
-                <span lang="zh">单独列出，避免今日页看起来一切正常。</span>
+                <span lang="en">So you can see what didn’t come through.</span>
+                <span lang="zh">这样你能看到哪些没有取到。</span>
               </div>
 
               <div class="dy-pin" lang="en">+ Pin a line</div>
@@ -424,8 +432,8 @@
               </header>
               <div class="dy-msgs" id="dyMsgs" tabindex="0">
                 <div class="dy-msg bot">
-                  <span lang="en">Hi — this is a walkthrough. Pick a suggestion or type a question. Replies are scripted, and nothing is sent to a model. If I prepare an outbound mail or comment, it waits here until you click Confirm.</span>
-                  <span lang="zh">你好，这是一段演示。可以点建议问法，或自己打一个问题。回复都是预设脚本，不会发给模型。如果我准备了对外的邮件或评论，会先停在这里，等你点「确认」。</span>
+                  <span lang="en">Hi — pick a suggestion or type a question. If I prepare a mail or a comment, it waits here until you click Confirm.</span>
+                  <span lang="zh">你好。可以点建议问法，或自己打一个问题。如果我准备了邮件或评论，会先停在这里，等你点「确认」。</span>
                 </div>
               </div>
               <div class="dy-dock">
@@ -458,8 +466,8 @@
                   <div class="dy-eyebrow" lang="zh">回忆</div>
                   <h1 lang="en">Moments worth keeping</h1>
                   <h1 lang="zh">值得留下的时刻</h1>
-                  <p lang="en">Readable memories via the official MCP Memory server. Achievements come first. These three are sample entries — photo attachments are not supported yet.</p>
-                  <p lang="zh">通过官方 MCP Memory 保存可读的记忆。成就会排在前面。下面三条是示例；暂不支持给记忆配图。</p>
+                  <p lang="en">Readable memories kept on this computer. Achievements come first. These three are samples.</p>
+                  <p lang="zh">可读的记忆保存在这台电脑上。成就会排在前面。下面三条是示例。</p>
                 </div>
                 <div class="dy-mem-count"><b>3</b><span lang="en">kept</span><span lang="zh">条记忆</span></div>
               </header>
@@ -554,34 +562,29 @@
               </article>
             </section>
 
-            <!-- SETTINGS: local data + platforms -->
+            <!-- SETTINGS: privacy note + platforms -->
             <section class="dy-view" data-view="settings" aria-hidden="true" aria-label="Settings">
               <header class="dy-set-head">
                 <div>
                   <div class="dy-eyebrow" lang="en">Settings</div>
                   <div class="dy-eyebrow" lang="zh">设置</div>
-                  <h1 lang="en">On this machine</h1>
+                  <h1 lang="en">On this computer</h1>
                   <h1 lang="zh">都在这台电脑上</h1>
-                  <p lang="en">A snapshot of how the packaged app treats data and platforms. This demo does not write any of it.</p>
-                  <p lang="zh">这是安装后的应用如何存放数据和覆盖哪些平台。这段演示不会真正写入。</p>
+                  <p lang="en">A look at privacy, and the computers Douya runs on. This walkthrough doesn’t save anything.</p>
+                  <p lang="zh">看一看隐私，以及豆芽能在哪些电脑上用。这段演示不会保存任何内容。</p>
                 </div>
               </header>
               <article class="dy-set-card">
-                <h3 lang="en">Local data and privacy</h3>
-                <h3 lang="zh">本地数据与隐私</h3>
-                <p lang="en">Your data stays under the app’s user directory — not in the install folder. The UI binds to 127.0.0.1. Chat still calls the model provider you configure, and connected sources go through Composio, only after you consent.</p>
-                <p lang="zh">数据留在本机用户目录，不会写入安装目录。界面只绑定 127.0.0.1。聊天仍会调用你配置的模型；连接外部应用走 Composio，对外发送需你同意。</p>
-                <ul>
-                  <li>macOS <code>~/Library/Application Support/Douya</code></li>
-                  <li>Windows <code>%APPDATA%\Douya</code></li>
-                  <li>Linux <code>~/.config/Douya</code></li>
-                </ul>
+                <h3 lang="en">Your data</h3>
+                <h3 lang="zh">你的数据</h3>
+                <p lang="en">Your mail, memory, and plans stay on this computer, in the app’s folder. Chat still uses the model you choose. Connected apps only after you agree.</p>
+                <p lang="zh">邮件、记忆和计划都留在这台电脑上，就在应用自己的文件夹里。聊天仍会用你选的模型。连接其他应用前，会先征得你的同意。</p>
               </article>
               <article class="dy-set-card">
                 <h3 lang="en">Windows, macOS, and Linux</h3>
                 <h3 lang="zh">Windows、macOS 和 Linux</h3>
-                <p lang="en">Native installers for all three desktops. The package already includes the server and dsh — no extra Node or git checkout.</p>
-                <p lang="zh">三个桌面平台都有安装包。安装包已内置服务和 dsh，不必再装 Node 或克隆仓库。</p>
+                <p lang="en">Download for all three. Pick the installer for your computer.</p>
+                <p lang="zh">三个系统都可以下载，选择适合你电脑的安装包即可。</p>
                 <div class="dy-plats">
                   <span>Windows x64</span>
                   <span>macOS Apple Silicon</span>
@@ -589,17 +592,6 @@
                   <span>Linux x64</span>
                   <span>Linux arm64</span>
                 </div>
-              </article>
-              <article class="dy-set-card">
-                <h3 lang="en">First-run wizard</h3>
-                <h3 lang="zh">首次启动向导</h3>
-                <p lang="en">If no chat model is saved yet, a two-step wizard opens: Model API, then optional Composio. You can also find it in Settings.</p>
-                <p lang="zh">如果还没有配置聊天模型，会打开一个两步向导：先配模型 API，Composio 可选。以后也可以在设置里再打开。</p>
-                <p style="margin-top:10px">
-                  <button type="button" class="dy-fut-primary" data-open-wizard>
-                    <span lang="en">Open the wizard</span><span lang="zh">打开向导</span>
-                  </button>
-                </p>
               </article>
             </section>
           </div>
@@ -684,23 +676,23 @@
     </section>
 
     <noscript>
-      <p class="note">The interactive demo needs JavaScript. The still above is Today in the packaged app.</p>
+      <p class="note">The interactive demo needs JavaScript. The still above is Today in the app.</p>
     </noscript>
-    <p class="note" lang="en">The packaged app already includes the server and dsh. No git checkout, Node.js, or separate dsh install. The demo above uses sample data and never leaves your browser.</p>
-    <p class="note" lang="zh">安装包已内置服务和 dsh。不需要再克隆仓库，也不必单独安装 Node 或 dsh。上面的演示只用示例数据，不会离开你的浏览器。</p>
+    <p class="note" lang="en">The demo uses sample data and stays in your browser.</p>
+    <p class="note" lang="zh">演示只用示例数据，不会离开你的浏览器。</p>
 
     <section id="features">
       <h2 lang="en">Core features</h2>
       <h2 lang="zh">核心特性</h2>
-      <p class="lead" lang="en">What the current desktop app actually ships. Each card opens that part of the demo.</p>
-      <p class="lead" lang="zh">以下都是当前桌面版已经提供的能力。点一张卡片，演示会跳到对应的界面。</p>
+      <p class="lead" lang="en">Here’s what Douya does. Click a card to see it in the demo.</p>
+      <p class="lead" lang="zh">豆芽可以帮你做这些。点一张卡片，在演示里看看。</p>
       <div class="feats">
         <a class="feat" href="#demo" data-demo-view="today">
           <img src="img/features/today.svg" alt="" width="48" height="48" />
           <h3 lang="en">Today</h3>
           <h3 lang="zh">今日</h3>
-          <p lang="en">Aggregates every Composio-connected source onto one page, and lists any source that couldn’t be fetched.</p>
-          <p lang="zh">汇总所有已连接的 Composio 信源到同一页，抓取失败的信源会单独列出来。</p>
+          <p lang="en">Today’s mail, GitHub, Slack, and calendar on one page. Sources that couldn’t be fetched are listed clearly.</p>
+          <p lang="zh">今天的邮件、GitHub、Slack 和日程，放在同一页。没取到的来源会清楚列出来。</p>
           <span class="jump" lang="en">Open in the demo</span>
           <span class="jump" lang="zh">在演示里打开</span>
         </a>
@@ -708,17 +700,17 @@
           <img src="img/features/timetable.svg" alt="" width="48" height="48" />
           <h3 lang="en">My Day timetable</h3>
           <h3 lang="zh">今日日程</h3>
-          <p lang="en">A timetable for the day: what’s next, what’s already done, and what’s coming.</p>
-          <p lang="zh">当天的时间表：下一步、已经完成的，以及后面的安排。</p>
+          <p lang="en">What’s next, what’s already done, and what’s coming.</p>
+          <p lang="zh">下一步是什么、已经完成了什么、后面还有什么。</p>
           <span class="jump" lang="en">Open in the demo</span>
           <span class="jump" lang="zh">在演示里打开</span>
         </a>
         <a class="feat" href="#demo" data-demo-view="chat">
           <img src="img/features/chat.svg" alt="" width="48" height="48" />
-          <h3 lang="en">Chat, with confirmation</h3>
+          <h3 lang="en">Chat, confirm before sending</h3>
           <h3 lang="zh">对话，先确认再发送</h3>
-          <p lang="en">Talk with Douya from the dock or a card. Outbound mail, comments, and archives wait until you click Confirm.</p>
-          <p lang="zh">从底部对话栏或卡片里和豆芽聊天。对外发信、评论和归档会先挂起，等你点「确认」。</p>
+          <p lang="en">Talk with Douya from the dock or a card. Outbound mail, comments, and similar wait until you click Confirm.</p>
+          <p lang="zh">从底部对话栏或卡片里和豆芽聊天。对外的邮件、评论等，要你点「确认」才会发出。</p>
           <span class="jump" lang="en">Open in the demo</span>
           <span class="jump" lang="zh">在演示里打开</span>
         </a>
@@ -726,8 +718,8 @@
           <img src="img/features/recall.svg" alt="" width="48" height="48" />
           <h3 lang="en">Recall</h3>
           <h3 lang="zh">回忆</h3>
-          <p lang="en">Human-readable local memories via the official MCP Memory server. Achievements surface first.</p>
-          <p lang="zh">用官方 MCP Memory 在本地保存可读的长期记忆。成就会排在前面。</p>
+          <p lang="en">Readable memories kept on this computer. Achievements come first.</p>
+          <p lang="zh">可读的记忆保存在这台电脑上。成就会排在前面。</p>
           <span class="jump" lang="en">Open in the demo</span>
           <span class="jump" lang="zh">在演示里打开</span>
         </a>
@@ -735,35 +727,8 @@
           <img src="img/features/future.svg" alt="" width="48" height="48" />
           <h3 lang="en">Future plans</h3>
           <h3 lang="zh">未来计划</h3>
-          <p lang="en">Long-term plans you accept first, then advance through chat — or tick a step yourself.</p>
-          <p lang="zh">先接受长期计划，再通过对话往前推进，也可以自己勾掉一步。</p>
-          <span class="jump" lang="en">Open in the demo</span>
-          <span class="jump" lang="zh">在演示里打开</span>
-        </a>
-        <a class="feat" href="#demo" data-demo-view="wizard">
-          <img src="img/features/wizard.svg" alt="" width="48" height="48" />
-          <h3 lang="en">First-run wizard</h3>
-          <h3 lang="zh">首次启动向导</h3>
-          <p lang="en">Ready right after download. Two steps: a model API (required for chat), then optional Composio.</p>
-          <p lang="zh">下载后即可使用。两步：先配模型 API（聊天必须），Composio 可选。</p>
-          <span class="jump" lang="en">Open in the demo</span>
-          <span class="jump" lang="zh">在演示里打开</span>
-        </a>
-        <a class="feat" href="#demo" data-demo-view="settings">
-          <img src="img/features/privacy.svg" alt="" width="48" height="48" />
-          <h3 lang="en">Local data and privacy</h3>
-          <h3 lang="zh">本地数据与隐私</h3>
-          <p lang="en">Data stays under the app’s user directory on this machine. The UI binds to 127.0.0.1.</p>
-          <p lang="zh">数据留在本机用户目录。界面只绑定 127.0.0.1。</p>
-          <span class="jump" lang="en">Open in the demo</span>
-          <span class="jump" lang="zh">在演示里打开</span>
-        </a>
-        <a class="feat" href="#demo" data-demo-view="settings">
-          <img src="img/features/desktop.svg" alt="" width="48" height="48" />
-          <h3 lang="en">Windows, macOS, and Linux</h3>
-          <h3 lang="zh">Windows、macOS 和 Linux</h3>
-          <p lang="en">Native installers for all three desktops, with the server and dsh already inside the package.</p>
-          <p lang="zh">三个桌面平台都有安装包，服务和 dsh 已打在包里。</p>
+          <p lang="en">Long-term plans you accept first, then advance in chat — or tick a step yourself.</p>
+          <p lang="zh">你先接受长期计划，再在对话里推进，也可以自己勾掉一步。</p>
           <span class="jump" lang="en">Open in the demo</span>
           <span class="jump" lang="zh">在演示里打开</span>
         </a>
@@ -800,49 +765,37 @@
           </div>
         </div>
       </div>
-      <p class="note" lang="en">macOS is ad-hoc signed (right-click Douya.app → Open). Windows is self-signed (SmartScreen: More info → Run anyway). Linux packages are unsigned. The AppImage needs libfuse.so.2, or run with --appimage-extract-and-run. Do not pass --no-sandbox.</p>
-      <p class="note" lang="zh">macOS 为临时签名（右键 Douya.app → 打开）。Windows 为自签名（SmartScreen：更多信息 → 仍要运行）。Linux 包未签名。AppImage 需要 libfuse.so.2，或加 --appimage-extract-and-run。不要加 --no-sandbox。</p>
+      <p class="note" lang="en">macOS is ad-hoc signed (right-click Douya.app → Open). Windows is self-signed (SmartScreen: More info → Run anyway). Linux packages are unsigned. More in the <a href="https://github.com/open-x-agents/Douya/blob/main/docs/install.md">install guide</a>.</p>
+      <p class="note" lang="zh">macOS 为临时签名（右键 Douya.app → 打开）。Windows 为自签名（SmartScreen：更多信息 → 仍要运行）。Linux 包未签名。详见 <a href="https://github.com/open-x-agents/Douya/blob/main/docs/install.md">安装说明</a>。</p>
     </section>
 
     <section id="setup">
       <h2 lang="en">First launch</h2>
       <h2 lang="zh">第一次启动</h2>
-      <p class="lead" lang="en">If no chat model is saved yet, a two-step wizard opens. You can also find it in Settings. <a href="#demo" data-demo-view="wizard">Try it in the demo</a>.</p>
-      <p class="lead" lang="zh">如果还没有配置聊天模型，会打开一个两步向导。以后也可以在设置里再改。<a href="#demo" data-demo-view="wizard">在演示里试一下</a>。</p>
+      <p class="lead" lang="en">The first time you open Douya, it asks you to set a few things. You can change them later in Settings. <a href="#demo" data-demo-view="wizard">Try it in the demo</a>.</p>
+      <p class="lead" lang="zh">第一次打开豆芽时，会请你先完成几项设置。以后也可以在设置里改。<a href="#demo" data-demo-view="wizard">在演示里试一下</a>。</p>
       <ol class="steps">
-        <li lang="en"><b>Model API</b> — pick a provider (DeepSeek is the default), paste a key, Save, optionally Test connection. Chat needs this.</li>
-        <li lang="zh"><b>模型 API</b> — 选择提供方（默认 DeepSeek），粘贴密钥，保存，也可先测连接。聊天必须这一步。</li>
-        <li lang="en"><b>Composio</b> (optional, can skip) — paste a project API key from the <a href="https://platform.composio.dev">Composio dashboard</a>, then connect GitHub, Gmail, Slack, or Calendar on Sources, only the apps you want.</li>
-        <li lang="zh"><b>Composio</b>（可选，可跳过）— 在 <a href="https://platform.composio.dev">Composio 控制台</a>复制项目 API 密钥并粘贴，然后在「信源」里按需连接 GitHub、Gmail、Slack 或日历。</li>
+        <li lang="en"><b>Add your model key</b> — pick a provider (DeepSeek is the default), enter your key, and save. Chat needs this.</li>
+        <li lang="zh"><b>填入模型密钥</b> — 选择提供方（默认 DeepSeek），输入密钥并保存。聊天必须这一步。</li>
+        <li lang="en"><b>Connect your apps</b> (optional, can skip) — bring in the mail, calendar, GitHub, or Slack you already use. You can do this later.</li>
+        <li lang="zh"><b>连接常用应用</b>（可选，可跳过）— 把你已在用的邮件、日历、GitHub 或 Slack 连上。以后再连也可以。</li>
       </ol>
-      <p class="lead" style="margin-top:14px;margin-bottom:0" lang="en">Outbound mail, comments, and archives stay pending until you click Confirm.</p>
-      <p class="lead" style="margin-top:14px;margin-bottom:0" lang="zh">对外发信、评论和归档会先挂起，等你点「确认」。</p>
     </section>
 
     <section id="privacy">
       <h2 lang="en">Privacy</h2>
       <h2 lang="zh">隐私</h2>
       <div class="privacy">
-        <p lang="en" style="margin:0;color:var(--ink2)">Your data stays on this machine, under the app’s user directory — <code>~/Library/Application Support/Douya</code> on macOS, <code>%APPDATA%\Douya</code> on Windows, <code>~/.config/Douya</code> on Linux. That includes config, the memory file, and the local runtime home. Nothing is written into the install folder. The UI binds to 127.0.0.1.</p>
-        <p lang="zh" style="margin:0;color:var(--ink2)">数据留在本机用户目录：macOS 为 <code>~/Library/Application Support/Douya</code>，Windows 为 <code>%APPDATA%\Douya</code>，Linux 为 <code>~/.config/Douya</code>。配置、记忆文件和本地运行时都在这里，不会写入安装目录。界面只绑定 127.0.0.1。</p>
-        <p lang="en" style="margin:12px 0 0;color:var(--ink2)">Chat and many features still call the model provider you configured. Connected sources go through Composio, and nothing is sent outbound until you consent. Douya is not a fully offline product.</p>
-        <p lang="zh" style="margin:12px 0 0;color:var(--ink2)">聊天和不少功能仍会调用你配置的模型服务。连接外部应用走 Composio，对外发送需你同意。豆芽不是完全离线的产品。</p>
+        <p lang="en" style="margin:0;color:var(--ink2)">Your mail, memory, and plans stay on this computer, in the app’s folder. Nothing is written into the install folder.</p>
+        <p lang="zh" style="margin:0;color:var(--ink2)">邮件、记忆和计划都留在这台电脑上，就在应用自己的文件夹里。不会写进安装目录。</p>
+        <p lang="en" style="margin:12px 0 0;color:var(--ink2)">Chat still uses the model you choose. Connected apps only after you agree. Chat and those apps need a network connection.</p>
+        <p lang="zh" style="margin:12px 0 0;color:var(--ink2)">聊天仍会用你选的模型。连接其他应用前，会先征得你的同意。聊天和连接应用需要联网。</p>
       </div>
     </section>
 
-    <section id="dev">
-      <h2 lang="en">Develop</h2>
-      <h2 lang="zh">开发</h2>
-      <div class="dev">
-        <p lang="en" style="margin:0 0 8px;color:var(--ink2)">From a source checkout:</p>
-        <p lang="zh" style="margin:0 0 8px;color:var(--ink2)">从源码运行：</p>
-        <pre>npm install
-npm start
-# → dsh --profile odm --port 7777
-open "$(cat .odm-data/dsh-web.url)"   # token URL; bare :7777 returns 401</pre>
-        <p lang="en" style="margin:12px 0 0;color:var(--ink2)">Run <code>npm test</code>, branch from <code>main</code>, and open a PR. Never push <code>main</code> directly. More in the <a href="https://github.com/open-x-agents/Douya#develop">README</a> and <a href="https://github.com/open-x-agents/Douya/blob/main/docs/develop.md">docs/develop.md</a>.</p>
-        <p lang="zh" style="margin:12px 0 0;color:var(--ink2)">运行 <code>npm test</code>，从 <code>main</code> 拉分支并开 PR。不要直接推 <code>main</code>。详见 <a href="https://github.com/open-x-agents/Douya#develop">README</a> 和 <a href="https://github.com/open-x-agents/Douya/blob/main/docs/develop.md">docs/develop.md</a>。</p>
-      </div>
+    <section id="dev" class="dev-lite">
+      <p lang="en">For developers — <a href="https://github.com/open-x-agents/Douya#develop">notes are in the README</a>.</p>
+      <p lang="zh">写给开发者 — <a href="https://github.com/open-x-agents/Douya#develop">说明在 README 里</a>。</p>
     </section>
 
     <footer class="foot">

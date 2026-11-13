@@ -417,10 +417,16 @@ test('docs, chrome, and prompts describe MCP Memory', () => {
   const tools = readFileSync(new URL('../src/web/dsbot-tools.js', import.meta.url), 'utf8')
   const workflow = readFileSync(new URL('../.github/workflows/desktop.yml', import.meta.url), 'utf8')
   const desk = JSON.parse(readFileSync(new URL('../desktop/package.json', import.meta.url), 'utf8'))
-  for (const text of [mem, install, readme]) {
+  for (const text of [mem, install]) {
     assert.match(text, /@modelcontextprotocol\/server-memory/)
     assert.match(text, /mcp__memory__/)
   }
+  // User-facing README copy stays in plain language. The package name remains in License.
+  const userFacing = readme.split('## Develop')[0]
+  assert.doesNotMatch(userFacing, /mcp__memory__/)
+  assert.doesNotMatch(userFacing, /@modelcontextprotocol/)
+  assert.match(userFacing, /Readable memories kept on this computer/)
+  assert.match(readme, /@modelcontextprotocol\/server-memory/)
   assert.match(mem, /are not migrated/)
   assert.match(start, /ensureMemoryMcp/)
   assert.match(start, /MEMORY_FILE_PATH/)

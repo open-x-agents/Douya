@@ -111,6 +111,15 @@ export function resolveDshBin({ env = process.env, saved, home = env.HOME || '',
 }
 
 /**
+ * The dsh runtime the server will use: env / saved / usual Mac layout first, then `dsh` on PATH.
+ * null means start-dsh would fall back to a bare `dsh` that is not there and die before it is
+ * ready, so the shell should ask for the executable instead of showing a generic crash.
+ */
+export function locateDsh({ env = process.env, saved, home = env.HOME || '', exists = existsSync, onPath = () => null } = {}) {
+  return resolveDshBin({ env, saved, home, exists }) || onPath('dsh') || null
+}
+
+/**
  * A GUI app on macOS starts with PATH=/usr/bin:/bin:… — no Homebrew, no nvm. Merge the login
  * shell's PATH and the usual install dirs, de-duplicated, keeping the current order first.
  */
@@ -151,6 +160,8 @@ const MESSAGES = {
     conflict: (port) => `Port ${port} is in use, but Douya could not log in to it. Quit whatever is using it (or a stale npm start) and try again, or set ODM_PORT.`,
     noRepo: 'Could not find the openDigitalMate folder. Choose the folder that contains scripts/start-dsh.mjs.',
     pickRepo: 'Choose the openDigitalMate folder',
+    noDsh: 'Could not find the dsh runtime that Douya runs on. Choose the dsh executable (for example …/dsh-rc5/bin/dsh), or set DSH_BIN.',
+    pickDsh: 'Choose the dsh executable',
     log: 'Log',
     quit: 'Quit',
     retry: 'Retry',
@@ -168,6 +179,8 @@ const MESSAGES = {
     conflict: (port) => `端口 ${port} 已被占用，但豆芽登录不上。请先关掉占用它的程序（或残留的 npm start）再试，或设置 ODM_PORT。`,
     noRepo: '找不到 openDigitalMate 文件夹。请选择包含 scripts/start-dsh.mjs 的那个文件夹。',
     pickRepo: '选择 openDigitalMate 文件夹',
+    noDsh: '找不到豆芽运行所需的 dsh。请选择 dsh 可执行文件（例如 …/dsh-rc5/bin/dsh），或设置 DSH_BIN。',
+    pickDsh: '选择 dsh 可执行文件',
     log: '日志',
     quit: '退出',
     retry: '重试',

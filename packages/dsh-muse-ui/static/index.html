@@ -6111,17 +6111,41 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = t('memory.add_photo'); }
     }
   });
+  function memListView(data) {
+    if (memPresentMod && typeof memPresentMod.presentMemoryList === 'function') {
+      return memPresentMod.presentMemoryList(data);
+    }
+    const memories = (data && data.memories) || [];
+    const total = (data && data.total) != null ? data.total : memories.length;
+    if (memories.length) return { state: 'ready', memories, total };
+    if (data && data.available === false) return { state: 'unavailable', memories: [], total: 0 };
+    return { state: 'empty', memories: [], total };
+  }
   function paintMemories(data) {
     const box = $('memContent');
     const countEl = $('memCount');
     if (!box) return;
-    const rows = (data && data.memories) || [];
+    const view = memListView(data);
+    const rows = view.memories || [];
     memRows = rows;
-    const total = (data && data.total) != null ? data.total : rows.length;
+    const total = view.total;
     if (countEl) {
-      countEl.innerHTML = total === 1
-        ? `<b>${escapeHtml(t('memory.count_one'))}</b>`
-        : `<b>${escapeHtml(t('memory.count', { n: total }))}</b>`;
+      countEl.innerHTML = view.state === 'unavailable'
+        ? `<b>${escapeHtml(t('memory.unavailable_count'))}</b>`
+        : total === 1
+          ? `<b>${escapeHtml(t('memory.count_one'))}</b>`
+          : `<b>${escapeHtml(t('memory.count', { n: total }))}</b>`;
+    }
+    if (view.state === 'unavailable') {
+      box.className = '';
+      box.innerHTML = `<div class="mem-empty is-unavailable" role="status">
+        <div class="mem-empty-mark">${typeof douyaSvg === 'function' ? douyaSvg({ size: 56, state: 'idle', id: 'mem' }) : '🌱'}</div>
+        <h2>${escapeHtml(t('memory.unavailable_title'))}</h2>
+        <p>${escapeHtml(t('memory.unavailable_body'))}</p>
+        <button type="button" class="step primary" id="memUnavailableCta">${escapeHtml(t('memory.unavailable_cta'))}</button>
+      </div>`;
+      $('memUnavailableCta')?.addEventListener('click', () => loadMemories());
+      return;
     }
     if (!rows.length) {
       box.className = '';
@@ -6211,10 +6235,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       paintMemories(data);
     } catch (err) {
       if (seq !== memSeq) return;
-      if (box) {
-        box.className = '';
-        box.innerHTML = `<div class="error">${escapeHtml(err.message || String(err))}</div>`;
-      }
+      paintMemories({ available: false, memories: [], total: 0, error: err.message || String(err) });
     }
   }
   window.loadMemories = loadMemories;

@@ -1,6 +1,13 @@
 // Cross-platform bits used by scripts/start-dsh.mjs (Windows has no `ln`, uses
 // Path/PATH, and os.tmpdir() instead of /tmp). Keep this import-safe for tests.
-import { existsSync, mkdirSync, symlinkSync, cpSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, symlinkSync, cpSync, readFileSync, writeFileSync, rmSync, readdirSync } from 'node:fs'
+import {
+  MCP_MEMORY_PLUGIN_ID, MCP_MEMORY_SERVER_NAME,
+} from '../src/digest/mcp-memory.js'
+export {
+  MCP_MEMORY_PACKAGE, MCP_MEMORY_VERSION, MCP_MEMORY_SERVER_NAME, MCP_MEMORY_PLUGIN_ID,
+  MCP_MEMORY_ENTRY, resolveMemoryFilePath, resolveMemoryServerEntry,
+} from '../src/digest/mcp-memory.js'
 import { dirname, join, delimiter } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -76,7 +83,6 @@ export const ODM_PROFILE_BUNDLES = [
   'opendigitalmate',
   'dsh-muse-ui',
   'deep-view',
-  '@openviking/dsh-memory-plugin',
 ]
 
 export function odmProfilePackageJson(runtimeRoot) {
@@ -88,7 +94,6 @@ export function odmProfilePackageJson(runtimeRoot) {
       'dsh-muse-ui': `file:${join(runtimeRoot, 'packages', 'dsh-muse-ui')}`,
       'ds-bot': `file:${join(runtimeRoot, 'vendor', 'ds-bot')}`,
       'deep-view': '0.1.0',
-      '@openviking/dsh-memory-plugin': '0.5.33',
     },
     dsh: { profile: { bundles: [...ODM_PROFILE_BUNDLES] } },
   }
@@ -110,16 +115,11 @@ function pluginLinkTargets(runtimeRoot, exists = existsSync) {
     join(runtimeRoot, 'vendor', 'ds-bot', 'node_modules', 'deep-view'),
     join(runtimeRoot, 'node_modules', 'deep-view'),
   ].find((p) => exists(p))
-  const memory = [
-    join(runtimeRoot, 'bundled-plugins', 'node_modules', '@openviking', 'dsh-memory-plugin'),
-    join(runtimeRoot, 'node_modules', '@openviking', 'dsh-memory-plugin'),
-  ].find((p) => exists(p))
   return {
     opendigitalmate: runtimeRoot,
     'dsh-muse-ui': join(runtimeRoot, 'packages', 'dsh-muse-ui'),
     'ds-bot': join(runtimeRoot, 'vendor', 'ds-bot'),
     'deep-view': deepView || null,
-    '@openviking/dsh-memory-plugin': memory || null,
   }
 }
 
@@ -140,6 +140,7 @@ export function ensureOdmProfile({
   if (!dshHome || !runtimeRoot) return { action: 'skip' }
   const profile = join(dshHome, 'profiles', 'odm')
   if (profileLooksReady(profile, exists)) {
+    syncOdmProfilePackage(profile, runtimeRoot, { exists, read, write })
     linkProfilePlugins({ profile, runtimeRoot, exists, mkdir, link })
     return { action: 'exists', profile }
   }
@@ -154,6 +155,7 @@ export function ensureOdmProfile({
     ].join('\n'))
   }
   if (!exists(join(profile, 'compatibility.json'))) write(join(profile, 'compatibility.json'), '{}\n')
+  syncOdmProfilePackage(profile, runtimeRoot, { exists, read, write })
   linkProfilePlugins({ profile, runtimeRoot, exists, mkdir, link })
   return { action: 'created', profile }
 }
@@ -161,7 +163,6 @@ export function ensureOdmProfile({
 function linkProfilePlugins({ profile, runtimeRoot, exists, mkdir, link }) {
   const mods = join(profile, 'node_modules')
   mkdir(mods)
-  mkdir(join(mods, '@openviking'))
   const targets = pluginLinkTargets(runtimeRoot, exists)
   const results = {}
   for (const [name, target] of Object.entries(targets)) {
@@ -169,6 +170,141 @@ function linkProfilePlugins({ profile, runtimeRoot, exists, mkdir, link }) {
     results[name] = link(target, join(mods, name))
   }
   return results
+}
+
+
+/**
+ * Keep an existing odm profile's package.json on the canonical bundles and
+ * dependencies. Drops retired plugins and stale node_modules links that are
+ * not in the current set, so an upgrade does not keep loading a removed bundle.
+ */
+export function syncOdmProfilePackage(profileDir, runtimeRoot, {
+  exists = existsSync,
+  read = (p) => readFileSync(p, 'utf8'),
+  write = (p, t) => writeFileSync(p, t),
+  rm = (p) => rmSync(p, { recursive: true, force: true }),
+  list = (p) => readdirSync(p, { withFileTypes: true }),
+} = {}) {
+  if (!profileDir || !exists(join(profileDir, 'package.json'))) return { action: 'skip' }
+  const path = join(profileDir, 'package.json')
+  let pkg
+  try { pkg = JSON.parse(read(path)) } catch { return { action: 'skip' } }
+  const canonical = odmProfilePackageJson(runtimeRoot || '.')
+  let changed = false
+  const wantBundles = [...ODM_PROFILE_BUNDLES]
+  const haveBundles = Array.isArray(pkg?.dsh?.profile?.bundles) ? pkg.dsh.profile.bundles : []
+  const bundlesMatch = haveBundles.length === wantBundles.length
+    && wantBundles.every((b, i) => haveBundles[i] === b)
+  if (!bundlesMatch) {
+    if (!pkg.dsh) pkg.dsh = {}
+    if (!pkg.dsh.profile) pkg.dsh.profile = {}
+    pkg.dsh.profile.bundles = wantBundles
+    changed = true
+  }
+  if (!pkg.dependencies) pkg.dependencies = {}
+  for (const k of Object.keys(pkg.dependencies)) {
+    if (!(k in canonical.dependencies)) {
+      delete pkg.dependencies[k]
+      changed = true
+    }
+  }
+  if (runtimeRoot) {
+    for (const [k, v] of Object.entries(canonical.dependencies)) {
+      if (pkg.dependencies[k] !== v) {
+        pkg.dependencies[k] = v
+        changed = true
+      }
+    }
+  }
+  if (changed) write(path, JSON.stringify(pkg, null, 2) + '\n')
+
+  const allowed = new Set([...ODM_PROFILE_BUNDLES, ...Object.keys(canonical.dependencies)])
+  const mods = join(profileDir, 'node_modules')
+  if (exists(mods)) {
+    try {
+      for (const ent of list(mods)) {
+        if (!ent.isDirectory() && !ent.isSymbolicLink()) continue
+        const name = ent.name
+        if (name.startsWith('.')) continue
+        if (name.startsWith('@')) {
+          const scope = join(mods, name)
+          try {
+            for (const inner of list(scope)) {
+              const full = `${name}/${inner.name}`
+              if (!allowed.has(full)) {
+                try { rm(join(scope, inner.name)) } catch { /* leftover link is not fatal */ }
+              }
+            }
+            if (list(scope).length === 0) {
+              try { rm(scope) } catch { /* empty scope */ }
+            }
+          } catch { /* listing is best-effort */ }
+        } else if (!allowed.has(name)) {
+          try { rm(join(mods, name)) } catch { /* leftover link is not fatal */ }
+        }
+      }
+    } catch { /* listing is best-effort */ }
+  }
+  return { action: changed ? 'synced' : 'clean' }
+}
+
+function yamlString(s) {
+  return JSON.stringify(String(s))
+}
+
+/** Cordis patch that *inserts* official MCP Memory via dsh-mcp-client (stdio, bundled Node).
+ * A raw `- id:` row is a replace-patch and is skipped when the id is not already
+ * in the document (dsh: "unknown targets … are warned and skipped"). */
+export function memoryMcpPatchYaml({ nodeExe, entry, memoryFile }) {
+  return [
+    '- insert:',
+    `    - id: ${MCP_MEMORY_PLUGIN_ID}`,
+    '      name: "@deepseek-ai/dsh-mcp-client"',
+    '      config:',
+    `        serverName: ${MCP_MEMORY_SERVER_NAME}`,
+    '        transport: stdio',
+    `        command: ${yamlString(nodeExe)}`,
+    '        args:',
+    `          - ${yamlString(entry)}`,
+    '        env:',
+    `          MEMORY_FILE_PATH: ${yamlString(memoryFile)}`,
+    '        failOnStartupError: false',
+    '',
+  ].join('\n')
+}
+
+const MEMORY_MCP_INSERT_RE = /^- insert:\n[ \t]+- id: odm-mcp-memory\n(?:[ \t]+.*\n)*/m
+const MEMORY_MCP_RAW_RE = /^- id: odm-mcp-memory\n(?:[ \t].*\n)*/m
+
+export function upsertMemoryMcpPatch(text, opts) {
+  const block = memoryMcpPatchYaml(opts)
+  let t = text || ''
+  if (t && !t.endsWith('\n')) t += '\n'
+  t = t.replace(MEMORY_MCP_INSERT_RE, '').replace(MEMORY_MCP_RAW_RE, '')
+  if (t && !t.endsWith('\n')) t += '\n'
+  return t + block
+}
+
+/**
+ * Write (or refresh) the MCP Memory client into the profile's cordis.patch.yml.
+ * Paths are concrete so a packaged install never shells out to `npx` and never
+ * writes the graph under extraResources.
+ */
+export function ensureMemoryMcp({
+  profileDir, nodeExe, entry, memoryFile,
+  exists = existsSync,
+  read = (p) => readFileSync(p, 'utf8'),
+  write = (p, t) => writeFileSync(p, t),
+  mkdir = (p) => mkdirSync(p, { recursive: true }),
+} = {}) {
+  if (!profileDir || !nodeExe || !entry || !memoryFile) return { action: 'skip' }
+  mkdir(profileDir)
+  const patch = join(profileDir, 'cordis.patch.yml')
+  const before = exists(patch) ? read(patch) : ''
+  const after = upsertMemoryMcpPatch(before, { nodeExe, entry, memoryFile })
+  if (after === before) return { action: 'unchanged', patch }
+  write(patch, after)
+  return { action: before.trim() ? 'updated' : 'created', patch }
 }
 
 /** De-duplicate PATH entries, using the platform delimiter unless `sep` is set. */

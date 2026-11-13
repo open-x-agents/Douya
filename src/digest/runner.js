@@ -15,13 +15,13 @@ import { validateCandidates, validatePlan, buildCards, invalidLinks, seenEntitie
 import { stableKey, linkUrls } from '../host/reconcile.js'
 import { rankMemories } from './memory-rank.js'
 import {
-  listOpenVikingMemories,
-  forgetOpenVikingMemory,
-  readOpenVikingRecall,
-  openVikingHealth,
-  resolveOpenVikingConfig,
-} from './openviking.js'
+  listMcpMemories,
+  forgetMcpMemory,
+  readMcpRecall,
+  resolveMemoryFilePath,
+} from './mcp-memory.js'
 export { rankMemories, isMemoryHighlight, isRoutinePreference, partitionMemories, memorySignal } from './memory-rank.js'
+export { resolveMemoryFilePath, listMcpMemories, forgetMcpMemory, readMcpRecall } from './mcp-memory.js'
 
 const clip = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n - 1) + '…' : s }
 const shNow = (t = Date.now()) => new Date(t + 8 * 3600e3).toISOString().slice(0, 16).replace('T', ' ')
@@ -474,7 +474,7 @@ export function createBotDigest(deps) {
   return { store: digestStore, lastRun: () => lastRun, live: () => (liveRun?.status === 'running' ? liveRun.progress : null), run, toolSnapshot, toolPropose, toolNote, toolCommit, get running() { return !!running }, current: () => running, summarize, roleOf }
 }
 
-/** Legacy dsh-memory SQLite recall (fallback while OpenViking is offline). */
+/** Legacy dsh-memory SQLite recall (fallback if the MCP Memory file is unreadable). */
 export function readDshMemoryRecall(dshHome, { recentCount = 10, maxChars = 2000 } = {}) {
   const dbPath = join(dshHome || '', 'memory', 'memory.db')
   if (!dbPath || !existsSync(dbPath)) return ''
@@ -565,45 +565,55 @@ export function forgetDshMemory(dshHome, id) {
   }
 }
 
-/** Unified Memory 一瞥: OpenViking first, SQLite dsh-memory fallback while migrating. */
-export async function listMemories(dshHome, { limit = 40 } = {}) {
+/** Path of the MCP Memory JSONL (ODM data dir, never resources). */
+function memoryFile(explicit) {
+  if (explicit) return explicit
+  return resolveMemoryFilePath({ env: process.env, dataDir: process.env.ODM_DATA_DIR })
+}
+
+/** Unified Memory 一瞥: MCP Memory JSONL first, SQLite dsh-memory fallback if the file is unreadable. */
+export async function listMemories(dshHome, { limit = 40, file } = {}) {
+  const path = memoryFile(file)
   try {
-    const ov = await listOpenVikingMemories({ limit })
-    if (ov.available) return { ...ov, home: dshHome || null }
-    // Server missing / unhealthy → keep old SQLite glimpse so UI is not blank mid-migrate.
+    const listed = listMcpMemories({ file: path, limit })
+    if (listed.available) return { ...listed, home: dshHome || null }
     const sqlite = listDshMemories(dshHome, { limit })
     return {
       ...sqlite,
-      backend: sqlite.total ? 'dsh-memory' : 'openviking',
-      available: ov.available,
-      openviking: { url: ov.url, error: ov.error },
+      backend: sqlite.total ? 'dsh-memory' : 'mcp-memory',
+      available: listed.available,
+      error: listed.error,
+      path,
       home: dshHome || null,
     }
   } catch (err) {
     const sqlite = listDshMemories(dshHome, { limit })
     return {
       ...sqlite,
-      backend: sqlite.total ? 'dsh-memory' : 'openviking',
+      backend: sqlite.total ? 'dsh-memory' : 'mcp-memory',
       available: false,
-      openviking: { error: err?.message || String(err) },
+      error: err?.message || String(err),
+      path,
       home: dshHome || null,
     }
   }
 }
 
-/** Forget by viking:// URI (OpenViking) or numeric id (legacy SQLite). */
-export async function forgetMemory(dshHome, id) {
+/** Forget by MCP Memory id (`obs:` / `ent:`) or numeric id (legacy SQLite). */
+export async function forgetMemory(dshHome, id, { file } = {}) {
   const key = id == null ? '' : String(id).trim()
-  if (key.startsWith('viking://')) return forgetOpenVikingMemory(key)
+  if (key.startsWith('obs:') || key.startsWith('ent:')) {
+    return forgetMcpMemory(key, memoryFile(file))
+  }
   return forgetDshMemory(dshHome, key)
 }
 
-/** Chief brief memory: OpenViking recall first, then legacy dsh-memory, then MEMORY.md. */
-export async function readChiefMemory(dshHome) {
+/** Chief brief memory: MCP Memory recall first, then legacy dsh-memory, then MEMORY.md. */
+export async function readChiefMemory(dshHome, { file } = {}) {
   const parts = []
   try {
-    const ov = await readOpenVikingRecall()
-    if (ov) parts.push(ov)
+    const recall = readMcpRecall({ file: memoryFile(file) })
+    if (recall) parts.push(recall)
   } catch {}
   if (!parts.length) {
     try {
@@ -622,5 +632,3 @@ export async function readChiefMemory(dshHome) {
   } catch {}
   return parts.join('\n\n')
 }
-
-export { openVikingHealth, resolveOpenVikingConfig }

@@ -20,9 +20,9 @@ One product. Three pages. Shared memory underneath.
 Douya is a **desktop-first** Electron app for **Windows, macOS, and Linux**. The UI is bilingual EN / 中文. Mobile apps were cancelled. It is not a fully offline product: chat and many features need a supported model provider, and sources need [Composio](https://app.composio.dev) plus your consent for anything outbound.
 
 ```
-  Muse UI  ──▶  Chief / source bots  ──▶  OpenViking  ──▶  Sources
+  Muse UI  ──▶  Chief / source bots  ──▶  MCP Memory  ──▶  Sources
   (Today ·     (merge, rank,          (shared            (Gmail · Slack ·
-   Memories ·   plan, chat)            memory)             GitHub · Calendar)
+   Memories ·   plan, chat)            knowledge graph)    GitHub · Calendar)
    Future)
 ```
 
@@ -54,7 +54,7 @@ Installers are not warning-free. macOS is ad-hoc signed and **not notarized** (r
 
 The packaged app ships the Douya server and **[dsh](https://github.com/deepseek-ai/dsh)** inside the installer. You do not need a git checkout, a Node.js install, or a separate dsh: on first launch it starts from the bundled runtime, writes data under the app’s userData folder, and opens the setup wizard for the model API (Composio is optional). Details: [docs/install.md](docs/install.md).
 
-Installers bundle OpenViking **0.5.4**, relocatable CPython, `llama-cpp-python`, and the local `bge-small-zh-v1.5-f16` embedding GGUF (Chinese-optimized; English is weaker). Semantic auto-recall can work **without a cloud key or Ollama**. A VLM / chat model is **not** shipped — chat still needs a supported provider, and memory extraction and summaries need a VLM. The app does not rebuild existing vectors, and it does not move an existing OpenViking workspace for you. Details: [docs/install.md](docs/install.md), [docs/memory.md](docs/memory.md).
+Installers bundle the official [`@modelcontextprotocol/server-memory@2.1.1`](https://www.npmjs.com/package/@modelcontextprotocol/server-memory) (pure Node, no embeddings). Chat tools are `mcp__memory__*`. The graph is `$ODM_DATA_DIR/memory.jsonl` and is never written under `resources/`. A chat model is **not** shipped — the first-run wizard still asks for a provider. Details: [docs/install.md](docs/install.md), [docs/memory.md](docs/memory.md).
 
 This rc also includes the long-running chat wait: if Chief is still working, the UI keeps waiting instead of reporting no reply after a few minutes. A turn that stays marked running can keep you waiting; hangs are not all detected.
 
@@ -97,9 +97,9 @@ Default UI is **English**. Switch to 中文 in Settings or the sidebar (`localSt
 
 ## Memory in brief
 
-Douya uses **[OpenViking](https://docs.openviking.net/en/agent-integrations/17-dsh)** via [`@openviking/dsh-memory-plugin`](https://www.npmjs.com/package/@openviking/dsh-memory-plugin) (~0.5.33). Chat auto-recall, the Memories / Recall page, and Future’s grounding share `viking://~/memories`.
+Douya uses the official [`@modelcontextprotocol/server-memory`](https://www.npmjs.com/package/@modelcontextprotocol/server-memory) **2.1.1** knowledge graph. Chat auto-recall uses `mcp__memory__*` tools (`create_entities`, `add_observations`, `search_nodes`, `read_graph`, …). The Memories / Recall page, Chief digest, and Future’s grounding read the same JSONL, achievements first.
 
-Desktop installers already include the server and the local GGUF; a new app-local `ov.conf` points at the shipped file, and `~/.openviking/ovcli.conf` is created only if it is missing. An existing `~/.openviking/ov.conf` is left alone. The app does not rebuild existing vectors. For `npm start`, you run or reuse a server on `127.0.0.1:1933` yourself — see [docs/memory.md](docs/memory.md).
+Desktop installers already include the server and Node; the file is `$ODM_DATA_DIR/memory.jsonl`. For `npm start`, install the package once if it is not already in `node_modules` — see [docs/memory.md](docs/memory.md).
 
 ---
 
@@ -109,7 +109,7 @@ Desktop installers already include the server and the local GGUF; a new app-loca
 | --- | --- |
 | **Today** | Hero, timetable, digest cards, prepared next steps, “what got done” |
 | **Future / 未来** | Propose a plan from a memory or a stated interest; accept before work; tick or complete a step (including **Do this with Douya**); archive. Progress lives in host `state.json` and survives a restart |
-| **Memories / Recall** | Readable tiles + photos (≤ 5 MB), achievements first; forget removes the memory and its photos |
+| **Memories / Recall** | Readable tiles, achievements first; forget removes an observation or entity |
 | **Sources** | Connect apps via Composio. Coverage and limits: [docs/sources/connected-scans.md](docs/sources/connected-scans.md) |
 | **Dock chat** | Talk with Chief. Confirmed sends can echo into card chat and general chat |
 
@@ -138,4 +138,4 @@ Local-only: the UI binds to `127.0.0.1`.
 
 ## License
 
-The root and desktop `package.json` files list `license` as `Apache-2.0`. This tree does not add a separate license grant file. Bundled runtimes keep their upstream terms: OpenViking is AGPL-3.0; the shipped embedding GGUF and `llama-cpp-python` are MIT. See [docs/install.md](docs/install.md).
+The root and desktop `package.json` files list `license` as `Apache-2.0`. This tree does not add a separate license grant file. Bundled runtimes keep their upstream terms: `@modelcontextprotocol/server-memory` is MIT. See [docs/install.md](docs/install.md).

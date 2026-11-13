@@ -11,9 +11,9 @@ import { fileURLToPath } from 'node:url'
 import { applyLlmEnv, ensureAgentDefaultModel, ensureProfileDeepseekCatalog, syncLlmToDsh, DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_LEGACY_MODELS } from '../src/web/llm-env.js'
 import { syncBotModels } from '../src/web/dsbot-chat.js'
 import {
-  bundledDshEntry, dshLogPath, ensureOdmProfile, linkDir, mergePathEnv,
-  resolveDshHome, resolveDshLaunch, resolveOdmDataDir,
-  uniquePathEnv, userHome,
+  bundledDshEntry, dshLogPath, ensureMemoryMcp, ensureOdmProfile, linkDir, mergePathEnv,
+  resolveDshHome, resolveDshLaunch, resolveMemoryFilePath, resolveMemoryServerEntry,
+  resolveOdmDataDir, uniquePathEnv, userHome,
 } from './start-dsh-util.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -100,22 +100,17 @@ try {
   }
 } catch (err) { console.warn(`[start-dsh] profile catalog update skipped: ${err?.message || err}`) }
 
-// Long-term memory: OpenViking (`@openviking/dsh-memory-plugin`). Needs a reachable
-// OpenViking server (default http://127.0.0.1:1933) + ~/.openviking/ovcli.conf.
+// Long-term memory: official MCP Memory, launched by dsh-mcp-client with the
+// bundled Node (no npx, no network). The JSONL lives in the writable data dir.
+const memoryFile = resolveMemoryFilePath({ env: process.env, dataDir: HOME })
+if (memoryFile) process.env.MEMORY_FILE_PATH = memoryFile
+const memoryEntry = resolveMemoryServerEntry(ROOT)
 try {
   const profilePkg = join(profileDir, 'package.json')
   if (existsSync(profilePkg)) {
     const pkg = JSON.parse(readFileSync(profilePkg, 'utf8'))
     const bundles = pkg?.dsh?.profile?.bundles || []
     const deps = pkg?.dependencies || {}
-    const hasOv = bundles.includes('@openviking/dsh-memory-plugin') || deps['@openviking/dsh-memory-plugin']
-    if (hasOv) {
-      const ovUrl = process.env.OPENVIKING_URL || process.env.OPENVIKING_BASE_URL || 'http://127.0.0.1:1933'
-      console.log(`🧠 Long-term memory: OpenViking → ${ovUrl} (Muse Glimpse reads viking://~/memories)`)
-    }
-    if (bundles.includes('dsh-memory') || deps['dsh-memory']) {
-      console.warn('[start-dsh] legacy dsh-memory still listed — remove after OpenViking is healthy (SQLite is Glimpse fallback only).')
-    }
     const hasMuse = bundles.includes('dsh-muse-ui') || deps['dsh-muse-ui']
     if (!hasMuse) {
       console.warn('[start-dsh] dsh-muse-ui not in odm profile — stock dsh shell stays (no Muse Today page).')
@@ -124,7 +119,7 @@ try {
       console.log('🎨 Muse UI: dsh-muse-ui → /api/opendigitalmate/app')
     }
   }
-} catch (err) { console.warn(`[start-dsh] memory plugin check skipped: ${err?.message || err}`) }
+} catch (err) { console.warn(`[start-dsh] profile check skipped: ${err?.message || err}`) }
 
 process.env.ODM_CHAT_MODEL = chatModel
 process.env.OPENAI_BASE_URL ||= 'https://api.deepseek.com'
@@ -162,33 +157,26 @@ function dshCommand(args, envExtra = {}) {
   return { exe: launch.exe, args: [...launch.args, ...args], env, shell: launch.shell }
 }
 
-// Fresh machines: add the memory plugin so the bundled OpenViking server is actually used.
-// Packaged installs already linked it from app-runtime; skip `dsh plugin add` (needs pnpm + network).
+// Register official MCP Memory on the odm profile (dsh-mcp-client + bundled Node).
+// Rewritten every start so command / MEMORY_FILE_PATH stay current. No npx, no network.
 try {
-  const profilePkg = join(profileDir, 'package.json')
-  if (existsSync(profilePkg)) {
-    const pkg = JSON.parse(readFileSync(profilePkg, 'utf8'))
-    const bundles = pkg?.dsh?.profile?.bundles || []
-    const deps = pkg?.dependencies || {}
-    const hasOv = bundles.includes('@openviking/dsh-memory-plugin') || deps['@openviking/dsh-memory-plugin']
-    if (!hasOv && !process.env.ODM_PACKAGED) {
-      console.warn('[start-dsh] @openviking/dsh-memory-plugin not in odm profile — trying to add it.')
-      const cmd = dshCommand(['plugin', '--profile', 'odm', 'add', '@openviking/dsh-memory-plugin@0.5.33'])
-      const add = spawnSync(cmd.exe, cmd.args, {
-        encoding: 'utf8', env: cmd.env, timeout: 120_000, shell: cmd.shell, windowsHide: true,
-      })
-      if (add.status !== 0) {
-        console.warn('[start-dsh] auto-add failed — chat long-term memory stays off until you run:')
-        console.warn('  dsh plugin --profile odm add @openviking/dsh-memory-plugin@0.5.33')
-        if (add.stderr) process.stderr.write(add.stderr)
-      } else {
-        console.log('[start-dsh] added @openviking/dsh-memory-plugin@0.5.33 to the odm profile')
-      }
-    } else if (!hasOv) {
-      console.warn('[start-dsh] @openviking/dsh-memory-plugin not in the packaged odm profile — chat long-term memory stays off.')
+  if (memoryEntry && memoryFile) {
+    mkdirSync(dirname(memoryFile), { recursive: true })
+    const mcp = ensureMemoryMcp({
+      profileDir,
+      nodeExe: process.execPath,
+      entry: memoryEntry,
+      memoryFile,
+    })
+    if (mcp.action === 'skip') {
+      console.warn('[start-dsh] MCP Memory config skipped — chat long-term memory stays off.')
+    } else {
+      console.log(`🧠 Long-term memory: MCP Memory → ${memoryFile} (tools mcp__memory__*)`)
     }
+  } else {
+    console.warn('[start-dsh] @modelcontextprotocol/server-memory not in the runtime — chat long-term memory stays off.')
   }
-} catch (err) { console.warn(`[start-dsh] memory plugin auto-add skipped: ${err?.message || err}`) }
+} catch (err) { console.warn(`[start-dsh] MCP Memory setup skipped: ${err?.message || err}`) }
 
 const log = createWriteStream(DSH_LOG, { flags: 'w' })
 const cmd = dshCommand(['--profile', 'odm', '--no-open', '--port', String(PORT)])

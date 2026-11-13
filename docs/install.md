@@ -56,15 +56,11 @@ On a first launch where no chat model is saved, a **setup wizard** opens and ask
 
 ## Bundled memory runtime
 
-Each installer includes OpenViking **0.5.4**, relocatable CPython 3.13.18, `llama-cpp-python` 0.3.36, and the official `bge-small-zh-v1.5-f16` GGUF (MIT, 512-d, sha256 `ab9b81d9cd329c712eee379cf0068eabe6a5e2a01d0def61535eba9384085e2c`). The OpenViking runtime is AGPL-3.0 (upstream).
+Each installer includes the official MCP Memory server [`@modelcontextprotocol/server-memory@2.1.1`](https://www.npmjs.com/package/@modelcontextprotocol/server-memory) (MIT; pure Node; no embeddings). dsh launches it with the bundled Node via `dsh-mcp-client`; tools appear as `mcp__memory__*`. The knowledge-graph JSONL is `$ODM_DATA_DIR/memory.jsonl` (under userData in the packaged app). There is no Python, llama.cpp, or GGUF in the package, and nothing is written under `resources/`.
 
-If `127.0.0.1:1933/health` is already healthy, the app reuses that server and does not stop it on quit. Otherwise it starts the bundled server, points a **new** app-local config at the shipped GGUF, and stops only the process it started. Semantic auto-recall can then work offline with **no cloud key and no Ollama**. The model is Chinese-optimized; English is weaker.
-
-This is **not** a bundled chat or VLM model. Chat still needs a supported provider. Memory extraction and summaries need a VLM in `ov.conf` if you want them. The whole app is not promised to work offline.
+This is **not** a bundled chat model. Chat still needs a supported provider (the first-run wizard). Memory needs no embedding key and no Ollama. More: [memory.md](memory.md).
 
 This rc keeps waiting while a Muse turn is still working, instead of reporting no reply after a short wall-clock timeout. A turn that stays marked `running` can keep you waiting; that is not a guarantee every hang is detected.
-
-You do not need to install `uv` or `openviking` separately for the packaged app. More: [memory.md](memory.md).
 
 ## Where config and data live
 
@@ -90,14 +86,8 @@ Two trees matter, and the app does **not** automatically copy or reindex one int
 | Windows | `%APPDATA%\Douya` |
 | Linux | `~/.config/Douya` |
 
-There you will find `settings.json` (window bounds, and any last-resort remembered paths), `odm-data/`, `dsh-odm/`, and, when the app starts its own OpenViking, `openviking/ov.conf` plus `openviking/data`. Logs: `~/Library/Logs/Douya` on macOS, or `logs` under userData on Windows and Linux.
+There you will find `settings.json` (window bounds, and any last-resort remembered paths), `odm-data/` (including `memory.jsonl`, the MCP Memory graph), and `dsh-odm/`. Logs: `~/Library/Logs/Douya` on macOS, or `logs` under userData on Windows and Linux.
 
-**OpenViking config choice** (the app never overwrites a home config):
-
-- If `~/.openviking/ov.conf` already exists, that file and its workspace are used as-is, even if they do not name the bundled GGUF.
-- Otherwise the app writes `userData/openviking/ov.conf` (and `userData/openviking/data`) and can point a new or embedding-less app-local conf at the shipped GGUF.
-- `~/.openviking/ovcli.conf` is created only when missing, so the memory plugin can reach `http://127.0.0.1:1933`. An existing `ovcli.conf` is left alone.
-
-A source-run server you already set up under `~/.openviking` is therefore kept. A brand-new packaged install without that home file uses the app-local data directory — that is a **different** workspace, not a silent migration. The app does not rebuild existing vectors and does not ship a destructive reindex or wipe command. Do not run `ov reindex … --force` unless you have decided to.
+**Memory file:** `$ODM_DATA_DIR/memory.jsonl` (override with `MEMORY_FILE_PATH`).
 
 Updates: install the newer `desktop-v*` package over the previous one. Config and memory stay in the locations above unless you delete them yourself.

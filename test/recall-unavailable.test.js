@@ -36,16 +36,6 @@ test('presentMemoryList: available:false with no rows is unavailable, not empty'
   assert.equal(down.total, 0)
   assert.deepEqual(down.memories, [])
   assert.match(down.error, /fetch failed/)
-
-  const ovShape = presentMemoryList({
-    available: false,
-    total: 0,
-    memories: [],
-    backend: 'openviking',
-    openviking: { error: 'fetch failed' },
-  })
-  assert.equal(ovShape.state, 'unavailable')
-  assert.match(ovShape.error, /fetch failed/)
 })
 
 test('presentMemoryList: available:true total:0 is a truly empty library', () => {
@@ -56,14 +46,14 @@ test('presentMemoryList: available:true total:0 is a truly empty library', () =>
   assert.equal(empty.error, '')
 })
 
-test('presentMemoryList: fallback rows still show even when OpenViking is down', () => {
+test('presentMemoryList: fallback rows still show even when the MCP file is unreadable', () => {
   const rows = [{ id: 1, text: 'Prefer English UI' }]
   const view = presentMemoryList({
     available: false,
     total: 1,
     memories: rows,
     backend: 'dsh-memory',
-    openviking: { error: 'fetch failed' },
+    error: 'fetch failed',
   })
   assert.equal(view.state, 'ready')
   assert.equal(view.total, 1)
@@ -71,7 +61,7 @@ test('presentMemoryList: fallback rows still show even when OpenViking is down',
 })
 
 test('presentMemoryList: a loaded library is ready', () => {
-  const rows = [{ id: 'viking://~/memories/a.md', text: 'Shipped Recall' }]
+  const rows = [{ id: 'ent:Shipped_Recall', text: 'Shipped Recall' }]
   const view = presentMemoryList({ available: true, total: 3, memories: rows })
   assert.equal(view.state, 'ready')
   assert.equal(view.total, 3)

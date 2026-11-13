@@ -1,51 +1,33 @@
-# Long-term memory (OpenViking)
+# Long-term memory (official MCP Memory)
 
-Douya stores memories on a local [OpenViking](https://docs.openviking.net/en/agent-integrations/17-dsh) server (`viking://~/memories`). The dsh `odm` profile uses [`@openviking/dsh-memory-plugin`](https://www.npmjs.com/package/@openviking/dsh-memory-plugin) (~0.5.33) for auto-recall, session capture, and `mcp__openviking__*` tools. The Memories / Recall page, Chief digest, and Future’s grounding read the same server, achievements first. Forget uses `DELETE /api/v1/fs` (same as MCP `forget`) and also deletes photos stored for that memory.
+Douya stores memories in a local knowledge graph managed by the official [`@modelcontextprotocol/server-memory`](https://www.npmjs.com/package/@modelcontextprotocol/server-memory) **2.1.1** server (pure Node, JSONL on disk, no embeddings, `engines.node` ≥ 24). The dsh `odm` profile registers it through [`@deepseek-ai/dsh-mcp-client`](https://www.npmjs.com/package/@deepseek-ai/dsh-mcp-client) as stdio MCP, so chat tools appear as `mcp__memory__create_entities`, `mcp__memory__add_observations`, `mcp__memory__search_nodes`, `mcp__memory__read_graph`, `mcp__memory__open_nodes`, and the matching delete tools. The Memories / Recall page, Chief digest, and Future’s grounding read the same JSONL file directly (achievements first). Forget removes one observation, or a whole entity and its relations, with an atomic write.
 
-Pack-time layout of the bundled runtime: [`desktop/resources/openviking/README.md`](../desktop/resources/openviking/README.md). Installer behavior and paths: [install.md](install.md).
+The graph file is `MEMORY_FILE_PATH`, defaulting to `$ODM_DATA_DIR/memory.jsonl` — a writable data directory (`userData/odm-data` in the packaged app, `.odm-data` for `npm start`). It is never written under `resources/` or Program Files. Search is case-insensitive substring matching over entity names, types, and observations, not semantic retrieval.
+
+Installer and data-dir paths: [install.md](install.md).
 
 ## What is bundled, and what is not
 
-Desktop installers include OpenViking 0.5.4, relocatable CPython, `llama-cpp-python`, and the local `bge-small-zh-v1.5-f16` GGUF (sha256 `ab9b81d9cd329c712eee379cf0068eabe6a5e2a01d0def61535eba9384085e2c`). A new app-local `ov.conf` can point at that file so **semantic auto-recall** works without a cloud embedding key and without Ollama. The embedding is Chinese-optimized; English is weaker.
+Desktop installers include `@modelcontextprotocol/server-memory@2.1.1` next to the bundled official Node **24.22.1**. dsh starts the server with that Node; there is no `npx`, no network at runtime, and no Python, CPython, llama.cpp, or GGUF model. Chat still needs a supported provider in Settings (the first-run wizard). The app is not promised to work fully offline — only memory storage is local and model-free.
 
-A VLM / chat model is **not** shipped. Chat still needs a supported provider in Settings. Memory extraction and summaries need a VLM in `ov.conf` if you want them. Listing and forgetting memories still work over the filesystem API without a VLM. The app is not promised to work fully offline.
+Attaching photos to a memory is no longer supported. The Recall page hides those controls.
 
-The app does not rebuild existing vectors. Changing embedding model or dimension can make old vector collections incompatible; reindex only if you choose to, by hand. There is no automatic or in-app destructive migration.
-
-## If you already have OpenViking
-
-An existing `~/.openviking/ov.conf` is never rewritten, even when it has no embedding model. The desktop app will reuse a healthy server already on `127.0.0.1:1933` and will not stop a server it did not start. `~/.openviking/ovcli.conf` is written only when that file is missing.
-
-Your existing workspace is not copied into the app-local `userData/openviking/data` directory. Leave the home config in place if you want to keep using that memory store.
+Existing OpenViking memories are not migrated.
 
 ## Source-run (`npm start`)
 
-The installers already include the server — skip this section if you are using the packaged Mac, Windows, or Linux app.
+The packaged app already includes the server and Node — skip this section if you are using the installer.
+
+`scripts/start-dsh.mjs` looks for `@modelcontextprotocol/server-memory` under the checkout’s `node_modules` (or a staged `app-runtime`) and writes a `dsh-mcp-client` entry into the `odm` profile’s `cordis.patch.yml`. Install the package once if it is missing:
 
 ```bash
-# needs uv; the OpenViking wizard configures models — see the upstream quickstart
-uv tool install openviking --upgrade
-openviking-server init
-openviking-server doctor
-openviking-server
-# → http://127.0.0.1:1933   curl http://127.0.0.1:1933/health
+npm install @modelcontextprotocol/server-memory@2.1.1
 ```
 
-CLI connection (`ovcli.conf`), only if you do not already have one:
+Set `MEMORY_FILE_PATH` only if you want a file other than `.odm-data/memory.jsonl`. A missing file is an empty library; it is created on the first successful write.
 
-```bash
-mkdir -p ~/.openviking
-cat > ~/.openviking/ovcli.conf <<'JSON'
-{ "url": "http://127.0.0.1:1933" }
-JSON
-```
-
-Remote / managed: set `api_key` (and optional `account` / `user`), or export `OPENVIKING_URL` + `OPENVIKING_API_KEY`.
-
-`scripts/start-dsh.mjs` tries to add `@openviking/dsh-memory-plugin@0.5.33` to the **odm** dsh profile when it is missing (`dsh plugin --profile odm add @openviking/dsh-memory-plugin@0.5.33`). Remove legacy `dsh-memory` from that profile once OpenViking is healthy.
-
-While the server is down, Muse can fall back to the old SQLite `memory.db` for the Glimpse list only. Chat auto-recall needs the server. For a source-run server, semantic auto-recall needs a working embedding — the same local GGUF via `openviking[local-embed]`, Ollama, or a cloud key. `openviking-server doctor` may still warn that a VLM is missing.
+While the JSONL cannot be read, Muse can fall back to the old SQLite `memory.db` for the Glimpse list only. Chat auto-recall needs the MCP server’s tools.
 
 ## Recall page
 
-Memories render as a short title plus plain sentences (no `viking://` URIs or marker tokens in the tile). Open a tile to read the whole memory. **Add photo** (png / jpeg / gif / webp, ≤ 5 MB) stores the image in OpenViking under `viking://resources/recall/…` and appends a markdown image to the memory, so chat sees the same link. The host only proxies `GET|POST /api/opendigitalmate/memories/image` for those recall resources.
+Memories render as a short title plus plain sentences: each observation on an entity is one tile, with the entity name as the heading and any relations as extra context. Achievements and other high-signal types surface first; everyday preferences stay quieter. If the file cannot be read, Recall shows an unavailable state, not a zero count. A truly empty graph still shows 0. Forget asks for confirmation, then deletes that observation (or the whole entity if it was the last fact).

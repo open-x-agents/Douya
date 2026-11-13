@@ -293,21 +293,6 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     fetch: async (request) => json(await router.forgetMemory(await readJson(request))),
   }, 'opendigitalmate: memories forget')
 
-  // Memory photos: bytes live in OpenViking (viking://resources/recall/…); Muse only sees same-origin srcs.
-  effect({
-    path: '/api/opendigitalmate/memories/image',
-    methods: ['GET', 'POST'],
-    requestBody: 'buffered',
-    fetch: async (request) => {
-      if (request.method === 'POST') {
-        const r = await router.attachMemoryImage(await readJson(request))
-        return json(r, r?.ok ? 200 : 400)
-      }
-      const r = await router.memoryImage({ ref: new URL(request.url).searchParams.get('ref') || '' })
-      if (!r?.ok) return json({ ok: false, error: r?.error || 'not found' }, r?.status || 404)
-      return new Response(r.body, { status: 200, headers: { 'content-type': r.type, 'cache-control': 'private, max-age=86400', 'x-content-type-options': 'nosniff' } })
-    },
-  }, 'opendigitalmate: memory image')
 
 
   effect({

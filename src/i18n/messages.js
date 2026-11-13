@@ -336,6 +336,8 @@ export const messages = {
 
     'chat.send_fail': 'Send failed. Please try again.',
     'chat.send_fail_short': 'Send failed.',
+    'chat.auth_expired': 'You are signed out or the sign-in expired. Reopen the Douya sign-in link on this computer.',
+    'chat.empty_reply': 'Got it, but the model returned nothing.',
     'chat.retry': 'Retry',
     'chat.resending': 'Resending…',
     'chat.load_fail': 'Load failed — try again',
@@ -1018,6 +1020,8 @@ export const messages = {
 
     'chat.send_fail': '抱歉，发送失败了。请稍后重试。',
     'chat.send_fail_short': '发送失败了。',
+    'chat.auth_expired': '登录已失效或未登录。请让主人在这台电脑上重新打开豆芽登录链接。',
+    'chat.empty_reply': '收到了，但模型没有返回内容。',
     'chat.retry': '重试',
     'chat.resending': '重新发送中…',
     'chat.load_fail': '加载失败，请稍后重试',

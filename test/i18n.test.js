@@ -182,3 +182,19 @@ test('thinking indicator and time-of-day note are bilingual (no zh-only server s
   assert.match(t('today.tod_note_new', 'zh', { p: t('today.tod_period_evening', 'zh'), n: 0 }), /^按傍晚排序/)
   for (const p of ['morning', 'work', 'evening']) assert.notEqual(t(`today.tod_why_${p}`, 'en'), `today.tod_why_${p}`)
 })
+
+test('chat errors and the Composio key hint go through i18n (no zh-only literals in EN chrome)', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of ['登录已失效或未登录', '收到了，但模型没有返回内容', '获取你的 API 密钥</p>']) {
+    assert.ok(!html.includes(s), `hardcoded zh copy left: ${s}`)
+  }
+  assert.match(html, /addBotMessage\(t\('chat\.auth_expired'\)/)
+  assert.match(html, /new ChatFail\(t\('chat\.auth_expired'\)\)/)
+  assert.match(html, /addBotMessage\(t\('chat\.empty_reply'\)/)
+  assert.match(html, /data-i18n="settings\.composio_key_help"/)
+  assert.match(t('chat.auth_expired', 'en'), /sign-in/i)
+  assert.match(t('chat.auth_expired', 'zh'), /登录已失效/)
+  assert.match(t('chat.empty_reply', 'en'), /returned nothing/)
+  assert.match(t('chat.empty_reply', 'zh'), /没有返回内容/)
+  assert.match(t('settings.composio_key_help', 'en'), /Composio Dashboard/)
+})

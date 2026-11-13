@@ -2243,7 +2243,7 @@
           <!-- API Key Configuration -->
           <div class="card a in" id="apiKeyCard">
             <h3>🔑 <span data-i18n="settings.composio_key">API key</span></h3>
-            <p style="font-size:12.5px;color:var(--ink2);margin:8px 0">从 <a href="https://app.composio.dev" target="_blank" style="color:var(--blue)">Composio Dashboard</a> 获取你的 API 密钥</p>
+            <p style="font-size:12.5px;color:var(--ink2);margin:8px 0"><a href="https://app.composio.dev" target="_blank" rel="noopener" style="color:var(--blue)" data-i18n="settings.composio_key_help">Get your key from the Composio Dashboard</a></p>
             
             <div style="display:grid;gap:12px;margin-top:12px">
               <div>
@@ -2567,7 +2567,7 @@
       typing.remove();
 
       if (res.status === 401 || res.status === 403) {
-        addBotMessage('登录已失效或未登录。请让主人在这台电脑上重新打开豆芽登录链接。', null);
+        addBotMessage(t('chat.auth_expired'), null);
         return;
       }
       if (!res.ok) {
@@ -2585,7 +2585,7 @@
       // Check for empty response
       if (!data.text && (!data.cards || data.cards.length === 0)) {
         console.warn('[Chat] Empty response:', data);
-        addBotMessage('收到了，但模型没有返回内容。', data.time);
+        addBotMessage(t('chat.empty_reply'), data.time);
         return;
       }
 
@@ -5908,7 +5908,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     try {
       const res = await fetch('/api/chat', { method: 'POST', headers: odmHeaders({ 'Content-Type': 'application/json', 'x-odm-sent-at': String(Date.now()) }), body: JSON.stringify(body), signal: ctl.signal });
       // Auth wall: without the current dsh login cookie every API returns 401. Don't pretend it's a flaky network.
-      if (res.status === 401 || res.status === 403) throw new ChatFail('登录已失效或未登录。请让主人在这台电脑上重新打开豆芽登录链接（终端：open "$(cat .odm-data/dsh-web.url)"），不要用过期分享链接。');
+      if (res.status === 401 || res.status === 403) throw new ChatFail(t('chat.auth_expired'));
       if (res.status >= 500) throw Object.assign(new Error('http ' + res.status), { net: true });
       try { return await res.json(); } catch (_) { throw Object.assign(new Error('bad response'), { net: true }); }
     } catch (e) {

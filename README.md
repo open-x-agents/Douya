@@ -54,7 +54,7 @@ Installers are not warning-free. macOS is ad-hoc signed and **not notarized** (r
 
 The packaged app ships the Douya server and **[dsh](https://github.com/deepseek-ai/dsh)** inside the installer. You do not need a git checkout, a Node.js install, or a separate dsh: on first launch it starts from the bundled runtime, writes data under the app’s userData folder, and opens the setup wizard for the model API (Composio is optional). Details: [docs/install.md](docs/install.md).
 
-Installers bundle the official [`@modelcontextprotocol/server-memory@2.1.1`](https://www.npmjs.com/package/@modelcontextprotocol/server-memory) (pure Node, no embeddings). Chat tools are `mcp__memory__*`. The graph is `$ODM_DATA_DIR/memory.jsonl` and is never written under `resources/`. A chat model is **not** shipped — the first-run wizard still asks for a provider. Existing OpenViking memories are not migrated. Details: [docs/install.md](docs/install.md), [docs/memory.md](docs/memory.md).
+Installers bundle the official [`@modelcontextprotocol/server-memory@2.1.1`](https://www.npmjs.com/package/@modelcontextprotocol/server-memory) (pure Node, no embeddings). Chat tools are `mcp__memory__*`. The graph is `$ODM_DATA_DIR/memory.jsonl` and is never written under `resources/`. A chat model is **not** shipped — the first-run wizard still asks for a provider. Details: [docs/install.md](docs/install.md), [docs/memory.md](docs/memory.md).
 
 This rc also includes the long-running chat wait: if Chief is still working, the UI keeps waiting instead of reporting no reply after a few minutes. A turn that stays marked running can keep you waiting; hangs are not all detected.
 
@@ -99,7 +99,7 @@ Default UI is **English**. Switch to 中文 in Settings or the sidebar (`localSt
 
 Douya uses the official [`@modelcontextprotocol/server-memory`](https://www.npmjs.com/package/@modelcontextprotocol/server-memory) **2.1.1** knowledge graph. Chat auto-recall uses `mcp__memory__*` tools (`create_entities`, `add_observations`, `search_nodes`, `read_graph`, …). The Memories / Recall page, Chief digest, and Future’s grounding read the same JSONL, achievements first.
 
-Desktop installers already include the server and Node; the file is `$ODM_DATA_DIR/memory.jsonl`. Existing OpenViking memories are not migrated. For `npm start`, install the package once if it is not already in `node_modules` — see [docs/memory.md](docs/memory.md).
+Desktop installers already include the server and Node; the file is `$ODM_DATA_DIR/memory.jsonl`. For `npm start`, install the package once if it is not already in `node_modules` — see [docs/memory.md](docs/memory.md).
 
 ---
 

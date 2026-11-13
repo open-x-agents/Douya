@@ -10,11 +10,9 @@ Installer and data-dir paths: [install.md](install.md).
 
 Desktop installers include `@modelcontextprotocol/server-memory@2.1.1` next to the bundled official Node **24.22.1**. dsh starts the server with that Node; there is no `npx`, no network at runtime, and no Python, CPython, llama.cpp, or GGUF model. Chat still needs a supported provider in Settings (the first-run wizard). The app is not promised to work fully offline — only memory storage is local and model-free.
 
-Attaching photos to a memory is no longer supported (that feature existed only on OpenViking). The Recall page hides those controls.
+Attaching photos to a memory is no longer supported. The Recall page hides those controls.
 
-## Existing OpenViking memories are not migrated
-
-Memories that lived in an OpenViking workspace (`viking://~/memories`, `userData/openviking/data`, or `~/.openviking`) are **not migrated**. A one-time export is possible by hand but is out of scope here. After this change the app does not start OpenViking, does not read `ov.conf`, and does not talk to port 1933.
+Existing OpenViking memories are not migrated.
 
 ## Source-run (`npm start`)
 

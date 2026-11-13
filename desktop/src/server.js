@@ -255,8 +255,8 @@ export function tail(text, n = 12) {
 /**
  * Spawn env with a single PATH.
  * On Windows the system key is often `Path`; dropping it without copying the
- * value into `PATH` used to clear the child's path (OpenViking's start failure
- * on rc8). When `path` is omitted, the existing Path/PATH value is preserved.
+ * value into `PATH` used to clear the child's path. When `path` is omitted,
+ * the existing Path/PATH value is preserved.
  */
 export function sanitizeSpawnEnv(env, { path, platform = process.platform } = {}) {
   const out = { ...env }

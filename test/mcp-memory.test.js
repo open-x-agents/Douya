@@ -11,7 +11,7 @@ import {
 } from '../src/digest/mcp-memory.js'
 import { listMemories, forgetMemory, readChiefMemory } from '../src/digest/runner.js'
 import { presentMemoryList, memorySourceKey } from '../packages/dsh-muse-ui/memory-present.js'
-import { ensureMemoryMcp, upsertMemoryMcpPatch, stripOpenVikingFromProfile, OPENVIKING_PLUGIN, odmProfilePackageJson, ODM_PROFILE_BUNDLES, ensureOdmProfile } from '../scripts/start-dsh-util.mjs'
+import { ensureMemoryMcp, upsertMemoryMcpPatch, syncOdmProfilePackage, odmProfilePackageJson, ODM_PROFILE_BUNDLES, ensureOdmProfile } from '../scripts/start-dsh-util.mjs'
 import { BUNDLED_PACKAGES, ROOT_PACKAGES, MEMORY_SERVER, memoryServerPath } from '../desktop/scripts/bundle-app-runtime.mjs'
 
 function fixture(dir, lines) {
@@ -65,7 +65,7 @@ test('ids round-trip and reject junk', () => {
   assert.equal(parseMemoryId(id).observation, 'Speaks Spanish')
   assert.equal(parseMemoryId(id).kind, 'obs')
   assert.equal(parseMemoryId(entityId('Alice')).kind, 'ent')
-  assert.equal(parseMemoryId('viking://~/memories/x'), null)
+  assert.equal(parseMemoryId('legacy:memories/x'), null)
   assert.equal(parseMemoryId('12'), null)
   assert.equal(parseMemoryId('obs:%%%%'), null)
 })
@@ -183,7 +183,7 @@ test('forgetMcpMemory: entity id removes the whole node; invalid id is refused',
   const g = loadGraph(file)
   assert.ok(!g.entities.some((e) => e.name === 'Douya'))
   assert.ok(!g.relations.some((rel) => rel.to === 'Douya'))
-  const bad = forgetMcpMemory('viking://~/memories/x', file)
+  const bad = forgetMcpMemory('not-a-memory-id', file)
   assert.equal(bad.ok, false)
   assert.equal(bad.forgotten, false)
   rmSync(tmp, { recursive: true, force: true })
@@ -244,9 +244,6 @@ test('listMemories / forgetMemory / readChiefMemory go through the MCP adapter',
   assert.ok(!again.memories.some((m) => /Prefers morning/.test(m.text)))
   const chief = await readChiefMemory(tmp, { file })
   assert.match(chief, /mcp__memory__search_nodes/)
-  const viking = await forgetMemory(tmp, 'viking://~/memories/x')
-  assert.equal(viking.ok, false)
-  assert.match(viking.error, /not migrated/)
   // Unavailable vs empty at the runner layer
   const none = await listMemories(tmp, { file: null, limit: 5 })
   // file:null → memoryFile() falls through to env; isolate by passing a dir path as file that's unreadable
@@ -315,57 +312,54 @@ test('ensureMemoryMcp writes a stdio dsh-mcp-client entry with bundled Node, no 
   rmSync(tmp, { recursive: true, force: true })
 })
 
-test('stripOpenVikingFromProfile removes the retired plugin from an existing odm profile', () => {
-  const tmp = mkdtempSync(join(tmpdir(), 'odm-mcp-strip-'))
+test('syncOdmProfilePackage drops a retired plugin from an existing odm profile', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'odm-mcp-sync-'))
   const profile = join(tmp, 'odm')
-  mkdirSync(join(profile, 'node_modules', '@openviking'), { recursive: true })
+  const stale = '@example/retired-memory'
+  mkdirSync(join(profile, 'node_modules', '@example'), { recursive: true })
   writeFileSync(join(profile, 'package.json'), JSON.stringify({
-    dependencies: { [OPENVIKING_PLUGIN]: '0.5.33', 'dsh-muse-ui': 'file:x' },
-    dsh: { profile: { bundles: ['dsh-muse-ui', 'opendigitalmate', OPENVIKING_PLUGIN] } },
+    dependencies: { [stale]: '0.5.33', 'dsh-muse-ui': 'file:x' },
+    dsh: { profile: { bundles: ['dsh-muse-ui', 'opendigitalmate', stale] } },
   }))
-  mkdirSync(join(profile, 'node_modules', OPENVIKING_PLUGIN), { recursive: true })
-  writeFileSync(join(profile, 'node_modules', OPENVIKING_PLUGIN, 'package.json'), '{}')
-  const r = stripOpenVikingFromProfile(profile)
-  assert.equal(r.action, 'stripped')
+  mkdirSync(join(profile, 'node_modules', stale), { recursive: true })
+  writeFileSync(join(profile, 'node_modules', stale, 'package.json'), '{}')
+  const r = syncOdmProfilePackage(profile, '/rt')
+  assert.equal(r.action, 'synced')
   const pkg = JSON.parse(readFileSync(join(profile, 'package.json'), 'utf8'))
-  assert.ok(!pkg.dependencies[OPENVIKING_PLUGIN])
-  assert.ok(!pkg.dsh.profile.bundles.includes(OPENVIKING_PLUGIN))
-  assert.ok(pkg.dsh.profile.bundles.includes('dsh-muse-ui'))
-  assert.ok(!existsSync(join(profile, 'node_modules', OPENVIKING_PLUGIN, 'package.json')))
+  assert.ok(!pkg.dependencies[stale])
+  assert.ok(!pkg.dsh.profile.bundles.includes(stale))
+  assert.deepEqual(pkg.dsh.profile.bundles, [...ODM_PROFILE_BUNDLES])
+  assert.ok(!existsSync(join(profile, 'node_modules', stale, 'package.json')))
   rmSync(tmp, { recursive: true, force: true })
 })
 
-test('odm profile bundles no longer include OpenViking; app-runtime pins MCP Memory 2.1.1', () => {
-  assert.ok(!ODM_PROFILE_BUNDLES.includes(OPENVIKING_PLUGIN))
+test('odm profile bundles the official plugins; app-runtime pins MCP Memory 2.1.1', () => {
   const pkg = odmProfilePackageJson('/rt')
-  assert.ok(!pkg.dependencies[OPENVIKING_PLUGIN])
+  assert.ok(ODM_PROFILE_BUNDLES.includes('opendigitalmate'))
+  assert.ok(ODM_PROFILE_BUNDLES.includes('dsh-muse-ui'))
+  assert.equal(pkg.dependencies.opendigitalmate, 'file:/rt')
   assert.equal(BUNDLED_PACKAGES[MEMORY_SERVER], '2.1.1')
   assert.equal(ROOT_PACKAGES[MEMORY_SERVER], '2.1.1')
   assert.equal(memoryServerPath('/rt'), join('/rt', 'node_modules', '@modelcontextprotocol', 'server-memory', 'dist', 'index.js'))
 })
 
-test('docs, chrome, and prompts describe MCP Memory and not a bundled OpenViking server', () => {
+test('docs, chrome, and prompts describe MCP Memory', () => {
   const mem = readFileSync(new URL('../docs/memory.md', import.meta.url), 'utf8')
   const install = readFileSync(new URL('../docs/install.md', import.meta.url), 'utf8')
   const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8')
   const start = readFileSync(new URL('../scripts/start-dsh.mjs', import.meta.url), 'utf8')
   const tools = readFileSync(new URL('../src/web/dsbot-tools.js', import.meta.url), 'utf8')
-  const main = readFileSync(new URL('../desktop/src/main.js', import.meta.url), 'utf8')
   const workflow = readFileSync(new URL('../.github/workflows/desktop.yml', import.meta.url), 'utf8')
   const desk = JSON.parse(readFileSync(new URL('../desktop/package.json', import.meta.url), 'utf8'))
   for (const text of [mem, install, readme]) {
     assert.match(text, /@modelcontextprotocol\/server-memory/)
     assert.match(text, /mcp__memory__/)
-    assert.match(text, /not migrated|are not migrated|not a migration/i)
   }
+  assert.match(mem, /are not migrated/)
   assert.match(start, /ensureMemoryMcp/)
   assert.match(start, /MEMORY_FILE_PATH/)
-  assert.doesNotMatch(start, /dsh plugin.*openviking/)
   assert.match(tools, /mcp__memory__create_entities/)
   assert.match(tools, /MEMORY_TOOL_PROMPT/)
-  assert.doesNotMatch(main, /openviking/)
-  assert.doesNotMatch(workflow, /bundle-openviking/)
   assert.doesNotMatch(workflow, /setup-uv/)
   assert.ok(!desk.scripts['bundle:ov'])
-  assert.ok(!(desk.build.extraResources || []).some((e) => e.to === 'openviking'))
 })

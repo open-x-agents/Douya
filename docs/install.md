@@ -58,7 +58,7 @@ On a first launch where no chat model is saved, a **setup wizard** opens and ask
 
 Each installer includes the official MCP Memory server [`@modelcontextprotocol/server-memory@2.1.1`](https://www.npmjs.com/package/@modelcontextprotocol/server-memory) (MIT; pure Node; no embeddings). dsh launches it with the bundled Node via `dsh-mcp-client`; tools appear as `mcp__memory__*`. The knowledge-graph JSONL is `$ODM_DATA_DIR/memory.jsonl` (under userData in the packaged app). There is no Python, llama.cpp, or GGUF in the package, and nothing is written under `resources/`.
 
-This is **not** a bundled chat model. Chat still needs a supported provider (the first-run wizard). Memory needs no embedding key and no Ollama. Existing OpenViking memories are not migrated. More: [memory.md](memory.md).
+This is **not** a bundled chat model. Chat still needs a supported provider (the first-run wizard). Memory needs no embedding key and no Ollama. More: [memory.md](memory.md).
 
 This rc keeps waiting while a Muse turn is still working, instead of reporting no reply after a short wall-clock timeout. A turn that stays marked `running` can keep you waiting; that is not a guarantee every hang is detected.
 
@@ -87,6 +87,6 @@ Two trees matter, and the app does **not** automatically copy or reindex one int
 
 There you will find `settings.json` (window bounds, and any last-resort remembered paths), `odm-data/` (including `memory.jsonl`, the MCP Memory graph), and `dsh-odm/`. Logs: `~/Library/Logs/Douya` on macOS, or `logs` under userData on Windows and Linux.
 
-**Memory file:** `$ODM_DATA_DIR/memory.jsonl` (override with `MEMORY_FILE_PATH`). Existing OpenViking workspaces under `~/.openviking` or `userData/openviking` are left on disk and are not migrated.
+**Memory file:** `$ODM_DATA_DIR/memory.jsonl` (override with `MEMORY_FILE_PATH`).
 
 Updates: install the newer `desktop-v*` package over the previous one. Config and memory stay in the locations above unless you delete them yourself.

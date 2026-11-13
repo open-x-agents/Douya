@@ -6,7 +6,7 @@ Product narrative for Douya / 豆芽:
 - **Today** — current affairs with real completion feedback
 - **Memories** — readable memories, achievements, photos
 
-Architecture: Muse UI ↔ Chief / bots ↔ OpenViking ↔ Sources.
+Architecture: Muse UI ↔ Chief / bots ↔ MCP Memory ↔ Sources.
 
 Principles: less is more · bilingual EN/中文 · ship via PR into `main`.
 

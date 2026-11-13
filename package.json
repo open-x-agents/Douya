@@ -1,7 +1,7 @@
 {
   "name": "opendigitalmate",
   "version": "0.1.0",
-  "description": "Douya / \u8c46\u82bd \u2014 Muse-style coworker on dsh: Today \u00b7 Memories \u00b7 (Future next). Host digests + Confirm-gated actions; UI is packages/dsh-muse-ui.",
+  "description": "Douya / 豆芽 — Muse-style coworker on dsh: Today · Memories · (Future next). Host digests + Confirm-gated actions; UI is packages/dsh-muse-ui.",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -37,7 +37,7 @@
     "douya",
     "today",
     "memories",
-    "openviking",
+    "mcp-memory",
     "composio"
   ],
   "peerDependencies": {

@@ -7,7 +7,7 @@ Start at the root [README](../README.md). This folder holds the rest, by audienc
 | Doc | Language | What it covers |
 | --- | --- | --- |
 | [Install, first launch, and data](install.md) | EN | Desktop packages, signing, Linux AppImage vs `.deb`, FUSE, config and data locations |
-| [Memory (OpenViking)](memory.md) | EN | Bundled embedding vs chat/VLM, source-run server, what is not migrated |
+| [Memory (MCP Memory)](memory.md) | EN | Official `@modelcontextprotocol/server-memory`, JSONL path, what is not migrated |
 | [macOS Shortcut](mac-shortcut.md) | 中文 | One hotkey to open the token URL from a source checkout |
 | [Connected-source scans](sources/connected-scans.md) | EN | What Sources actually scan, and the limits |
 | [LLM / chat setup](LLM_SETUP.md) | EN | Provider keys, `.odm-data/config.json`, token URL |
@@ -31,4 +31,3 @@ These are kept because they still describe a contract, a research note, or a rec
 - [Labels](labels.md) · [Feishu contract](feishu-contract.md) · [Aggregation research](aggregation-research.md) · [e2e day-1 record](e2e-day1.md)
 - [Archive](archive/README.md) — superseded how-tos and status snapshots (may contradict current code)
 
-The bundled OpenViking pack-time note lives in [`desktop/resources/openviking/README.md`](../desktop/resources/openviking/README.md).

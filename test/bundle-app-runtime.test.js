@@ -62,8 +62,10 @@ test('shouldCopy keeps the runtime tree and drops tests, desktop, docs, .git, se
 test('applyBundledDeps pins the dsh CLI at the root and drops dev/optional', () => {
   const next = applyBundledDeps({ name: 'opendigitalmate', devDependencies: { playwright: '1' }, optionalDependencies: { x: '1' } })
   assert.equal(next.dependencies['@deepseek-ai/dsh'], ROOT_PACKAGES['@deepseek-ai/dsh'])
+  assert.equal(next.dependencies['@modelcontextprotocol/server-memory'], '2.1.1')
   assert.equal(next.dependencies['@openviking/dsh-memory-plugin'], undefined)
   assert.equal(BUNDLED_PACKAGES[MEMORY_PLUGIN], MEMORY_PLUGIN_VERSION)
+  assert.equal(MEMORY_PLUGIN_VERSION, '2.1.1')
   assert.equal(next.devDependencies, undefined)
   assert.equal(next.optionalDependencies, undefined)
 })
@@ -105,9 +107,10 @@ test('bundledDshEntry points at the published @deepseek-ai/dsh JS bin', () => {
 test('desktop CI stages the app runtime before electron-builder', () => {
   const yml = readFileSync(new URL('../.github/workflows/desktop.yml', import.meta.url), 'utf8')
   const stageAt = yml.indexOf('bundle-app-runtime.mjs')
-  const ovAt = yml.indexOf('bundle-openviking.mjs')
   const buildAt = yml.indexOf('electron-builder')
-  assert.ok(stageAt > 0 && ovAt > stageAt && buildAt > ovAt)
+  assert.ok(stageAt > 0 && buildAt > stageAt)
+  assert.equal(yml.indexOf('bundle-openviking.mjs'), -1)
+  assert.equal(yml.indexOf('setup-uv'), -1)
 })
 
 test('nodeArchive pins official Node 24 builds for every desktop CI target', () => {

@@ -1,6 +1,6 @@
 // Long-horizon plans are user state, not digest cards. No embeddings or new service.
 import { randomUUID } from 'node:crypto'
-import { listOpenVikingMemories } from '../digest/openviking.js'
+import { listMcpMemories } from '../digest/mcp-memory.js'
 
 const text = (value, max = 500) => typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : ''
 const fail = error => ({ ok: false, error })
@@ -9,7 +9,7 @@ export function progress(plan) {
   const steps = plan?.steps || [], done = steps.filter(s => s.done).length, next = steps.find(s => !s.done)
   return { done, total: steps.length, percent: Math.round(done / (steps.length || 1) * 100), next: next ? { id: next.id, text: next.text } : null }
 }
-export function createFutureService({ store, memories = listOpenVikingMemories, emit = () => {} }) {
+export function createFutureService({ store, memories = (opts) => listMcpMemories({ file: process.env.MEMORY_FILE_PATH || undefined, ...opts }), emit = () => {} }) {
   let queue = Promise.resolve()
   async function context() {
     try {

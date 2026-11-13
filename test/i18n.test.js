@@ -198,3 +198,39 @@ test('chat errors and the Composio key hint go through i18n (no zh-only literals
   assert.match(t('chat.empty_reply', 'zh'), /没有返回内容/)
   assert.match(t('settings.composio_key_help', 'en'), /Composio Dashboard/)
 })
+
+test('My Day timetable empty states, actions and lock chrome go through i18n', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of [
+    '今天还没有安排 · 豆芽会按精力曲线帮你填上专注与缓冲',
+    '今天还很轻 🌱',
+    '今天的安排都已过去，剩余约',
+    '日历原时区不是北京时间，已按 Asia/Shanghai 显示',
+    'content:"锁"',
+    ' · 日历锁定',
+    '>开始</button>',
+    '>延后 30 分</button>',
+    "title: '会后缓冲'",
+    "showUiToast('日历会议已锁定，不能拖动')",
+  ]) {
+    assert.ok(!html.includes(s), `hardcoded zh copy left in timetable: ${s}`)
+  }
+  assert.match(html, /t\('tt\.empty_note'\)/)
+  assert.match(html, /t\('tt\.past_note'/)
+  assert.match(html, /t\('tt\.empty_title'\)/)
+  assert.match(html, /t\('tt\.empty_body'\)/)
+  assert.match(html, /t\('tile\.tt\.tz_note'\)/)
+  assert.match(html, /t\('tt\.act_start'\)/)
+  assert.match(html, /t\('tt\.act_delay'\)/)
+  assert.match(html, /t\('tt\.lock_toast'\)/)
+  assert.match(html, /content:attr\(data-lock-mark\)/)
+  assert.match(t('tt.empty_title', 'en'), /light day/i)
+  assert.match(t('tt.empty_title', 'zh'), /今天还很轻/)
+  assert.match(t('tt.empty_note', 'en'), /No plan yet/)
+  assert.match(t('tt.past_note', 'en', { h: '1.5' }), /1\.5h/)
+  assert.match(t('tt.past_note', 'zh', { h: '1.5' }), /1\.5/)
+  assert.equal(t('tt.act_start', 'en'), 'Start')
+  assert.equal(t('tt.act_start', 'zh'), '开始')
+  assert.match(t('tt.lock_toast', 'en'), /locked/i)
+  assert.match(t('tile.tt.tz_note', 'en'), /Asia\/Shanghai/)
+})

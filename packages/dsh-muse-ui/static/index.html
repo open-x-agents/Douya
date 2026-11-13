@@ -814,7 +814,7 @@
   .tt-bar{cursor:default;user-select:none;gap:2px}
   .tt-bar .tt-ic{font-size:11px;line-height:1;opacity:.9;margin-right:3px}
   .tt-bar.locked{cursor:default;background-image:repeating-linear-gradient(135deg,transparent,transparent 5px,rgba(255,255,255,.18) 5px,rgba(255,255,255,.18) 6px)}
-  .tt-bar.locked::after{content:"锁";position:absolute;top:3px;right:5px;font-size:9px;font-weight:700;opacity:.55;letter-spacing:.04em}
+  .tt-bar.locked::after{content:attr(data-lock-mark);position:absolute;top:3px;right:5px;font-size:9px;font-weight:700;opacity:.55;letter-spacing:.04em}
   .tt-bar.soft{cursor:grab}
   .tt-bar.soft:active,.tt-bar.dragging{cursor:grabbing;z-index:5;opacity:.92;box-shadow:inset 3px 0 0 currentColor,0 4px 14px rgba(30,40,80,.18)}
   .tt-bar .tt-rz{position:absolute;top:0;bottom:0;width:8px;cursor:ew-resize;z-index:2}
@@ -3254,14 +3254,14 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const soft = !b.fixed;
       const lock = b.fixed || b.locked;
       const resize = soft ? '<i class="tt-rz l" data-rz="l"></i><i class="tt-rz r" data-rz="r"></i>' : '';
-      return `<div class="tt-bar c-${escapeHtml(catKey)} ${state}${lock ? ' locked' : ''}${soft ? ' soft' : ''}" data-i="${i}" data-start="${escapeHtml(b.start)}" data-end="${escapeHtml(b.end)}" data-title="${escapeHtml(ttTitle(b.title))}" data-fixed="${lock ? '1' : '0'}" style="left:${pct(b.s)}%;width:calc(${pct(b.ve) - pct(b.s)}% - 2px);top:${5 + b.lane * laneH}px;height:${laneH - 6}px;position:absolute" title="${escapeHtml(b.start + '–' + b.end + ' ' + ttTitle(b.title))}${lock ? ' · 日历锁定' : ''}"><b><span class="tt-ic">${ic}</span>${escapeHtml(cat)}${lock ? '' : ''}</b><span>${escapeHtml(b.start)}–${escapeHtml(b.end)} · ${escapeHtml(ttTitle(b.title))}</span>${resize}</div>`;
+      return `<div class="tt-bar c-${escapeHtml(catKey)} ${state}${lock ? ' locked' : ''}${soft ? ' soft' : ''}" data-i="${i}" data-start="${escapeHtml(b.start)}" data-end="${escapeHtml(b.end)}" data-title="${escapeHtml(ttTitle(b.title))}" data-fixed="${lock ? '1' : '0'}" style="left:${pct(b.s)}%;width:calc(${pct(b.ve) - pct(b.s)}% - 2px);top:${5 + b.lane * laneH}px;height:${laneH - 6}px;position:absolute" data-lock-mark="${lock ? escapeHtml(t('tt.locked_mark')) : ''}" title="${escapeHtml(b.start + '–' + b.end + ' ' + ttTitle(b.title) + (lock ? ' · ' + t('tt.locked') : ''))}"><b><span class="tt-ic">${ic}</span>${escapeHtml(cat)}${lock ? '' : ''}</b><span>${escapeHtml(b.start)}–${escapeHtml(b.end)} · ${escapeHtml(ttTitle(b.title))}</span>${resize}</div>`;
     }).join('');
     const upcoming = blocks.find(b => b.e > nowM);
     const fixedN = blocks.filter(b => b.fixed).length;
     const freeMin = Math.max(0, (Math.min(hi, 23 * 60) - nowM) - blocks.filter(b => b.e > nowM).reduce((s, b) => s + (b.e - Math.max(b.s, nowM)), 0));
     let note;
     if (!blocks.length) {
-      note = '今天还没有安排 · 豆芽会按精力曲线帮你填上专注与缓冲';
+      note = escapeHtml(t('tt.empty_note'));
     } else if (upcoming) {
       const ttl = ttTitle(upcoming.title), c = CAT_ZH[upcoming.category] || '';
       const label = escapeHtml(c && !ttl.startsWith(c) ? c + '：' + ttl : ttl);
@@ -3269,7 +3269,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         ? `<span class="tt-nowlbl">${t('tt.now')}</span> ${escapeHtml(upcoming.start)}–${escapeHtml(upcoming.end)} ${label}`
         : `<span class="tt-nowlbl">${t('tt.next')}</span> ${escapeHtml(upcoming.start)} ${label}`;
     } else {
-      note = `今天的安排都已过去，剩余约 ${(freeMin / 60).toFixed(1)} 小时空闲，适合收尾或复盘。`;
+      note = escapeHtml(t('tt.past_note', { h: (freeMin / 60).toFixed(1) }));
     }
     // Buffer suggestions after meetings when the next 15 min are free
     const bufChips = [];
@@ -3278,7 +3278,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const taken = blocks.some(b => b.s < gapEnd && b.e > f.e && b !== f);
       if (!taken && f.e < 23 * 60) bufChips.push({ start: fmtMin(f.e), end: fmtMin(Math.min(gapEnd, 24 * 60 - 1)), after: ttTitle(f.title) });
     }
-    const emptyHtml = `<div class="tt-empty"><b>今天还很轻 🌱</b><span>连接 Google 日历后，会议会锁在轴上；空档会按上午专注、下午杂务排进来。</span></div>`;
+    const emptyHtml = `<div class="tt-empty"><b>${escapeHtml(t('tt.empty_title'))}</b><span>${escapeHtml(t('tt.empty_body'))}</span></div>`;
     const tzNote = tt.tzNote ? `<div class="tt-tz">⏱ ${escapeHtml(tt.tzNote)}</div>` : '';
     // Detect client-side mismatch if server didn't stamp tzNote
     const tzClient = !tt.tzNote && (tt.fixedBlocks || []).some(b => {
@@ -3289,7 +3289,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const sign = m[1].startsWith('-') ? -1 : 1;
       const absH = Math.abs(Number(m[1]));
       return sign * (absH * 60 + Number(m[2] || 0)) !== 8 * 60;
-    }) ? `<div class="tt-tz">⏱ 日历原时区不是北京时间，已按 Asia/Shanghai 显示</div>` : '';
+    }) ? `<div class="tt-tz">⏱ ${escapeHtml(t('tile.tt.tz_note'))}</div>` : '';
     return `
       <section class="myday" data-sys="timetable" data-card-id="${escapeHtml(card.id || '')}">
         <div class="myday-head">
@@ -3307,18 +3307,18 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
           <div class="tt-axis">${ticks}</div>
         </div>
         <div class="tt-acts" data-tt-acts>
-          <button type="button" data-tt-act="start" class="primary">开始</button>
-          <button type="button" data-tt-act="delay">延后 30 分</button>
-          <button type="button" data-tt-act="shorten">缩短</button>
-          <button type="button" data-tt-act="ask">交给豆芽</button>
+          <button type="button" data-tt-act="start" class="primary">${escapeHtml(t('tt.act_start'))}</button>
+          <button type="button" data-tt-act="delay">${escapeHtml(t('tt.act_delay'))}</button>
+          <button type="button" data-tt-act="shorten">${escapeHtml(t('tt.act_shorten'))}</button>
+          <button type="button" data-tt-act="ask">${escapeHtml(t('tt.act_ask'))}</button>
         </div>
-        ${bufChips.length ? `<div class="tt-buf">${bufChips.map(c => `<button type="button" data-tt-buf="${escapeHtml(c.start)}" data-tt-buf-end="${escapeHtml(c.end)}" title="在 ${escapeHtml(c.after)} 后">＋ 会后缓冲 ${escapeHtml(c.start)}–${escapeHtml(c.end)}</button>`).join('')}</div>` : ''}
+        ${bufChips.length ? `<div class="tt-buf">${bufChips.map(c => `<button type="button" data-tt-buf="${escapeHtml(c.start)}" data-tt-buf-end="${escapeHtml(c.end)}" title="${escapeHtml(t('tt.buf_after', { title: c.after }))}">${escapeHtml(t('tt.buf_label', { start: c.start, end: c.end }))}</button>`).join('')}</div>` : ''}
       </section>`;
   }
 
   async function timetablePatch(ops, toastOk) {
     const r = await fetch('/api/opendigitalmate/timetable', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'patch', ops }) }).then(x => x.json()).catch(e => ({ success: false, error: e.message }));
-    if (!r.success) { showUiToast((r.errors && r.errors[0]) || r.error || '没改成'); return null; }
+    if (!r.success) { showUiToast((r.errors && r.errors[0]) || r.error || t('tt.patch_fail')); return null; }
     if (r.warnings && r.warnings[0]) showUiToast(r.warnings[0]);
     else if (toastOk) showUiToast(toastOk);
     await loadToday({ force: true }).catch(() => {});
@@ -3341,7 +3341,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     el.querySelectorAll('.tt-bar').forEach(bar => {
       bar.addEventListener('click', e => {
         e.stopPropagation();
-        if (bar.dataset.fixed === '1') { showUiToast('日历会议已锁定，不能拖动'); selectBar(null); return; }
+        if (bar.dataset.fixed === '1') { showUiToast(t('tt.lock_toast')); selectBar(null); return; }
         selectBar(bar);
       });
     });
@@ -3367,21 +3367,21 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       if (act === 'delay') {
         const s = toMin(start), e = toMin(end); if (s == null) return;
         const ns = snapMin(s + 30), ne = snapMin(e + 30);
-        await timetablePatch([{ match: start, start: fmtMin(ns), end: fmtMin(ne) }], `已延后「${title}」30 分`);
+        await timetablePatch([{ match: start, start: fmtMin(ns), end: fmtMin(ne) }], t('tt.delayed', { title }));
         return;
       }
       if (act === 'shorten') {
         const s = toMin(start), e = toMin(end); if (s == null || e == null) return;
         const dur = e - s;
-        if (dur <= 20) { showUiToast('已经够短了'); return; }
+        if (dur <= 20) { showUiToast(t('tt.too_short')); return; }
         const ne = snapMin(s + Math.max(15, dur - 30));
-        await timetablePatch([{ match: start, end: fmtMin(Math.max(s + 15, ne)) }], `已缩短「${title}」`);
+        await timetablePatch([{ match: start, end: fmtMin(Math.max(s + 15, ne)) }], t('tt.shortened', { title }));
       }
     }));
     el.querySelectorAll('[data-tt-buf]').forEach(btn => btn.addEventListener('click', async e => {
       e.stopPropagation();
       const start = btn.getAttribute('data-tt-buf'), end = btn.getAttribute('data-tt-buf-end');
-      await timetablePatch([{ start, end, title: '会后缓冲', kind: 'break' }], '已加入会后缓冲');
+      await timetablePatch([{ start, end, title: t('tt.buf_title'), kind: 'break' }], t('tt.buf_added'));
     }));
 
     // Drag move / resize soft blocks (15-min snap); calendar collisions handled server-side (split/reject).

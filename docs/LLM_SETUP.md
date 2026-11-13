@@ -13,7 +13,7 @@ Chat goes through **ds-bot Chief** inside `dsh --profile odm`, not the old stand
 2. **Default model** in `$DSH_HOME/settings.yaml` (`agent-default-model`, usually `deepseek` / `deepseek-flash`). `deepseek-flash` is the current DeepSeek API id (DeepSeek-V4.1-Flash). `deepseek-chat` is a retired alias.
 3. **Login cookie**: open the `?token=…` URL from `.odm-data/dsh-web.url` (plain `http://127.0.0.1:7777` → 401)
 
-`npm start` (`scripts/start-dsh.mjs`) and **配置 / the setup wizard** (`POST /api/llm/config`) call `syncLlmToDsh`, which writes the key into `.credentials.yaml` (watched and hot-reloaded, so a new key takes effect without a restart) and refreshes `settings.yaml`. A custom OpenAI-compatible base URL is written as an `llm-pi-ai` provider route.
+`npm start` (`scripts/start-dsh.mjs`) and **配置 / the setup wizard** (`POST /api/llm/config`) call `syncLlmToDsh`, which writes the key into `.credentials.yaml` (watched and hot-reloaded, so a new key takes effect without a restart) and refreshes `settings.yaml`. A custom OpenAI-compatible base URL is written as an `llm-pi-ai` provider route, merged into any existing providers (a blank line in the block is fine). Switching back to official DeepSeek removes a stale `deepseek` route so the odm profile wins. An inline empty `refs: {}` in `.credentials.yaml` still receives the key.
 
 ## Fresh DeepSeek + Composio
 

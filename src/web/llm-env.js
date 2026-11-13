@@ -182,6 +182,9 @@ export function upsertCredentialRefs(text, updates) {
   if (!/^refs:/m.test(next)) {
     return next.replace(/^(version:\s*1[ \t]*\n)/m, `$1refs:\n${block}`)
   }
+  // Inline empty mapping (`refs: {}` / `refs: { }`) must become a block
+  // so a later insert of `  KEY: ...` can match `refs:\n`.
+  next = next.replace(/^refs:[ \t]*\{[ \t]*\}[ \t]*\n/m, 'refs:\n')
   for (const [k, v] of entries) {
     const line = `  ${k}: ${yamlScalar(v)}`
     const re = new RegExp(`^  ${k}:[^\\n]*\\n`, 'm')
@@ -223,20 +226,75 @@ function safeIdent(value, fallback) {
   return /^[A-Za-z0-9._-]+$/.test(s) ? s : fallback
 }
 
-function providerRouteBlock(llm = {}) {
+function escapeRe(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * A YAML mapping entry at `indent` whose key is `key`, within [from, to).
+ * Blank lines and comments inside the block are included; the block ends at
+ * the first non-empty, non-comment line with indent <= `indent`. Trailing
+ * blank lines before the next sibling are not part of the block.
+ */
+function yamlMappingBlock(text, key, indent = 0, from = 0, to = text.length) {
+  const region = text.slice(from, to)
+  const pad = ' '.repeat(indent)
+  const re = new RegExp(`^${pad}${escapeRe(key)}:[^\\n]*\\n?`, 'm')
+  const m = region.match(re)
+  if (!m) return null
+  const start = from + m.index
+  let pos = start + m[0].length
+  const keyLineEnd = pos
+  const childMin = indent + 1
+  const limit = Math.min(to, text.length)
+  while (pos < limit) {
+    const nl = text.indexOf('\n', pos)
+    const lineEnd = nl === -1 || nl + 1 > limit ? limit : nl + 1
+    const line = text.slice(pos, lineEnd)
+    const trimmed = line.trim()
+    if (trimmed === '' || trimmed.startsWith('#')) {
+      pos = lineEnd
+      if (nl === -1) break
+      continue
+    }
+    const sp = (line.match(/^ */) || [''])[0].length
+    if (sp < childMin) break
+    pos = lineEnd
+    if (nl === -1) break
+  }
+  let end = pos
+  while (end > keyLineEnd) {
+    const prev = text.lastIndexOf('\n', end - 2)
+    const lineStart = prev === -1 ? 0 : prev + 1
+    if (lineStart < start) break
+    const line = text.slice(lineStart, end)
+    if (line.trim() === '') {
+      end = lineStart
+      continue
+    }
+    break
+  }
+  return { start, end, keyLineEnd }
+}
+
+function isOfficialDeepseek(llm = {}) {
   const provider = safeIdent(String(llm.provider || '').toLowerCase(), '')
-  if (!provider) return ''
+  if (provider !== 'deepseek') return false
+  const rawBase = llm.baseURL ? String(llm.baseURL).trim() : ''
+  const baseURL = rawBase ? stripV1(rawBase) : ''
+  return !baseURL || /api\.deepseek\.com$/.test(baseURL)
+}
+
+/** The `    <id>:` entry (indent 4) for a custom / non-official route. */
+function providerEntryYaml(llm = {}) {
+  const provider = safeIdent(String(llm.provider || '').toLowerCase(), '')
+  if (!provider || isOfficialDeepseek(llm)) return ''
   const apiKeyEnv = provider === 'deepseek' ? 'OPENAI_API_KEY' : (PROVIDER_KEY_ENV[provider] || 'OPENAI_API_KEY')
   const rawBase = llm.baseURL ? String(llm.baseURL).trim() : ''
   const baseURL = rawBase
     ? (provider === 'deepseek' ? stripV1(rawBase) : rawBase.replace(/\/$/, ''))
     : ''
-  // Official DeepSeek is already declared in the odm profile (apiKeyEnv + models).
-  const officialDeepseek = provider === 'deepseek' && (!baseURL || /api\.deepseek\.com$/.test(baseURL))
-  if (officialDeepseek) return ''
   const lines = [
-    'llm-pi-ai:',
-    '  providers:',
     `    ${provider}:`,
     `      apiKeyEnv: ${apiKeyEnv}`,
   ]
@@ -250,22 +308,69 @@ function providerRouteBlock(llm = {}) {
   return lines.join('\n') + '\n'
 }
 
-/** Write a user-settings llm-pi-ai route for a custom baseURL or non-catalog provider. */
+function providerRouteBlock(llm = {}) {
+  const entry = providerEntryYaml(llm)
+  if (!entry) return ''
+  return 'llm-pi-ai:\n  providers:\n' + entry
+}
+
+function upsertProviderEntry(text, llm) {
+  const entry = providerEntryYaml(llm)
+  if (!entry) return text
+  const provider = safeIdent(String(llm.provider || '').toLowerCase(), '')
+  const pi = yamlMappingBlock(text, 'llm-pi-ai', 0)
+  if (!pi) {
+    const block = providerRouteBlock(llm)
+    return text.endsWith('\n') ? text + block : text + '\n' + block
+  }
+  const prov = yamlMappingBlock(text, 'providers', 2, pi.start, pi.end)
+  if (!prov) {
+    return text.slice(0, pi.keyLineEnd) + '  providers:\n' + entry + text.slice(pi.keyLineEnd)
+  }
+  const existing = yamlMappingBlock(text, provider, 4, prov.start, prov.end)
+  if (existing) return text.slice(0, existing.start) + entry + text.slice(existing.end)
+  return text.slice(0, prov.end) + entry + text.slice(prov.end)
+}
+
+function removeProviderEntry(text, providerId) {
+  const pi = yamlMappingBlock(text, 'llm-pi-ai', 0)
+  if (!pi) return text
+  const prov = yamlMappingBlock(text, 'providers', 2, pi.start, pi.end)
+  if (!prov) return text
+  const entry = yamlMappingBlock(text, providerId, 4, prov.start, prov.end)
+  if (!entry) return text
+  let next = text.slice(0, entry.start) + text.slice(entry.end)
+  const pi2 = yamlMappingBlock(next, 'llm-pi-ai', 0)
+  if (!pi2) return next
+  const prov2 = yamlMappingBlock(next, 'providers', 2, pi2.start, pi2.end)
+  if (prov2 && next.slice(prov2.keyLineEnd, prov2.end).trim() === '') {
+    next = next.slice(0, prov2.start) + next.slice(prov2.end)
+    const pi3 = yamlMappingBlock(next, 'llm-pi-ai', 0)
+    if (pi3 && next.slice(pi3.keyLineEnd, pi3.end).trim() === '') {
+      next = next.slice(0, pi3.start) + next.slice(pi3.end)
+    }
+  }
+  return next
+}
+
+/** Write a user-settings llm-pi-ai route for a custom baseURL or non-catalog provider.
+ * Official DeepSeek removes a stale `deepseek` route so the odm profile wins. */
 export function ensureProviderRoute(dshHome, llm = {}) {
   if (!dshHome) return false
-  const block = providerRouteBlock(llm)
-  if (!block) return false
+  const official = isOfficialDeepseek(llm)
+  const block = official ? '' : providerRouteBlock(llm)
+  if (!official && !block) return false
   mkdirSync(dshHome, { recursive: true })
   const file = join(dshHome, 'settings.yaml')
-  if (!existsSync(file)) { writeFileSync(file, block); return true }
-  let text = readFileSync(file, 'utf8')
-  if (/^llm-pi-ai\s*:/m.test(text)) {
-    const next = text.replace(/^llm-pi-ai:\n(?:  .*\n)*/m, block)
-    if (next === text) return false
-    writeFileSync(file, next)
+  if (!existsSync(file)) {
+    if (official) return false
+    writeFileSync(file, block)
     return true
   }
-  writeFileSync(file, text.endsWith('\n') ? text + block : text + '\n' + block)
+  const text = readFileSync(file, 'utf8')
+  const next = official ? removeProviderEntry(text, 'deepseek') : upsertProviderEntry(text, llm)
+  if (next === text) return false
+  writeFileSync(file, next)
   return true
 }
 

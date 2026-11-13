@@ -152,3 +152,150 @@ test('start-dsh and the LLM save path both sync credentials into DSH_HOME', asyn
   const api = await readFile(new URL('../src/web/api.js', import.meta.url), 'utf8')
   assert.match(api, /syncLlmToDsh\(dshHome, updates\.llm\)/)
 })
+
+test('ensureProviderRoute merges a custom provider and does not drop the others', () => {
+  const d = mkdtempSync(join(tmpdir(), 'odm-prov-merge-'))
+  writeFileSync(join(d, 'settings.yaml'), [
+    'agent-default-model:',
+    '  provider: openai',
+    '  model: gpt-4o',
+    'llm-pi-ai:',
+    '  providers:',
+    '    openai:',
+    '      apiKeyEnv: OPENAI_API_KEY',
+    '      baseURL: "https://gateway.example.com/v1"',
+    '    anthropic:',
+    '      apiKeyEnv: ANTHROPIC_API_KEY',
+    '',
+  ].join('\n'))
+  assert.equal(ensureProviderRoute(d, {
+    provider: 'custom',
+    model: 'my-local-model',
+    baseURL: 'http://127.0.0.1:8000/v1',
+    apiKey: FAKE,
+  }), true)
+  const t = readFileSync(join(d, 'settings.yaml'), 'utf8')
+  assert.match(t, /agent-default-model:\n  provider: openai/)
+  assert.match(t, /openai:\n      apiKeyEnv: OPENAI_API_KEY\n      baseURL: "https:\/\/gateway.example.com\/v1"/)
+  assert.match(t, /anthropic:\n      apiKeyEnv: ANTHROPIC_API_KEY/)
+  assert.match(t, /custom:\n      apiKeyEnv: OPENAI_API_KEY\n      baseURL: "http:\/\/127.0.0.1:8000\/v1"/)
+})
+
+test('ensureProviderRoute removes a stale deepseek route when switching back to official DeepSeek', () => {
+  const d = mkdtempSync(join(tmpdir(), 'odm-prov-off-'))
+  writeFileSync(join(d, 'settings.yaml'), [
+    'agent-default-model:',
+    '  provider: deepseek',
+    '  model: deepseek-flash',
+    'llm-pi-ai:',
+    '  providers:',
+    '    deepseek:',
+    '      apiKeyEnv: OPENAI_API_KEY',
+    '      baseURL: "https://proxy.example.com"',
+    '    openai:',
+    '      apiKeyEnv: OPENAI_API_KEY',
+    '      baseURL: "https://gateway.example.com/v1"',
+    '',
+  ].join('\n'))
+  assert.equal(ensureProviderRoute(d, {
+    provider: 'deepseek',
+    model: 'deepseek-flash',
+    baseURL: 'https://api.deepseek.com/v1',
+    apiKey: FAKE,
+  }), true)
+  const t = readFileSync(join(d, 'settings.yaml'), 'utf8')
+  assert.doesNotMatch(t, /proxy\.example\.com/)
+  assert.doesNotMatch(t, /^    deepseek:/m)
+  assert.match(t, /openai:\n      apiKeyEnv: OPENAI_API_KEY\n      baseURL: "https:\/\/gateway.example.com\/v1"/)
+  assert.match(t, /agent-default-model:\n  provider: deepseek/)
+  // A lone stale deepseek route takes the whole llm-pi-ai block with it.
+  const d2 = mkdtempSync(join(tmpdir(), 'odm-prov-off2-'))
+  writeFileSync(join(d2, 'settings.yaml'), [
+    'agent-default-model:',
+    '  provider: deepseek',
+    '  model: deepseek-flash',
+    'llm-pi-ai:',
+    '  providers:',
+    '    deepseek:',
+    '      apiKeyEnv: OPENAI_API_KEY',
+    '      baseURL: "https://proxy.example.com"',
+    '',
+  ].join('\n'))
+  assert.equal(ensureProviderRoute(d2, {
+    provider: 'deepseek',
+    model: 'deepseek-flash',
+    baseURL: 'https://api.deepseek.com',
+    apiKey: FAKE,
+  }), true)
+  const t2 = readFileSync(join(d2, 'settings.yaml'), 'utf8')
+  assert.doesNotMatch(t2, /llm-pi-ai/)
+  assert.doesNotMatch(t2, /proxy\.example\.com/)
+  assert.match(t2, /agent-default-model:\n  provider: deepseek/)
+})
+
+test('upsertCredentialRefs writes the key into an inline empty refs mapping', () => {
+  const a = upsertCredentialRefs('version: 1\nrefs: {}\nrecords:\n  keep: 1\n', { OPENAI_API_KEY: FAKE })
+  assert.match(a, /version: 1\nrefs:\n  OPENAI_API_KEY: "sk-test-fake-not-a-real-key"\nrecords:\n  keep: 1\n/)
+  const b = upsertCredentialRefs('version: 1\nrefs: { }\n', { OPENAI_API_KEY: FAKE })
+  assert.match(b, /refs:\n  OPENAI_API_KEY: "sk-test-fake-not-a-real-key"/)
+  const c = upsertCredentialRefs('version: 1\nrefs:{}\n', { OPENAI_API_KEY: FAKE, DEEPSEEK_API_KEY: FAKE })
+  assert.match(c, /OPENAI_API_KEY: "sk-test-fake-not-a-real-key"/)
+  assert.match(c, /DEEPSEEK_API_KEY: "sk-test-fake-not-a-real-key"/)
+  assert.match(c, /^refs:\n/m)
+  const d = mkdtempSync(join(tmpdir(), 'odm-cred-empty-'))
+  writeFileSync(join(d, '.credentials.yaml'), 'version: 1\nrefs: {}\nrecords:\n  client-connection/browser-session:\n    kind: grant\n')
+  assert.equal(syncLlmCredentials(d, { provider: 'deepseek', apiKey: FAKE }), true)
+  const after = readFileSync(join(d, '.credentials.yaml'), 'utf8')
+  assert.match(after, /OPENAI_API_KEY: "sk-test-fake-not-a-real-key"/)
+  assert.match(after, /DEEPSEEK_API_KEY: "sk-test-fake-not-a-real-key"/)
+  assert.match(after, /kind: grant/)
+  assert.doesNotMatch(after, /refs:\s*\{/)
+})
+
+test('ensureProviderRoute does not stop at a blank line inside the section', () => {
+  const d = mkdtempSync(join(tmpdir(), 'odm-prov-blank-'))
+  writeFileSync(join(d, 'settings.yaml'), [
+    'llm-pi-ai:',
+    '  providers:',
+    '    openai:',
+    '      apiKeyEnv: OPENAI_API_KEY',
+    '',
+    '    anthropic:',
+    '      apiKeyEnv: ANTHROPIC_API_KEY',
+    '',
+  ].join('\n'))
+  assert.equal(ensureProviderRoute(d, {
+    provider: 'custom',
+    model: 'my-local-model',
+    baseURL: 'http://127.0.0.1:8000/v1',
+    apiKey: FAKE,
+  }), true)
+  const t = readFileSync(join(d, 'settings.yaml'), 'utf8')
+  assert.match(t, /openai:\n      apiKeyEnv: OPENAI_API_KEY/)
+  assert.match(t, /anthropic:\n      apiKeyEnv: ANTHROPIC_API_KEY/)
+  assert.match(t, /custom:\n      apiKeyEnv: OPENAI_API_KEY/)
+
+  // A blank line inside the provider being updated must not leave a stale property behind.
+  const d2 = mkdtempSync(join(tmpdir(), 'odm-prov-blank2-'))
+  writeFileSync(join(d2, 'settings.yaml'), [
+    'llm-pi-ai:',
+    '  providers:',
+    '    openai:',
+    '      apiKeyEnv: OPENAI_API_KEY',
+    '',
+    '      baseURL: "https://old.example.com/v1"',
+    '    anthropic:',
+    '      apiKeyEnv: ANTHROPIC_API_KEY',
+    '',
+  ].join('\n'))
+  assert.equal(ensureProviderRoute(d2, {
+    provider: 'openai',
+    model: 'gpt-4o',
+    baseURL: 'https://new.example.com/v1',
+    apiKey: FAKE,
+  }), true)
+  const t2 = readFileSync(join(d2, 'settings.yaml'), 'utf8')
+  assert.doesNotMatch(t2, /old\.example\.com/)
+  assert.match(t2, /openai:\n      apiKeyEnv: OPENAI_API_KEY\n      baseURL: "https:\/\/new.example.com\/v1"/)
+  assert.match(t2, /anthropic:\n      apiKeyEnv: ANTHROPIC_API_KEY/)
+})

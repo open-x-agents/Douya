@@ -320,3 +320,20 @@ test('card zoom header, deep links and link-kind labels go through i18n', () => 
     assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
   }
 })
+
+test('timetable categories, zoom section and chat context name go through i18n', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of ['CAT_ZH', '<h4>时间表</h4>', '暂无日程', "'今天的安排'", "? '会议' : '建议'", "'建议' : '日程'"]) {
+    assert.ok(!html.includes(s), `hardcoded zh copy left in timetable: ${s}`)
+  }
+  assert.equal(t('tt.cat.admin', 'en'), 'Chores')
+  assert.equal(t('tt.cat.admin', 'zh'), '杂务')
+  assert.equal(t('tt.zoom_head', 'en'), 'Timetable')
+  assert.equal(t('tt.ctx_name', 'zh'), '今天的安排')
+  for (const k of ['meal', 'focus', 'work', 'break', 'exercise', 'meeting', 'review', 'admin', 'learning', 'personal', 'winddown']) {
+    assert.ok(messages.en['tt.cat.' + k] && messages.zh['tt.cat.' + k], `missing tt.cat.${k}`)
+  }
+  for (const k of ['tt.cat_suggested', 'tt.cat_event', 'tt.zoom_head', 'tt.zoom_empty', 'tt.ctx_name']) {
+    assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
+  }
+})

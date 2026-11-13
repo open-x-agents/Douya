@@ -2988,7 +2988,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   const SYS_TYPES = new Set(['hero', 'timetable']);
   let lastCards = [];
   let lastToday = {};
-  const CAT_ZH = { meal: '用餐', focus: '专注', work: '工作', break: '休息', exercise: '运动', meeting: '会议', review: '评审', admin: '杂务', learning: '学习', personal: '个人', winddown: '收尾' };
+  const CAT_KEYS = ['meal', 'focus', 'work', 'break', 'exercise', 'meeting', 'review', 'admin', 'learning', 'personal', 'winddown'];
+  const catLabel = k => (CAT_KEYS.includes(k) ? t('tt.cat.' + k) : '');
   const TAG_KEY = { 'In Progress': 'tag.in_progress', '进行中': 'tag.in_progress', Active: 'tag.active', '活跃': 'tag.active', 'Needs Review': 'tag.needs_review', '待你审': 'tag.needs_review', Waiting: 'tag.waiting', '等待中': 'tag.waiting', Done: 'tag.done', '已完成': 'tag.done', '等你': 'tag.waiting_you', '优先': 'tag.priority', '等别人': 'tag.waiting_others', Priority: 'tag.priority', 'Waiting on you': 'tag.waiting_you', 'Waiting on others': 'tag.waiting_others' };
   const tagLabel = (text) => { const k = TAG_KEY[String(text || '')]; return k ? t(k) : String(text || ''); };
   const TAG_ZH = { 'In Progress': '进行中', Active: '活跃', 'Needs Review': '待你审', Waiting: '等待中', Done: '已完成' }; // legacy alias
@@ -3249,7 +3250,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const bars = blocks.map((b, i) => {
       const state = b.e <= nowM ? 'past' : b.s <= nowM ? 'live' : 'next';
       const catKey = b.category || (b.fixed ? 'meeting' : 'focus');
-      const cat = CAT_ZH[catKey] || (b.fixed ? '会议' : '建议');
+      const cat = catLabel(catKey) || t(b.fixed ? 'tt.cat.meeting' : 'tt.cat_suggested');
       const ic = CAT_IC[catKey] || '·';
       const soft = !b.fixed;
       const lock = b.fixed || b.locked;
@@ -3263,7 +3264,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (!blocks.length) {
       note = escapeHtml(t('tt.empty_note'));
     } else if (upcoming) {
-      const ttl = ttTitle(upcoming.title), c = CAT_ZH[upcoming.category] || '';
+      const ttl = ttTitle(upcoming.title), c = catLabel(upcoming.category);
       const label = escapeHtml(c && !ttl.startsWith(c) ? c + '：' + ttl : ttl);
       note = upcoming.s <= nowM
         ? `<span class="tt-nowlbl">${t('tt.now')}</span> ${escapeHtml(upcoming.start)}–${escapeHtml(upcoming.end)} ${label}`
@@ -4273,7 +4274,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function setChatContext(card) {
     if (!card) { chatCtx = null; } else {
       const r = repoOf(card); const isTT = card.type === 'timetable';
-      chatCtx = { card, key: chatKeyFor(card), isTT, name: r ? r.name : (isTT ? '今天的安排' : clip(card.title, 20)) };
+      chatCtx = { card, key: chatKeyFor(card), isTT, name: r ? r.name : (isTT ? t('tt.ctx_name') : clip(card.title, 20)) };
     }
     paintChatContext();
   }
@@ -6865,7 +6866,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (isTT) {
       const tt = blockOf(card, 'timetable') || {};
       const all = [...(tt.fixedBlocks || []), ...(tt.suggestedBlocks || [])].sort((a, b) => (toMin(a.start) || 0) - (toMin(b.start) || 0));
-      html += `<div class="z-sec"><h4>时间表</h4><div class="z-items">${all.map(b => `<div class="z-item"><span class="z-time">${escapeHtml(b.start)}–${escapeHtml(b.end)}</span><div class="z-item-b"><b>${escapeHtml(b.title)}</b><span>${escapeHtml(CAT_ZH[b.category] || (b.type === 'suggested' ? '建议' : '日程'))}</span></div></div>`).join('') || '<p class="w-desc">暂无日程</p>'}</div></div>`;
+      html += `<div class="z-sec"><h4>${escapeHtml(t('tt.zoom_head'))}</h4><div class="z-items">${all.map(b => `<div class="z-item"><span class="z-time">${escapeHtml(b.start)}–${escapeHtml(b.end)}</span><div class="z-item-b"><b>${escapeHtml(b.title)}</b><span>${escapeHtml(catLabel(b.category) || t(b.type === 'suggested' ? 'tt.cat_suggested' : 'tt.cat_event'))}</span></div></div>`).join('') || `<p class="w-desc">${escapeHtml(t('tt.zoom_empty'))}</p>`}</div></div>`;
     } else {
       if (card.body) html += `<p class="z-body">${escapeHtml(zhBody(card))}</p>`;
       if (!isMailGroup(card) && card.title && card.title !== headline(card) && !(r && card.title.toLowerCase() === r.name.toLowerCase())) html += `<p class="z-orig">${escapeHtml(t('zoom.orig_summary', { title: card.title }))}</p>`;
@@ -6875,7 +6876,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       html += `<div class="z-next"><div><span class="w-next-k">${escapeHtml(t('today.next_step'))}</span><b>${escapeHtml(nextAction(card))}</b></div>${dl[0] ? `<a class="z-btn" href="${escapeHtml(dl[0].url)}" target="_blank" rel="noopener">${escapeHtml(t(isMailGroup(card) ? 'zoom.open_first_mail' : 'zoom.go_handle'))}</a>` : ''}</div>`;
       if (linksOf(card).length) html += `<div class="z-sec" id="zItemsSec">${zoomItemsHtml(card)}</div>`;
     }
-    const name = r ? r.name : (isTT ? '今天的安排' : clip(card.title, 20));
+    const name = r ? r.name : (isTT ? t('tt.ctx_name') : clip(card.title, 20));
     if (!isTT && (card.prepared || []).length) html = html.replace('<div class="z-next">', `<div class="w-acts z-acts-row"><span class="w-acts-k">${escapeHtml(t('today.ready_steps'))}</span>${card.prepared.map((p, i) => stepBtnHtml(p, i, i === 0 && p.kind !== 'snooze' ? 'primary' : '')).join('')}</div><div class="w-slot z-slot"></div><div class="z-next">`);
     html += '<details class="z-hist" id="zHist" hidden><summary></summary><div class="z-hist-b" id="zHistB"></div></details>';
     const modal = overlay.querySelector('.tile-zoom-modal');

@@ -7,8 +7,10 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  decideStartup, freshLogin, isExternalOpenable, isInternalUrl, isPortOpen, isRepoRoot,
-  locateDsh, mergePath, messages, parseLoginUrl, readLoginUrl, resolveDshBin, resolveRepoRoot,
+  APP_RUNTIME, bundledDshEntry, bundledNodeExe, bundledRuntimeRoot, decideStartup, freshLogin,
+  isExternalOpenable, isInternalUrl, isPortOpen, isRepoRoot,
+  locateDsh, mergePath, messages, parseLoginUrl, readLoginUrl, resolveDshBin,
+  resolveNodeExe, resolveOdmDataDir, resolvePackagedDshHome, resolveRepoRoot,
   sanitizeBounds, tail, tokenWorks, waitForLogin,
 } from '../desktop/src/server.js'
 
@@ -177,4 +179,84 @@ test('the window keeps renderer hardening on', () => {
   assert.match(main, /sandbox: true/)
   assert.match(main, /requestSingleInstanceLock/)
   assert.doesNotMatch(main, /enableRemoteModule|@electron\/remote/)
+})
+
+test('readLoginUrl can read from a writable dataDir outside the root', () => {
+  const root = mkdtempSync(join(tmpdir(), 'odm-desk-root-'))
+  const dataDir = mkdtempSync(join(tmpdir(), 'odm-desk-data-'))
+  writeFileSync(join(dataDir, 'dsh-web.url'), URL_TEXT + '\n')
+  const got = readLoginUrl(root, { dataDir })
+  assert.equal(got.url, URL_TEXT)
+  assert.equal(readLoginUrl(root), null)
+})
+
+test('resolveRepoRoot prefers a bundled app-runtime over a saved leftover path', () => {
+  const start = (dir) => join(dir, 'scripts', 'start-dsh.mjs')
+  const has = (paths) => (p) => paths.includes(p)
+  assert.equal(resolveRepoRoot({
+    env: {}, saved: '/old/checkout', bundledRoot: '/res/app-runtime',
+    exists: has([start('/old/checkout'), start('/res/app-runtime')]),
+  }), '/res/app-runtime')
+  // ODM_ROOT still wins, for a deliberate override.
+  assert.equal(resolveRepoRoot({
+    env: { ODM_ROOT: '/a' }, saved: '/b', bundledRoot: '/res/app-runtime',
+    exists: has([start('/a'), start('/b'), start('/res/app-runtime')]),
+  }), '/a')
+  assert.equal(bundledRuntimeRoot('/res', (p) => p === start(join('/res', APP_RUNTIME))), join('/res', APP_RUNTIME))
+  assert.equal(bundledRuntimeRoot('/res', () => false), null)
+  assert.equal(bundledDshEntry('/rt', (p) => p === join('/rt', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')),
+    join('/rt', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js'))
+})
+
+test('locateDsh prefers a bundled entry after env and before a saved path', () => {
+  assert.equal(locateDsh({
+    env: {}, bundled: '/rt/node_modules/@deepseek-ai/dsh/lib/bin.js',
+    saved: '/old/dsh', exists: () => true, onPath: () => '/p/dsh',
+  }), '/rt/node_modules/@deepseek-ai/dsh/lib/bin.js')
+  assert.equal(locateDsh({
+    env: { DSH_BIN: '/x/dsh' }, bundled: '/rt/bin.js', exists: () => true,
+  }), '/x/dsh')
+})
+
+test('resolveNodeExe prefers a bundled vanilla Node when packaged, else PATH, else Electron', () => {
+  assert.deepEqual(resolveNodeExe({
+    packaged: true, execPath: '/Douya.exe', bundledNode: '/rt/node/bin/node', onPath: () => '/usr/bin/node',
+  }), { exe: '/rt/node/bin/node', electronAsNode: false })
+  assert.deepEqual(resolveNodeExe({ packaged: true, execPath: '/Douya.exe', onPath: () => '/usr/bin/node' }),
+    { exe: '/Douya.exe', electronAsNode: true })
+  assert.deepEqual(resolveNodeExe({ packaged: false, execPath: '/Douya', onPath: () => '/usr/bin/node' }),
+    { exe: '/usr/bin/node', electronAsNode: false })
+  assert.deepEqual(resolveNodeExe({ packaged: false, execPath: '/Douya', onPath: () => null }),
+    { exe: '/Douya', electronAsNode: true })
+  assert.equal(bundledNodeExe('/rt', 'linux', (p) => p === join('/rt', 'node', 'bin', 'node')), join('/rt', 'node', 'bin', 'node'))
+  assert.equal(bundledNodeExe('/rt', 'win32', (p) => p === join('/rt', 'node', 'node.exe')), join('/rt', 'node', 'node.exe'))
+})
+
+test('packaged data dirs land under userData, not the (read-only) runtime root', () => {
+  const userData = join('/Users/a/Library/Application Support', 'Douya')
+  assert.equal(resolveOdmDataDir({ packaged: true, userData, root: '/res/app-runtime', env: {} }), join(userData, 'odm-data'))
+  assert.equal(resolvePackagedDshHome({ packaged: true, userData, root: '/res/app-runtime', env: {} }), join(userData, 'dsh-odm'))
+  assert.equal(resolveOdmDataDir({ packaged: false, userData, root: '/repo', env: {} }), join('/repo', '.odm-data'))
+  assert.equal(resolveOdmDataDir({ packaged: true, userData, root: '/res', env: { ODM_DATA_DIR: '/custom' } }), '/custom')
+})
+
+test('desktop package stages app-runtime into extraResources and has a bundle:runtime script', () => {
+  const desk = JSON.parse(readFileSync(new URL('../desktop/package.json', import.meta.url), 'utf8'))
+  const root = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  assert.ok(desk.scripts['bundle:runtime'])
+  const ers = desk.build.extraResources
+  // from the parent dir: electron-builder drops a top-level node_modules of `from`.
+  const runtime = ers.find((e) => Array.isArray(e.filter) && e.filter.includes('app-runtime/**'))
+  assert.ok(runtime, 'app-runtime extraResources entry')
+  assert.equal(runtime.from, 'resources')
+  assert.equal(runtime.to, '.')
+  assert.ok(ers.some((e) => e.to === 'openviking'))
+  for (const s of ['desktop:build:mac', 'desktop:build:win', 'desktop:build:linux']) {
+    assert.match(root.scripts[s], /bundle:runtime/)
+  }
+  const main = readFileSync(new URL('../desktop/src/main.js', import.meta.url), 'utf8')
+  assert.match(main, /ELECTRON_RUN_AS_NODE/)
+  assert.match(main, /ODM_DATA_DIR/)
+  assert.match(main, /bundledRoot/)
+  assert.match(main, /resolveNodeExe/)
 })

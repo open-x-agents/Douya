@@ -6,8 +6,10 @@ import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync }
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  COMMON_BIN_DIRS, DEFAULT_PORT, START_SCRIPT, decideStartup, isExternalOpenable, isInternalUrl,
-  isPortOpen, isRepoRoot, locateDsh, mergePath, messages, readLoginUrl, resolveRepoRoot,
+  COMMON_BIN_DIRS, DEFAULT_PORT, START_SCRIPT, bundledDshEntry, bundledNodeExe, bundledRuntimeRoot,
+  decideStartup, isExternalOpenable, isInternalUrl,
+  isPortOpen, isRepoRoot, locateDsh, mergePath, messages, readLoginUrl,
+  resolveNodeExe, resolveOdmDataDir, resolvePackagedDshHome, resolveRepoRoot,
   sanitizeBounds, tail, tokenWorks, waitForLogin,
 } from './server.js'
 import {
@@ -62,10 +64,19 @@ function findOnPath(name, pathEnv) {
   return null
 }
 
+function packagedRuntime() {
+  return app.isPackaged ? bundledRuntimeRoot(process.resourcesPath) : null
+}
+
 async function pickRepoRoot() {
   const settings = loadSettings()
-  const found = resolveRepoRoot({ saved: settings.repoRoot, devRoot: app.isPackaged ? null : DEV_ROOT })
+  const found = resolveRepoRoot({
+    saved: settings.repoRoot,
+    bundledRoot: packagedRuntime(),
+    devRoot: app.isPackaged ? null : DEV_ROOT,
+  })
   if (found) return found
+  // Last-resort fallback: a checkout on disk. Packaged installs with app-runtime never reach this.
   await dialog.showMessageBox({ type: 'info', message: t().noRepo })
   const res = await dialog.showOpenDialog({ title: t().pickRepo, properties: ['openDirectory'] })
   const dir = res.filePaths?.[0]
@@ -78,10 +89,15 @@ let serverPathCache = null
 const serverPath = () => (serverPathCache ??= mergePath(process.env.PATH, [loginShellPath(), ...COMMON_BIN_DIRS]))
 
 // Without dsh, start-dsh dies before it is ready; ask for it up front (like the repo folder).
-async function pickDshBin() {
+async function pickDshBin(root) {
   const settings = loadSettings()
-  const found = locateDsh({ saved: settings.dshBin, onPath: (name) => findOnPath(name, serverPath()) })
+  const found = locateDsh({
+    saved: settings.dshBin,
+    bundled: bundledDshEntry(root),
+    onPath: (name) => findOnPath(name, serverPath()),
+  })
   if (found) return found
+  // Last-resort fallback. A packaged install with bundled dsh never reaches this.
   await dialog.showMessageBox({ type: 'info', message: t().noDsh })
   const res = await dialog.showOpenDialog({ title: t().pickDsh, properties: ['openFile'] })
   const file = res.filePaths?.[0]
@@ -90,15 +106,36 @@ async function pickDshBin() {
   return file
 }
 
+function dataPaths(root) {
+  const userData = app.getPath('userData')
+  return {
+    dataDir: resolveOdmDataDir({ packaged: app.isPackaged, userData, root }),
+    dshHome: resolvePackagedDshHome({ packaged: app.isPackaged, userData, root }),
+  }
+}
+
 function startServer(root, dshBin) {
   const PATH = serverPath()
+  const { dataDir, dshHome } = dataPaths(root)
   const env = sanitizeSpawnEnv({ ...process.env, PORT: String(PORT) }, { path: PATH })
   if (dshBin) env.DSH_BIN = dshBin
-  // Prefer the user's Node (same one `npm start` uses); fall back to Electron's bundled Node.
-  let nodeExe = findOnPath('node', PATH)
-  if (!nodeExe) { nodeExe = process.execPath; env.ELECTRON_RUN_AS_NODE = '1' }
+  env.ODM_DATA_DIR = dataDir
+  env.DSH_HOME = dshHome
+  if (app.isPackaged) env.ODM_PACKAGED = '1'
+  // Packaged: the vanilla Node we ship (dsh rejects Electron's Node fingerprint).
+  // Dev: prefer the same `node` `npm start` uses, else Electron.
+  const node = resolveNodeExe({
+    packaged: app.isPackaged,
+    execPath: process.execPath,
+    bundledNode: bundledNodeExe(root),
+    onPath: (name) => findOnPath(name, PATH),
+  })
+  const nodeExe = node.exe
+  if (node.electronAsNode) env.ELECTRON_RUN_AS_NODE = '1'
 
   mkdirSync(dirname(logFile()), { recursive: true })
+  mkdirSync(dataDir, { recursive: true })
+  mkdirSync(dshHome, { recursive: true })
   const log = createWriteStream(logFile(), { flags: 'w' })
   childDead = false
   child = spawn(nodeExe, [join(root, START_SCRIPT), String(PORT)], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
@@ -235,11 +272,12 @@ async function boot() {
   nativeTheme.themeSource = 'light' // the Muse palette is light/warm; keep native chrome light too
   const root = await pickRepoRoot()
   if (!root) return app.quit()
+  const { dataDir } = dataPaths(root)
 
   await ensureMemory()
 
   const portOpen = await isPortOpen(PORT)
-  const login = readLoginUrl(root)
+  const login = readLoginUrl(root, { dataDir })
   const tokenOk = portOpen && login ? await tokenWorks(login.url) : false
   const plan = decideStartup({ portOpen, login, tokenOk, port: PORT })
   if (plan.action === 'reuse') {
@@ -249,12 +287,12 @@ async function boot() {
   }
   if (plan.action === 'conflict') return showError(t().conflict(PORT))
 
-  const dshBin = await pickDshBin()
+  const dshBin = await pickDshBin(root)
   if (!dshBin) return app.quit()
   const since = Date.now()
   startServer(root, dshBin)
   try {
-    const ready = await waitForLogin({ root, port: PORT, since, isDead: () => childDead })
+    const ready = await waitForLogin({ root, dataDir, port: PORT, since, isDead: () => childDead })
     createWindow(ready.url)
     showMemoryNote()
   } catch (err) {

@@ -44,15 +44,15 @@ Installers are not warning-free, and they are not notarized.
 
 ## What the machine must already have
 
-The Electron window is only a shell, not a self-contained server.
+The packaged app is self-contained for startup: it ships the Douya server (`scripts/`, `src/`, `packages/`, `vendor/`), production `node_modules`, and **[dsh](https://github.com/deepseek-ai/dsh)** (`@deepseek-ai/dsh`) inside `resources/app-runtime`. You do **not** need a git checkout, a Node.js install, or a separate dsh. There is no folder picker on a normal first launch.
 
-- A **checkout of this repo is always required.** `boot()` calls `pickRepoRoot()` and quits if it cannot find a folder that contains `scripts/start-dsh.mjs` (`isRepoRoot`). It checks `ODM_ROOT`, a remembered path in userData `settings.json`, `~/Documents/git/openDigitalMate`, then `~/openDigitalMate`; otherwise it asks once and remembers. Even when it reuses an already-running server, it still reads the login token from `<repo>/.odm-data/dsh-web.url`.
-- **[dsh](https://github.com/deepseek-ai/dsh) is required to start the server.** If `127.0.0.1:7777` already has a working token, the app reuses that process. Otherwise it runs `scripts/start-dsh.mjs` from the checkout (`desktop/src/main.js` `startServer`) and stops only that child on quit. The start script spawns `dsh --profile odm --no-open --port …`. The shell sets `DSH_BIN` from `$DSH_BIN`, a remembered path, or `~/Documents/git/dsh-rc5/bin/dsh` when that file exists; then `dsh` on `PATH`. If none of those exist, the app asks once for the dsh executable and remembers it, instead of starting a server that would exit before it is ready.
-- **A separate Node.js install is not required.** `startServer` prefers `node` on `PATH` (plus the login-shell PATH so GUI launches can see it). If none is found, it runs the start script with Electron’s bundled Node (`process.execPath` and `ELECTRON_RUN_AS_NODE=1`). `start-dsh.mjs` may still call `npm install` only when `vendor/ds-bot` is missing `deep-view`.
+- On boot, `resolveRepoRoot` prefers the bundled `app-runtime` (before a remembered path, which may be leftover from an older build). The checkout folder picker is only a last-resort fallback if that tree is missing.
+- **dsh** is started from `app-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js`, using a **vanilla Node 24.22.1** binary also shipped in `app-runtime/node`. (dsh’s native loader rejects Electron 45.2.3’s Node fingerprint; `ELECTRON_RUN_AS_NODE` is only a last-resort fallback.) A user `node` on `PATH` is not required. The dsh picker from earlier builds is kept only as a last-resort fallback.
+- Runtime data is **not** written into the install folder (that path is read-only under Program Files). The app sets `ODM_DATA_DIR` and `DSH_HOME` to writable folders under userData, provisions the `odm` profile from the bundle, and reads the login token from `ODM_DATA_DIR/dsh-web.url`.
 
-You also need a **chat model provider** (for example DeepSeek) in Settings. Connect sources through Composio only if you want them. See the root README’s [Configure AI + Composio](../README.md#configure-ai--composio).
+You also need a **chat model provider** (for example DeepSeek). Connect sources through Composio only if you want them. See the root README’s [Configure AI + Composio](../README.md#configure-ai--composio).
 
-On a first launch where no chat model is saved, a **setup wizard** opens and asks only for the model API and, optionally, a Composio project API key. Composio can be skipped. The same wizard is also in Settings. Keys are written to the repo checkout’s `.odm-data/config.json`, the same file Settings already uses.
+On a first launch where no chat model is saved, a **setup wizard** opens and asks only for the model API and, optionally, a Composio project API key. Composio can be skipped. The same wizard is also in Settings. Keys are written to `ODM_DATA_DIR/config.json` (under userData in the packaged app; `.odm-data/config.json` in a source checkout), the same file Settings already uses.
 
 ## Bundled memory runtime
 
@@ -70,11 +70,16 @@ You do not need to install `uv` or `openviking` separately for the packaged app.
 
 Two trees matter, and the app does **not** automatically copy or reindex one into the other.
 
-**1. The repo checkout** (source-run and packaged app share this once the app has found the folder):
+**1. Writable app data** — in the packaged app this is all under userData (never under `resources/app-runtime`, which is read-only on Windows):
 
-- `.odm-data/dsh-web.url` — login token URL (do not commit or paste it)
-- `.odm-data/config.json` — optional AI / Composio keys
-- Future plans and host state: `$DSH_HOME/opendigitalmate/state.json` (or the configured dsh host home)
+| Path | Typical location (packaged) | Source checkout |
+| --- | --- | --- |
+| `ODM_DATA_DIR` | `userData/odm-data` | `<repo>/.odm-data` |
+| `DSH_HOME` | `userData/dsh-odm` | `<repo>/.dsh-odm` |
+
+- `ODM_DATA_DIR/dsh-web.url` — login token URL (do not commit or paste it)
+- `ODM_DATA_DIR/config.json` — AI / Composio keys
+- Host state: `$DSH_HOME/opendigitalmate/state.json` when `ODM_DATA_DIR` is unset; the packaged app writes state next to `config.json` in `ODM_DATA_DIR`
 
 **2. The Electron app userData** (`productName` is Douya):
 
@@ -84,7 +89,7 @@ Two trees matter, and the app does **not** automatically copy or reindex one int
 | Windows | `%APPDATA%\Douya` |
 | Linux | `~/.config/Douya` |
 
-There you will find `settings.json` (remembered repo path, window bounds) and, when the app starts its own OpenViking, `openviking/ov.conf` plus `openviking/data`. Logs: `~/Library/Logs/Douya` on macOS, or `logs` under userData on Windows and Linux.
+There you will find `settings.json` (window bounds, and any last-resort remembered paths), `odm-data/`, `dsh-odm/`, and, when the app starts its own OpenViking, `openviking/ov.conf` plus `openviking/data`. Logs: `~/Library/Logs/Douya` on macOS, or `logs` under userData on Windows and Linux.
 
 **OpenViking config choice** (the app never overwrites a home config):
 

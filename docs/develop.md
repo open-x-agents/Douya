@@ -37,9 +37,11 @@ Environment knobs used by the desktop shell (and useful when spawning it from th
 
 | Setting | Default |
 | --- | --- |
-| `ODM_ROOT` | this checkout, then `~/Documents/git/openDigitalMate` |
-| `DSH_BIN` | `$DSH_BIN`, then `~/Documents/git/dsh-rc5/bin/dsh`, then `dsh` on `PATH` |
+| `ODM_ROOT` | this checkout, then (when packaged) the bundled `app-runtime`, then `~/Documents/git/openDigitalMate` |
+| `DSH_BIN` | `$DSH_BIN`, then (when packaged) the bundled dsh JS entry, then `~/Documents/git/dsh-rc5/bin/dsh`, then `dsh` on `PATH` |
 | `ODM_PORT` | `7777` |
+| `ODM_DATA_DIR` | (packaged) `userData/odm-data`; (source) `<repo>/.odm-data` |
+| `DSH_HOME` | (packaged) `userData/dsh-odm`; (source) `<repo>/.dsh-odm` |
 
 ## Test
 
@@ -54,10 +56,11 @@ Layers, pr-guard, merge-tree, and the pre-release gate: [testing.md](testing.md)
 
 ```bash
 npm run desktop:dev          # Electron against this checkout
-npm --prefix desktop run bundle:ov   # fill desktop/resources/openviking (needed before packing)
-npm run desktop:build:mac    # → desktop/dist/*.dmg (one arch per job in CI)
-npm run desktop:build:win    # → desktop/dist/*.exe (build on Windows or CI)
-npm run desktop:build:linux  # → desktop/dist/*.AppImage and *.deb (build on Linux or CI)
+npm --prefix desktop run bundle:runtime  # stage desktop/resources/app-runtime (server + dsh)
+npm --prefix desktop run bundle:ov       # fill desktop/resources/openviking (needed before packing)
+npm run desktop:build:mac    # stages app-runtime, then → desktop/dist/*.dmg (one arch per job in CI)
+npm run desktop:build:win    # stages app-runtime, then → desktop/dist/*.exe (build on Windows or CI)
+npm run desktop:build:linux  # stages app-runtime, then → desktop/dist/*.AppImage and *.deb (build on Linux or CI)
 ```
 
 CI builds installers only on a `desktop-v*` tag or a manual run of the `desktop` workflow — not on every PR. Official installers are published on [desktop-v0.1.0-rc7](https://github.com/open-x-agents/openDigitalMate/releases/tag/desktop-v0.1.0-rc7). How `v*` and `desktop-v*` differ: [release.md](release.md).

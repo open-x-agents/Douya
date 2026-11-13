@@ -24,3 +24,6 @@ desktop/resources/openviking/python/
 desktop/resources/openviking/site-packages/
 desktop/resources/openviking/VERSION
 desktop/resources/openviking/models/
+
+# Staged server runtime filled in by desktop/scripts/bundle-app-runtime.mjs (CI / pack).
+desktop/resources/app-runtime/

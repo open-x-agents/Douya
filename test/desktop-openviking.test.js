@@ -268,8 +268,9 @@ test('desktop workflow builds Windows, macOS, and Linux packages with the same O
 
 test('desktop package ships the OpenViking extraResources and message keys stay bilingual', () => {
   const desk = JSON.parse(readFileSync(new URL('../desktop/package.json', import.meta.url), 'utf8'))
-  assert.equal(desk.build.extraResources[0].from, 'resources/openviking')
-  assert.equal(desk.build.extraResources[0].to, 'openviking')
+  const ov = desk.build.extraResources.find((e) => e.to === 'openviking')
+  assert.ok(ov, 'openviking extraResources entry')
+  assert.equal(ov.from, 'resources/openviking')
   assert.ok(desk.scripts['bundle:ov'])
   const en = messages('en')
   const zh = messages('zh')

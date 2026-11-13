@@ -287,3 +287,30 @@ test('wizard client talks only to existing save/test paths plus the two new rout
   assert.match(css, /backdrop-filter/)
   assert.match(css, /#f4f2ee|#fff|rgba\(255,255,255/)
 })
+
+test('wizard Next saves edits to an already-configured model instead of dropping them (#215)', async () => {
+  const { runInNewContext } = await import('node:vm')
+  const js = readFileSync(new URL('../packages/dsh-muse-ui/static/setup-wizard.js', import.meta.url), 'utf8')
+  const window = {}
+  runInNewContext(js, {
+    window,
+    document: { readyState: 'complete', getElementById: () => null, addEventListener() {}, querySelectorAll: () => [] },
+    location: { hash: '', pathname: '/', search: '' },
+    history: { replaceState() {} },
+    fetch: () => Promise.resolve({ json: () => Promise.resolve({}) }),
+    console,
+  })
+  const changed = window.odmWizardModelChanged
+  assert.equal(typeof changed, 'function')
+  const saved = { provider: 'deepseek', baseURL: 'https://api.deepseek.com/v1', model: 'deepseek-flash' }
+  // Untouched form: Next may skip saving.
+  assert.equal(changed(saved, { ...saved, apiKey: '' }), false)
+  assert.equal(changed(saved, { ...saved, model: ' deepseek-flash ', apiKey: '  ' }), false)
+  // Any edit must be saved.
+  assert.equal(changed(saved, { ...saved, apiKey: 'new-key' }), true)
+  assert.equal(changed(saved, { ...saved, provider: 'openai' }), true)
+  assert.equal(changed(saved, { ...saved, baseURL: 'https://example.test/v1' }), true)
+  assert.equal(changed(saved, { ...saved, model: 'other-model' }), true)
+  // onNext gates the save on this check, not only on modelReady.
+  assert.match(js, /!modelReady \|\| modelFormChanged\(loadedModel, readModelForm\(\)\)/)
+})

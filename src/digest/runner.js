@@ -605,9 +605,6 @@ export async function forgetMemory(dshHome, id, { file } = {}) {
   if (key.startsWith('obs:') || key.startsWith('ent:')) {
     return forgetMcpMemory(key, memoryFile(file))
   }
-  if (key.startsWith('viking://')) {
-    return { ok: false, forgotten: false, error: 'OpenViking memories are no longer used and were not migrated', id: key }
-  }
   return forgetDshMemory(dshHome, key)
 }
 

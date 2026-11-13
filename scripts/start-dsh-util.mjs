@@ -1,6 +1,6 @@
 // Cross-platform bits used by scripts/start-dsh.mjs (Windows has no `ln`, uses
 // Path/PATH, and os.tmpdir() instead of /tmp). Keep this import-safe for tests.
-import { existsSync, mkdirSync, symlinkSync, cpSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, symlinkSync, cpSync, readFileSync, writeFileSync, rmSync, readdirSync } from 'node:fs'
 import {
   MCP_MEMORY_PLUGIN_ID, MCP_MEMORY_SERVER_NAME,
 } from '../src/digest/mcp-memory.js'
@@ -140,7 +140,7 @@ export function ensureOdmProfile({
   if (!dshHome || !runtimeRoot) return { action: 'skip' }
   const profile = join(dshHome, 'profiles', 'odm')
   if (profileLooksReady(profile, exists)) {
-    stripOpenVikingFromProfile(profile, { exists, read, write })
+    syncOdmProfilePackage(profile, runtimeRoot, { exists, read, write })
     linkProfilePlugins({ profile, runtimeRoot, exists, mkdir, link })
     return { action: 'exists', profile }
   }
@@ -155,7 +155,7 @@ export function ensureOdmProfile({
     ].join('\n'))
   }
   if (!exists(join(profile, 'compatibility.json'))) write(join(profile, 'compatibility.json'), '{}\n')
-  stripOpenVikingFromProfile(profile, { exists, read, write })
+  syncOdmProfilePackage(profile, runtimeRoot, { exists, read, write })
   linkProfilePlugins({ profile, runtimeRoot, exists, mkdir, link })
   return { action: 'created', profile }
 }
@@ -173,35 +173,79 @@ function linkProfilePlugins({ profile, runtimeRoot, exists, mkdir, link }) {
 }
 
 
-export const OPENVIKING_PLUGIN = '@openviking/dsh-memory-plugin'
-
-/** Drop the retired OpenViking dsh plugin from an existing odm profile (package.json + link). */
-export function stripOpenVikingFromProfile(profileDir, {
+/**
+ * Keep an existing odm profile's package.json on the canonical bundles and
+ * dependencies. Drops retired plugins and stale node_modules links that are
+ * not in the current set, so an upgrade does not keep loading a removed bundle.
+ */
+export function syncOdmProfilePackage(profileDir, runtimeRoot, {
   exists = existsSync,
   read = (p) => readFileSync(p, 'utf8'),
   write = (p, t) => writeFileSync(p, t),
   rm = (p) => rmSync(p, { recursive: true, force: true }),
+  list = (p) => readdirSync(p, { withFileTypes: true }),
 } = {}) {
   if (!profileDir || !exists(join(profileDir, 'package.json'))) return { action: 'skip' }
   const path = join(profileDir, 'package.json')
   let pkg
   try { pkg = JSON.parse(read(path)) } catch { return { action: 'skip' } }
+  const canonical = odmProfilePackageJson(runtimeRoot || '.')
   let changed = false
-  const bundles = pkg?.dsh?.profile?.bundles
-  if (Array.isArray(bundles) && bundles.includes(OPENVIKING_PLUGIN)) {
-    pkg.dsh.profile.bundles = bundles.filter((b) => b !== OPENVIKING_PLUGIN)
+  const wantBundles = [...ODM_PROFILE_BUNDLES]
+  const haveBundles = Array.isArray(pkg?.dsh?.profile?.bundles) ? pkg.dsh.profile.bundles : []
+  const bundlesMatch = haveBundles.length === wantBundles.length
+    && wantBundles.every((b, i) => haveBundles[i] === b)
+  if (!bundlesMatch) {
+    if (!pkg.dsh) pkg.dsh = {}
+    if (!pkg.dsh.profile) pkg.dsh.profile = {}
+    pkg.dsh.profile.bundles = wantBundles
     changed = true
   }
-  if (pkg?.dependencies?.[OPENVIKING_PLUGIN]) {
-    delete pkg.dependencies[OPENVIKING_PLUGIN]
-    changed = true
+  if (!pkg.dependencies) pkg.dependencies = {}
+  for (const k of Object.keys(pkg.dependencies)) {
+    if (!(k in canonical.dependencies)) {
+      delete pkg.dependencies[k]
+      changed = true
+    }
+  }
+  if (runtimeRoot) {
+    for (const [k, v] of Object.entries(canonical.dependencies)) {
+      if (pkg.dependencies[k] !== v) {
+        pkg.dependencies[k] = v
+        changed = true
+      }
+    }
   }
   if (changed) write(path, JSON.stringify(pkg, null, 2) + '\n')
-  const linked = join(profileDir, 'node_modules', OPENVIKING_PLUGIN)
-  if (exists(linked)) {
-    try { rm(linked) } catch { /* leftover link is not fatal */ }
+
+  const allowed = new Set([...ODM_PROFILE_BUNDLES, ...Object.keys(canonical.dependencies)])
+  const mods = join(profileDir, 'node_modules')
+  if (exists(mods)) {
+    try {
+      for (const ent of list(mods)) {
+        if (!ent.isDirectory() && !ent.isSymbolicLink()) continue
+        const name = ent.name
+        if (name.startsWith('.')) continue
+        if (name.startsWith('@')) {
+          const scope = join(mods, name)
+          try {
+            for (const inner of list(scope)) {
+              const full = `${name}/${inner.name}`
+              if (!allowed.has(full)) {
+                try { rm(join(scope, inner.name)) } catch { /* leftover link is not fatal */ }
+              }
+            }
+            if (list(scope).length === 0) {
+              try { rm(scope) } catch { /* empty scope */ }
+            }
+          } catch { /* listing is best-effort */ }
+        } else if (!allowed.has(name)) {
+          try { rm(join(mods, name)) } catch { /* leftover link is not fatal */ }
+        }
+      }
+    } catch { /* listing is best-effort */ }
   }
-  return { action: changed ? 'stripped' : 'clean' }
+  return { action: changed ? 'synced' : 'clean' }
 }
 
 function yamlString(s) {

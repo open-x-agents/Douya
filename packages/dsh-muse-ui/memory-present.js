@@ -13,7 +13,6 @@ export function humanizeMemoryText(raw) {
   s = s.replace(/<!--[\s\S]*?-->/g, '') // MEMORY_FIELDS and other machine comments
   s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, '') // image links (shown as pictures, not text)
   s = s.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1') // [label](url) → label
-  s = s.replace(/\bviking:\/\/\S+/g, '') // raw OpenViking URIs
   s = s.replace(/\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+){2,}\b:?\s*/g, '') // MARKER_TOKENS_LIKE_THIS:
   const out = []
   let first = true
@@ -142,7 +141,6 @@ export function isAchievementKind(kind) {
 export function memorySourceKey(m) {
   const src = String(m?.source || '').toLowerCase()
   if (src === 'mcp-memory' || src === 'mcp' || src === 'memory') return 'mcp'
-  if (src === 'openviking' || String(m?.uri || m?.id || '').startsWith('viking://')) return 'mcp'
   if (src === 'dsh-memory' || src === 'sqlite' || src === 'local') return 'local'
   if (typeof m?.id === 'number' || /^\d+$/.test(String(m?.id || ''))) return 'local'
   return 'unknown'
@@ -157,7 +155,7 @@ export function presentMemoryList(data) {
   const memories = Array.isArray(data?.memories) ? data.memories : []
   const hasTotal = data != null && data.total != null
   const total = hasTotal ? Number(data.total) || 0 : memories.length
-  const error = String(data?.error || data?.openviking?.error || '')
+  const error = String(data?.error || '')
   const available = data?.available
 
   if (memories.length) {

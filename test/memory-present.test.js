@@ -46,7 +46,7 @@ test('memoryLeadKind / isAchievementKind', () => {
 
 test('memorySourceKey: mcp memory vs local numeric id', () => {
   assert.equal(memorySourceKey({ source: 'mcp-memory' }), 'mcp')
-  assert.equal(memorySourceKey({ source: 'openviking', uri: 'viking://~/memories/x.md' }), 'mcp')
+  assert.equal(memorySourceKey({ source: 'mcp', uri: 'ent:x' }), 'mcp')
   assert.equal(memorySourceKey({ id: 12, text: 'x' }), 'local')
   assert.equal(memorySourceKey({ source: 'dsh-memory' }), 'local')
   assert.equal(memorySourceKey({ id: 'abc' }), 'unknown')
@@ -55,9 +55,8 @@ test('memorySourceKey: mcp memory vs local numeric id', () => {
 import { humanizeMemoryText, presentMemory } from '../packages/dsh-muse-ui/memory-present.js'
 
 test('humanizeMemoryText: no URIs, marker tokens, comments, markdown or image links', () => {
-  const raw = '---\nkind: x\n---\n<!-- MEMORY_FIELDS {"a":1} -->\n# Shipped Recall\n\nODM_MEMTEST_20261107_SHIPPED: Photos now show **inline** in `Recall`. See viking://user/default/memories/x.md\n\n![team](viking://resources/recall/x/y.png)'
+  const raw = '---\nkind: x\n---\n<!-- MEMORY_FIELDS {"a":1} -->\n# Shipped Recall\n\nODM_MEMTEST_20261107_SHIPPED: Photos now show **inline** in `Recall`.\n\n![team](https://example.com/recall/x/y.png)'
   const out = humanizeMemoryText(raw)
-  assert.doesNotMatch(out, /viking:\/\//)
   assert.doesNotMatch(out, /ODM_MEMTEST|MEMORY_FIELDS|kind: x|\*\*|`|!\[/)
   assert.match(out, /^# Shipped Recall\nPhotos now show inline in Recall\./)
 })
@@ -71,5 +70,5 @@ test('presentMemory: file-name heading prefix dropped, sub-headings lead sentenc
 test('presentMemory: one-liner title has no trailing period; Chinese gets 。; empty → file name', () => {
   assert.equal(presentMemory({ text: 'Prefer English UI' }).title, 'Prefer English UI')
   assert.equal(presentMemory({ text: '# 上线回忆照片\n照片会显示在卡片上' }).body, '照片会显示在卡片上。')
-  assert.equal(presentMemory({ text: '', uri: 'viking://user/default/memories/events/first-demo.md' }).title, 'First demo')
+  assert.equal(presentMemory({ text: '', uri: 'file:///memories/events/first-demo.md' }).title, 'First demo')
 })

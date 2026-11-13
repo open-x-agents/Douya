@@ -6014,7 +6014,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     return `<div class="chat-fail"><span>${escMd(text)}</span><button class="chat-retry" type="button">${t('chat.retry')}</button></div>`;
   }
 
-  // ===== Memory 一瞥 (OpenViking; SQLite fallback) =====
+  // ===== Memory 一瞥 (MCP Memory; SQLite fallback) =====
   const MEM_MARKS = ['🌱', '✨', '📌', '🫧', '🌙', '🫖', '📎', '💫', '🪄', '🍃'];
   const MEM_ACCENTS = {
     achievement: '#d4a017', milestone: '#d4a017', win: '#d4a017',
@@ -6086,7 +6086,6 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function memSourceKey(m) {
     const src = String(m && m.source || '').toLowerCase();
     if (src === 'mcp-memory' || src === 'mcp' || src === 'memory') return 'mcp';
-    if (src === 'openviking' || String(m && (m.uri || m.id) || '').startsWith('viking://')) return 'mcp';
     if (src === 'dsh-memory' || src === 'sqlite' || src === 'local') return 'local';
     if (typeof (m && m.id) === 'number' || /^\d+$/.test(String(m && m.id || ''))) return 'local';
     return 'unknown';
@@ -6140,7 +6139,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         </div>
       </article>`;
   }
-  // Detail view: the whole memory in plain sentences. Photos (OpenViking-only) are no longer attached.
+  // Detail view: the whole memory in plain sentences. Photos are no longer attached.
   let memRows = [];
   let memDetailId = null;
   function memDetailHtml(m) {

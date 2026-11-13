@@ -250,7 +250,6 @@ test('desktop package stages app-runtime into extraResources and has a bundle:ru
   assert.ok(runtime, 'app-runtime extraResources entry')
   assert.equal(runtime.from, 'resources')
   assert.equal(runtime.to, '.')
-  assert.ok(!(ers || []).some((e) => e.to === 'openviking'))
   for (const s of ['desktop:build:mac', 'desktop:build:win', 'desktop:build:linux']) {
     assert.match(root.scripts[s], /bundle:runtime/)
   }
@@ -265,8 +264,7 @@ test('sanitizeSpawnEnv keeps a single PATH and does not drop Windows Path when n
   const env = sanitizeSpawnEnv({ Path: 'C:\\old', HOME: 'x' }, { path: 'C:\\new', platform: 'win32' })
   assert.equal(env.PATH, 'C:\\new')
   assert.equal(env.Path, undefined)
-  // The rc8 OpenViking bug: sanitize({ ...process.env }) with no path, on Windows,
-  // deleted `Path` and left the child with an empty PATH.
+  // Without a path override, Windows Path must be copied into PATH, not dropped.
   const kept = sanitizeSpawnEnv({ Path: 'C:\\Windows;C:\\Windows\\System32', HOME: 'x' }, { platform: 'win32' })
   assert.equal(kept.PATH, 'C:\\Windows;C:\\Windows\\System32')
   assert.equal(kept.Path, undefined)

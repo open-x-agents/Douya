@@ -8,7 +8,7 @@ import { createStore } from '../src/host/store.js'
 import { readIndexHtml } from '../packages/dsh-muse-ui/static-serve.js'
 import { validateUiOp } from '../src/ui/ops.js'
 
-const memory = { id: 'viking://~/memories/preferences/study.md', text: 'I want to learn Mandarin by reading a little each week.', tags: ['preference'] }
+const memory = { id: 'ent:study', text: 'I want to learn Mandarin by reading a little each week.', tags: ['preference'] }
 const proposed = { op: 'propose', title: 'Read Mandarin', goal: 'Read a short story comfortably', step: 'Choose one short story and read its first paragraph this week.', memoryId: memory.id }
 async function fixture(t, options = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'odm-future-'))
@@ -65,7 +65,7 @@ test('page cannot impersonate Chief to create or edit', async t => {
   assert.equal((await service.apply({ ...proposed, op: 'create', userAgreed: true }, { by: 'user' })).ok, false)
   assert.equal((await service.apply({ ...proposed }, { by: 'user' })).ok, false)
 })
-test('explicit chat interest works without OpenViking', async t => {
+test('explicit chat interest works without a memory server', async t => {
   const { service } = await fixture(t, { memories: async () => { throw Error('offline') } })
   assert.equal((await service.get()).available, false)
   const result = await service.apply({ ...proposed, memoryId: undefined, interestQuote: 'I want to read Mandarin.' })

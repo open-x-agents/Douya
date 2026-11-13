@@ -15,9 +15,9 @@ export function parseLoginUrl(text) {
   return { url: m[0], port: Number(m[1]), origin: `http://127.0.0.1:${m[1]}` }
 }
 
-/** Login URL from `<root>/.odm-data/dsh-web.url`, with the file's mtime. */
-export function readLoginUrl(root, { fs = { readFileSync, statSync } } = {}) {
-  const file = join(root, URL_FILE)
+/** Login URL from `<dataDir>/dsh-web.url` (default `<root>/.odm-data`), with the file's mtime. */
+export function readLoginUrl(root, { fs = { readFileSync, statSync }, dataDir } = {}) {
+  const file = dataDir ? join(dataDir, 'dsh-web.url') : join(root, URL_FILE)
   try {
     const login = parseLoginUrl(fs.readFileSync(file, 'utf8'))
     if (!login) return null
@@ -73,12 +73,12 @@ export function freshLogin(login, since, port) {
  * Resolves the login, or rejects on timeout / when `isDead()` says the child exited.
  */
 export async function waitForLogin({ root, port, since, timeoutMs = 120_000, intervalMs = 400,
-  read = readLoginUrl, portOpen = isPortOpen, isDead = () => false, now = Date.now,
+  dataDir, read = (dir, opts) => readLoginUrl(dir, opts), portOpen = isPortOpen, isDead = () => false, now = Date.now,
   sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const deadline = now() + timeoutMs
   while (now() < deadline) {
     if (isDead()) throw Object.assign(new Error('server exited'), { code: 'exited' })
-    const login = freshLogin(read(root), since, port)
+    const login = freshLogin(read(root, dataDir ? { dataDir } : {}), since, port)
     if (login && (await portOpen(port))) return login
     await sleep(intervalMs)
   }
@@ -90,10 +90,39 @@ export function isRepoRoot(dir, exists = existsSync) {
   return Boolean(dir) && exists(join(dir, START_SCRIPT))
 }
 
-/** First candidate that looks like the repo (env, saved setting, dev checkout, common clones). */
-export function resolveRepoRoot({ env = process.env, saved, devRoot, home = env.HOME || env.USERPROFILE || '', exists = existsSync }) {
+/** Bundled server tree shipped in extraResources (`app-runtime`). */
+export const APP_RUNTIME = 'app-runtime'
+
+export function bundledRuntimeRoot(resourcesPath, exists = existsSync) {
+  if (!resourcesPath) return null
+  const dir = join(resourcesPath, APP_RUNTIME)
+  return isRepoRoot(dir, exists) ? dir : null
+}
+
+export function bundledDshEntry(runtimeRoot, exists = existsSync) {
+  if (!runtimeRoot) return null
+  const entry = join(runtimeRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+  return exists(entry) ? entry : null
+}
+
+/** Vanilla Node binary shipped next to the runtime. dsh refuses Electron's Node. */
+export function bundledNodeExe(runtimeRoot, platform = process.platform, exists = existsSync) {
+  if (!runtimeRoot) return null
+  const candidates = platform === 'win32'
+    ? [join(runtimeRoot, 'node', 'node.exe'), join(runtimeRoot, 'node', 'bin', 'node.exe')]
+    : [join(runtimeRoot, 'node', 'bin', 'node'), join(runtimeRoot, 'node', 'node')]
+  return candidates.find((p) => exists(p)) || null
+}
+
+/**
+ * First candidate that looks like the repo: env, then a packaged `app-runtime`
+ * (before a remembered path, which may be a stale leftover from an older build),
+ * then a saved setting, a dev checkout, and the usual clone locations.
+ */
+export function resolveRepoRoot({ env = process.env, saved, bundledRoot, devRoot, home = env.HOME || env.USERPROFILE || '', exists = existsSync }) {
   const candidates = [
     env.ODM_ROOT,
+    bundledRoot,
     saved,
     devRoot,
     home && join(home, 'Documents', 'git', 'openDigitalMate'),
@@ -102,21 +131,51 @@ export function resolveRepoRoot({ env = process.env, saved, devRoot, home = env.
   return candidates.find((dir) => isRepoRoot(dir, exists)) || null
 }
 
-/** DSH_BIN from env, else the owner's usual Mac checkout if it exists; else leave it to start-dsh. */
-export function resolveDshBin({ env = process.env, saved, home = env.HOME || '', exists = existsSync }) {
+/** DSH_BIN from env, else a bundled entry, a saved path, or the owner's usual Mac checkout. */
+export function resolveDshBin({ env = process.env, saved, bundled, home = env.HOME || '', exists = existsSync }) {
   if (env.DSH_BIN) return env.DSH_BIN
+  if (bundled && exists(bundled)) return bundled
   if (saved && exists(saved)) return saved
   const guess = home && join(home, 'Documents', 'git', 'dsh-rc5', 'bin', 'dsh')
   return guess && exists(guess) ? guess : null
 }
 
 /**
- * The dsh runtime the server will use: env / saved / usual Mac layout first, then `dsh` on PATH.
+ * The dsh runtime the server will use: env / bundled / saved / usual Mac layout first, then `dsh` on PATH.
  * null means start-dsh would fall back to a bare `dsh` that is not there and die before it is
  * ready, so the shell should ask for the executable instead of showing a generic crash.
+ * A packaged install with a bundled dsh never returns null.
  */
-export function locateDsh({ env = process.env, saved, home = env.HOME || '', exists = existsSync, onPath = () => null } = {}) {
-  return resolveDshBin({ env, saved, home, exists }) || onPath('dsh') || null
+export function locateDsh({ env = process.env, saved, bundled, home = env.HOME || '', exists = existsSync, onPath = () => null } = {}) {
+  return resolveDshBin({ env, saved, bundled, home, exists }) || onPath('dsh') || null
+}
+
+/**
+ * Which Node runs start-dsh (and, through it, dsh). A packaged app always uses
+ * Electron's own Node (`ELECTRON_RUN_AS_NODE`) so the user needs no Node install.
+ * Dev prefers `node` on PATH and falls back to Electron.
+ */
+export function resolveNodeExe({ packaged, execPath, bundledNode, onPath = () => null } = {}) {
+  // Packaged: prefer the vanilla Node we ship. dsh's native loader rejects Electron 45.2.3.
+  if (packaged && bundledNode) return { exe: bundledNode, electronAsNode: false }
+  if (packaged) return { exe: execPath, electronAsNode: true }
+  const node = onPath('node')
+  if (node) return { exe: node, electronAsNode: false }
+  return { exe: execPath, electronAsNode: true }
+}
+
+/** Writable data dir: userData when packaged, otherwise `<root>/.odm-data`. */
+export function resolveOdmDataDir({ packaged, userData, root, env = process.env } = {}) {
+  if (env.ODM_DATA_DIR) return env.ODM_DATA_DIR
+  if (packaged && userData) return join(userData, 'odm-data')
+  return join(root, '.odm-data')
+}
+
+/** Writable dsh home: userData when packaged, otherwise `<root>/.dsh-odm`. */
+export function resolvePackagedDshHome({ packaged, userData, root, env = process.env } = {}) {
+  if (env.DSH_HOME) return env.DSH_HOME
+  if (packaged && userData) return join(userData, 'dsh-odm')
+  return join(root, '.dsh-odm')
 }
 
 /**

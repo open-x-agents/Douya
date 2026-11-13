@@ -16,6 +16,8 @@ DSH（DeepSeek Harness）
         └── 状态                 <DSH_HOME>/opendigitalmate/state.json
 ```
 
+若设置了 `ODM_DATA_DIR`（桌面安装包会把它指到可写的 userData 目录），插件的状态和 `config.json` 写在那里，而不是 `<DSH_HOME>/opendigitalmate`。源码目录里直接 `npm start`、未设该变量时，路径不变。
+
 飞书的**入口**已经存在：FlyBot 的 `core/src/host/feishu-inbound.js`（长连接、事件去重环、连接状态）和 `feishu-sdk.js`（`@larksuiteoapi/node-sdk` 的适配）。本项目不重复实现入站，只补出站：发卡片、更新卡片、收按钮回调。
 
 ## 数据形状
@@ -323,7 +325,7 @@ node scripts/source-probe.mjs --fixture test/fixtures/github/ok --dir /tmp/p  # 
 | `src/web/dsbot-chat.js` | 独立服务器（`npm start`）里的 ds-bot 回退：经 DSH `/api/bot` 把消息发给 ds-bot Chief（`send`），再读回 `chat` 页；Muse 的对话与历史都走进程内（`muse-chat-core.js` 直接读 Chief 的 Session，不读日志文件） |
 | `src/web/dsbot-tools.js` | 把 Composio / identity / today / `ask.js` cite 注册成 ds-bot 可调用的 `odm_*` 工具 |
 | `src/web/bot-chat.js` | 废弃 shim，指向 `dsbot-chat.js` |
-| `src/web/llm-client.js`、`config-store.js`、`profile.js` | 模型客户端、`.odm-data/config.json`、显示名（运行时从 GitHub 身份推出，不写死） |
+| `src/web/llm-client.js`、`config-store.js`、`profile.js` | 模型客户端、`config.json`（默认 `.odm-data/`，或 `ODM_DATA_DIR` / `<DSH_HOME>/opendigitalmate`）、显示名（运行时从 GitHub 身份推出，不写死） |
 
 ### 问答：Bot 对话 + 先找依据再答
 

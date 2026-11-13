@@ -42,7 +42,7 @@ export function createRuntime(ctx, config = {}) {
   // 这是「启动失败」，不是一条告警 —— 告警会被日志吞掉，写动作却已经进了白名单。
   const composioRegistry = config.composioRegistry ?? composioRegistryDefault
   assertReadOnlyRegistry(composioRegistry, COMPOSIO_SNAPSHOT)
-  const home = config.home ?? join(process.env.DSH_HOME ?? '.', 'opendigitalmate')
+  const home = config.home ?? process.env.ODM_DATA_DIR ?? join(process.env.DSH_HOME ?? '.', 'opendigitalmate')
   const now = config.now ?? (() => new Date())
   // The zone the two report slots are read in, and the two functions the single timer uses.
   // Both are injected, so a test can watch the delay without waiting for it.

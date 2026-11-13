@@ -1,7 +1,7 @@
 {
   "name": "opendigitalmate",
   "version": "0.1.0",
-  "description": "Douya / 豆芽 — Muse-style coworker on dsh: Today · Memories · (Future next). Host digests + Confirm-gated actions; UI is packages/dsh-muse-ui.",
+  "description": "Douya / \u8c46\u82bd \u2014 Muse-style coworker on dsh: Today \u00b7 Memories \u00b7 (Future next). Host digests + Confirm-gated actions; UI is packages/dsh-muse-ui.",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -26,9 +26,9 @@
     "demo": "node scripts/demo.mjs",
     "start:standalone": "node scripts/server.js",
     "desktop:dev": "npm --prefix desktop install --no-fund --no-audit && npm --prefix desktop run dev",
-    "desktop:build:mac": "npm --prefix desktop install --no-fund --no-audit && npm --prefix desktop run build:mac",
-    "desktop:build:win": "npm --prefix desktop install --no-fund --no-audit && npm --prefix desktop run build:win",
-    "desktop:build:linux": "npm --prefix desktop install --no-fund --no-audit && npm --prefix desktop run build:linux"
+    "desktop:build:mac": "npm --prefix desktop install --no-fund --no-audit && npm --prefix desktop run bundle:runtime && npm --prefix desktop run build:mac",
+    "desktop:build:win": "npm --prefix desktop install --no-fund --no-audit && npm --prefix desktop run bundle:runtime && npm --prefix desktop run build:win",
+    "desktop:build:linux": "npm --prefix desktop install --no-fund --no-audit && npm --prefix desktop run bundle:runtime && npm --prefix desktop run build:linux"
   },
   "keywords": [
     "dsh-plugin",

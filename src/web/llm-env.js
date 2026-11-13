@@ -3,7 +3,7 @@
 // (DeepSeek → DEEPSEEK_API_KEY). Saving keys only into .odm-data/config.json left a fresh install
 // with a filled 配置 page but "No model is available" / no reply until restart — and even then
 // start-dsh used to export only OPENAI_API_KEY.
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
+import { mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 
 // DeepSeek's API serves `deepseek-flash` (display name DeepSeek-V4.1-Flash, input text+image) and
@@ -117,4 +117,269 @@ export function ensureAgentDefaultModel(dshHome, llm = {}) {
   }
   writeFileSync(file, text.endsWith('\n') ? text + block : text + '\n' + block)
   return true
+}
+
+const CREDENTIALS_FILE = '.credentials.yaml'
+// Catalog routes that already declare a protocol and models. A wizard "custom"
+// provider (or moonshot / zhipu, which are not catalog ids) must be declared.
+const PI_AI_CATALOG = new Set([
+  'amazon-bedrock', 'ant-ling', 'anthropic', 'azure', 'baseten', 'cerebras',
+  'cloudflare-ai-gateway', 'cloudflare-workers-ai', 'deepseek', 'fireworks',
+  'github-copilot', 'google', 'google-vertex', 'groq', 'huggingface',
+  'kimi-coding', 'meta', 'minimax', 'minimax-cn', 'mistral', 'moonshotai',
+  'moonshotai-cn', 'nvidia', 'openai', 'openai-codex', 'openrouter',
+  'qwen-token-plan', 'qwen-token-plan-cn', 'qwen-token-plan-individual',
+  'radius', 'together', 'vercel-ai-gateway', 'xai', 'xiaomi',
+  'xiaomi-token-plan-ams', 'xiaomi-token-plan-cn', 'xiaomi-token-plan-sgp',
+  'zai', 'zai-coding-cn',
+])
+
+const PROVIDER_KEY_ENV = {
+  deepseek: 'DEEPSEEK_API_KEY',
+  openai: 'OPENAI_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+  moonshot: 'MOONSHOT_API_KEY',
+  moonshotai: 'MOONSHOT_API_KEY',
+  'moonshotai-cn': 'MOONSHOT_API_KEY',
+  google: 'GEMINI_API_KEY',
+  groq: 'GROQ_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
+  zhipu: 'ZAI_API_KEY',
+  zai: 'ZAI_API_KEY',
+}
+
+/** Env refs the odm DeepSeek profile and OpenAI-compatible routes resolve. Never log these values. */
+export function llmCredentialRefs(llm = {}) {
+  const key = typeof llm.apiKey === 'string' ? llm.apiKey.trim() : ''
+  if (!key || key.includes('...')) return {}
+  const provider = String(llm.provider || '').toLowerCase()
+  const refs = { OPENAI_API_KEY: key }
+  const named = PROVIDER_KEY_ENV[provider]
+  if (named) refs[named] = key
+  else if (/deepseek/.test(String(llm.baseURL || ''))) refs.DEEPSEEK_API_KEY = key
+  return refs
+}
+
+function yamlScalar(value) {
+  return JSON.stringify(String(value))
+}
+
+/**
+ * Insert or replace `refs` entries in a version-1 `$DSH_HOME/.credentials.yaml`.
+ * The rest of the document (especially `records`, which holds the browser login
+ * grant) is kept byte-for-byte. Returns null when the existing text is a layout
+ * we must not rewrite.
+ */
+export function upsertCredentialRefs(text, updates) {
+  const entries = Object.entries(updates || {}).filter(([k, v]) =>
+    /^[A-Z][A-Z0-9_]*$/.test(k) && typeof v === 'string' && v.length > 0)
+  if (!entries.length) return text == null ? '' : text
+  const block = entries.map(([k, v]) => `  ${k}: ${yamlScalar(v)}`).join('\n') + '\n'
+  const src = text == null ? '' : String(text).replace(/\r\n/g, '\n')
+  if (!src.trim()) return `version: 1\nrefs:\n${block}`
+  if (!/^version:\s*1[ \t]*$/m.test(src)) return null
+  let next = src.endsWith('\n') ? src : src + '\n'
+  if (!/^refs:/m.test(next)) {
+    return next.replace(/^(version:\s*1[ \t]*\n)/m, `$1refs:\n${block}`)
+  }
+  // Inline empty mapping (`refs: {}` / `refs: { }`) must become a block
+  // so a later insert of `  KEY: ...` can match `refs:\n`.
+  next = next.replace(/^refs:[ \t]*\{[ \t]*\}[ \t]*\n/m, 'refs:\n')
+  for (const [k, v] of entries) {
+    const line = `  ${k}: ${yamlScalar(v)}`
+    const re = new RegExp(`^  ${k}:[^\\n]*\\n`, 'm')
+    if (re.test(next)) next = next.replace(re, line + '\n')
+    else next = next.replace(/^refs:[ \t]*\n/m, `refs:\n${line}\n`)
+  }
+  return next
+}
+
+function ownerOnly(file) {
+  try { chmodSync(file, 0o600) } catch { /* Windows has no POSIX mode */ }
+}
+
+/**
+ * Persist the Muse model key into dsh's credentials file so llm-pi-ai can
+ * resolve it after launch. process.env is snapshotted at boot and later
+ * writes are invisible; this file is watched and hot-reloaded. Never log the key.
+ * @returns {boolean} whether the file was written
+ */
+export function syncLlmCredentials(dshHome, llm = {}) {
+  const refs = llmCredentialRefs(llm)
+  if (!dshHome || !Object.keys(refs).length) return false
+  mkdirSync(dshHome, { recursive: true })
+  const file = join(dshHome, CREDENTIALS_FILE)
+  let current = ''
+  if (existsSync(file)) {
+    ownerOnly(file)
+    current = readFileSync(file, 'utf8')
+  }
+  const next = upsertCredentialRefs(current, refs)
+  if (next == null || next === current) return false
+  writeFileSync(file, next, { mode: 0o600 })
+  ownerOnly(file)
+  return true
+}
+
+function safeIdent(value, fallback) {
+  const s = String(value || '').trim()
+  return /^[A-Za-z0-9._-]+$/.test(s) ? s : fallback
+}
+
+function escapeRe(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * A YAML mapping entry at `indent` whose key is `key`, within [from, to).
+ * Blank lines and comments inside the block are included; the block ends at
+ * the first non-empty, non-comment line with indent <= `indent`. Trailing
+ * blank lines before the next sibling are not part of the block.
+ */
+function yamlMappingBlock(text, key, indent = 0, from = 0, to = text.length) {
+  const region = text.slice(from, to)
+  const pad = ' '.repeat(indent)
+  const re = new RegExp(`^${pad}${escapeRe(key)}:[^\\n]*\\n?`, 'm')
+  const m = region.match(re)
+  if (!m) return null
+  const start = from + m.index
+  let pos = start + m[0].length
+  const keyLineEnd = pos
+  const childMin = indent + 1
+  const limit = Math.min(to, text.length)
+  while (pos < limit) {
+    const nl = text.indexOf('\n', pos)
+    const lineEnd = nl === -1 || nl + 1 > limit ? limit : nl + 1
+    const line = text.slice(pos, lineEnd)
+    const trimmed = line.trim()
+    if (trimmed === '' || trimmed.startsWith('#')) {
+      pos = lineEnd
+      if (nl === -1) break
+      continue
+    }
+    const sp = (line.match(/^ */) || [''])[0].length
+    if (sp < childMin) break
+    pos = lineEnd
+    if (nl === -1) break
+  }
+  let end = pos
+  while (end > keyLineEnd) {
+    const prev = text.lastIndexOf('\n', end - 2)
+    const lineStart = prev === -1 ? 0 : prev + 1
+    if (lineStart < start) break
+    const line = text.slice(lineStart, end)
+    if (line.trim() === '') {
+      end = lineStart
+      continue
+    }
+    break
+  }
+  return { start, end, keyLineEnd }
+}
+
+function isOfficialDeepseek(llm = {}) {
+  const provider = safeIdent(String(llm.provider || '').toLowerCase(), '')
+  if (provider !== 'deepseek') return false
+  const rawBase = llm.baseURL ? String(llm.baseURL).trim() : ''
+  const baseURL = rawBase ? stripV1(rawBase) : ''
+  return !baseURL || /api\.deepseek\.com$/.test(baseURL)
+}
+
+/** The `    <id>:` entry (indent 4) for a custom / non-official route. */
+function providerEntryYaml(llm = {}) {
+  const provider = safeIdent(String(llm.provider || '').toLowerCase(), '')
+  if (!provider || isOfficialDeepseek(llm)) return ''
+  const apiKeyEnv = provider === 'deepseek' ? 'OPENAI_API_KEY' : (PROVIDER_KEY_ENV[provider] || 'OPENAI_API_KEY')
+  const rawBase = llm.baseURL ? String(llm.baseURL).trim() : ''
+  const baseURL = rawBase
+    ? (provider === 'deepseek' ? stripV1(rawBase) : rawBase.replace(/\/$/, ''))
+    : ''
+  const lines = [
+    `    ${provider}:`,
+    `      apiKeyEnv: ${apiKeyEnv}`,
+  ]
+  if (baseURL) lines.push(`      baseURL: ${yamlScalar(baseURL)}`)
+  if (!PI_AI_CATALOG.has(provider)) {
+    const model = safeIdent(llm.model, 'default')
+    lines.push('      api: openai-completions')
+    lines.push('      models:')
+    lines.push(`        - id: ${model}`)
+  }
+  return lines.join('\n') + '\n'
+}
+
+function providerRouteBlock(llm = {}) {
+  const entry = providerEntryYaml(llm)
+  if (!entry) return ''
+  return 'llm-pi-ai:\n  providers:\n' + entry
+}
+
+function upsertProviderEntry(text, llm) {
+  const entry = providerEntryYaml(llm)
+  if (!entry) return text
+  const provider = safeIdent(String(llm.provider || '').toLowerCase(), '')
+  const pi = yamlMappingBlock(text, 'llm-pi-ai', 0)
+  if (!pi) {
+    const block = providerRouteBlock(llm)
+    return text.endsWith('\n') ? text + block : text + '\n' + block
+  }
+  const prov = yamlMappingBlock(text, 'providers', 2, pi.start, pi.end)
+  if (!prov) {
+    return text.slice(0, pi.keyLineEnd) + '  providers:\n' + entry + text.slice(pi.keyLineEnd)
+  }
+  const existing = yamlMappingBlock(text, provider, 4, prov.start, prov.end)
+  if (existing) return text.slice(0, existing.start) + entry + text.slice(existing.end)
+  return text.slice(0, prov.end) + entry + text.slice(prov.end)
+}
+
+function removeProviderEntry(text, providerId) {
+  const pi = yamlMappingBlock(text, 'llm-pi-ai', 0)
+  if (!pi) return text
+  const prov = yamlMappingBlock(text, 'providers', 2, pi.start, pi.end)
+  if (!prov) return text
+  const entry = yamlMappingBlock(text, providerId, 4, prov.start, prov.end)
+  if (!entry) return text
+  let next = text.slice(0, entry.start) + text.slice(entry.end)
+  const pi2 = yamlMappingBlock(next, 'llm-pi-ai', 0)
+  if (!pi2) return next
+  const prov2 = yamlMappingBlock(next, 'providers', 2, pi2.start, pi2.end)
+  if (prov2 && next.slice(prov2.keyLineEnd, prov2.end).trim() === '') {
+    next = next.slice(0, prov2.start) + next.slice(prov2.end)
+    const pi3 = yamlMappingBlock(next, 'llm-pi-ai', 0)
+    if (pi3 && next.slice(pi3.keyLineEnd, pi3.end).trim() === '') {
+      next = next.slice(0, pi3.start) + next.slice(pi3.end)
+    }
+  }
+  return next
+}
+
+/** Write a user-settings llm-pi-ai route for a custom baseURL or non-catalog provider.
+ * Official DeepSeek removes a stale `deepseek` route so the odm profile wins. */
+export function ensureProviderRoute(dshHome, llm = {}) {
+  if (!dshHome) return false
+  const official = isOfficialDeepseek(llm)
+  const block = official ? '' : providerRouteBlock(llm)
+  if (!official && !block) return false
+  mkdirSync(dshHome, { recursive: true })
+  const file = join(dshHome, 'settings.yaml')
+  if (!existsSync(file)) {
+    if (official) return false
+    writeFileSync(file, block)
+    return true
+  }
+  const text = readFileSync(file, 'utf8')
+  const next = official ? removeProviderEntry(text, 'deepseek') : upsertProviderEntry(text, llm)
+  if (next === text) return false
+  writeFileSync(file, next)
+  return true
+}
+
+/** Apply the saved Muse LLM config to DSH_HOME (settings + credentials). */
+export function syncLlmToDsh(dshHome, llm = {}) {
+  if (!dshHome) return { defaultModel: false, credentials: false, provider: false }
+  return {
+    defaultModel: ensureAgentDefaultModel(dshHome, llm),
+    credentials: syncLlmCredentials(dshHome, llm),
+    provider: ensureProviderRoute(dshHome, llm),
+  }
 }

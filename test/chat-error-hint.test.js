@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { chatErrorHint } from '../src/web/muse-chat-core.js'
+import { chatErrorHint, isCredentialOrModelError, resolveTurnError } from '../src/web/muse-chat-core.js'
 
 test('stale or unreadable Chief sessions get an actionable hint', () => {
   assert.match(chatErrorHint('session "session-9b67" not found'), /state\.json/)
@@ -62,4 +62,33 @@ test('the chat client keeps waiting while chat-progress is running instead of ab
   assert.doesNotMatch(html, /setTimeout\(\(\) => ctl\.abort\(\), 240000\)/)
   assert.match(html, /t\('chat\.wait_too_long'\)/)
   assert.match(html, /t\('chat\.still_working'\)|chat-progress/)
+})
+
+test('credential and missing-model errors get a bilingual hint with a #setup link', () => {
+  const long = 'llm-pi-ai: no credential for provider route "deepseek"; its profile resolves OPENAI_API_KEY, which is not set — store OPENAI_API_KEY through the credentials service'
+  assert.equal(isCredentialOrModelError(long), true)
+  assert.equal(isCredentialOrModelError('MISSING_CREDENTIAL'), true)
+  assert.equal(isCredentialOrModelError('No model is available. Add one in Harness settings.'), true)
+  assert.equal(isCredentialOrModelError('rate limited'), false)
+  assert.equal(chatErrorHint(long, 'zh'), '模型 Key 没配好，[去设置](#setup)')
+  assert.equal(chatErrorHint(long, 'en'), 'Model key isn’t set up — [open Settings](#setup)')
+  assert.equal(chatErrorHint('MISSING_CREDENTIAL', 'en'), 'Model key isn’t set up — [open Settings](#setup)')
+})
+
+test('a bare "error" turn reason yields to the diagnostics MISSING_CREDENTIAL text', () => {
+  const diag = 'llm-pi-ai: no credential for provider route "deepseek"; its profile resolves OPENAI_API_KEY, which is not set'
+  assert.equal(resolveTurnError('error', diag), diag)
+  assert.equal(resolveTurnError('failed', diag), diag)
+  assert.equal(resolveTurnError('timeout', 'later'), 'later')
+  assert.equal(resolveTurnError('session "s-1" not found', 'other'), 'session "s-1" not found')
+  assert.equal(resolveTurnError('', diag), diag)
+  assert.equal(resolveTurnError('error', ''), 'error')
+})
+
+test('the chat UI turns the #setup markdown into a same-page link', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const html = await readFile(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  assert.ok(html.includes("u === '#setup'"), 'mdInline recognizes a #setup href')
+  assert.ok(html.includes('href="#setup"'), 'chat bubbles render a #setup link')
+  assert.equal((html.match(/href="#setup"/g) || []).length >= 2, true)
 })

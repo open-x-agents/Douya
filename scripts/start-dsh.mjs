@@ -8,7 +8,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { createWriteStream, writeFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { applyLlmEnv, ensureAgentDefaultModel, ensureProfileDeepseekCatalog, DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_LEGACY_MODELS } from '../src/web/llm-env.js'
+import { applyLlmEnv, ensureAgentDefaultModel, ensureProfileDeepseekCatalog, syncLlmToDsh, DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_LEGACY_MODELS } from '../src/web/llm-env.js'
 import { syncBotModels } from '../src/web/dsbot-chat.js'
 import {
   bundledDshEntry, dshLogPath, ensureMemoryMcp, ensureOdmProfile, linkDir, mergePathEnv,
@@ -86,7 +86,7 @@ let chatModel = DEEPSEEK_DEFAULT_MODEL
 try {
   const cfg = JSON.parse(readFileSync(join(HOME, 'config.json'), 'utf8'))
   applyLlmEnv(cfg?.llm || {})
-  ensureAgentDefaultModel(DSH_HOME, cfg?.llm || { provider: 'deepseek', model: DEEPSEEK_DEFAULT_MODEL })
+  syncLlmToDsh(DSH_HOME, cfg?.llm || { provider: 'deepseek', model: DEEPSEEK_DEFAULT_MODEL })
   if ((cfg?.llm?.provider || 'deepseek') === 'deepseek' && cfg?.llm?.model) chatModel = cfg.llm.model
   if (!process.env.COMPOSIO_API_KEY && cfg?.composioApiKey) process.env.COMPOSIO_API_KEY = cfg.composioApiKey
 } catch {

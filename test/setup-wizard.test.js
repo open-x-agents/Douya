@@ -336,3 +336,40 @@ test('wizard Next saves edits to an already-configured model instead of dropping
   // onNext gates the save on this check, not only on modelReady.
   assert.match(js, /!modelReady \|\| modelFormChanged\(loadedModel, readModelForm\(\)\)/)
 })
+
+test('updateLLMConfig syncs the key into DSH_HOME/.credentials.yaml (packaged-app path)', async () => {
+  const prev = process.env.DSH_HOME
+  const dshHome = mkdtempSync(join(tmpdir(), 'odm-dshhome-'))
+  // A packaged install already has a login grant in this file; the sync must keep it.
+  writeFileSync(join(dshHome, '.credentials.yaml'), [
+    'version: 1',
+    'records:',
+    '  client-connection/browser-session:',
+    '    kind: grant',
+    '    payload:',
+    '      secret: keep-login',
+    '',
+  ].join('\n'), { mode: 0o600 })
+  process.env.DSH_HOME = dshHome
+  try {
+    const { router } = await makeRouter({})
+    const saved = await router.updateLLMConfig({
+      provider: 'deepseek',
+      baseURL: 'https://api.deepseek.com/v1',
+      apiKey: LLM_KEY,
+      model: 'deepseek-flash',
+    })
+    assert.equal(saved.success, true)
+    const creds = readFileSync(join(dshHome, '.credentials.yaml'), 'utf8')
+    assert.match(creds, /OPENAI_API_KEY: "sk-test-llm-0123456789abcdef"/)
+    assert.match(creds, /DEEPSEEK_API_KEY: "sk-test-llm-0123456789abcdef"/)
+    assert.match(creds, /secret: keep-login/)
+    const settings = readFileSync(join(dshHome, 'settings.yaml'), 'utf8')
+    assert.match(settings, /provider: deepseek/)
+    assert.match(settings, /model: deepseek-flash/)
+    assert.ok(!JSON.stringify(saved).includes(LLM_KEY))
+  } finally {
+    if (prev === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = prev
+  }
+})

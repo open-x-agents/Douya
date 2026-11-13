@@ -52,7 +52,7 @@ The packaged app is self-contained for startup: it ships the Douya server (`scri
 
 You also need a **chat model provider** (for example DeepSeek). Connect sources through Composio only if you want them. See the root README’s [Configure AI + Composio](../README.md#configure-ai--composio).
 
-On a first launch where no chat model is saved, a **setup wizard** opens and asks only for the model API and, optionally, a Composio project API key. Composio can be skipped. The same wizard is also in Settings. Keys are written to `ODM_DATA_DIR/config.json` (under userData in the packaged app; `.odm-data/config.json` in a source checkout), the same file Settings already uses.
+On a first launch where no chat model is saved, a **setup wizard** opens and asks only for the model API and, optionally, a Composio project API key. Composio can be skipped. The same wizard is also in Settings. Keys are written to `ODM_DATA_DIR/config.json` (under userData in the packaged app; `.odm-data/config.json` in a source checkout), the same file Settings already uses, and synced into `$DSH_HOME/.credentials.yaml` so dsh can use them without a restart.
 
 ## Bundled memory runtime
 
@@ -75,6 +75,7 @@ Two trees matter, and the app does **not** automatically copy or reindex one int
 
 - `ODM_DATA_DIR/dsh-web.url` — login token URL (do not commit or paste it)
 - `ODM_DATA_DIR/config.json` — AI / Composio keys
+- `$DSH_HOME/.credentials.yaml` — the model key as dsh's credentials service reads it (`OPENAI_API_KEY`, and `DEEPSEEK_API_KEY` for DeepSeek)
 - Host state: `$DSH_HOME/opendigitalmate/state.json` when `ODM_DATA_DIR` is unset; the packaged app writes state next to `config.json` in `ODM_DATA_DIR`
 
 **2. The Electron app userData** (`productName` is Douya):

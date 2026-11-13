@@ -39,14 +39,32 @@ const HINTS = {
     zh: 'Chief 的旧对话找不到或格式太旧，无法继续。请备份并移走 .dsh-odm/bot/state.json 后重启，会新建一个 Chief。',
     en: 'The Chief’s earlier conversation is missing or too old to resume. Back up and move aside .dsh-odm/bot/state.json, then restart — a new Chief will be created.',
   },
+  credential: {
+    zh: '模型 Key 没配好，[去设置](#setup)',
+    en: 'Model key isn’t set up — [open Settings](#setup)',
+  },
+}
+export function isCredentialOrModelError(err) {
+  return /No model is available|没有可用的模型|MISSING_CREDENTIAL|no credential for provider|no API key for provider|Add one in Harness settings|UNSTORABLE_PROVIDER_ID/i.test(String(err || ''))
 }
 export function chatErrorHint(err, lang = 'zh') {
   const s = String(err || '')
   const pick = k => HINTS[k][lang === 'en' ? 'en' : 'zh']
+  if (isCredentialOrModelError(s)) return pick('credential')
   if (/could not be read \(saved by a newer DS Bot/i.test(s)) return pick('newer')
   if (/no Main Bot/i.test(s)) return pick('noMain')
   if (/session "[^"]+" not found|v0 artifact|cannot safely transform/i.test(s)) return pick('stale')
   return ''
+}
+
+// A turn/end reason of kind "error" becomes the bare string "error", which hid the
+// real MISSING_CREDENTIAL text already in diagnostics.jsonl. Prefer a specific diagnostic.
+const GENERIC_TURN_ERROR = /^(error|fail|failed|failure|timeout|abort|aborted)$/i
+export function resolveTurnError(turnError, diagnostic) {
+  const a = String(turnError || '').trim()
+  const b = String(diagnostic || '').trim()
+  if (a && !GENERIC_TURN_ERROR.test(a)) return a
+  return b || a
 }
 
 // A fresh team has no Chief until ds-bot's own 'state' endpoint bootstraps one; the Muse page never calls it,
@@ -540,7 +558,7 @@ export async function runMuseChatTurn(ctx, {
     // (or this-turn records already named an error). Never reuse an earlier lastTurnError
     // while the bot is still working, and never present a still-open turn as "no reply".
     const why = endedEmpty || turnError
-      ? (turnError || await lastTurnError(dshHome, sessionId, T.turnCallAt || T.promptAt || 0))
+      ? resolveTurnError(turnError, await lastTurnError(dshHome, sessionId, T.turnCallAt || T.promptAt || 0))
       : ''
     const code = endedEmpty ? 'no_reply' : (why ? 'turn_error' : 'silent')
     const error = endedEmpty ? (why || NO_REPLY_ERROR) : (why || SILENT_TURN_ERROR)

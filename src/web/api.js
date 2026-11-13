@@ -2115,10 +2115,10 @@ export function createApiRouter(ctx) {
       // Live-apply for Chief (same dsh process): without DEEPSEEK_API_KEY a fresh DeepSeek setup
       // saves 配置 successfully but every chat returns "No model is available" until restart.
       try {
-        const { applyLlmEnv, ensureAgentDefaultModel } = await import('./llm-env.js');
+        const { applyLlmEnv, syncLlmToDsh } = await import('./llm-env.js');
         applyLlmEnv(updates.llm);
         const dshHome = process.env.DSH_HOME || null;
-        if (dshHome) ensureAgentDefaultModel(dshHome, updates.llm);
+        if (dshHome) syncLlmToDsh(dshHome, updates.llm);
       } catch (err) { console.warn('[llm-config] env apply failed:', err.message); }
 
       // Rebuild LLM client immediately from saved config (standalone server.js only)

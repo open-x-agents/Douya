@@ -285,10 +285,38 @@ test('card zoom related-items list goes through i18n', () => {
   assert.match(html, /t\('zoom\.dismiss_all', \{ n: open\.length \}\)/)
   assert.equal(t('zoom.replies', 'en', { n: 3 }), '3 replies')
   assert.equal(t('zoom.replies', 'zh', { n: 3 }), '3 条回复')
-  assert.equal(t('zoom.dismiss_all', 'en', { n: 4 }), 'Dismiss all 4')
+  assert.equal(t('zoom.dismiss_all', 'en', { n: 4 }), 'Dismiss all 4 emails')
   assert.equal(t('zoom.of_total', 'zh', { n: 5 }), '/ 共 5')
   assert.match(t('zoom.all_handled', 'en'), /handled/)
   for (const k of ['zoom.needs_you', 'zoom.status_done', 'zoom.status_dismissed', 'zoom.expand', 'zoom.collapse', 'zoom.head_mail', 'zoom.head_slack', 'zoom.head_items', 'zoom.handled']) {
+    assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
+  }
+})
+
+test('card zoom header, deep links and link-kind labels go through i18n', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of [
+    "zh: '消息'",
+    "zh: '邮件'",
+    "zh: '链接'",
+    "zh: '仓库'",
+    '个待处理 PR`',
+    ": '全部 PR'",
+    "title: '打开仓库'",
+    '原始摘要：${',
+    '<span>待推进 PR</span>',
+    '<span>待处理 issue</span></div>` :',
+    "'打开第一封 ↗'",
+    "'去处理 ↗'",
+  ]) {
+    assert.ok(!html.includes(s), `hardcoded zh copy left in card zoom: ${s}`)
+  }
+  assert.equal(t('zoom.all_prs_n', 'en', { n: 3 }), 'All 3 open PRs')
+  assert.equal(t('zoom.all_prs_n', 'zh', { n: 3 }), '全部 3 个待处理 PR')
+  assert.equal(t('zoom.orig_summary', 'en', { title: 'x' }), 'Original summary: x')
+  assert.equal(t('kind.link', 'en'), 'Link')
+  assert.equal(t('kind.link', 'zh'), '链接')
+  for (const k of ['kind.slack', 'kind.mail', 'kind.issue', 'kind.pr', 'kind.repo', 'zoom.all_prs', 'zoom.kpi_prs', 'zoom.kpi_issues', 'zoom.open_first_mail', 'zoom.go_handle', 'card.open_repo']) {
     assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
   }
 })

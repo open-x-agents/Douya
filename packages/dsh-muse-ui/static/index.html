@@ -3020,12 +3020,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function blockOf(card, type) { return (card.blocks || []).find(b => b.type === type); }
   function clip(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
   function linkKind(l) {
-    const t = String(l.type || '');
-    if (t === 'slack' || /\.slack\.com\//.test(l.url)) return { k: 'slack', zh: '消息' };
-    if (t.startsWith('email') || /mail\.google/.test(l.url)) return { k: 'mail', zh: '邮件' };
-    if (/\/issues\//.test(l.url) || t.includes('issue')) return { k: 'issue', zh: 'Issue' };
-    if (/\/pull\//.test(l.url) || t.includes('pr')) return { k: 'pr', zh: 'PR' };
-    return { k: 'link', zh: '链接' };
+    const ty = String(l.type || '');
+    if (ty === 'slack' || /\.slack\.com\//.test(l.url)) return { k: 'slack', zh: t('kind.slack') };
+    if (ty.startsWith('email') || /mail\.google/.test(l.url)) return { k: 'mail', zh: t('kind.mail') };
+    if (/\/issues\//.test(l.url) || ty.includes('issue')) return { k: 'issue', zh: t('kind.issue') };
+    if (/\/pull\//.test(l.url) || ty.includes('pr')) return { k: 'pr', zh: t('kind.pr') };
+    return { k: 'link', zh: t('kind.link') };
   }
   function explain(card) {
     const r = repoOf(card);
@@ -3106,10 +3106,10 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const r = repoOf(card);
     if (a && !seen.has(a.value)) {
       let label = a.label;
-      if (r && /\/pulls$/.test(a.value)) { const pr = statOf(card, 'PR'); label = pr ? `全部 ${pr} 个待处理 PR` : '全部 PR'; }
-      out.push({ url: a.value, title: label, kind: { k: 'repo', zh: '仓库' } });
+      if (r && /\/pulls$/.test(a.value)) { const pr = statOf(card, 'PR'); label = pr ? t('zoom.all_prs_n', { n: pr }) : t('zoom.all_prs'); }
+      out.push({ url: a.value, title: label, kind: { k: 'repo', zh: t('kind.repo') } });
     } else if (r && !seen.has(card.url)) {
-      out.push({ url: card.url, title: '打开仓库', kind: { k: 'repo', zh: '仓库' } });
+      out.push({ url: card.url, title: t('card.open_repo'), kind: { k: 'repo', zh: t('kind.repo') } });
     }
     return out.slice(0, 3);
   }
@@ -6868,11 +6868,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       html += `<div class="z-sec"><h4>时间表</h4><div class="z-items">${all.map(b => `<div class="z-item"><span class="z-time">${escapeHtml(b.start)}–${escapeHtml(b.end)}</span><div class="z-item-b"><b>${escapeHtml(b.title)}</b><span>${escapeHtml(CAT_ZH[b.category] || (b.type === 'suggested' ? '建议' : '日程'))}</span></div></div>`).join('') || '<p class="w-desc">暂无日程</p>'}</div></div>`;
     } else {
       if (card.body) html += `<p class="z-body">${escapeHtml(zhBody(card))}</p>`;
-      if (!isMailGroup(card) && card.title && card.title !== headline(card) && !(r && card.title.toLowerCase() === r.name.toLowerCase())) html += `<p class="z-orig">原始摘要：${escapeHtml(card.title)}</p>`;
+      if (!isMailGroup(card) && card.title && card.title !== headline(card) && !(r && card.title.toLowerCase() === r.name.toLowerCase())) html += `<p class="z-orig">${escapeHtml(t('zoom.orig_summary', { title: card.title }))}</p>`;
       const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
-      if (pr || iss) html += `<div class="z-kpis">${pr ? `<div><b class="c-teal">${pr}</b><span>待推进 PR</span></div>` : ''}${iss ? `<div><b class="c-violet">${iss}</b><span>待处理 issue</span></div>` : ''}</div>`;
+      if (pr || iss) html += `<div class="z-kpis">${pr ? `<div><b class="c-teal">${pr}</b><span>${escapeHtml(t('zoom.kpi_prs'))}</span></div>` : ''}${iss ? `<div><b class="c-violet">${iss}</b><span>${escapeHtml(t('zoom.kpi_issues'))}</span></div>` : ''}</div>`;
       const dl = deepLinks(card);
-      html += `<div class="z-next"><div><span class="w-next-k">${escapeHtml(t('today.next_step'))}</span><b>${escapeHtml(nextAction(card))}</b></div>${dl[0] ? `<a class="z-btn" href="${escapeHtml(dl[0].url)}" target="_blank" rel="noopener">${isMailGroup(card) ? '打开第一封 ↗' : '去处理 ↗'}</a>` : ''}</div>`;
+      html += `<div class="z-next"><div><span class="w-next-k">${escapeHtml(t('today.next_step'))}</span><b>${escapeHtml(nextAction(card))}</b></div>${dl[0] ? `<a class="z-btn" href="${escapeHtml(dl[0].url)}" target="_blank" rel="noopener">${escapeHtml(t(isMailGroup(card) ? 'zoom.open_first_mail' : 'zoom.go_handle'))}</a>` : ''}</div>`;
       if (linksOf(card).length) html += `<div class="z-sec" id="zItemsSec">${zoomItemsHtml(card)}</div>`;
     }
     const name = r ? r.name : (isTT ? '今天的安排' : clip(card.title, 20));

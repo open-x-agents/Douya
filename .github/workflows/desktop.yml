@@ -73,7 +73,15 @@ jobs:
           "CSC_KEY_PASSWORD=$pass" >> $env:GITHUB_ENV
 
       - name: Build installer
-        run: npx electron-builder --${{ matrix.target }} --${{ matrix.arch }} --publish never
+        shell: bash
+        run: |
+          # macos-latest's default file limit is too low for ad-hoc signing of the
+          # bundled app-runtime (electron-builder hits EMFILE walking node_modules).
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            ulimit -n 65536
+            ulimit -n
+          fi
+          npx electron-builder --${{ matrix.target }} --${{ matrix.arch }} --publish never
 
       - name: Check signatures
         if: matrix.target != 'linux'

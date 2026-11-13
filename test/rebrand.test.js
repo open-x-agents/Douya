@@ -41,4 +41,9 @@ test('public name is Douya / 豆芽; internal ids that would break upgrades stay
   assert.match(site, /desktop personal assistant/i)
   assert.match(site, /桌面版个人助手/)
   assert.doesNotMatch(site, /openDigitalMate|Open Digital Mate/)
+
+  // Hero "Download Douya / 下载豆芽" jumps to the on-page section, not GitHub.
+  assert.match(site, /<section id="download">/)
+  assert.match(site, /class="btn primary" href="#download"/)
+  assert.doesNotMatch(site, /class="btn primary" href="https:\/\/github\.com\//)
 })

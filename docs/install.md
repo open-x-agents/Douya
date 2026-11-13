@@ -52,6 +52,8 @@ The Electron window is only a shell, not a self-contained server.
 
 You also need a **chat model provider** (for example DeepSeek) in Settings. Connect sources through Composio only if you want them. See the root README’s [Configure AI + Composio](../README.md#configure-ai--composio).
 
+On a first launch where no chat model is saved, a **setup wizard** opens and asks only for the model API and, optionally, a Composio project API key. Composio can be skipped. The same wizard is also in Settings. Keys are written to the repo checkout’s `.odm-data/config.json`, the same file Settings already uses.
+
 ## Bundled memory runtime
 
 Each installer includes OpenViking **0.5.4**, relocatable CPython 3.13.18, `llama-cpp-python` 0.3.36, and the official `bge-small-zh-v1.5-f16` GGUF (MIT, 512-d, sha256 `ab9b81d9cd329c712eee379cf0068eabe6a5e2a01d0def61535eba9384085e2c`). The OpenViking runtime is AGPL-3.0 (upstream).

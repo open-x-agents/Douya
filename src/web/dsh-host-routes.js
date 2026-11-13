@@ -591,6 +591,20 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
   }, 'opendigitalmate: /api/llm/test')
 
   effect({
+    path: '/api/composio/test',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request) => json(await router.testComposio(await readJson(request))),
+  }, 'opendigitalmate: /api/composio/test')
+
+  effect({
+    path: '/api/setup/complete',
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request) => json(await router.completeSetup(await readJson(request))),
+  }, 'opendigitalmate: /api/setup/complete')
+
+  effect({
     path: '/api/composio/disconnect',
     methods: ['POST'],
     requestBody: 'buffered',

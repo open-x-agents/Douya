@@ -1,0 +1,77 @@
+/* First-run setup wizard: warm-glass overlay, two steps only. */
+.setup-wiz{
+  position:fixed;inset:0;z-index:3000;
+  display:none;
+  align-items:center;justify-content:center;
+  padding:20px 16px;
+  background:linear-gradient(160deg,rgba(244,242,238,.82) 0%,rgba(227,232,240,.88) 100%);
+  backdrop-filter:blur(18px) saturate(150%);
+  -webkit-backdrop-filter:blur(18px) saturate(150%);
+}
+.setup-wiz.on{display:flex}
+.setup-wiz-card{
+  width:min(520px,100%);
+  max-height:calc(100vh - 36px);
+  overflow:auto;
+  background:rgba(255,255,255,.9);
+  backdrop-filter:blur(20px) saturate(180%);
+  -webkit-backdrop-filter:blur(20px) saturate(180%);
+  border:1px solid rgba(255,255,255,.7);
+  border-radius:20px;
+  box-shadow:0 18px 48px rgba(21,23,28,.12),inset 0 1px 0 rgba(255,255,255,.95);
+  padding:26px 28px 22px;
+}
+.setup-wiz-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px}
+.setup-wiz-top h2{margin:0;font-size:22px;font-weight:600;letter-spacing:-.02em;line-height:1.35}
+.setup-wiz-sub{margin:6px 0 0;font-size:13.5px;color:var(--ink2);line-height:1.55;max-width:44ch}
+.setup-wiz-x{
+  border:0;background:transparent;color:var(--ink3);cursor:pointer;
+  width:32px;height:32px;border-radius:8px;font-size:18px;line-height:1;
+  flex-shrink:0;
+}
+.setup-wiz-x:hover{background:rgba(21,23,28,.06);color:var(--ink)}
+.setup-wiz-steps{display:flex;align-items:center;gap:8px;margin:18px 0 20px}
+.setup-wiz-step{
+  display:flex;align-items:center;gap:8px;
+  font-size:12px;color:var(--ink3);font-weight:500;
+}
+.setup-wiz-step b{
+  width:22px;height:22px;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:rgba(21,23,28,.06);font-size:11px;font-weight:600;
+}
+.setup-wiz-step.on{color:var(--ink)}
+.setup-wiz-step.on b{background:var(--blue);color:#fff}
+.setup-wiz-step.done b{background:var(--green-soft);color:var(--green)}
+.setup-wiz-steps i{flex:1;height:1px;background:var(--line);display:block}
+.setup-wiz-pane{display:none}
+.setup-wiz-pane.on{display:block}
+.setup-wiz-pane h3{margin:0 0 6px;font-size:16px;font-weight:600}
+.setup-wiz-pane .help{margin:0 0 14px;font-size:13px;color:var(--ink2);line-height:1.55}
+.setup-wiz label{font-size:12px;color:var(--ink3);display:block;margin:0 0 4px}
+.setup-wiz .field{margin-bottom:12px}
+.setup-wiz input[type=text],
+.setup-wiz input[type=password],
+.setup-wiz select{
+  width:100%;border:1px solid var(--line);border-radius:8px;
+  padding:9px 12px;font-size:13px;background:#fff;font-family:inherit;
+  color:var(--ink);
+}
+.setup-wiz input[type=password],
+.setup-wiz input.mono{font-family:ui-monospace,Menlo,monospace}
+.setup-wiz-note{
+  font-size:12.5px;color:var(--ink2);line-height:1.55;
+  background:var(--amber-soft);border:1px solid rgba(200,134,42,.18);
+  border-radius:10px;padding:10px 12px;margin:0 0 14px;
+}
+.setup-wiz-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px;align-items:center}
+.setup-wiz-actions .push{margin-left:auto}
+.setup-wiz-status{font-size:12px;margin-top:10px;min-height:1.3em;line-height:1.5}
+.setup-wiz-status.ok{color:var(--green)}
+.setup-wiz-status.err{color:var(--red)}
+.setup-wiz-status.busy{color:var(--ink3)}
+.setup-wiz-launch{margin:0 0 18px}
+.settings-wizard-launch{margin:0 0 18px}
+
+.setup-wiz a.btn{text-decoration:none;display:inline-block;line-height:1.4}
+

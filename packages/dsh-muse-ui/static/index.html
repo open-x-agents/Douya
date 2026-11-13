@@ -2152,6 +2152,9 @@
         <section class="view" id="v-settings">
           <h3 class="concl" data-i18n="settings.model_title">Model settings</h3>
           <div class="stamp a in" data-i18n="settings.model_sub">Configure the AI model used for chat</div>
+          <div class="settings-wizard-launch a in">
+            <button type="button" class="btn" id="openSetupWizardBtn" data-i18n="wizard.open_from_settings">Open setup wizard</button>
+          </div>
 
           <div class="card a in settings-lang" id="langCard">
             <h3 data-i18n="settings.lang_card">Interface language</h3>
@@ -2356,6 +2359,90 @@
   </div>
 </div>
 
+
+<!-- First-run setup wizard: model API + Composio only. -->
+<div class="setup-wiz" id="setupWizard" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="wizTitle">
+  <div class="setup-wiz-card">
+    <div class="setup-wiz-top">
+      <div>
+        <h2 id="wizTitle" data-i18n="wizard.title">Welcome to Douya</h2>
+        <p class="setup-wiz-sub" data-i18n="wizard.sub">Two quick steps: your chat model, then Composio for sources. You can change these later in Settings.</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <div class="lang-switch" id="langSwitchWizard" role="group" aria-label="Language">
+          <button type="button" data-lang="en" class="on">English</button>
+          <button type="button" data-lang="zh">中文</button>
+        </div>
+        <button type="button" class="setup-wiz-x" id="wizClose" aria-label="Close" data-i18n="wizard.close" data-i18n-attr="aria-label">×</button>
+      </div>
+    </div>
+    <div class="setup-wiz-steps" aria-hidden="true">
+      <div class="setup-wiz-step on" id="wizStepModel"><b>1</b> <span data-i18n="wizard.step_model">Model</span></div>
+      <i></i>
+      <div class="setup-wiz-step" id="wizStepComposio"><b>2</b> <span data-i18n="wizard.step_composio">Composio</span></div>
+    </div>
+
+    <div class="setup-wiz-pane on" id="wizPaneModel">
+      <h3 data-i18n="wizard.model_title">Chat model</h3>
+      <p class="help" data-i18n="wizard.model_help">Douya needs a model API key to talk with you. DeepSeek is the recommended default.</p>
+      <div class="field">
+        <label for="wizLlmProvider" data-i18n="settings.provider">Provider</label>
+        <select id="wizLlmProvider">
+          <option value="" data-i18n="settings.provider_pick">Choose a provider…</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="openai">OpenAI</option>
+          <option value="moonshot">Moonshot (月之暗面)</option>
+          <option value="zhipu">ZhipuAI (智谱清言)</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+      <div class="field" id="wizLlmBaseWrap" style="display:none">
+        <label for="wizLlmBase">Base URL</label>
+        <input type="text" id="wizLlmBase" class="mono" placeholder="https://api.example.com/v1" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="wizLlmKey">API Key</label>
+        <input type="password" id="wizLlmKey" class="mono" placeholder="Enter API Key" data-i18n="settings.api_key_ph" data-i18n-attr="placeholder" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="wizLlmModel" data-i18n="settings.model">Model</label>
+        <input type="text" id="wizLlmModel" placeholder="deepseek-flash" autocomplete="off">
+      </div>
+      <div class="setup-wiz-actions">
+        <button type="button" class="btn" id="wizSaveModel" data-i18n="wizard.save">Save</button>
+        <button type="button" class="btn" id="wizTestModel" data-i18n="wizard.test">Test connection</button>
+        <button type="button" class="btn primary push" id="wizNext" data-i18n="wizard.next">Next</button>
+      </div>
+      <div id="wizLlmStatus" class="setup-wiz-status" role="status" aria-live="polite"></div>
+    </div>
+
+    <div class="setup-wiz-pane" id="wizPaneComposio">
+      <h3 data-i18n="wizard.composio_title">Connect Composio</h3>
+      <p class="help" data-i18n="wizard.composio_help">Composio connects your mail, calendar, GitHub, and other apps. This is optional — you can skip and add it later.</p>
+      <p class="setup-wiz-note" data-i18n="wizard.composio_no_oneclick">Composio doesn’t offer a one-click login for other apps. Open the dashboard, copy a project API key (Settings → Project Settings → API Keys), and paste it here.</p>
+      <p style="margin:0 0 14px">
+        <a class="btn primary" id="wizComposioOpen" href="https://platform.composio.dev" target="_blank" rel="noopener noreferrer" data-i18n="wizard.composio_open">Open Composio dashboard</a>
+      </p>
+      <div class="field">
+        <label for="wizComposioKey" data-i18n="wizard.composio_key">Project API key</label>
+        <input type="password" id="wizComposioKey" class="mono" placeholder="Paste your Composio project API key" data-i18n="wizard.composio_key_ph" data-i18n-attr="placeholder" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="wizEntityId" data-i18n="settings.entity_id">Entity ID (optional)</label>
+        <input type="text" id="wizEntityId" placeholder="default" autocomplete="off">
+      </div>
+      <div class="setup-wiz-actions">
+        <button type="button" class="btn" id="wizBack" data-i18n="wizard.back">Back</button>
+        <button type="button" class="btn" id="wizSkip" data-i18n="wizard.skip">Skip for now</button>
+        <button type="button" class="btn" id="wizTestComposio" data-i18n="wizard.composio_validate">Save and verify</button>
+        <button type="button" class="btn primary push" id="wizFinish" data-i18n="wizard.finish">Finish</button>
+      </div>
+      <div id="wizComposioStatus" class="setup-wiz-status" role="status" aria-live="polite"></div>
+    </div>
+  </div>
+</div>
+
 <script src="/api/opendigitalmate/ui-renderer.js"></script>
 <script src="/api/opendigitalmate/i18n.js"></script>
 <script>
@@ -2386,6 +2473,7 @@
     if (reload && typeof loadSources === 'function' && $('v-sources')?.classList.contains('on')) loadSources(false);
     if (reload && typeof loadDigestPrefs === 'function' && $('v-settings')?.classList.contains('on')) loadDigestPrefs();
   }
+  window.setAppLocale = setAppLocale;
   document.querySelectorAll('.lang-switch').forEach(sw => {
     sw.addEventListener('click', (e) => {
       const b = e.target.closest('button[data-lang]');
@@ -5381,7 +5469,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   }
   window.odmWatchComposio = odmWatchComposio;
   // Deep link: the callback page (no opener) redirects to …/app#sources.
-  const hashView = () => { const v = (location.hash || '').slice(1); if (v === 'sources' || v === 'settings' || v === 'memory' || v === 'future') showView(v); };
+  const hashView = () => { const v = (location.hash || '').slice(1); if (v === 'setup') { if (window.odmOpenSetupWizard) window.odmOpenSetupWizard({ fromSettings: true }); return; } if (v === 'sources' || v === 'settings' || v === 'memory' || v === 'future') showView(v); };
   setTimeout(hashView, 0); window.addEventListener('hashchange', hashView);
   window.__reloadSources = () => { if ($('v-sources').classList.contains('on')) loadSources(true); };
 

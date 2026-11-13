@@ -20,8 +20,8 @@ Chat goes through **ds-bot Chief** inside `dsh --profile odm`, not the old stand
 npm install
 npm start
 open "$(cat .odm-data/dsh-web.url)"
-# 配置 → DeepSeek + API Key → 保存 → 测试连接
-# 配置 → Composio → 保存并连接信源
+# First run: the setup wizard asks for the model and an optional Composio project key
+# (or 配置 → DeepSeek + API Key → 保存 → 测试连接, then Composio)
 # 今天页对话框发一句「你好」
 ```
 

@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   COMMON_BIN_DIRS, DEFAULT_PORT, START_SCRIPT, decideStartup, isExternalOpenable, isInternalUrl,
-  isPortOpen, isRepoRoot, mergePath, messages, readLoginUrl, resolveDshBin, resolveRepoRoot,
+  isPortOpen, isRepoRoot, locateDsh, mergePath, messages, readLoginUrl, resolveRepoRoot,
   sanitizeBounds, tail, tokenWorks, waitForLogin,
 } from './server.js'
 import {
@@ -74,11 +74,25 @@ async function pickRepoRoot() {
   return dir
 }
 
-function startServer(root) {
+let serverPathCache = null
+const serverPath = () => (serverPathCache ??= mergePath(process.env.PATH, [loginShellPath(), ...COMMON_BIN_DIRS]))
+
+// Without dsh, start-dsh dies before it is ready; ask for it up front (like the repo folder).
+async function pickDshBin() {
   const settings = loadSettings()
-  const PATH = mergePath(process.env.PATH, [loginShellPath(), ...COMMON_BIN_DIRS])
+  const found = locateDsh({ saved: settings.dshBin, onPath: (name) => findOnPath(name, serverPath()) })
+  if (found) return found
+  await dialog.showMessageBox({ type: 'info', message: t().noDsh })
+  const res = await dialog.showOpenDialog({ title: t().pickDsh, properties: ['openFile'] })
+  const file = res.filePaths?.[0]
+  if (!file || !existsSync(file)) return null
+  saveSettings({ dshBin: file })
+  return file
+}
+
+function startServer(root, dshBin) {
+  const PATH = serverPath()
   const env = sanitizeSpawnEnv({ ...process.env, PORT: String(PORT) }, { path: PATH })
-  const dshBin = resolveDshBin({ saved: settings.dshBin })
   if (dshBin) env.DSH_BIN = dshBin
   // Prefer the user's Node (same one `npm start` uses); fall back to Electron's bundled Node.
   let nodeExe = findOnPath('node', PATH)
@@ -235,8 +249,10 @@ async function boot() {
   }
   if (plan.action === 'conflict') return showError(t().conflict(PORT))
 
+  const dshBin = await pickDshBin()
+  if (!dshBin) return app.quit()
   const since = Date.now()
-  startServer(root)
+  startServer(root, dshBin)
   try {
     const ready = await waitForLogin({ root, port: PORT, since, isDead: () => childDead })
     createWindow(ready.url)

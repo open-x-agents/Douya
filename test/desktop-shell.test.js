@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   decideStartup, freshLogin, isExternalOpenable, isInternalUrl, isPortOpen, isRepoRoot,
-  mergePath, messages, parseLoginUrl, readLoginUrl, resolveDshBin, resolveRepoRoot,
+  locateDsh, mergePath, messages, parseLoginUrl, readLoginUrl, resolveDshBin, resolveRepoRoot,
   sanitizeBounds, tail, tokenWorks, waitForLogin,
 } from '../desktop/src/server.js'
 
@@ -100,6 +100,24 @@ test('resolveRepoRoot / resolveDshBin: env first, then saved, then the usual Mac
   const macDsh = join('/h', 'Documents', 'git', 'dsh-rc5', 'bin', 'dsh')
   assert.equal(resolveDshBin({ env: { HOME: '/h' }, exists: (p) => p === macDsh }), macDsh)
   assert.equal(resolveDshBin({ env: { HOME: '/h' }, exists: () => false }), null)
+})
+
+test('locateDsh: known locations first, then dsh on PATH, else null so the shell asks', () => {
+  assert.equal(locateDsh({ env: { DSH_BIN: '/x/dsh' }, onPath: () => '/usr/local/bin/dsh' }), '/x/dsh')
+  assert.equal(locateDsh({ env: {}, saved: '/s/dsh', exists: (p) => p === '/s/dsh', onPath: () => '/p/dsh' }), '/s/dsh')
+  assert.equal(locateDsh({ env: { HOME: '/h' }, exists: () => false, onPath: (n) => (n === 'dsh' ? '/opt/homebrew/bin/dsh' : null) }), '/opt/homebrew/bin/dsh')
+  assert.equal(locateDsh({ env: { HOME: '/h' }, exists: () => false, onPath: () => null }), null)
+  assert.equal(locateDsh({ env: {}, exists: () => false }), null)
+})
+
+test('dsh picker copy is bilingual', () => {
+  for (const locale of ['en-US', 'zh-CN']) {
+    const m = messages(locale)
+    assert.match(m.noDsh, /dsh/)
+    assert.match(m.noDsh, /DSH_BIN/)
+    assert.ok(m.pickDsh)
+  }
+  assert.notEqual(messages('en').noDsh, messages('zh').noDsh)
 })
 
 test('mergePath keeps order and drops duplicates / blanks', () => {

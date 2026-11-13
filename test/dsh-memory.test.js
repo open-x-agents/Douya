@@ -159,7 +159,7 @@ test('Memory 一瞥 chrome: nav + view + i18n + sources-only apps', () => {
   assert.match(msgs, /'memory\.add_photo'/)
   assert.match(html, /mem-source/)
   assert.match(msgs, /'memory\.more'/)
-  assert.match(msgs, /'memory\.source_openviking'/)
+  assert.match(msgs, /'memory\.source_mcp'/)
   const ops = readFileSync(new URL('../src/ui/ops.js', import.meta.url), 'utf8')
   assert.match(ops, /memory: '回忆'/)
   const api = readFileSync(new URL('../src/web/api.js', import.meta.url), 'utf8')

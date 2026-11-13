@@ -21,18 +21,23 @@ import { fileURLToPath } from 'node:url'
 
 export const BUNDLED_PACKAGES = {
   '@deepseek-ai/dsh': '0.2.2-rc.1',
-  '@openviking/dsh-memory-plugin': '0.5.33',
+  '@modelcontextprotocol/server-memory': '2.1.1',
   'deep-view': '0.1.0',
 }
 
-/** Only the CLI goes in the staged root package.json, so npm can install a complete dsh tree.
- *  The memory plugin and deep-view have older peer ranges and are installed separately. */
+/** dsh and the official MCP Memory server go in the staged root package.json so one
+ *  `npm install` fills both (Memory has no conflicting dsh peers). deep-view still
+ *  has older peer ranges and is installed under vendor/ds-bot. */
 export const ROOT_PACKAGES = {
   '@deepseek-ai/dsh': BUNDLED_PACKAGES['@deepseek-ai/dsh'],
+  '@modelcontextprotocol/server-memory': BUNDLED_PACKAGES['@modelcontextprotocol/server-memory'],
 }
 
-export const MEMORY_PLUGIN = '@openviking/dsh-memory-plugin'
-export const MEMORY_PLUGIN_VERSION = BUNDLED_PACKAGES[MEMORY_PLUGIN]
+export const MEMORY_SERVER = '@modelcontextprotocol/server-memory'
+export const MEMORY_SERVER_VERSION = BUNDLED_PACKAGES[MEMORY_SERVER]
+// Back-compat aliases used by older tests; both now refer to the MCP Memory server.
+export const MEMORY_PLUGIN = MEMORY_SERVER
+export const MEMORY_PLUGIN_VERSION = MEMORY_SERVER_VERSION
 
 // Official Node 24, matching dsh's engines.node (>=24.9.0). We ship this binary
 // because dsh's node-addon-require-builtin rejects Electron 45.2.3
@@ -251,18 +256,22 @@ export function installBundledNode(outDir, { platform = process.platform, arch =
   return { skipped: false, dest }
 }
 
-// deep-view and @openviking/dsh-memory-plugin declare older @deepseek-ai/dsh-* peers
-// than the bundled dsh release; at runtime dsh provides its own copies. npm 7+
-// would otherwise refuse the tree.
+// Official MCP Memory is a root dependency (see ROOT_PACKAGES). deep-view still
+// declares older @deepseek-ai/dsh-* peers; at runtime dsh provides its own copies.
+export function memoryServerPath(outDir) {
+  return join(outDir, 'node_modules', '@modelcontextprotocol', 'server-memory', 'dist', 'index.js')
+}
 export function memoryPluginPath(outDir) {
-  return join(outDir, 'bundled-plugins', 'node_modules', MEMORY_PLUGIN, 'package.json')
+  return join(outDir, 'node_modules', MEMORY_SERVER, 'package.json')
 }
 
 export function installRuntimeDeps(outDir, { force = false } = {}) {
   const dsh = bundledDshEntry(outDir)
   const deepView = join(outDir, 'vendor', 'ds-bot', 'node_modules', 'deep-view', 'package.json')
   const memory = memoryPluginPath(outDir)
-  if (!force && existsSync(dsh) && existsSync(deepView) && existsSync(memory)) return { skipped: true }
+  if (!force && existsSync(dsh) && existsSync(deepView) && existsSync(memory) && existsSync(memoryServerPath(outDir))) {
+    return { skipped: true }
+  }
   if (force && existsSync(join(outDir, 'node_modules'))) {
     rmSync(join(outDir, 'node_modules'), { recursive: true, force: true })
   }
@@ -271,23 +280,11 @@ export function installRuntimeDeps(outDir, { force = false } = {}) {
   if (existsSync(join(vendor, 'package.json'))) {
     runNpm(['install', '--omit=dev', '--legacy-peer-deps', '--no-fund', '--no-audit'], vendor)
   }
-  const plugins = join(outDir, 'bundled-plugins')
-  mkdirSync(plugins, { recursive: true })
-  writeFileSync(join(plugins, 'package.json'), JSON.stringify({
-    name: 'odm-bundled-plugins',
-    private: true,
-    dependencies: { [MEMORY_PLUGIN]: MEMORY_PLUGIN_VERSION },
-  }, null, 2) + '\n')
-  if (force && existsSync(join(plugins, 'node_modules'))) {
-    rmSync(join(plugins, 'node_modules'), { recursive: true, force: true })
-  }
-  // Older peer ranges than the bundled dsh; at runtime dsh provides its own copies.
-  runNpm(['install', '--omit=dev', '--legacy-peer-deps', '--no-fund', '--no-audit'], plugins)
   if (!existsSync(dsh)) {
     throw new Error(`dsh entry missing after npm install: ${dsh}`)
   }
-  if (!existsSync(memoryPluginPath(outDir))) {
-    throw new Error(`memory plugin missing after npm install in ${plugins}`)
+  if (!existsSync(memoryServerPath(outDir))) {
+    throw new Error(`MCP Memory server missing after npm install: ${memoryServerPath(outDir)}`)
   }
   return { skipped: false }
 }

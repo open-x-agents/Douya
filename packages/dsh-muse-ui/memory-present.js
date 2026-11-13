@@ -138,10 +138,11 @@ export function isAchievementKind(kind) {
   return k === 'achievement' || k === 'milestone' || k === 'win'
 }
 
-/** Source cue label key fragment: openviking | local | unknown */
+/** Source cue label key fragment: mcp | local | unknown */
 export function memorySourceKey(m) {
   const src = String(m?.source || '').toLowerCase()
-  if (src === 'openviking' || String(m?.uri || m?.id || '').startsWith('viking://')) return 'openviking'
+  if (src === 'mcp-memory' || src === 'mcp' || src === 'memory') return 'mcp'
+  if (src === 'openviking' || String(m?.uri || m?.id || '').startsWith('viking://')) return 'mcp'
   if (src === 'dsh-memory' || src === 'sqlite' || src === 'local') return 'local'
   if (typeof m?.id === 'number' || /^\d+$/.test(String(m?.id || ''))) return 'local'
   return 'unknown'
@@ -150,7 +151,7 @@ export function memorySourceKey(m) {
 /**
  * Decide what Recall should show for a listMemories payload.
  * An unreachable service (available:false, no fallback rows) is not an empty library.
- * Fallback rows (e.g. SQLite while OpenViking is down) still render as a ready list.
+ * Fallback rows (e.g. SQLite if the MCP Memory file is unreadable) still render as a ready list.
  */
 export function presentMemoryList(data) {
   const memories = Array.isArray(data?.memories) ? data.memories : []

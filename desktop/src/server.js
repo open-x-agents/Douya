@@ -225,11 +225,6 @@ const MESSAGES = {
     quit: 'Quit',
     retry: 'Retry',
     ok: 'OK',
-    ovTitle: 'Douya memory',
-    ovModels: 'Long-term memory is running, but this configuration has no embedding model. You can list and forget memories; chat auto-recall needs an embedding model. The desktop installer ships a local Chinese model for new configs (see the README). A VLM / chat model is separate and is not required for recall.',
-    ovFailed: (log) => `The bundled OpenViking memory server did not start. Memories will use the local fallback; chat auto-recall is off. See the log: ${log}`,
-    ovConflict: 'Port 1933 is in use, but it is not a healthy OpenViking server. Memories will use the local fallback; quit whatever is using that port and try again.',
-    ovSkip: 'This build does not include a bundled OpenViking server. Memories will use the local fallback unless you already run one on 127.0.0.1:1933.',
   },
   zh: {
     title: '豆芽没能启动',
@@ -244,11 +239,6 @@ const MESSAGES = {
     quit: '退出',
     retry: '重试',
     ok: '好',
-    ovTitle: '豆芽记忆',
-    ovModels: '长期记忆已经启动，但当前配置里没有向量模型。你仍可以查看和删除记忆；聊天自动回忆需要向量模型。桌面安装包会为新配置附带一个中文本地模型（详见 README）。聊天 / VLM 模型是另一回事，回忆本身不需要它。',
-    ovFailed: (log) => `打包的 OpenViking 记忆服务没有启动。回忆页会改用本地备份，聊天不会自动想起以前的事。日志：${log}`,
-    ovConflict: '端口 1933 已被占用，但上面不是健康的 OpenViking 服务。回忆页会改用本地备份；请先关掉占用该端口的程序再试。',
-    ovSkip: '这个安装包没有附带 OpenViking 服务。除非你已经在 127.0.0.1:1933 跑着一个，否则回忆页会改用本地备份。',
   },
 }
 
@@ -260,4 +250,24 @@ export function messages(locale) {
 /** Last n lines of a log text, for the error dialog. */
 export function tail(text, n = 12) {
   return String(text || '').trimEnd().split('\n').slice(-n).join('\n')
+}
+
+/**
+ * Spawn env with a single PATH.
+ * On Windows the system key is often `Path`; dropping it without copying the
+ * value into `PATH` used to clear the child's path (OpenViking's start failure
+ * on rc8). When `path` is omitted, the existing Path/PATH value is preserved.
+ */
+export function sanitizeSpawnEnv(env, { path, platform = process.platform } = {}) {
+  const out = { ...env }
+  if (platform === 'win32') {
+    const existing = out.PATH ?? out.Path ?? out.path
+    for (const k of Object.keys(out)) {
+      if (k.toUpperCase() === 'PATH') delete out[k]
+    }
+    out.PATH = path != null ? path : existing
+  } else if (path != null) {
+    out.PATH = path
+  }
+  return out
 }

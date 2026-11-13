@@ -18,7 +18,6 @@
     "build:win": "electron-builder --win --publish never",
     "build:linux": "electron-builder --linux --publish never",
     "build:dir": "electron-builder --dir --publish never",
-    "bundle:ov": "node ./scripts/bundle-openviking.mjs",
     "bundle:runtime": "node ./scripts/bundle-app-runtime.mjs"
   },
   "devDependencies": {
@@ -84,14 +83,6 @@
         "to": ".",
         "filter": [
           "app-runtime/**"
-        ]
-      },
-      {
-        "from": "resources/openviking",
-        "to": "openviking",
-        "filter": [
-          "**/*",
-          "!README.md"
         ]
       }
     ]

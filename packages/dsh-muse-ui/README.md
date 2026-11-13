@@ -9,11 +9,11 @@ Replaces the stock dsh web shell and serves Muse at `/api/opendigitalmate/app`. 
 | Page | Role |
 | --- | --- |
 | **Today** | Current affairs — finish something, state writes back |
-| **Memories / Recall** | Readable recalls & achievements with photos (OpenViking) |
+| **Memories / Recall** | Readable recalls & achievements (official MCP Memory) |
 | **Sources / Settings** | Connect apps, keys, language, digest prefs |
 | **Future / 未来** | Long-term plans from interests — consent first; propose, then accept |
 
-Shared memory under everything: Muse UI ↔ Chief/bots ↔ OpenViking ↔ Sources.
+Shared memory under everything: Muse UI ↔ Chief/bots ↔ MCP Memory ↔ Sources.
 
 ## Install (odm profile)
 

@@ -6085,7 +6085,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   }
   function memSourceKey(m) {
     const src = String(m && m.source || '').toLowerCase();
-    if (src === 'openviking' || String(m && (m.uri || m.id) || '').startsWith('viking://')) return 'openviking';
+    if (src === 'mcp-memory' || src === 'mcp' || src === 'memory') return 'mcp';
+    if (src === 'openviking' || String(m && (m.uri || m.id) || '').startsWith('viking://')) return 'mcp';
     if (src === 'dsh-memory' || src === 'sqlite' || src === 'local') return 'local';
     if (typeof (m && m.id) === 'number' || /^\d+$/.test(String(m && m.id || ''))) return 'local';
     return 'unknown';
@@ -6139,7 +6140,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         </div>
       </article>`;
   }
-  // Detail view: the whole memory in plain sentences, its photos large, and "Add photo".
+  // Detail view: the whole memory in plain sentences. Photos (OpenViking-only) are no longer attached.
   let memRows = [];
   let memDetailId = null;
   function memDetailHtml(m) {
@@ -6159,7 +6160,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         <div class="mem-detail-foot">
           <span>${escapeHtml(memAgo(m.updatedAt || m.createdAt))}</span>
           ${source ? `<span class="mem-source">${escapeHtml(source)}</span>` : ''}
-          ${memSourceKey(m) === 'openviking' ? `<button type="button" class="mem-add-photo" data-mem-add-photo>${escapeHtml(t('memory.add_photo'))}</button>` : ''}
+          
         </div>
       </div>`;
   }

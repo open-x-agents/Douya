@@ -5,10 +5,10 @@ This is the source-checkout path: run, test, and pack from git. End users who on
 ## Requirements
 
 - Node.js (ESM)
-- [`dsh`](https://github.com/deepseek-ai/dsh) on `PATH`, with an `odm` profile that includes this host plugin, `dsh-muse-ui`, and (for memory) `@openviking/dsh-memory-plugin`
+- [`dsh`](https://github.com/deepseek-ai/dsh) on `PATH`, with an `odm` profile that includes this host plugin and `dsh-muse-ui`. Long-term memory is official `@modelcontextprotocol/server-memory`, registered via `dsh-mcp-client`.
 - For chat: an LLM provider key (DeepSeek recommended)
 - For sources: a [Composio](https://app.composio.dev) key
-- For a source-run memory server: OpenViking on `127.0.0.1:1933` — [memory.md](memory.md)
+- For source-run memory: `npm install @modelcontextprotocol/server-memory@2.1.1` so `scripts/start-dsh.mjs` can register it — [memory.md](memory.md)
 
 ## Run
 
@@ -29,7 +29,7 @@ The Muse shell is the [`dsh-muse-ui`](../packages/dsh-muse-ui) plugin and is ser
 dsh plugin --profile odm add link:$(pwd)/packages/dsh-muse-ui
 ```
 
-`scripts/start-dsh.mjs` also tries to add `@openviking/dsh-memory-plugin@0.5.33` to the odm profile when it is missing. Restart dsh after adding plugins by hand. Without `dsh-muse-ui`, the stock dsh shell stays; host APIs still work.
+`scripts/start-dsh.mjs` writes a `dsh-mcp-client` entry for official MCP Memory into the odm profile’s `cordis.patch.yml` (bundled Node, `MEMORY_FILE_PATH` under the data dir; no `npx`). Restart dsh after adding plugins by hand. Without `dsh-muse-ui`, the stock dsh shell stays; host APIs still work.
 
 On macOS you can open the token URL with a system Shortcut: [mac-shortcut.md](mac-shortcut.md).
 
@@ -57,7 +57,6 @@ Layers, pr-guard, merge-tree, and the pre-release gate: [testing.md](testing.md)
 ```bash
 npm run desktop:dev          # Electron against this checkout
 npm --prefix desktop run bundle:runtime  # stage desktop/resources/app-runtime (server + dsh)
-npm --prefix desktop run bundle:ov       # fill desktop/resources/openviking (needed before packing)
 npm run desktop:build:mac    # stages app-runtime, then → desktop/dist/*.dmg (one arch per job in CI)
 npm run desktop:build:win    # stages app-runtime, then → desktop/dist/*.exe (build on Windows or CI)
 npm run desktop:build:linux  # stages app-runtime, then → desktop/dist/*.AppImage and *.deb (build on Linux or CI)

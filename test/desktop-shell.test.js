@@ -11,7 +11,7 @@ import {
   isExternalOpenable, isInternalUrl, isPortOpen, isRepoRoot,
   locateDsh, mergePath, messages, parseLoginUrl, readLoginUrl, resolveDshBin,
   resolveNodeExe, resolveOdmDataDir, resolvePackagedDshHome, resolveRepoRoot,
-  sanitizeBounds, tail, tokenWorks, waitForLogin,
+  sanitizeBounds, sanitizeSpawnEnv, tail, tokenWorks, waitForLogin,
 } from '../desktop/src/server.js'
 
 const URL_TEXT = 'http://127.0.0.1:7777/?token=abc123'
@@ -158,7 +158,7 @@ test('desktop package stays out of the root install and ships the agreed scripts
   const desk = JSON.parse(readFileSync(new URL('../desktop/package.json', import.meta.url), 'utf8'))
   assert.ok(!('electron' in (root.devDependencies || {})) && !('electron' in (root.dependencies || {})))
   for (const s of ['desktop:dev', 'desktop:build:mac', 'desktop:build:win', 'desktop:build:linux']) assert.ok(root.scripts[s], `missing ${s}`)
-  // one arch per build: CI passes --arm64 / --x64 so each DMG carries its own OpenViking runtime
+  // one arch per build: CI passes --arm64 / --x64 so each DMG carries its own Node + MCP Memory
   assert.deepEqual(desk.build.mac.target, ['dmg'])
   assert.equal(desk.build.win.target[0].target, 'nsis')
   assert.equal(desk.build.mac.identity, '-') // ad-hoc: arm64 opens instead of "damaged"
@@ -250,7 +250,7 @@ test('desktop package stages app-runtime into extraResources and has a bundle:ru
   assert.ok(runtime, 'app-runtime extraResources entry')
   assert.equal(runtime.from, 'resources')
   assert.equal(runtime.to, '.')
-  assert.ok(ers.some((e) => e.to === 'openviking'))
+  assert.ok(!(ers || []).some((e) => e.to === 'openviking'))
   for (const s of ['desktop:build:mac', 'desktop:build:win', 'desktop:build:linux']) {
     assert.match(root.scripts[s], /bundle:runtime/)
   }
@@ -259,4 +259,19 @@ test('desktop package stages app-runtime into extraResources and has a bundle:ru
   assert.match(main, /ODM_DATA_DIR/)
   assert.match(main, /bundledRoot/)
   assert.match(main, /resolveNodeExe/)
+})
+
+test('sanitizeSpawnEnv keeps a single PATH and does not drop Windows Path when no override is given', () => {
+  const env = sanitizeSpawnEnv({ Path: 'C:\\old', HOME: 'x' }, { path: 'C:\\new', platform: 'win32' })
+  assert.equal(env.PATH, 'C:\\new')
+  assert.equal(env.Path, undefined)
+  // The rc8 OpenViking bug: sanitize({ ...process.env }) with no path, on Windows,
+  // deleted `Path` and left the child with an empty PATH.
+  const kept = sanitizeSpawnEnv({ Path: 'C:\\Windows;C:\\Windows\\System32', HOME: 'x' }, { platform: 'win32' })
+  assert.equal(kept.PATH, 'C:\\Windows;C:\\Windows\\System32')
+  assert.equal(kept.Path, undefined)
+  const nix = sanitizeSpawnEnv({ PATH: '/usr/bin' }, { path: '/usr/bin:/opt/bin', platform: 'darwin' })
+  assert.equal(nix.PATH, '/usr/bin:/opt/bin')
+  const nixKeep = sanitizeSpawnEnv({ PATH: '/usr/bin', HOME: 'h' }, { platform: 'linux' })
+  assert.equal(nixKeep.PATH, '/usr/bin')
 })

@@ -44,9 +44,9 @@ test('memoryLeadKind / isAchievementKind', () => {
   assert.equal(isAchievementKind('preference'), false)
 })
 
-test('memorySourceKey: openviking uri vs local numeric id', () => {
-  assert.equal(memorySourceKey({ source: 'openviking', uri: 'viking://~/memories/x.md' }), 'openviking')
-  assert.equal(memorySourceKey({ id: 'viking://~/memories/y.md' }), 'openviking')
+test('memorySourceKey: mcp memory vs local numeric id', () => {
+  assert.equal(memorySourceKey({ source: 'mcp-memory' }), 'mcp')
+  assert.equal(memorySourceKey({ source: 'openviking', uri: 'viking://~/memories/x.md' }), 'mcp')
   assert.equal(memorySourceKey({ id: 12, text: 'x' }), 'local')
   assert.equal(memorySourceKey({ source: 'dsh-memory' }), 'local')
   assert.equal(memorySourceKey({ id: 'abc' }), 'unknown')

@@ -10,12 +10,8 @@ import {
   decideStartup, isExternalOpenable, isInternalUrl,
   isPortOpen, isRepoRoot, locateDsh, mergePath, messages, readLoginUrl,
   resolveNodeExe, resolveOdmDataDir, resolvePackagedDshHome, resolveRepoRoot,
-  sanitizeBounds, tail, tokenWorks, waitForLogin,
+  sanitizeBounds, sanitizeSpawnEnv, tail, tokenWorks, waitForLogin,
 } from './server.js'
-import {
-  bundledCommand, decideOpenViking, ensureOpenVikingConfig,
-  probeOpenVikingHealth, resolveBundledModel, resolveBundledRuntime, sanitizeSpawnEnv, waitForHealth,
-} from './openviking.js'
 
 const WARM_BG = '#f4f2ee' // dsh-muse-ui --bg
 const PORT = Number(process.env.ODM_PORT || DEFAULT_PORT)
@@ -25,17 +21,11 @@ const ALLOWED_PERMISSIONS = new Set(['media', 'clipboard-sanitized-write', 'noti
 let win = null
 let child = null
 let childDead = false
-let ovChild = null
-let ovDead = false
-let ovStartedByUs = false
-let ovNote = null // { kind: 'models' | 'failed' | 'conflict' | 'skip', detail? }
 let quitting = false
 
 const t = () => messages(app.getLocale())
 const settingsFile = () => join(app.getPath('userData'), 'settings.json')
 const logFile = () => join(app.getPath('logs'), 'server.log')
-const ovLogFile = () => join(app.getPath('logs'), 'openviking.log')
-const homeDir = () => process.env.HOME || process.env.USERPROFILE || ''
 
 function loadSettings() {
   try { return JSON.parse(readFileSync(settingsFile(), 'utf8')) } catch { return {} }
@@ -202,11 +192,6 @@ function createWindow(url) {
 }
 
 
-function bundledOvRoot() {
-  if (app.isPackaged) return join(process.resourcesPath, 'openviking')
-  return join(DEV_ROOT, 'desktop', 'resources', 'openviking')
-}
-
 function stopChild(c, { onDone, timeoutMs = 4000 } = {}) {
   if (!c) { onDone?.(); return }
   let finished = false
@@ -218,63 +203,12 @@ function stopChild(c, { onDone, timeoutMs = 4000 } = {}) {
   else c.kill('SIGTERM')
 }
 
-async function ensureMemory() {
-  const portOpen = await isPortOpen(1933)
-  const healthy = portOpen ? await probeOpenVikingHealth() : false
-  const ovRoot = bundledOvRoot()
-  const runtime = resolveBundledRuntime(ovRoot)
-  const plan = decideOpenViking({ portOpen, healthy, bundled: Boolean(runtime) })
-  if (plan.action === 'reuse') return
-  if (plan.action === 'conflict') { ovNote = { kind: 'conflict' }; return }
-  if (plan.action === 'skip') { ovNote = { kind: 'skip' }; return }
-
-  const cfg = ensureOpenVikingConfig({
-    homeDir: homeDir(),
-    userDataDir: app.getPath('userData'),
-    bundledModelPath: resolveBundledModel(ovRoot),
-  })
-  const cmd = bundledCommand(runtime, { confPath: cfg.confPath })
-  mkdirSync(dirname(ovLogFile()), { recursive: true })
-  const log = createWriteStream(ovLogFile(), { flags: 'w' })
-  const env = sanitizeSpawnEnv({ ...process.env, ...cmd.env })
-  ovDead = false
-  ovStartedByUs = true
-  ovChild = spawn(cmd.exe, cmd.args, { cwd: cmd.cwd, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
-  ovChild.stdout.pipe(log)
-  ovChild.stderr.pipe(log)
-  ovChild.on('error', (err) => { log.write(`\n[desktop] openviking spawn failed: ${err.message}\n`); ovDead = true })
-  ovChild.on('exit', () => { ovDead = true; ovChild = null })
-  try {
-    await waitForHealth({ isDead: () => ovDead })
-    if (!cfg.models.ok) ovNote = { kind: 'models' }
-  } catch (err) {
-    ovNote = { kind: 'failed', detail: err.message }
-  }
-}
-
-function memoryNoteText(kind) {
-  const m = t()
-  if (kind === 'models') return m.ovModels
-  if (kind === 'failed') return m.ovFailed(ovLogFile())
-  if (kind === 'conflict') return m.ovConflict
-  if (kind === 'skip') return m.ovSkip
-  return ''
-}
-
-async function showMemoryNote() {
-  if (!ovNote) return
-  const message = memoryNoteText(ovNote.kind)
-  if (!message) return
-  await dialog.showMessageBox({ type: 'info', title: t().ovTitle, message, buttons: [t().ok], defaultId: 0 })
-}
-
 async function boot() {
   nativeTheme.themeSource = 'light' // the Muse palette is light/warm; keep native chrome light too
   const root = await pickRepoRoot()
   if (!root) return app.quit()
   const { dataDir } = dataPaths(root)
 
-  await ensureMemory()
 
   const portOpen = await isPortOpen(PORT)
   const login = readLoginUrl(root, { dataDir })
@@ -282,7 +216,6 @@ async function boot() {
   const plan = decideStartup({ portOpen, login, tokenOk, port: PORT })
   if (plan.action === 'reuse') {
     createWindow(plan.url)
-    showMemoryNote()
     return
   }
   if (plan.action === 'conflict') return showError(t().conflict(PORT))
@@ -294,7 +227,6 @@ async function boot() {
   try {
     const ready = await waitForLogin({ root, dataDir, port: PORT, since, isDead: () => childDead })
     createWindow(ready.url)
-    showMemoryNote()
   } catch (err) {
     showError(err.code === 'timeout' ? t().timeout : t().exited)
   }
@@ -314,13 +246,8 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', (event) => {
     quitting = true
     const liveDsh = child && !childDead
-    const liveOv = ovStartedByUs && ovChild && !ovDead
-    if (!liveDsh && !liveOv) return
+    if (!liveDsh) return
     event.preventDefault()
-    let left = (liveDsh ? 1 : 0) + (liveOv ? 1 : 0)
-    const done = () => { if (--left <= 0) app.exit(0) }
-    if (liveDsh) stopChild(child, { onDone: done })
-    // Only the OpenViking process we started; a reused one on :1933 stays up.
-    if (liveOv) stopChild(ovChild, { onDone: done })
+    stopChild(child, { onDone: () => app.exit(0) })
   })
 }

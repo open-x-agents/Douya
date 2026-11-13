@@ -115,7 +115,6 @@ test('ensureOdmProfile creates a writable odm profile and links bundled plugins'
     'packages/dsh-muse-ui/package.json',
     'vendor/ds-bot/package.json',
     'vendor/ds-bot/node_modules/deep-view/package.json',
-    'node_modules/@openviking/dsh-memory-plugin/package.json',
     'node_modules/@deepseek-ai/dsh/lib/bin.js',
   ]) {
     mkdirSync(dirname(join(runtime, rel)), { recursive: true })
@@ -129,11 +128,12 @@ test('ensureOdmProfile creates a writable odm profile and links bundled plugins'
   const pkg = JSON.parse(readFileSync(join(first.profile, 'package.json'), 'utf8'))
   assert.ok(pkg.dsh.profile.bundles.includes('dsh-muse-ui'))
   assert.ok(pkg.dsh.profile.bundles.includes('opendigitalmate'))
+  assert.ok(!pkg.dsh.profile.bundles.includes('@openviking/dsh-memory-plugin'))
+  assert.ok(!pkg.dependencies['@openviking/dsh-memory-plugin'])
   assert.ok(existsSync(join(first.profile, 'node_modules', 'opendigitalmate', 'package.json')))
   assert.ok(existsSync(join(first.profile, 'node_modules', 'dsh-muse-ui', 'package.json')))
   assert.ok(existsSync(join(first.profile, 'node_modules', 'ds-bot', 'package.json')))
   assert.ok(existsSync(join(first.profile, 'node_modules', 'deep-view', 'package.json')))
-  assert.ok(existsSync(join(first.profile, 'node_modules', '@openviking', 'dsh-memory-plugin', 'package.json')))
   const st = lstatSync(join(first.profile, 'node_modules', 'opendigitalmate'))
   assert.ok(st.isSymbolicLink() || st.isDirectory())
 

@@ -139,8 +139,8 @@
   var SCRIPTS = {
     plate: {
       keys: ["what's on my plate", 'on my plate', 'today', '今天', '今天有什么', '日程'],
-      en: 'You have one open item: <b>PR follow-ups</b> on acme/app, next at 14:00–15:00. GitHub, Gmail, Slack and Calendar came through. <b>YouTube couldn’t be fetched</b> (quota), so it is listed as failed on Today — Douya does not pretend it was fine.',
-      zh: '今天有 1 件待办：acme/app 上的 <b>PR 跟进</b>，下一段在 14:00–15:00。GitHub、Gmail、Slack 和日历已汇总。<b>YouTube 没抓取到</b>（配额），今日页会单独标成失败，不会装作正常。'
+      en: 'You have one open item: <b>PR follow-ups</b> on acme/app, next at 14:00–15:00. GitHub, Gmail, Slack and Calendar came through. <b>YouTube couldn’t be fetched</b> (quota), and Today lists it clearly.',
+      zh: '今天有 1 件待办：acme/app 上的 <b>PR 跟进</b>，下一段在 14:00–15:00。GitHub、Gmail、Slack 和日历已汇总。<b>YouTube 没抓取到</b>（配额），今日页上会清楚列出来。'
     },
     done: {
       keys: ['finish', 'got done', '完成', '做完', 'what did i'],
@@ -165,13 +165,13 @@
     },
     memory: {
       keys: ['remember', 'memory', 'recall', '记得', '回忆', '记忆'],
-      en: 'In Recall I can see the achievement “Shipped Douya desktop v0.1.0”, and that you prefer DeepSeek for chat. Memories stay in a local JSONL file via MCP Memory — I am not inventing new ones in this walkthrough.',
-      zh: '回忆里有成就「发布了豆芽桌面版 v0.1.0」，以及你聊天更喜欢用 DeepSeek。记忆通过 MCP Memory 写在本机 JSONL 里。这段演示不会新造记忆。'
+      en: 'In Recall I can see the achievement “Shipped Douya desktop v0.1.0”, and that you prefer DeepSeek for chat. These are sample memories on this page — I’m not adding new ones.',
+      zh: '回忆里有成就「发布了豆芽桌面版 v0.1.0」，以及你聊天更喜欢用 DeepSeek。这些是这个页面上的示例记忆，我不会在这里新造。'
     },
     fallback: {
       keys: [],
-      en: 'This is a walkthrough with sample data, so I only play a few scripted replies — nothing is sent to a model. Try a suggestion, or open Today, Recall, or Future in the sidebar.',
-      zh: '这是一段示例演示，我只会按脚本回复，不会把内容发给模型。可以点建议问法，或在侧栏打开今日、回忆或未来。'
+      en: 'This page has a few prepared replies. Try a suggestion, or open Today, Recall, or Future in the sidebar.',
+      zh: '这个页面有几段准备好的回复。可以点建议问法，或在侧栏打开今日、回忆或未来。'
     }
   };
 

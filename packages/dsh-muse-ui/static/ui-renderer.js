@@ -9,6 +9,14 @@
 
   function createRenderer(doc) {
     const el = (tag, cls, text) => { const e = doc.createElement(tag); if (cls) e.className = cls; if (text !== undefined && text !== null) e.textContent = String(text); return e }
+    // Chrome strings go through window.ODMi18n (loaded after this script, so look it up per call); the
+    // Chinese text is only the fallback when the i18n runtime is missing. View data itself is never translated.
+    const say = (key, zh, vars) => {
+      const i = root && root.ODMi18n
+      let s = i && typeof i.t === 'function' ? i.t(key, vars) : null
+      if (!s || s === key) { s = zh; if (vars) for (const k of Object.keys(vars)) s = s.split('{' + k + '}').join(String(vars[k])) }
+      return s
+    }
     const link = (url, text, cls) => {
       if (typeof url === 'string' && SAFE_LINK.test(url)) { const a = el('a', cls, text); a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'; return a }
       return el('span', cls, text)
@@ -65,7 +73,7 @@
         thead.appendChild(tr); t.appendChild(thead); t.appendChild(tb); paint()
       }
       wrap.appendChild(t)
-      if (!rows.length) wrap.appendChild(el('div', 'sf-empty', '没有符合的条目'))
+      if (!rows.length) wrap.appendChild(el('div', 'sf-empty', say('view.no_match', '没有符合的条目')))
       return wrap
     }
     function list(c, h) {
@@ -78,7 +86,7 @@
         if ((r.actions || []).length) li.appendChild(actionsCell(r.actions, h))
         ul.appendChild(li)
       }
-      if (!(c.rows || []).length) ul.appendChild(el('li', 'sf-empty', '没有符合的条目'))
+      if (!(c.rows || []).length) ul.appendChild(el('li', 'sf-empty', say('view.no_match', '没有符合的条目')))
       return ul
     }
     function keyValue(c) {
@@ -89,7 +97,7 @@
     function timeline(c) {
       const ol = el('ol', 'sf-timeline')
       for (const r of c.rows || []) { const li = el('li'); li.appendChild(el('time', '', r.at)); const b = el('div'); b.appendChild(link(r.url, r.title, 'sf-link')); if (r.from) b.appendChild(el('span', 'sf-meta', r.from)); li.appendChild(b); ol.appendChild(li) }
-      if (c.undated) ol.appendChild(el('li', 'sf-meta', `另有 ${c.undated} 条没有时间`))
+      if (c.undated) ol.appendChild(el('li', 'sf-meta', say('view.undated', '另有 {n} 条没有时间', { n: c.undated })))
       return ol
     }
     function chart(c) {
@@ -111,7 +119,7 @@
           row.appendChild(el('b', 'sf-bar-v', d.value)); w.appendChild(row)
         }
       }
-      if (!data.length) w.appendChild(el('div', 'sf-empty', '没有数据'))
+      if (!data.length) w.appendChild(el('div', 'sf-empty', say('view.no_data', '没有数据')))
       return w
     }
     function form(c, h, view, id) {
@@ -132,8 +140,8 @@
         f.appendChild(row)
       }
       const foot = el('div', 'sf-form-foot')
-      const note = el('span', 'sf-form-note', c.submit && c.submit.kind === 'draft' ? '提交后生成「待你确认」卡，确认前不会发出' : '提交后作为你的消息发给豆芽')
-      const go = el('button', 'sf-btn primary', (c.submit && c.submit.label) || '提交'); go.type = 'submit'
+      const note = el('span', 'sf-form-note', c.submit && c.submit.kind === 'draft' ? say('view.form_note_draft', '提交后生成「待你确认」卡，确认前不会发出') : say('view.form_note_send', '提交后作为你的消息发给豆芽'))
+      const go = el('button', 'sf-btn primary', (c.submit && c.submit.label) || say('view.submit', '提交')); go.type = 'submit'
       foot.appendChild(note); foot.appendChild(go); f.appendChild(foot)
       const status = el('div', 'sf-form-status'); f.appendChild(status)
       f.addEventListener('submit', async (e) => {
@@ -141,9 +149,9 @@
         if (!h.submit) return
         const values = {}
         for (const [k, v] of Object.entries(inputs)) values[k] = v.kind === 'checkbox' ? !!v.input.checked : String(v.input.value)
-        go.disabled = true; status.textContent = '提交中…'
+        go.disabled = true; status.textContent = say('view.submitting', '提交中…')
         try { const r = await h.submit(view.id, id, values); status.textContent = (r && r.message) || ''; if (!r || !r.ok) go.disabled = false }
-        catch (_) { status.textContent = '提交失败'; go.disabled = false }
+        catch (_) { status.textContent = say('view.submit_failed', '提交失败'); go.disabled = false }
       })
       return f
     }
@@ -178,24 +186,24 @@
     /** opts: { placement: 'chat'|'panel'|'card', onPanel, onSave, onClose } */
     function render(view, h = {}, opts = {}) {
       const box = el('section', 'sf sf-' + (opts.placement || 'chat'))
-      if (!view || typeof view !== 'object' || !view.components) { box.appendChild(el('div', 'sf-empty', '视图已过期')); return box }
+      if (!view || typeof view !== 'object' || !view.components) { box.appendChild(el('div', 'sf-empty', say('view.gone', '视图已过期'))); return box }
       box.setAttribute('data-surface-id', String(view.id || ''))
       const head = el('header', 'sf-head')
       head.appendChild(el('b', 'sf-title', view.title))
-      head.appendChild(el('span', 'sf-badge', view.generatedBy || '豆芽生成'))
+      head.appendChild(el('span', 'sf-badge', view.generatedBy || say('view.badge', '豆芽生成')))
       const acts = el('span', 'sf-head-acts')
-      if (opts.placement === 'chat' && opts.onPanel) acts.appendChild(btn('放到今天页', 'sf-btn sm ghost', () => opts.onPanel(view)))
-      if (opts.placement !== 'card' && opts.onSave && !view.savedCardId) acts.appendChild(btn('保存为卡片', 'sf-btn sm ghost', (e, b) => { b.disabled = true; opts.onSave(view, b) }))
-      if (view.savedCardId && opts.placement !== 'card') acts.appendChild(el('span', 'sf-saved', '已保存为卡片'))
-      if (opts.onClose) acts.appendChild(btn(opts.placement === 'card' ? '移除' : '关闭', 'sf-btn sm ghost', () => opts.onClose(view)))
+      if (opts.placement === 'chat' && opts.onPanel) acts.appendChild(btn(say('view.to_today', '放到今天页'), 'sf-btn sm ghost', () => opts.onPanel(view)))
+      if (opts.placement !== 'card' && opts.onSave && !view.savedCardId) acts.appendChild(btn(say('view.save_card', '保存为卡片'), 'sf-btn sm ghost', (e, b) => { b.disabled = true; opts.onSave(view, b) }))
+      if (view.savedCardId && opts.placement !== 'card') acts.appendChild(el('span', 'sf-saved', say('view.saved_card', '已保存为卡片')))
+      if (opts.onClose) acts.appendChild(btn(opts.placement === 'card' ? say('view.remove', '移除') : say('view.close', '关闭'), 'sf-btn sm ghost', () => opts.onClose(view)))
       head.appendChild(acts)
       box.appendChild(head)
-      if (view.expired) box.appendChild(el('div', 'sf-callout sf-tone-warn', '这个视图已过期（数据仍是此刻 store 里的）'))
+      if (view.expired) box.appendChild(el('div', 'sf-callout sf-tone-warn', say('view.expired', '这个视图已过期（数据仍是此刻 store 里的）')))
       box.appendChild(node(view.root, view, h, 1))
       if ((view.refs || []).length) {
-        const f = el('footer', 'sf-refs'); f.appendChild(el('span', '', '引用：'))
+        const f = el('footer', 'sf-refs'); f.appendChild(el('span', '', say('view.refs', '引用：')))
         for (const r of view.refs.slice(0, 6)) f.appendChild(h.openCard ? btn(r.title, 'sf-ref', () => h.openCard(r.id)) : el('span', 'sf-ref', r.title))
-        if (view.refs.length > 6) f.appendChild(el('span', '', `等 ${view.refs.length} 张`))
+        if (view.refs.length > 6) f.appendChild(el('span', '', say('view.refs_more', '等 {n} 张', { n: view.refs.length })))
         box.appendChild(f)
       }
       return box

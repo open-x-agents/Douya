@@ -29,6 +29,26 @@
   let composioReady = false;
   let dashboardUrl = 'https://platform.composio.dev';
   let openedFromSettings = false;
+  // Model fields as last loaded or saved, so Next can tell whether the user edited them.
+  let loadedModel = { provider: '', baseURL: '', model: '' };
+
+  /** True when the model form differs from what is saved (a typed key always counts). */
+  function modelFormChanged(saved, form) {
+    const s = saved || {}, f = form || {};
+    if (String(f.apiKey || '').trim()) return true;
+    const norm = (v) => String(v || '').trim();
+    return ['provider', 'baseURL', 'model'].some((k) => norm(f[k]) !== norm(s[k]));
+  }
+
+  function readModelForm() {
+    const v = (id) => ($(id) && $(id).value) || '';
+    return { provider: v('wizLlmProvider'), baseURL: v('wizLlmBase'), apiKey: v('wizLlmKey'), model: v('wizLlmModel') };
+  }
+
+  function rememberModelForm() {
+    const f = readModelForm();
+    loadedModel = { provider: f.provider, baseURL: f.baseURL, model: f.model };
+  }
 
   function wiz() { return $('setupWizard'); }
   function isOpen() { return !!(wiz() && wiz().classList.contains('on')); }
@@ -94,6 +114,7 @@
         $('wizLlmKey').value = '';
       }
       modelReady = !!chk.llmConfigured || !!llm.configured;
+      rememberModelForm();
       if (cp.apiKeyMasked && $('wizComposioKey')) {
         $('wizComposioKey').placeholder = cp.apiKeyMasked;
         $('wizComposioKey').value = '';
@@ -163,6 +184,7 @@
           $('wizLlmKey').placeholder = result.masked;
           $('wizLlmKey').value = '';
         }
+        rememberModelForm();
         setStatus('wizLlmStatus', 'ok', t('wizard.save_ok'));
         return true;
       }
@@ -246,7 +268,9 @@
 
   async function onNext() {
     if (step === 'model') {
-      if (!modelReady) {
+      // Save when nothing is configured yet, or when the user edited an
+      // already-configured model; otherwise Next would drop those edits.
+      if (!modelReady || modelFormChanged(loadedModel, readModelForm())) {
         const ok = await saveModel();
         if (!ok) return;
       }
@@ -294,6 +318,7 @@
 
   window.odmOpenSetupWizard = function (opts) { bind(); openWizard(opts || { fromSettings: true }); };
   window.odmCloseSetupWizard = closeWizard;
+  window.odmWizardModelChanged = modelFormChanged;
 
   function boot() {
     bind();

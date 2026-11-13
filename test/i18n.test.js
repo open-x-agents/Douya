@@ -263,3 +263,32 @@ test('snooze sheet, snooze toasts and the done badge go through i18n', () => {
     assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
   }
 })
+
+test('card zoom related-items list goes through i18n', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of [
+    '条回复`',
+    '需要你回应${',
+    "'已完成' : '已忽略'",
+    'type="button">展开</button>',
+    'rel="noopener">打开</a>',
+    '${data}>完成</button>',
+    '${data}>忽略</button>',
+    '一键全部忽略 ${',
+    "'这组邮件' :",
+    '这张卡的条目都处理完了',
+    '<summary>已处理 ·',
+    "? '展开' : '收起'",
+  ]) {
+    assert.ok(!html.includes(s), `hardcoded zh copy left in card zoom items: ${s}`)
+  }
+  assert.match(html, /t\('zoom\.dismiss_all', \{ n: open\.length \}\)/)
+  assert.equal(t('zoom.replies', 'en', { n: 3 }), '3 replies')
+  assert.equal(t('zoom.replies', 'zh', { n: 3 }), '3 条回复')
+  assert.equal(t('zoom.dismiss_all', 'en', { n: 4 }), 'Dismiss all 4')
+  assert.equal(t('zoom.of_total', 'zh', { n: 5 }), '/ 共 5')
+  assert.match(t('zoom.all_handled', 'en'), /handled/)
+  for (const k of ['zoom.needs_you', 'zoom.status_done', 'zoom.status_dismissed', 'zoom.expand', 'zoom.collapse', 'zoom.head_mail', 'zoom.head_slack', 'zoom.head_items', 'zoom.handled']) {
+    assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
+  }
+})

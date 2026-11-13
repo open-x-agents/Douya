@@ -1,13 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, existsSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, existsSync, rmSync, utimesSync } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { tmpdir } from 'node:os'
+import { tmpdir, hostname } from 'node:os'
 import {
   BACKEND, MEMORY_FILENAME, observationId, entityId, parseMemoryId,
   resolveMemoryFilePath, resolveMemoryServerEntry, tagsForEntityType,
   loadGraph, saveGraph, listMcpMemories, forgetMcpMemory, readMcpRecall,
-  atomicWriteFile, withMemoryLock,
+  atomicWriteFile, withMemoryLock, isLockOwnerDead,
 } from '../src/digest/mcp-memory.js'
 import { listMemories, forgetMemory, readChiefMemory } from '../src/digest/runner.js'
 import { presentMemoryList, memorySourceKey } from '../packages/dsh-muse-ui/memory-present.js'
@@ -205,6 +205,72 @@ test('forget is serialized under a lock so two writes cannot clobber each other'
     assert.equal(r.forgotten, true)
     rmSync(tmp, { recursive: true, force: true })
   })
+})
+
+test('forget breaks a lock left by a dead same-host process (#224)', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'odm-mcp-stale-'))
+  const file = fixture(tmp, SAMPLE)
+  // A pid far above pid_max on Linux/macOS/Windows: no such process.
+  writeFileSync(`${file}.lock`, JSON.stringify({ pid: 2 ** 30, hostname: hostname(), token: 'x' }))
+  const r = forgetMcpMemory(entityId('Timezone'), file)
+  assert.equal(r.ok, true)
+  assert.equal(r.forgotten, true)
+  assert.equal(existsSync(`${file}.lock`), false)
+  assert.equal(existsSync(`${file}.lock.break`), false)
+  rmSync(tmp, { recursive: true, force: true })
+})
+
+test('forget breaks an unrefreshed lock older than staleMs, even from another host (#224)', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'odm-mcp-old-'))
+  const file = fixture(tmp, SAMPLE)
+  const lock = `${file}.lock`
+  writeFileSync(lock, JSON.stringify({ pid: process.pid, hostname: 'some-other-host', token: 'y' }))
+  const old = new Date(Date.now() - 120_000)
+  utimesSync(lock, old, old)
+  const r = forgetMcpMemory(entityId('Timezone'), file)
+  assert.equal(r.forgotten, true)
+  assert.equal(existsSync(lock), false)
+  rmSync(tmp, { recursive: true, force: true })
+})
+
+test('a live, fresh lock is never stolen and is left in place on timeout (#224)', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'odm-mcp-live-'))
+  const file = fixture(tmp, SAMPLE)
+  const lock = `${file}.lock`
+  const held = JSON.stringify({ pid: process.pid, hostname: hostname(), token: 'live' })
+  writeFileSync(lock, held)
+  let ran = false
+  assert.throws(() => withMemoryLock(file, () => { ran = true }, { timeoutMs: 80 }), (err) => err.code === 'lock_timeout')
+  assert.equal(ran, false)
+  assert.equal(readFileSync(lock, 'utf8'), held)
+  rmSync(tmp, { recursive: true, force: true })
+})
+
+test('withMemoryLock releases only its own lock (#224)', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'odm-mcp-own-'))
+  const file = fixture(tmp, SAMPLE)
+  const lock = `${file}.lock`
+  const other = JSON.stringify({ pid: process.pid, hostname: hostname(), token: 'someone-else' })
+  withMemoryLock(file, () => {
+    // Simulate our lock having been broken as stale and re-taken by another writer.
+    writeFileSync(lock, other)
+  })
+  assert.equal(readFileSync(lock, 'utf8'), other)
+  withMemoryLock(file + '.second', () => {})
+  assert.equal(existsSync(`${file}.second.lock`), false)
+  rmSync(tmp, { recursive: true, force: true })
+})
+
+test('isLockOwnerDead only trusts a same-host numeric pid that is gone', () => {
+  const host = 'h'
+  const gone = () => { throw Object.assign(new Error('no'), { code: 'ESRCH' }) }
+  const otherUser = () => { throw Object.assign(new Error('perm'), { code: 'EPERM' }) }
+  assert.equal(isLockOwnerDead(JSON.stringify({ pid: 5, hostname: host }), { host, kill: gone }), true)
+  assert.equal(isLockOwnerDead(JSON.stringify({ pid: 5, hostname: host }), { host, kill: otherUser }), false)
+  assert.equal(isLockOwnerDead(JSON.stringify({ pid: 5, hostname: host }), { host, kill: () => true }), false)
+  assert.equal(isLockOwnerDead(JSON.stringify({ pid: 5, hostname: 'elsewhere' }), { host, kill: gone }), false)
+  assert.equal(isLockOwnerDead('not json', { host, kill: gone }), false)
+  assert.equal(isLockOwnerDead('', { host, kill: gone }), false)
 })
 
 test('atomicWriteFile leaves a complete file (tmp is renamed, not truncated in place)', () => {

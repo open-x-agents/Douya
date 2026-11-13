@@ -6,11 +6,12 @@
  * No embeddings, no separate Python service.
  */
 import {
-  closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync,
+  closeSync, existsSync, fstatSync, fsyncSync, mkdirSync, openSync, readFileSync,
   renameSync, statSync, unlinkSync, writeSync,
 } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { hostname } from 'node:os'
+import { randomBytes } from 'node:crypto'
 import { rankMemories } from './memory-rank.js'
 
 export const BACKEND = 'mcp-memory'
@@ -225,34 +226,108 @@ function sleep(ms) {
   Atomics.wait(buf, 0, 0, Math.max(1, ms))
 }
 
+const LOCK_STALE_MS = 30_000
+
+/** EEXIST, or EPERM on Windows while another process is still deleting the lock. */
+function isLockBusy(err, platform = process.platform) {
+  return err?.code === 'EEXIST' || (platform === 'win32' && err?.code === 'EPERM')
+}
+
+/** Same-host owner pid known to be gone (EPERM = alive, another user). */
+export function isLockOwnerDead(contents, { host = hostname(), kill = process.kill.bind(process) } = {}) {
+  let owner
+  try { owner = JSON.parse(contents) } catch { return false }
+  const { pid, hostname: h } = owner ?? {}
+  if (typeof pid !== 'number' || h !== host) return false
+  try {
+    kill(pid, 0)
+    return false
+  } catch (err) {
+    return err?.code === 'ESRCH'
+  }
+}
+
+function isLockStale(lock, staleMs) {
+  const fd = openSync(lock, 'r')
+  try {
+    const st = fstatSync(fd)
+    const contents = readFileSync(fd, 'utf8')
+    return isLockOwnerDead(contents) || Date.now() - st.mtimeMs > staleMs
+  } finally {
+    closeSync(fd)
+  }
+}
+
+/** Break an abandoned lock under a `<lock>.break` O_EXCL guard, like the official server. */
+function breakStaleLock(lock, staleMs) {
+  const guard = `${lock}.break`
+  let gfd
+  try {
+    gfd = openSync(guard, 'wx')
+  } catch (err) {
+    if (!isLockBusy(err)) throw err
+    try {
+      if (Date.now() - statSync(guard).mtimeMs > staleMs) unlinkSync(guard)
+    } catch { /* guard already gone */ }
+    return false
+  }
+  try {
+    closeSync(gfd)
+    if (!isLockStale(lock, staleMs)) return false
+    unlinkSync(lock)
+    return true
+  } finally {
+    try { unlinkSync(guard) } catch { /* */ }
+  }
+}
+
 /**
  * Exclusive lock compatible with the official server's `<file>.lock` (O_EXCL).
- * Releases in `finally` so a failed forget cannot leave the MCP server wedged.
+ * A lock left by a crashed process is broken once its same-host owner is gone
+ * or it has gone unrefreshed for 30s (#224). Releases only our own lock, in
+ * `finally`, so a failed forget cannot leave the MCP server wedged.
  */
-export function withMemoryLock(file, fn, { timeoutMs = 8_000 } = {}) {
+export function withMemoryLock(file, fn, { timeoutMs = 8_000, staleMs = LOCK_STALE_MS } = {}) {
   if (!file) return fn()
   mkdirSync(dirname(file), { recursive: true })
   const lock = `${file}.lock`
+  const token = JSON.stringify({ pid: process.pid, hostname: hostname(), token: randomBytes(16).toString('hex') })
   const deadline = Date.now() + timeoutMs
-  let fd
   for (;;) {
+    let fd
     try {
       fd = openSync(lock, 'wx')
-      writeSync(fd, JSON.stringify({ pid: process.pid, hostname: hostname() }))
-      break
     } catch (err) {
-      if (err?.code !== 'EEXIST') throw err
-      if (Date.now() >= deadline) {
-        throw Object.assign(new Error(`timed out waiting for the memory file lock ${lock}`), { code: 'lock_timeout' })
-      }
-      sleep(15)
+      if (!isLockBusy(err)) throw err
     }
+    if (fd !== undefined) {
+      try {
+        writeSync(fd, token)
+        closeSync(fd)
+      } catch (err) {
+        try { closeSync(fd) } catch { /* */ }
+        try { unlinkSync(lock) } catch { /* */ }
+        throw err
+      }
+      break
+    }
+    try {
+      if (isLockStale(lock, staleMs) && breakStaleLock(lock, staleMs)) continue
+    } catch (err) {
+      if (err?.code === 'ENOENT') continue
+      if (!isLockBusy(err)) throw err
+    }
+    if (Date.now() >= deadline) {
+      throw Object.assign(new Error(`timed out waiting for the memory file lock ${lock}`), { code: 'lock_timeout' })
+    }
+    sleep(15)
   }
   try {
     return fn()
   } finally {
-    try { closeSync(fd) } catch { /* */ }
-    try { unlinkSync(lock) } catch { /* */ }
+    try {
+      if (readFileSync(lock, 'utf8') === token) unlinkSync(lock)
+    } catch { /* already gone */ }
   }
 }
 

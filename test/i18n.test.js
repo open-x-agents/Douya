@@ -337,3 +337,17 @@ test('timetable categories, zoom section and chat context name go through i18n',
     assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
   }
 })
+
+test('chat attachment tips and dock reply toasts go through i18n', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of ["new Error('读取失败')", '超过 10MB`', '超过 20MB`', '张图`', '个文件`', "'该图片类型'", "? '图片' : '文件'", '`豆芽回复了：', "'豆芽回复了，点输入框查看'"]) {
+    assert.ok(!html.includes(s), `hardcoded zh copy left in chat attach/dock: ${s}`)
+  }
+  assert.equal(t('attach.too_big', 'en', { name: 'a.pdf', max: '20MB' }), 'a.pdf is over 20MB')
+  assert.equal(t('attach.max_images', 'zh', { n: 4 }), '一次最多 4 张图')
+  assert.equal(t('attach.bad_ext', 'en', { ext: 'exe' }), '.exe files aren’t supported')
+  assert.equal(t('dock.replied', 'en', { text: 'hi' }), 'Douya replied: hi')
+  for (const k of ['attach.read_failed', 'attach.this_image_type', 'attach.bad_image', 'attach.max_files', 'attach.image', 'attach.file', 'dock.replied_tap', 'dock.view', 'dock.open']) {
+    assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
+  }
+})

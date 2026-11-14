@@ -375,3 +375,17 @@ test('Composio app connect and disconnect prompts go through i18n', () => {
     assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
   }
 })
+
+test('Settings config check statuses go through i18n', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of ['✓ 已配置', '⚠ 未配置或配置不完整', '✗ 未配置（聊天功能受限）', '检查失败']) {
+    assert.ok(!html.includes(s), `hardcoded zh copy left in checkConfig: ${s}`)
+  }
+  assert.equal(t('status.configured', 'en'), 'Configured')
+  assert.equal(t('status.incomplete', 'zh'), '未配置或配置不完整')
+  assert.equal(t('status.llm_missing', 'en'), 'Not configured (chat limited)')
+  assert.equal(t('status.check_failed', 'zh'), '检查失败')
+  for (const k of ['status.configured', 'status.incomplete', 'status.llm_missing', 'status.check_failed']) {
+    assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
+  }
+})

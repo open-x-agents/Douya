@@ -479,6 +479,7 @@ export const messages = {
     'status.configured': 'Configured',
     'status.incomplete': 'Missing or incomplete',
     'status.llm_missing': 'Not configured (chat limited)',
+    'status.check_failed': 'Check failed',
     'status.saved': 'Saved',
     'status.save_fail': 'Save failed',
 
@@ -1282,6 +1283,7 @@ export const messages = {
     'status.configured': '已配置',
     'status.incomplete': '未配置或配置不完整',
     'status.llm_missing': '未配置（聊天功能受限）',
+    'status.check_failed': '检查失败',
     'status.saved': '已保存',
     'status.save_fail': '保存失败',
 

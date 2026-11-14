@@ -419,3 +419,19 @@ test('Today live digest progress goes through i18n', () => {
     assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
   }
 })
+
+test('Sources last-run box goes through i18n and no longer shadows t()', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  const fn = html.slice(html.indexOf('async function loadDigestRun()'), html.indexOf('window.loadDigestRun = loadDigestRun;'))
+  assert.ok(fn.length > 0)
+  assert.ok(!/const t = new Date/.test(fn), 'loadDigestRun must not shadow the i18n t()')
+  for (const s of ['上次汇聚', '旧流水线', '<th>信源 Bot</th>', '旧卡保持不变', '次合并', '汇聚偏好', '还没有运行过']) {
+    assert.ok(!fn.includes(s), `hardcoded zh copy left in loadDigestRun: ${s}`)
+  }
+  assert.equal(t('sources.run_heading', 'en', { mode: 'Source bots', time: 'now', result: 'Succeeded', secs: 12 }), 'Last refresh (Source bots · now · Succeeded · 12s)')
+  assert.equal(t('sources.run_heading', 'zh', { mode: '信源 Bot', time: 'x', result: '成功', secs: 3 }), '上次汇聚（信源 Bot · x · 成功 · 3s）')
+  assert.equal(t('sources.run_merges', 'en', { n: 2 }), '2 merges')
+  for (const k of ['run_never', 'run_heading', 'run_mode_bot', 'run_mode_legacy', 'run_ok', 'run_failed', 'run_col_bot', 'run_col_status', 'run_col_cards', 'run_col_items', 'run_col_time', 'run_col_note', 'run_kept', 'run_merges', 'run_prefs']) {
+    assert.ok(messages.en['sources.' + k] && messages.zh['sources.' + k], `missing sources.${k}`)
+  }
+})

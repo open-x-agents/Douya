@@ -4751,7 +4751,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         const i = s.indexOf(',');
         resolve(i >= 0 ? s.slice(i + 1) : s);
       };
-      r.onerror = () => reject(new Error('读取失败'));
+      r.onerror = () => reject(new Error(t('attach.read_failed')));
       r.readAsDataURL(file);
     });
   }
@@ -4957,13 +4957,13 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         const isImg = (file.type || '').startsWith('image/');
         const ext = (file.name.split('.').pop() || '').toLowerCase();
         if (isImg) {
-          if (!CHAT_IMG_OK.has(file.type)) { showTip(`不支持 ${file.type || '该图片类型'}（用 PNG/JPEG/WebP/GIF）`); continue; }
-          if (file.size > CHAT_IMAGE_MAX) { showTip(`${file.name} 超过 10MB`); continue; }
-          if (state.items.filter(x => x.kind === 'image').length >= CHAT_MAX_IMG) { showTip(`一次最多 ${CHAT_MAX_IMG} 张图`); break; }
+          if (!CHAT_IMG_OK.has(file.type)) { showTip(t('attach.bad_image', { type: file.type || t('attach.this_image_type') })); continue; }
+          if (file.size > CHAT_IMAGE_MAX) { showTip(t('attach.too_big', { name: file.name, max: '10MB' })); continue; }
+          if (state.items.filter(x => x.kind === 'image').length >= CHAT_MAX_IMG) { showTip(t('attach.max_images', { n: CHAT_MAX_IMG })); break; }
         } else {
-          if (!CHAT_EXT_OK.has(ext)) { showTip(`不支持 .${ext || '?'} 文件`); continue; }
-          if (file.size > CHAT_FILE_MAX) { showTip(`${file.name} 超过 20MB`); continue; }
-          if (state.items.filter(x => x.kind === 'file').length >= CHAT_MAX_FILE) { showTip(`一次最多 ${CHAT_MAX_FILE} 个文件`); break; }
+          if (!CHAT_EXT_OK.has(ext)) { showTip(t('attach.bad_ext', { ext: ext || '?' })); continue; }
+          if (file.size > CHAT_FILE_MAX) { showTip(t('attach.too_big', { name: file.name, max: '20MB' })); continue; }
+          if (state.items.filter(x => x.kind === 'file').length >= CHAT_MAX_FILE) { showTip(t('attach.max_files', { n: CHAT_MAX_FILE })); break; }
         }
         try {
           const data = await fileToB64(file);
@@ -5039,8 +5039,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     function chipEl(x) {
       const c = document.createElement('span'); c.className = 'att-chip'; c.title = x.name || '';
       c.innerHTML = `<span class="att-ic">${x.kind === 'image' ? ATT_IMG_SVG : ATT_FILE_SVG}</span><span class="att-nm"><b></b><i></i></span>`;
-      c.querySelector('b').textContent = x.name || (x.kind === 'image' ? '图片' : '文件');
-      c.querySelector('i').textContent = [fmtBytes(x.bytes), (x.name || '').includes('.') ? x.name.split('.').pop().toUpperCase() : ''].filter(Boolean).join(' · ') || (x.kind === 'image' ? '图片' : '文件');
+      c.querySelector('b').textContent = x.name || (x.kind === 'image' ? t('attach.image') : t('attach.file'));
+      c.querySelector('i').textContent = [fmtBytes(x.bytes), (x.name || '').includes('.') ? x.name.split('.').pop().toUpperCase() : ''].filter(Boolean).join(' · ') || (x.kind === 'image' ? t('attach.image') : t('attach.file'));
       return c;
     }
   }
@@ -5140,8 +5140,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         mountSurfaces($('todayChatMsgs'), data.cards, { container: $('todayChatMsgs'), sendPrompt: dockPrompt, skip: live.mounted });
         (window.__odmSurfaceTimings = window.__odmSurfaceTimings || []).push({ at: Date.now(), n: (data.cards || []).filter(c => c.type === 'surface').length, timing: data.timing || null });
         // The dock lives on 今天; if 豆芽 (or the user) switched pages meanwhile, say the reply arrived.
-        if (currentView() !== 'today') showUiToast(`豆芽回复了：${String(data.text || '').replace(/\s+/g, ' ').slice(0, 48)}`, null, { label: '查看', onClick: () => { showView('today'); openTodayChat({ byUser: true }); } });
-        else if (!chatDockWanted) showUiToast('豆芽回复了，点输入框查看', null, { label: '打开', onClick: () => openTodayChat({ byUser: true }) });
+        if (currentView() !== 'today') showUiToast(t('dock.replied', { text: String(data.text || '').replace(/\s+/g, ' ').slice(0, 48) }), null, { label: t('dock.view'), onClick: () => { showView('today'); openTodayChat({ byUser: true }); } });
+        else if (!chatDockWanted) showUiToast(t('dock.replied_tap'), null, { label: t('dock.open'), onClick: () => openTodayChat({ byUser: true }) });
         if (chatDockWanted) stickTodayChat(false); // don't yank a user reading history
         showActionsSince($('todayChatMsgs'), sentAt).catch(() => {});
         loadToday().catch(() => {}); // bot may have edited cards; dock stays however the user left it

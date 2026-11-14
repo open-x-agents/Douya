@@ -5513,7 +5513,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (provider === 'custom') {
       baseURLDiv.style.display = 'block';
       baseURLInput.value = '';
-      modelInput.placeholder = '输入模型名称';
+      modelInput.placeholder = t('settings.model_ph');
     } else if (PROVIDER_PRESETS[provider]) {
       const preset = PROVIDER_PRESETS[provider];
       baseURLDiv.style.display = 'none';
@@ -5541,15 +5541,15 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const model = $('llmModelInput').value;
 
       if (!provider) {
-        $('llmStatus').innerHTML = '<span style="color:var(--red)">请选择提供商</span>';
+        $('llmStatus').innerHTML = `<span style="color:var(--red)">${escapeHtml(t('settings.pick_provider'))}</span>`;
         return;
       }
       if (!apiKey && !$('llmApiKeyInput').placeholder.includes('...')) {
-        $('llmStatus').innerHTML = '<span style="color:var(--red)">请输入 API Key</span>';
+        $('llmStatus').innerHTML = `<span style="color:var(--red)">${escapeHtml(t('settings.need_key'))}</span>`;
         return;
       }
 
-      $('llmStatus').innerHTML = '<span style="color:var(--ink3)">保存中...</span>';
+      $('llmStatus').innerHTML = `<span style="color:var(--ink3)">${escapeHtml(t('settings.saving'))}</span>`;
       
       try {
         const payload = { provider, baseURL, model };
@@ -5564,16 +5564,16 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         const result = await res.json();
         
         if (result.success) {
-          $('llmStatus').innerHTML = '<span style="color:var(--green)">✓ 保存成功，模型已更新</span>';
+          $('llmStatus').innerHTML = `<span style="color:var(--green)">${escapeHtml(t('settings.model_saved'))}</span>`;
           if (result.masked) {
             $('llmApiKeyInput').placeholder = result.masked;
             $('llmApiKeyInput').value = '';
           }
         } else {
-          $('llmStatus').innerHTML = `<span style="color:var(--red)">保存失败: ${result.error}</span>`;
+          $('llmStatus').innerHTML = `<span style="color:var(--red)">${escapeHtml(t('settings.save_failed', { error: result.error || '' }))}</span>`;
         }
       } catch (error) {
-        $('llmStatus').innerHTML = `<span style="color:var(--red)">保存失败: ${error.message}</span>`;
+        $('llmStatus').innerHTML = `<span style="color:var(--red)">${escapeHtml(t('settings.save_failed', { error: error.message }))}</span>`;
       }
     });
   }
@@ -5581,14 +5581,14 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   const testLLMBtn = $('testLLMBtn');
   if (testLLMBtn) {
     testLLMBtn.addEventListener('click', async () => {
-      $('llmStatus').innerHTML = '<span style="color:var(--ink3)">测试中...</span>';
+      $('llmStatus').innerHTML = `<span style="color:var(--ink3)">${escapeHtml(t('settings.testing'))}</span>`;
       
       try {
         const res = await fetch('/api/llm/test', { method: 'POST' });
         const result = await res.json();
         
         if (result.ok) {
-          $('llmStatus').innerHTML = `<span style="color:var(--green)">✓ 连接成功！<br>回复: ${escapeHtml(result.response)}</span>`;
+          $('llmStatus').innerHTML = `<span style="color:var(--green)">${escapeHtml(t('settings.test_ok'))}<br>${escapeHtml(t('settings.test_reply', { text: result.response || '' }))}</span>`;
         } else {
           let errorHtml = `<span style="color:var(--red)">✗ ${escapeHtml(result.error)}`;
           if (result.status) {
@@ -5602,7 +5602,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
           $('llmStatus').innerHTML = errorHtml;
         }
       } catch (error) {
-        $('llmStatus').innerHTML = `<span style="color:var(--red)">测试失败: ${error.message}</span>`;
+        $('llmStatus').innerHTML = `<span style="color:var(--red)">${escapeHtml(t('settings.test_failed', { error: error.message }))}</span>`;
       }
     });
   }
@@ -5641,11 +5641,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const entityId = $('entityIdInput').value || 'default';
 
       if (!apiKey && !$('apiKeyInput').placeholder.includes('...')) {
-        $('apiKeyStatus').innerHTML = '<span style="color:var(--red)">请输入 API Key</span>';
+        $('apiKeyStatus').innerHTML = `<span style="color:var(--red)">${escapeHtml(t('settings.need_key'))}</span>`;
         return;
       }
 
-      $('apiKeyStatus').innerHTML = '<span style="color:var(--ink3)">保存中...</span>';
+      $('apiKeyStatus').innerHTML = `<span style="color:var(--ink3)">${escapeHtml(t('settings.saving'))}</span>`;
       
       try {
         const payload = { entityId };
@@ -5660,7 +5660,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         const result = await res.json();
         
         if (result.success) {
-          $('apiKeyStatus').innerHTML = '<span style="color:var(--green)">✓ 保存成功</span>';
+          $('apiKeyStatus').innerHTML = `<span style="color:var(--green)">${escapeHtml(t('settings.key_saved'))}</span>`;
           if (result.apiKeyMasked) {
             $('apiKeyInput').placeholder = result.apiKeyMasked;
             $('apiKeyInput').value = '';
@@ -5668,10 +5668,10 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
           // Reload apps to get connection status
           setTimeout(() => loadComposioSettings(), 500);
         } else {
-          $('apiKeyStatus').innerHTML = `<span style="color:var(--red)">保存失败: ${escapeHtml(result.error)}</span>`;
+          $('apiKeyStatus').innerHTML = `<span style="color:var(--red)">${escapeHtml(t('settings.save_failed', { error: result.error || '' }))}</span>`;
         }
       } catch (error) {
-        $('apiKeyStatus').innerHTML = `<span style="color:var(--red)">保存失败: ${error.message}</span>`;
+        $('apiKeyStatus').innerHTML = `<span style="color:var(--red)">${escapeHtml(t('settings.save_failed', { error: error.message }))}</span>`;
       }
     });
   }

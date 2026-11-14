@@ -351,3 +351,15 @@ test('chat attachment tips and dock reply toasts go through i18n', () => {
     assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
   }
 })
+
+test('AI model and Composio key settings status lines go through i18n', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of ["'输入模型名称'", '请选择提供商</span>', '请输入 API Key</span>', '保存中...</span>', '✓ 保存成功', '保存失败: ', '测试中...</span>', '✓ 连接成功！', '测试失败: ']) {
+    assert.ok(!html.includes(s), `hardcoded zh copy left in settings status: ${s}`)
+  }
+  assert.equal(t('settings.save_failed', 'en', { error: 'boom' }), 'Could not save: boom')
+  assert.equal(t('settings.test_reply', 'zh', { text: 'hi' }), '回复：hi')
+  for (const k of ['settings.model_ph', 'settings.pick_provider', 'settings.need_key', 'settings.saving', 'settings.model_saved', 'settings.key_saved', 'settings.testing', 'settings.test_ok', 'settings.test_failed']) {
+    assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
+  }
+})

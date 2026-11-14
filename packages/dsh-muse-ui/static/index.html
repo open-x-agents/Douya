@@ -5351,14 +5351,16 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     try {
       const st = await (await fetch('/api/opendigitalmate/digest-status')).json();
       const r = st.last;
-      if (!r) { box.innerHTML = st.botAvailable ? '<p class="src-note">还没有运行过 Bot 汇聚。</p>' : ''; return; }
-      const zh = { done: '✓ 完成', failed: '✗ 失败', timeout: '✗ 超时', fetching: '获取中', thinking: '整理中', queued: '排队' };
-      const t = new Date(r.startedAt).toLocaleString('zh-CN', { hour12: false });
-      const rows = [...Object.entries(r.channels || {}), ...Object.entries(r.aux || {}).map(([k, v]) => [k, { ...v, cards: v.note || null }])].map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${v.status === 'not-scanned' ? t('sources.not_scanned') : (zh[v.status] || v.status)}</td><td>${v.cards ?? '–'}</td><td>${v.items ?? '–'}</td><td>${v.ms != null ? (v.ms / 1000).toFixed(1) + 's' : '–'}</td><td>${escapeHtml(v.error || (v.status === 'done' ? '' : '旧卡保持不变'))}</td></tr>`).join('');
-      box.innerHTML = `<h4 style="margin:0 0 6px">上次汇聚（${st.mode === 'bot' ? '信源 Bot' : '旧流水线'} · ${escapeHtml(t)} · ${r.status === 'done' ? '成功' : '失败：' + escapeHtml(r.error || '')} · ${(r.ms / 1000).toFixed(0)}s）</h4>
-        <table><tr><th>信源 Bot</th><th>状态</th><th>候选卡</th><th>条目</th><th>用时</th><th>说明</th></tr>${rows}
-        <tr><td>Chief 合并</td><td>${zh[r.chief?.status] || r.chief?.status || '–'}</td><td>${(r.chief?.merges || []).length} 次合并</td><td></td><td>${r.chief?.ms != null ? (r.chief.ms / 1000).toFixed(1) + 's' : '–'}</td><td>${escapeHtml(r.chief?.error || '')}</td></tr></table>
-        ${st.prefs?.length ? `<p class="src-note">汇聚偏好：${st.prefs.map(p => escapeHtml(p.text)).join('；')}</p>` : ''}`;
+      if (!r) { box.innerHTML = st.botAvailable ? `<p class="src-note">${escapeHtml(t('sources.run_never'))}</p>` : ''; return; }
+      const label = { done: '✓ ' + t('today.dp_done'), failed: '✗ ' + t('today.dp_failed'), timeout: '✗ ' + t('today.dp_timeout'), fetching: t('today.dp_fetching'), thinking: t('today.dp_thinking'), queued: t('today.dp_queued') };
+      // Named `when`, not `t`: shadowing the i18n t() made the not-scanned row throw and blank the whole box.
+      const when = new Date(r.startedAt).toLocaleString(odmLang() === 'zh' ? 'zh-CN' : 'en', { hour12: false });
+      const rows = [...Object.entries(r.channels || {}), ...Object.entries(r.aux || {}).map(([k, v]) => [k, { ...v, cards: v.note || null }])].map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(v.status === 'not-scanned' ? t('sources.not_scanned') : (label[v.status] || v.status))}</td><td>${escapeHtml(v.cards ?? '–')}</td><td>${escapeHtml(v.items ?? '–')}</td><td>${v.ms != null ? (v.ms / 1000).toFixed(1) + 's' : '–'}</td><td>${escapeHtml(v.error || (v.status === 'done' ? '' : t('sources.run_kept')))}</td></tr>`).join('');
+      const head = t('sources.run_heading', { mode: st.mode === 'bot' ? t('sources.run_mode_bot') : t('sources.run_mode_legacy'), time: when, result: r.status === 'done' ? t('sources.run_ok') : t('sources.run_failed', { error: r.error || '' }), secs: (r.ms / 1000).toFixed(0) });
+      box.innerHTML = `<h4 style="margin:0 0 6px">${escapeHtml(head)}</h4>
+        <table><tr><th>${escapeHtml(t('sources.run_col_bot'))}</th><th>${escapeHtml(t('sources.run_col_status'))}</th><th>${escapeHtml(t('sources.run_col_cards'))}</th><th>${escapeHtml(t('sources.run_col_items'))}</th><th>${escapeHtml(t('sources.run_col_time'))}</th><th>${escapeHtml(t('sources.run_col_note'))}</th></tr>${rows}
+        <tr><td>${escapeHtml(t('today.dp_chief'))}</td><td>${escapeHtml(label[r.chief?.status] || r.chief?.status || '–')}</td><td>${escapeHtml(t('sources.run_merges', { n: (r.chief?.merges || []).length }))}</td><td></td><td>${r.chief?.ms != null ? (r.chief.ms / 1000).toFixed(1) + 's' : '–'}</td><td>${escapeHtml(r.chief?.error || '')}</td></tr></table>
+        ${st.prefs?.length ? `<p class="src-note">${escapeHtml(t('sources.run_prefs', { list: st.prefs.map(p => p.text).join(odmLang() === 'zh' ? '；' : '; ') }))}</p>` : ''}`;
     } catch (_) { box.innerHTML = ''; }
   }
   window.loadDigestRun = loadDigestRun;

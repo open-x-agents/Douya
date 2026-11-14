@@ -5680,7 +5680,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   window.handleAppAction = async function(appKey, isConnected) {
     if (isConnected) {
       // Disconnect
-      if (!confirm(`确定要断开 ${appKey} 的连接吗？`)) return;
+      if (!confirm(t('settings.app_disconnect_confirm', { app: appKey }))) return;
       
       try {
         const res = await fetch('/api/composio/disconnect', {
@@ -5690,13 +5690,13 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         });
         const result = await res.json();
         if (result.success) {
-          alert('已断开连接');
+          alert(t('settings.app_disconnected'));
           loadComposioSettings(); window.__reloadSources && window.__reloadSources();
         } else {
-          alert('断开失败: ' + result.error);
+          alert(t('settings.app_disconnect_failed', { error: result.error || '' }));
         }
       } catch (error) {
-        alert('断开失败: ' + error.message);
+        alert(t('settings.app_disconnect_failed', { error: error.message }));
       }
     } else {
       // Connect via OAuth
@@ -5713,10 +5713,10 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
           const pop = window.open(authUrl, 'odm-composio', 'width=600,height=720');
           odmWatchComposio(appKey, pop);
         } else {
-          alert('连接失败: ' + (result.error || '未知错误'));
+          alert(t('settings.app_connect_failed', { error: result.error || t('settings.unknown_error') }));
         }
       } catch (error) {
-        alert('连接失败: ' + error.message);
+        alert(t('settings.app_connect_failed', { error: error.message }));
       }
     }
   };

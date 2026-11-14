@@ -627,6 +627,7 @@ var ZH = {
   "Making headway": "有进展了",
   "Moving to a fresh conversation": "整理记忆，换到新对话",
   "Switching working folder": "正在切换工作文件夹",
+  "Folded into this step. Continuing when it finishes.": "已并进当前这条，这一步做完再继续",
   "Searching online": "上网搜索",
   "Reading a page": "阅读网页",
   "Running shell commands": "运行命令",
@@ -1480,8 +1481,8 @@ function bodyOf(def, paint, flat = false) {
     return "";
   }
 }
-var eyeMarkup = ([cx, cy, w, h50, tilt]) => `<g transform="translate(${cx} ${cy}) rotate(${tilt})"><rect class="bt-eye" x="${-w / 2}" y="${-h50 / 2}" width="${w}" height="${h50}" rx="${w / 2}"/></g>`;
-var happyEyeMarkup = ([cx, cy, w, h50, tilt]) => `<g transform="translate(${cx} ${cy}) rotate(${tilt})"><path class="bt-eye-happy" opacity="0" d="M${-w * 0.62} ${h50 * 0.14}Q0 ${-h50 * 0.42} ${w * 0.62} ${h50 * 0.14}" fill="none" stroke="#000" stroke-width="${w * 0.5}" stroke-linecap="round"/></g>`;
+var eyeMarkup = ([cx, cy, w, h51, tilt]) => `<g transform="translate(${cx} ${cy}) rotate(${tilt})"><rect class="bt-eye" x="${-w / 2}" y="${-h51 / 2}" width="${w}" height="${h51}" rx="${w / 2}"/></g>`;
+var happyEyeMarkup = ([cx, cy, w, h51, tilt]) => `<g transform="translate(${cx} ${cy}) rotate(${tilt})"><path class="bt-eye-happy" opacity="0" d="M${-w * 0.62} ${h51 * 0.14}Q0 ${-h51 * 0.42} ${w * 0.62} ${h51 * 0.14}" fill="none" stroke="#000" stroke-width="${w * 0.5}" stroke-linecap="round"/></g>`;
 var maskBox = (size) => `maskUnits="userSpaceOnUse" x="${-size}" y="${-size}" width="${size * 3}" height="${size * 3}"`;
 var holes = (def, eyes) => `<rect x="${-def.size}" y="${-def.size}" width="${def.size * 3}" height="${def.size * 3}" fill="#fff"/>${eyes}`;
 var MASK_ID = "%MASK%";
@@ -1800,6 +1801,9 @@ function teamActions({ call: call2, after, partFor, roster, ui: ui2, live, cards
     answerApproval: (id, choice) => after(call2("approval-answer", { id, choice })),
     stopMemberWork: (roomId, botId) => after(call2("stop-member-work", { roomId, botId })),
     stopRoomWork: (roomId) => after(call2("stop-room-work", { roomId })),
+    // The private chat's own stop. `partFor` sends the Bot's current part; the host
+    // cancels that part only, and leaves the Bot's group Sessions running.
+    stopPrivate: (sessionId) => after(call2("stop-private", { sessionId: partFor(sessionId) })),
     // Values go out in these requests and never come back in a response.
     secretSet: (payload) => after(call2("secret-set", payload)),
     secretAllow: (requestId) => after(call2("secret-allow", { requestId })),
@@ -2328,12 +2332,12 @@ function liveSprings(apply2) {
     const dt = Math.min(0.5, Math.max(1e-3, (now - last) / 1e3));
     last = now;
     const steps = Math.ceil(dt * 240);
-    const h50 = dt / steps;
+    const h51 = dt / steps;
     let moving = false;
     for (const value of values.values()) {
       for (let index = 0; index < steps; index += 1) {
-        value.v += (-value.k * (value.x - value.to) - value.c * value.v) * h50;
-        value.x += value.v * h50;
+        value.v += (-value.k * (value.x - value.to) - value.c * value.v) * h51;
+        value.x += value.v * h51;
       }
       if (Math.abs(value.x - value.to) < 0.05 && Math.abs(value.v) < 1) {
         value.x = value.to;
@@ -3674,6 +3678,8 @@ div:has(> nav [class*="_marks"]){display:none!important}
 .bt-btw-answer p{margin:0}
 .bt-btw-fail{margin:0 0 6px;color:var(--bt-danger);font-size:13px;line-height:18px}
 @media (prefers-reduced-motion:reduce){.bt-btw-chevron{transition:none}}
+.bt-private-stop-dock{display:flex;justify-content:center;width:100%;margin:0 auto 8px}
+.bt-private-stop-dock>button:disabled{opacity:.5;cursor:default}
 .bt-route-dock{width:100%;display:flex;justify-content:center}
 .bt-route{box-sizing:border-box;width:calc(var(--dsh-chat-content-width,748px) - 32px);max-width:calc(100% - 32px);margin:0 auto 8px;padding:12px 14px;border-radius:16px;background:var(--bt-card);color:var(--bt-ink);box-shadow:inset 0 0 0 .5px color-mix(in srgb,var(--bt-ink) 8%,transparent);font-family:var(--bt-font)}
 .bt-route-text{margin:0 0 8px;font-size:14px;line-height:22px}
@@ -9900,6 +9906,18 @@ var import_react18 = require("react");
 var import_react_dom2 = require("react-dom");
 var PHRASE_HOLD_MS = 800;
 var drawPhrase = (pool) => t(pool[Math.min(pool.length - 1, Math.floor(Math.random() * pool.length))]);
+function activityCue({ moving, inputAt, steeredAt, tool }) {
+  if (moving) return { key: "move", label: t("Switching working folder"), state: "thinking" };
+  const toolAt = typeof tool?.at === "number" ? tool.at : 0;
+  const steered = typeof steeredAt === "number" ? steeredAt : 0;
+  if (steered > toolAt) {
+    return { key: `steer:${steered}`, label: t("Folded into this step. Continuing when it finishes."), state: "thinking", fixed: true };
+  }
+  if (inputAt > toolAt) return { key: `input:${inputAt}`, pool: PHRASES.thinking, state: "thinking" };
+  if (tool) return { key: tool.label ? `tool:${tool.label}` : "working", label: tool.label, pool: PHRASES.working, state: tool.state ?? "working" };
+  return { key: "thinking", pool: PHRASES.thinking, state: "thinking" };
+}
+var phraseText = (shown) => shown?.fixed === true ? shown.text : `${shown.text}…`;
 var rowVisible = ({ running, streaming, tools, relaying, bot, room: room2 }) => running && (!streaming || tools.length > 0) && !relaying && (bot !== void 0 || room2 !== void 0);
 var freshInputAt = (submissions, steeredAt) => Math.max(
   0,
@@ -10014,14 +10032,14 @@ function ActivityIndicator({ sessionId, useRoster, useSessionStatus, useLive, us
   const inputRef = (0, import_react18.useRef)(0);
   const inputAt = Math.max(inputRef.current, pendingInput);
   inputRef.current = inputAt;
-  const want = !visible ? null : moveAt !== 0 ? { key: "move", label: t("Switching working folder"), state: "thinking" } : inputAt > (tool?.at ?? 0) ? { key: `input:${inputAt}`, pool: PHRASES.thinking, state: "thinking" } : tool ? { key: tool.label ? `tool:${tool.label}` : "working", label: tool.label, pool: PHRASES.working, state: tool.state ?? "working" } : { key: "thinking", pool: PHRASES.thinking, state: "thinking" };
+  const want = !visible ? null : activityCue({ moving: moveAt !== 0, inputAt, steeredAt, tool });
   const [shown, setShown] = (0, import_react18.useState)(null);
   const wantKey = want?.key ?? null;
   const markState = (0, import_react18.useRef)("thinking");
   if (want) markState.current = want.state;
   (0, import_react18.useEffect)(() => {
     if (wantKey === null || shown?.key === wantKey) return void 0;
-    const make = () => setShown({ key: wantKey, text: want.label ?? drawPhrase(want.pool), at: Date.now() });
+    const make = () => setShown({ key: wantKey, text: want.label ?? drawPhrase(want.pool), at: Date.now(), fixed: want.fixed === true });
     const wait = shown ? shown.at + PHRASE_HOLD_MS - Date.now() : 0;
     if (wait <= 0) {
       make();
@@ -10071,7 +10089,7 @@ function ActivityIndicator({ sessionId, useRoster, useSessionStatus, useLive, us
     (0, import_react18.createElement)(
       "span",
       { className: "bt-typing-text" },
-      (0, import_react18.createElement)("span", { key: `${shown.key}:${shown.at}`, className: "bt-typing-label" }, (0, import_react18.createElement)(Shimmer, null, `${shown.text}…`)),
+      (0, import_react18.createElement)("span", { key: `${shown.key}:${shown.at}`, className: "bt-typing-label" }, (0, import_react18.createElement)(Shimmer, null, phraseText(shown))),
       (0, import_react18.createElement)(Elapsed, { at: moveAt !== 0 ? moveAt : Math.max(turnAt ?? runAt.current, inputAt), className: "bt-typing-time" })
     )
   ), host);
@@ -21191,8 +21209,40 @@ function createSwitchWindow(settle) {
   };
 }
 
-// src/client/user-message.js
+// src/client/private-stop.js
 var import_react52 = require("react");
+function privateStopShown({ room: room2, bot, running }) {
+  return room2 == null && bot != null && running === true;
+}
+function PrivateStopDock({ sessionId, useRoster, useSessionStatus, actions }) {
+  const bot = useRoster((value) => value.byId?.[sessionId]);
+  const room2 = useRoster((value) => value.roomsById?.[sessionId]);
+  const running = useSessionStatus((map) => map.get(sessionId)?.running === true);
+  const [stopping, setStopping] = (0, import_react52.useState)(false);
+  if (!privateStopShown({ room: room2, bot, running })) return null;
+  const stop = () => {
+    if (stopping || typeof actions?.stopPrivate !== "function") return;
+    setStopping(true);
+    void Promise.resolve(actions.stopPrivate(sessionId)).catch((error) => actions.reportError?.(error, "stop")).finally(() => setStopping(false));
+  };
+  const label = t("Stop");
+  return (0, import_react52.createElement)(
+    "div",
+    { className: "bt-private-stop-dock" },
+    (0, import_react52.createElement)("button", {
+      type: "button",
+      className: "bt-soft bt-soft-sm",
+      disabled: stopping,
+      "aria-label": label,
+      title: label,
+      "data-private-stop": "",
+      onClick: stop
+    }, label)
+  );
+}
+
+// src/client/user-message.js
+var import_react53 = require("react");
 var ui = __toESM(require("@deepseek-ai/dsh-client-ui-primitives"), 1);
 var canDrawUserMessages = () => typeof ui.projectUserText === "function";
 function contentParts(content) {
@@ -21224,38 +21274,38 @@ function userTextParts(text, bots, referenceLabels = []) {
   return parts;
 }
 function UserText({ text, bots, referenceLabels, skillNames, references, actions }) {
-  return userTextParts(text, bots, referenceLabels).map((part, index) => part.bot ? (0, import_react52.createElement)(
+  return userTextParts(text, bots, referenceLabels).map((part, index) => part.bot ? (0, import_react53.createElement)(
     "button",
     { key: index, type: "button", className: "bt-umention", title: `@${part.bot.name}`, onClick: () => actions.openSession(part.bot.id) },
-    (0, import_react52.createElement)(BotMark, { bot: part.bot, size: 16 }),
+    (0, import_react53.createElement)(BotMark, { bot: part.bot, size: 16 }),
     part.label
-  ) : (0, import_react52.createElement)(import_react52.Fragment, { key: index }, ui.projectUserText(part.text, referenceLabels, skillNames, "skill", references)));
+  ) : (0, import_react53.createElement)(import_react53.Fragment, { key: index }, ui.projectUserText(part.text, referenceLabels, skillNames, "skill", references)));
 }
 function Attachments({ attachments, renderMessageImages }) {
   const compact2 = attachments.length > 1;
-  return (0, import_react52.createElement)("div", { className: "bt-uattach" }, attachments.map((block, index) => {
+  return (0, import_react53.createElement)("div", { className: "bt-uattach" }, attachments.map((block, index) => {
     if (block.type === "image") {
-      return renderMessageImages ? (0, import_react52.createElement)(import_react52.Fragment, { key: index }, renderMessageImages({ images: [{ attachment: block.attachment }], align: "end", compact: compact2 })) : null;
+      return renderMessageImages ? (0, import_react53.createElement)(import_react53.Fragment, { key: index }, renderMessageImages({ images: [{ attachment: block.attachment }], align: "end", compact: compact2 })) : null;
     }
     const file = block.attachment;
     const meta = [ui.fileExtension?.(file.name)?.toUpperCase().slice(0, 8), ui.fileSizeText?.(file.bytes)].filter(Boolean).join(" · ");
-    return (0, import_react52.createElement)(
+    return (0, import_react53.createElement)(
       "span",
       { key: index, className: "bt-ufile", title: file.name },
-      ui.FileTypeIcon ? (0, import_react52.createElement)(ui.FileTypeIcon, { path: file.name, className: "bt-ufile-icon" }) : null,
-      (0, import_react52.createElement)("span", { className: "bt-ufile-text" }, (0, import_react52.createElement)("span", { className: "bt-ufile-name" }, file.name), meta ? (0, import_react52.createElement)("span", { className: "bt-ufile-meta" }, meta) : null)
+      ui.FileTypeIcon ? (0, import_react53.createElement)(ui.FileTypeIcon, { path: file.name, className: "bt-ufile-icon" }) : null,
+      (0, import_react53.createElement)("span", { className: "bt-ufile-text" }, (0, import_react53.createElement)("span", { className: "bt-ufile-name" }, file.name), meta ? (0, import_react53.createElement)("span", { className: "bt-ufile-meta" }, meta) : null)
     );
   }));
 }
 function CopyButton({ text }) {
-  const [copied, setCopied] = (0, import_react52.useState)(false);
+  const [copied, setCopied] = (0, import_react53.useState)(false);
   const copy2 = () => {
     void navigator.clipboard?.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1e3);
     });
   };
-  return (0, import_react52.createElement)("button", { type: "button", className: "bt-tool", "aria-label": copied ? t("Copied") : t("Copy"), title: copied ? t("Copied") : t("Copy"), onClick: copy2 }, copied ? (0, import_react52.createElement)(CheckIcon) : (0, import_react52.createElement)(CopyIcon));
+  return (0, import_react53.createElement)("button", { type: "button", className: "bt-tool", "aria-label": copied ? t("Copied") : t("Copy"), title: copied ? t("Copied") : t("Copy"), onClick: copy2 }, copied ? (0, import_react53.createElement)(CheckIcon) : (0, import_react53.createElement)(CopyIcon));
 }
 var clock3 = (time) => typeof time === "number" ? new Date(time).toLocaleTimeString(dateLocale(), { hour: "numeric", minute: "2-digit" }) : void 0;
 function UserMessageCell({ node, sessionId, useRoster, actions, renderMessageImages, openFile, openSkill }) {
@@ -21267,10 +21317,10 @@ function UserMessageCell({ node, sessionId, useRoster, actions, renderMessageIma
   const steering = node.kind === "steering";
   const groupTime = roster.roomsById?.[sessionId] && Number.isFinite(data.time) ? messageClock(data.time) : void 0;
   const { shown, folded, control } = useFold(text, { markdown: false });
-  const body = (0, import_react52.createElement)(UserText, { text: shown, bots: mentionableBots(roster, sessionId), referenceLabels, skillNames: data.skillNames ?? [], references, actions });
-  const row = (0, import_react52.useRef)(null);
-  const [toolsOpen, setToolsOpen] = (0, import_react52.useState)(false);
-  (0, import_react52.useEffect)(() => {
+  const body = (0, import_react53.createElement)(UserText, { text: shown, bots: mentionableBots(roster, sessionId), referenceLabels, skillNames: data.skillNames ?? [], references, actions });
+  const row = (0, import_react53.useRef)(null);
+  const [toolsOpen, setToolsOpen] = (0, import_react53.useState)(false);
+  (0, import_react53.useEffect)(() => {
     if (!toolsOpen) return void 0;
     const onDown = (event) => {
       if (!row.current?.contains(event.target)) setToolsOpen(false);
@@ -21293,24 +21343,24 @@ function UserMessageCell({ node, sessionId, useRoster, actions, renderMessageIma
     citedTexts: room2?.citedTexts,
     citedIds: room2?.citedIds
   })) return null;
-  return (0, import_react52.createElement)(
+  return (0, import_react53.createElement)(
     "div",
     { ref: row, className: "bt-umsg", "data-steering": steering || void 0 },
-    (0, import_react52.createElement)(
+    (0, import_react53.createElement)(
       "div",
       { className: "bt-ustack" },
-      attachments.length > 0 ? (0, import_react52.createElement)(Attachments, { attachments, renderMessageImages }) : null,
-      text !== "" || rest.length > 0 ? (0, import_react52.createElement)(
+      attachments.length > 0 ? (0, import_react53.createElement)(Attachments, { attachments, renderMessageImages }) : null,
+      text !== "" || rest.length > 0 ? (0, import_react53.createElement)(
         "div",
         { className: "bt-ubody", title: clock3(data.time), "data-folded": folded || void 0, onClick: tapTools },
-        control ? (0, import_react52.createElement)("div", { className: "bt-fold-body" }, body) : body,
+        control ? (0, import_react53.createElement)("div", { className: "bt-fold-body" }, body) : body,
         control,
-        rest.map((block, index) => ui.JsonBlock ? (0, import_react52.createElement)(ui.JsonBlock, { key: index, label: t("Content"), payload: block }) : null)
+        rest.map((block, index) => ui.JsonBlock ? (0, import_react53.createElement)(ui.JsonBlock, { key: index, label: t("Content"), payload: block }) : null)
       ) : null,
-      referenceLabels.length > 0 ? (0, import_react52.createElement)("div", { className: "bt-urefs" }, t("Referenced {labels}", { labels: referenceLabels.join(t(", ")) })) : null,
-      groupTime ? (0, import_react52.createElement)("div", { className: "bt-utime", title: clockLabel(data.time) }, groupTime) : null
+      referenceLabels.length > 0 ? (0, import_react53.createElement)("div", { className: "bt-urefs" }, t("Referenced {labels}", { labels: referenceLabels.join(t(", ")) })) : null,
+      groupTime ? (0, import_react53.createElement)("div", { className: "bt-utime", title: clockLabel(data.time) }, groupTime) : null
     ),
-    text === "" ? null : (0, import_react52.createElement)("div", { className: "bt-utools", "data-open": toolsOpen || void 0 }, (0, import_react52.createElement)(CopyButton, { text }))
+    text === "" ? null : (0, import_react53.createElement)("div", { className: "bt-utools", "data-open": toolsOpen || void 0 }, (0, import_react53.createElement)(CopyButton, { text }))
   );
 }
 var USER_MESSAGE_CSS = `
@@ -22263,6 +22313,7 @@ function apply(ctx) {
     () => shadow("conversation.input.dock", { id: "bot-view", order: -95, inject: face }, WidgetDock),
     () => shadow("conversation.input.dock", { id: "bot-secret", order: -90, inject: face }, SecretDock),
     () => shadow("conversation.input.dock", { id: "bot-handoff", order: -85, inject: face }, HandoffDock),
+    () => shadow("conversation.input.dock", { id: "bot-stop", order: -80, inject: face }, PrivateStopDock),
     () => shadow("conversation.input.dock", { id: "bot-learning", order: 850, priority: BOT_PRIORITY, inject: face }, LearningDock)
   ];
   ctx.effect(() => installCompiledStyles(RETURN_CSS, "return"), "ds-bot: return styles");

@@ -120,6 +120,9 @@ export function teamActions({ call, after, partFor, roster, ui, live, cards, hel
     answerApproval: (id, choice) => after(call('approval-answer', { id, choice })),
     stopMemberWork: (roomId, botId) => after(call('stop-member-work', { roomId, botId })),
     stopRoomWork: roomId => after(call('stop-room-work', { roomId })),
+    // The private chat's own stop. `partFor` sends the Bot's current part; the host
+    // cancels that part only, and leaves the Bot's group Sessions running.
+    stopPrivate: sessionId => after(call('stop-private', { sessionId: partFor(sessionId) })),
     // Values go out in these requests and never come back in a response.
     secretSet: payload => after(call('secret-set', payload)),
     secretAllow: requestId => after(call('secret-allow', { requestId })),

@@ -17,6 +17,22 @@ const LANGUAGES = { zh: 'Chinese (简体中文)', en: 'English' }
 const RUN_STATS = ['sessionStats', 'tokenUsage', 'contextPressure']
 
 const invalid = message => Object.assign(new Error(message), { code: 'bot/invalid' })
+
+// The Bot's current private part, when `id` names that Bot, its current part, or an
+// earlier private part. A room id, a member's group Session, and an archived group
+// part are not private chats, so a private stop never resolves to one of them.
+export function privateTurnSession(rt, id) {
+  if (typeof id !== 'string' || id === '') return undefined
+  if (rt.roomOf(id) !== undefined || rt.groupOwners.has(id)) return undefined
+  const past = rt.pastOwners.get(id)
+  if (past?.roomId !== undefined) return undefined
+  const botId = rt.botOf(id)?.id ?? rt.chatOwners.get(id) ?? past?.botId
+  if (botId === undefined) return undefined
+  const sessionId = rt.chatOf(botId)
+  if (typeof sessionId !== 'string' || sessionId === '') return undefined
+  if (rt.roomOf(sessionId) !== undefined || rt.groupOwners.has(sessionId) || !rt.chatOwners.has(sessionId)) return undefined
+  return sessionId
+}
 // Programming and file system errors are DS Bot's own faults, logged with their stack;
 // any other error is a refusal whose message is meant for the user.
 const isInternal = error => error instanceof TypeError || error instanceof ReferenceError || error instanceof RangeError
@@ -359,6 +375,17 @@ export function install(rt) {
           return ok(await rt.stopMemberWork(String(body.roomId ?? ''), String(body.botId ?? '')))
         case 'stop-room-work':
           return ok(await rt.stopRoomWork(String(body.roomId ?? '')))
+        // Stop the open private chat only. Rooms, member Sessions, and browser holds
+        // stay as they are: this does not walk rooms or call stopRoomWork.
+        case 'stop-private': {
+          if (typeof body.sessionId !== 'string' || body.sessionId === '') return fail('Nothing to stop', 'bot/invalid')
+          await rt.load()
+          const sessionId = privateTurnSession(rt, body.sessionId)
+          if (sessionId === undefined || rt.live.get(sessionId)?.turn === undefined) return ok(false)
+          const agent = await rt.resolveAgent(sessionId)
+          agent.cancel({ kind: 'user' })
+          return ok(true)
+        }
         case 'dismiss-question':
           await rt.load()
           if (rt.own(state.questions, body.sessionId) !== undefined) {

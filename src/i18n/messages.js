@@ -288,6 +288,11 @@ export const messages = {
     'settings.test_ok': '✓ Connected!',
     'settings.test_reply': 'Reply: {text}',
     'settings.test_failed': 'Test failed: {error}',
+    'settings.app_disconnect_confirm': 'Disconnect {app}?',
+    'settings.app_disconnected': 'Disconnected',
+    'settings.app_disconnect_failed': 'Could not disconnect: {error}',
+    'settings.app_connect_failed': 'Could not connect: {error}',
+    'settings.unknown_error': 'unknown error',
 
     'dock.hint': 'Click to start chatting',
     'dock.title': 'Chat with Douya',
@@ -1086,6 +1091,11 @@ export const messages = {
     'settings.test_ok': '✓ 连接成功！',
     'settings.test_reply': '回复：{text}',
     'settings.test_failed': '测试失败：{error}',
+    'settings.app_disconnect_confirm': '确定要断开 {app} 的连接吗？',
+    'settings.app_disconnected': '已断开连接',
+    'settings.app_disconnect_failed': '断开失败：{error}',
+    'settings.app_connect_failed': '连接失败：{error}',
+    'settings.unknown_error': '未知错误',
 
     'dock.hint': '点击这里开始对话',
     'dock.title': '和豆芽对话（必备功能）',

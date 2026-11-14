@@ -363,3 +363,15 @@ test('AI model and Composio key settings status lines go through i18n', () => {
     assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
   }
 })
+
+test('Composio app connect and disconnect prompts go through i18n', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of ['确定要断开 ${appKey}', "alert('已断开连接')", "'断开失败: '", "'连接失败: '", "'未知错误'"]) {
+    assert.ok(!html.includes(s), `hardcoded zh copy left in Composio app actions: ${s}`)
+  }
+  assert.equal(t('settings.app_disconnect_confirm', 'en', { app: 'gmail' }), 'Disconnect gmail?')
+  assert.equal(t('settings.app_connect_failed', 'zh', { error: 'x' }), '连接失败：x')
+  for (const k of ['settings.app_disconnected', 'settings.app_disconnect_failed', 'settings.unknown_error']) {
+    assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
+  }
+})

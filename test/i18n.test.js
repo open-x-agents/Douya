@@ -439,7 +439,9 @@ test('Sources last-run box goes through i18n and no longer shadows t()', () => {
   assert.equal(t('sources.run_heading', 'en', { mode: 'Source bots', time: 'now', result: 'Succeeded', secs: 12 }), 'Last refresh (Source bots · now · Succeeded · 12s)')
   assert.equal(t('sources.run_heading', 'zh', { mode: '信源 Bot', time: 'x', result: '成功', secs: 3 }), '上次汇聚（信源 Bot · x · 成功 · 3s）')
   assert.equal(t('sources.run_merges', 'en', { n: 2 }), '2 merges')
-  for (const k of ['run_never', 'run_heading', 'run_mode_bot', 'run_mode_legacy', 'run_ok', 'run_failed', 'run_col_bot', 'run_col_status', 'run_col_cards', 'run_col_items', 'run_col_time', 'run_col_note', 'run_kept', 'run_merges', 'run_prefs']) {
+  assert.equal(t('sources.run_merges_one', 'en'), '1 merge')
+  assert.equal(t('sources.run_merges_one', 'zh'), '1 次合并')
+  for (const k of ['run_never', 'run_heading', 'run_mode_bot', 'run_mode_legacy', 'run_ok', 'run_failed', 'run_col_bot', 'run_col_status', 'run_col_cards', 'run_col_items', 'run_col_time', 'run_col_note', 'run_kept', 'run_merges', 'run_merges_one', 'run_prefs']) {
     assert.ok(messages.en['sources.' + k] && messages.zh['sources.' + k], `missing sources.${k}`)
   }
 })

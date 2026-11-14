@@ -5360,7 +5360,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const head = t('sources.run_heading', { mode: st.mode === 'bot' ? t('sources.run_mode_bot') : t('sources.run_mode_legacy'), time: when, result: r.status === 'done' ? t('sources.run_ok') : t('sources.run_failed', { error: r.error || '' }), secs: (r.ms / 1000).toFixed(0) });
       box.innerHTML = `<h4 style="margin:0 0 6px">${escapeHtml(head)}</h4>
         <table><tr><th>${escapeHtml(t('sources.run_col_bot'))}</th><th>${escapeHtml(t('sources.run_col_status'))}</th><th>${escapeHtml(t('sources.run_col_cards'))}</th><th>${escapeHtml(t('sources.run_col_items'))}</th><th>${escapeHtml(t('sources.run_col_time'))}</th><th>${escapeHtml(t('sources.run_col_note'))}</th></tr>${rows}
-        <tr><td>${escapeHtml(t('today.dp_chief'))}</td><td>${escapeHtml(label[r.chief?.status] || r.chief?.status || '–')}</td><td>${escapeHtml(t('sources.run_merges', { n: (r.chief?.merges || []).length }))}</td><td></td><td>${r.chief?.ms != null ? (r.chief.ms / 1000).toFixed(1) + 's' : '–'}</td><td>${escapeHtml(r.chief?.error || '')}</td></tr></table>
+        <tr><td>${escapeHtml(t('today.dp_chief'))}</td><td>${escapeHtml(label[r.chief?.status] || r.chief?.status || '–')}</td><td>${escapeHtml(((r.chief?.merges || []).length === 1) ? t('sources.run_merges_one') : t('sources.run_merges', { n: (r.chief?.merges || []).length }))}</td><td></td><td>${r.chief?.ms != null ? (r.chief.ms / 1000).toFixed(1) + 's' : '–'}</td><td>${escapeHtml(r.chief?.error || '')}</td></tr></table>
         ${st.prefs?.length ? `<p class="src-note">${escapeHtml(t('sources.run_prefs', { list: st.prefs.map(p => p.text).join(odmLang() === 'zh' ? '；' : '; ') }))}</p>` : ''}`;
     } catch (_) { box.innerHTML = ''; }
   }

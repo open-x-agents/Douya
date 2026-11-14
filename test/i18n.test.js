@@ -445,3 +445,20 @@ test('Sources last-run box goes through i18n and no longer shadows t()', () => {
     assert.ok(messages.en['sources.' + k] && messages.zh['sources.' + k], `missing sources.${k}`)
   }
 })
+
+test('Today pin badge, highlight chip and filter bar go through i18n without shadowing t()', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  const fn = html.slice(html.indexOf('function decorateTiles(container, cards)'), html.indexOf('async function sendUserOp(body)'))
+  assert.ok(fn.length > 0)
+  assert.ok(!/const t = document\.createElement/.test(fn), 'decorateTiles must not shadow the i18n t()')
+  for (const s of ['你固定的', '豆芽置顶', '豆芽标出', '已筛选', '豆芽筛选', '显示全部']) {
+    assert.ok(!fn.includes(s), `hardcoded zh copy left in decorateTiles: ${s}`)
+  }
+  assert.equal(t('today.pinned_bot_reason', 'en', { reason: 'due today' }), '📌 Pinned by Douya · due today')
+  assert.equal(t('today.hl_reason', 'zh', { reason: '要回' }), '豆芽标出：要回')
+  assert.equal(t('today.filter_bot', 'en', { label: 'PRs', shown: 2, total: 5 }), 'Douya filter: PRs · showing 2/5')
+  assert.equal(t('today.filter_user', 'zh', { label: 'PR', shown: 1, total: 3 }), '已筛选：PR · 显示 1/3 张')
+  for (const k of ['pinned_user', 'pinned_bot', 'pinned_bot_reason', 'hl', 'hl_reason', 'filter_user', 'filter_bot', 'filter_clear']) {
+    assert.ok(messages.en['today.' + k] && messages.zh['today.' + k], `missing today.${k}`)
+  }
+})

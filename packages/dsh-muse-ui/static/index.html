@@ -6407,7 +6407,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         tile.classList.add('is-pinned');
         const badge = document.createElement('div');
         badge.className = 'pin-badge' + (p.by === 'user' ? ' by-user' : '');
-        badge.textContent = p.by === 'user' ? '📌 你固定的' : `📌 豆芽置顶${p.reason ? ' · ' + p.reason : ''}`;
+        badge.textContent = p.by === 'user' ? t('today.pinned_user') : (p.reason ? t('today.pinned_bot_reason', { reason: p.reason }) : t('today.pinned_bot'));
         tile.prepend(badge);
       }
       const h = hls.get(card.id);
@@ -6415,7 +6415,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         tile.classList.add('ui-hl');
         const chip = document.createElement('div');
         chip.className = 'hl-chip';
-        chip.textContent = `豆芽标出${h.reason ? '：' + h.reason : ''}`;
+        chip.textContent = h.reason ? t('today.hl_reason', { reason: h.reason }) : t('today.hl');
         tile.prepend(chip);
       }
     });
@@ -6424,12 +6424,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (f && grid) {
       const bar = document.createElement('div');
       bar.className = 'ui-filterbar';
-      const t = document.createElement('span');
-      t.textContent = `${f.by === 'user' ? '已筛选' : '豆芽筛选'}：${f.label || ''} · 显示 ${(f.matchIds || []).length}/${f.total || 0} 张`;
+      const label = document.createElement('span');
+      label.textContent = t(f.by === 'user' ? 'today.filter_user' : 'today.filter_bot', { label: f.label || '', shown: (f.matchIds || []).length, total: f.total || 0 });
       const clear = document.createElement('button');
-      clear.type = 'button'; clear.textContent = '显示全部';
+      clear.type = 'button'; clear.textContent = t('today.filter_clear');
       clear.addEventListener('click', () => sendUserOp({ op: 'clearFilter' }));
-      bar.append(t, clear);
+      bar.append(label, clear);
       grid.before(bar);
     }
   }

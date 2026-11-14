@@ -389,3 +389,19 @@ test('Settings config check statuses go through i18n', () => {
     assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
   }
 })
+
+test('Today refresh button and status go through i18n', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of ["btn.textContent = '汇聚中...'", "status.textContent = '正在获取数据...'", "'汇聚失败'", "'⚡ 重新汇聚'", "status.textContent = '⚠️ 生成失败'", "'✓ 已汇聚（Bot 失败，已用旧流水线）'", '`✓ Bot 汇聚完成']) {
+    assert.ok(!html.includes(s), `hardcoded zh copy left in generateDigest: ${s}`)
+  }
+  assert.equal(t('today.digest_running', 'en'), 'Refreshing…')
+  assert.equal(t('today.digest_fetching', 'zh'), '正在获取数据...')
+  assert.equal(t('today.digest_bot_partial', 'en', { channels: 'gmail, slack' }), 'Bot refresh complete (gmail, slack not updated)')
+  assert.equal(t('today.digest_legacy_fallback', 'zh'), '已汇聚（Bot 失败，已用旧流水线）')
+  assert.equal(t('today.digest_again_bolt', 'en'), 'Refresh again')
+  for (const k of ['today.digest_running', 'today.digest_fetching', 'today.digest_failed', 'today.digest_generate_failed', 'today.digest_again_bolt', 'today.digest_bot_done', 'today.digest_bot_partial', 'today.digest_legacy_fallback']) {
+    assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
+  }
+})
+

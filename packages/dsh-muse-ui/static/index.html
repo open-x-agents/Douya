@@ -5180,8 +5180,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const status = $('digestStatus');
     
     btn.disabled = true;
-    btn.textContent = '汇聚中...';
-    status.textContent = '正在获取数据...';
+    btn.textContent = t('today.digest_running');
+    status.textContent = t('today.digest_fetching');
     status.style.color = 'var(--blue)';
     
     try {
@@ -5195,7 +5195,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       if (result?.bot?.id) finishedDigests.add(result.bot.id);
       
       if (!result.success) {
-        status.textContent = '⚠️ ' + (result.error || '汇聚失败');
+        status.textContent = '⚠️ ' + (result.error || t('today.digest_failed'));
         status.style.color = 'var(--red)';
         btn.textContent = t('today.digest_now_bolt');
         btn.disabled = false;
@@ -5203,16 +5203,23 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       }
       
       const failedCh = Object.entries(result.bot?.channels || {}).filter(([, v]) => v.status !== 'done').map(([k]) => k);
-      status.textContent = result.mode === 'bot' ? `✓ Bot 汇聚完成${failedCh.length ? `（${failedCh.join('、')} 未更新）` : ''}` : result.mode === 'legacy-fallback' ? '✓ 已汇聚（Bot 失败，已用旧流水线）' : '✓ 已汇聚';
+      const chSep = odmLang() === 'zh' ? '、' : ', ';
+      status.textContent = result.mode === 'bot'
+        ? (failedCh.length
+            ? '✓ ' + t('today.digest_bot_partial', { channels: failedCh.join(chSep) })
+            : '✓ ' + t('today.digest_bot_done'))
+        : result.mode === 'legacy-fallback'
+          ? '✓ ' + t('today.digest_legacy_fallback')
+          : '✓ ' + t('digest.status');
       status.style.color = 'var(--green)';
-      btn.textContent = '⚡ 重新汇聚';
+      btn.textContent = t('today.digest_again_bolt');
       btn.disabled = false;
       
       // Reload today page
       await loadToday();
     } catch (err) {
       console.error('Failed to generate digest:', err);
-      status.textContent = '⚠️ 生成失败';
+      status.textContent = '⚠️ ' + t('today.digest_generate_failed');
       status.style.color = 'var(--red)';
       btn.textContent = t('today.digest_now_bolt');
       btn.disabled = false;

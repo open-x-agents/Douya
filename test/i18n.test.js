@@ -405,3 +405,17 @@ test('Today refresh button and status go through i18n', () => {
   }
 })
 
+test('Today live digest progress goes through i18n', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of ["const DP_ZH = { queued: '排队'", "head.textContent = '汇聚中'", '${c.cards} 张', "chip('Chief 合并'"]) {
+    assert.ok(!html.includes(s), `hardcoded zh copy left in renderDigestProgress: ${s}`)
+  }
+  assert.equal(t('today.dp_heading', 'en'), 'Refreshing')
+  assert.equal(t('today.dp_thinking', 'zh'), '整理中…')
+  assert.equal(t('today.dp_cards', 'en', { n: 3 }), '3 cards')
+  assert.equal(t('today.dp_cards', 'zh', { n: 3 }), '3 张')
+  assert.equal(t('today.dp_chief', 'en'), 'Chief merge')
+  for (const k of ['today.dp_heading', 'today.dp_queued', 'today.dp_fetching', 'today.dp_thinking', 'today.dp_done', 'today.dp_failed', 'today.dp_timeout', 'today.dp_skipped', 'today.dp_cards', 'today.dp_chief']) {
+    assert.ok(messages.en[k] && messages.zh[k], `missing ${k}`)
+  }
+})

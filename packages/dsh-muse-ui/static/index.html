@@ -6721,7 +6721,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     };
   }
   // Bot digest progress on 今天: 'Gmail 整理中… · GitHub 完成 · Chief 合并中…'
-  const DP_ZH = { queued: '排队', fetching: '获取中…', thinking: '整理中…', done: '完成', failed: '失败', timeout: '超时', skipped: '跳过' };
+  const DP_STATUS = () => ({ queued: t('today.dp_queued'), fetching: t('today.dp_fetching'), thinking: t('today.dp_thinking'), done: t('today.dp_done'), failed: t('today.dp_failed'), timeout: t('today.dp_timeout'), skipped: t('today.dp_skipped') });
   const finishedDigests = new Set(); let dpHideTimer = null;
   function renderDigestProgress(p) {
     const el = $('digestProgress'); if (!el || !p) return;
@@ -6729,10 +6729,10 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (p.status !== 'running' || finishedDigests.has(p.runId)) { if (p.runId) finishedDigests.add(p.runId); el.hidden = true; return; }
     clearTimeout(dpHideTimer);
     if (p.chief?.status === 'done') dpHideTimer = setTimeout(() => { el.hidden = true; }, 3000);
-    const chip = (label, st, extra) => { const c = document.createElement('span'); c.className = 'dp-chip ' + (st === 'done' ? 'dp-done' : st === 'failed' || st === 'timeout' ? 'dp-bad' : 'dp-run'); c.textContent = `${label} ${DP_ZH[st] || st}${extra ? ' · ' + extra : ''}`; return c; };
-    const head = document.createElement('b'); head.style.marginRight = '4px'; head.textContent = '汇聚中';
-    const extraOf = c => c.status === 'done' ? (c.note || (c.cards != null ? `${c.cards} 张` : '')) : (c.status === 'failed' || c.status === 'timeout' || c.status === 'skipped') && c.error ? String(c.error).slice(0, 40) : '';
-    el.replaceChildren(head, ...Object.values(p.channels || {}).map(c => { const n = chip(c.label, c.status, extraOf(c)); if (c.error) n.title = c.error; return n; }), chip('Chief 合并', p.chief?.status || 'queued'));
+    const chip = (label, st, extra) => { const c = document.createElement('span'); c.className = 'dp-chip ' + (st === 'done' ? 'dp-done' : st === 'failed' || st === 'timeout' ? 'dp-bad' : 'dp-run'); c.textContent = `${label} ${DP_STATUS()[st] || st}${extra ? ' · ' + extra : ''}`; return c; };
+    const head = document.createElement('b'); head.style.marginRight = '4px'; head.textContent = t('today.dp_heading');
+    const extraOf = c => c.status === 'done' ? (c.note || (c.cards != null ? t('today.dp_cards', { n: c.cards }) : '')) : (c.status === 'failed' || c.status === 'timeout' || c.status === 'skipped') && c.error ? String(c.error).slice(0, 40) : '';
+    el.replaceChildren(head, ...Object.values(p.channels || {}).map(c => { const n = chip(c.label, c.status, extraOf(c)); if (c.error) n.title = c.error; return n; }), chip(t('today.dp_chief'), p.chief?.status || 'queued'));
     el.hidden = false;
   }
   window.__odmDigestProgress = renderDigestProgress;

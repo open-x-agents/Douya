@@ -2472,6 +2472,7 @@
     if (reload && typeof loadToday === 'function') loadToday({ force: true }).catch(() => {});
     if (reload && typeof loadSources === 'function' && $('v-sources')?.classList.contains('on')) loadSources(false);
     if (reload && typeof loadDigestPrefs === 'function' && $('v-settings')?.classList.contains('on')) loadDigestPrefs();
+    if (reload && typeof checkConfig === 'function' && $('v-settings')?.classList.contains('on')) checkConfig();
   }
   window.setAppLocale = setAppLocale;
   document.querySelectorAll('.lang-switch').forEach(sw => {

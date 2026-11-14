@@ -373,6 +373,9 @@ export const messages = {
     'draft.send': 'Confirm send',
     'draft.edit': 'Edit',
     'draft.preparing': 'Preparing send…',
+    'draft.confirmed': 'Confirmed',
+    'reply.more': 'Show details ({n})',
+    'reply.less': 'Hide details',
 
     'hero.now': 'Now',
     'hero.next': 'Up next',
@@ -1219,6 +1222,9 @@ export const messages = {
     'draft.send': '确认发送',
     'draft.edit': '修改',
     'draft.preparing': '准备发送…',
+    'draft.confirmed': '已确认',
+    'reply.more': '展开细节（{n} 段）',
+    'reply.less': '收起细节',
 
     'hero.now': '现在',
     'hero.next': '接下来',

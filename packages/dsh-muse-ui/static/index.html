@@ -2939,7 +2939,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       pending.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       pending.classList.add('act-flash'); setTimeout(() => pending.classList.remove('act-flash'), 1600);
       pending.querySelector('.act-go')?.click();
-      btn.disabled = true; btn.textContent = '已确认';
+      btn.disabled = true; btn.textContent = t('draft.confirmed');
       return;
     }
     btn.disabled = true; btn.textContent = t('draft.preparing');
@@ -4450,12 +4450,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const textLen = foldable.reduce((n, k) => n + (k.textContent || '').length, 0);
     if (lead && lead.classList.contains('rp-lead') && foldable.length && textLen > 240) {
       const det = document.createElement('details'); det.className = 'rp-more';
-      const sum = document.createElement('summary'); sum.textContent = `展开细节（${foldable.length} 段）`;
+      const sum = document.createElement('summary'); sum.textContent = t('reply.more', { n: foldable.length });
       det.appendChild(sum);
       const firstDraft = body.find(k => k.classList.contains('md-draft'));
       foldable.forEach(k => det.appendChild(k));
       if (firstDraft) md.insertBefore(det, firstDraft); else md.appendChild(det);
-      det.addEventListener('toggle', () => { sum.textContent = det.open ? '收起细节' : `展开细节（${foldable.length} 段）`; });
+      det.addEventListener('toggle', () => { sum.textContent = det.open ? t('reply.less') : t('reply.more', { n: foldable.length }); });
     }
     if (opts.length) {
       const row = document.createElement('div'); row.className = 'rp-opts';

@@ -462,3 +462,16 @@ test('Today pin badge, highlight chip and filter bar go through i18n without sha
     assert.ok(messages.en['today.' + k] && messages.zh['today.' + k], `missing today.${k}`)
   }
 })
+
+test('Draft confirmed button and reply fold summary go through i18n', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of ["textContent = '已确认'", '展开细节（', "'收起细节'"]) {
+    assert.ok(!html.includes(s), `hardcoded zh copy left: ${s}`)
+  }
+  assert.equal(t('draft.confirmed', 'en'), 'Confirmed')
+  assert.equal(t('draft.confirmed', 'zh'), '已确认')
+  assert.equal(t('reply.more', 'en', { n: 3 }), 'Show details (3)')
+  assert.equal(t('reply.more', 'zh', { n: 3 }), '展开细节（3 段）')
+  assert.equal(t('reply.less', 'en'), 'Hide details')
+  assert.equal(t('reply.less', 'zh'), '收起细节')
+})

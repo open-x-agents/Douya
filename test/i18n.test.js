@@ -390,6 +390,14 @@ test('Settings config check statuses go through i18n', () => {
   }
 })
 
+test('switching language on Settings repaints the config status lines', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  const start = html.indexOf('function setAppLocale')
+  const body = html.slice(start, html.indexOf("document.querySelectorAll('.lang-switch')", start))
+  assert.ok(start > 0)
+  assert.match(body, /\$\('v-settings'\)\?\.classList\.contains\('on'\)\) checkConfig\(\)/, 'setAppLocale re-runs checkConfig() while Settings is open')
+})
+
 test('Today refresh button and status go through i18n', () => {
   const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
   for (const s of ["btn.textContent = '汇聚中...'", "status.textContent = '正在获取数据...'", "'汇聚失败'", "'⚡ 重新汇聚'", "status.textContent = '⚠️ 生成失败'", "'✓ 已汇聚（Bot 失败，已用旧流水线）'", '`✓ Bot 汇聚完成']) {

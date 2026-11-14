@@ -6611,7 +6611,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     };
   }
   function renderSurface(view, ctx = {}, placement = 'chat') {
-    if (!window.OdmUi) { const d = document.createElement('div'); d.className = 'sf-empty'; d.textContent = '视图组件没加载出来，刷新页面再试'; return d; }
+    if (!window.OdmUi) { const d = document.createElement('div'); d.className = 'sf-empty'; d.textContent = t('view.load_failed'); return d; }
     const node = OdmUi.render(view, surfaceHost(ctx), {
       placement,
       onPanel: v => openPanel(v),
@@ -6634,7 +6634,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (currentZoomCard) closeTileZoom();
     rerenderToday();
     views.today && views.today.scrollTo({ top: 0, behavior: 'smooth' });
-    showUiToast(`已把「${view.title}」放到今天页顶部`);
+    showUiToast(t('view.pinned_toast', { title: view.title }));
   }
   function closePanel(id) { panelViews.delete(id); savePanelIds(); rerenderToday(); }
   async function refreshPanels() {
@@ -6645,15 +6645,15 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   }
   async function saveSurface(id, b) {
     const r = await fetch('/api/opendigitalmate/surface', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'save', id }) }).then(x => x.json()).catch(() => null);
-    if (!r || !r.success) { if (b) b.disabled = false; showUiToast((r && r.error) || '保存失败'); return; }
-    if (b) b.textContent = '已保存';
-    showUiToast('已保存为今天页上的卡片');
+    if (!r || !r.success) { if (b) b.disabled = false; showUiToast((r && r.error) || t('view.save_failed')); return; }
+    if (b) b.textContent = t('view.saved');
+    showUiToast(t('view.saved_toast'));
     loadToday().catch(() => {});
   }
   async function removeViewCard(view) {
     const id = view.savedCardId; if (!id) return;
     await fetch('/api/opendigitalmate/card-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }).catch(() => {});
-    showUiToast(`已移除视图卡「${view.title}」`);
+    showUiToast(t('view.removed_toast', { title: view.title }));
     loadToday().catch(() => {});
   }
   function mountPanelsAndViews(container, cards) {
@@ -6666,7 +6666,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const card = cards[Number(tile.getAttribute('data-idx'))];
       if (!card) return;
       if (card.view && !card.view.error) tile.appendChild(renderSurface(card.view, {}, 'card'));
-      else { const d = document.createElement('div'); d.className = 'sf-empty'; d.textContent = `视图「${card.title || ''}」引用的卡片已经不在了`; tile.appendChild(d); }
+      else { const d = document.createElement('div'); d.className = 'sf-empty'; d.textContent = t('view.missing', { title: card.title || '' }); tile.appendChild(d); }
     });
   }
   function onSurfaceEvent(e) {
@@ -6682,12 +6682,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     let bar = $('uiSuggest');
     if (!bar) { bar = document.createElement('div'); bar.id = 'uiSuggest'; bar.className = 'ui-suggest'; document.body.appendChild(bar); }
     bar.textContent = '';
-    const t = document.createElement('span'); t.textContent = e.message || '豆芽有个布局建议';
-    const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'ui-sg-ok'; ok.textContent = '应用';
+    const msg = document.createElement('span'); msg.textContent = e.message || t('suggest.default');
+    const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'ui-sg-ok'; ok.textContent = t('suggest.apply');
     ok.addEventListener('click', async () => { bar.classList.remove('show'); if (typeof e.onApply === 'function') e.onApply(); else await sendUserOp(e.op); });
-    const no = document.createElement('button'); no.type = 'button'; no.className = 'ui-sg-no'; no.textContent = '忽略';
+    const no = document.createElement('button'); no.type = 'button'; no.className = 'ui-sg-no'; no.textContent = t('suggest.ignore');
     no.addEventListener('click', () => { bar.classList.remove('show'); if (typeof e.onIgnore === 'function') e.onIgnore(); });
-    bar.append(t, ok, no); bar.classList.add('show');
+    bar.append(msg, ok, no); bar.classList.add('show');
   }
 
   // ===== 豆芽 Intelligent UI (P3): live feed — streamed reply text, tool progress, view skeletons =====
@@ -6769,7 +6769,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     t.skeleton = (title) => {
       if (!t.firstSkeletonAt) t.firstSkeletonAt = Date.now();
       const sk = document.createElement('div'); sk.className = 'sf-skel';
-      const b = document.createElement('b'); b.textContent = `${title} · 生成中…`; sk.appendChild(b);
+      const b = document.createElement('b'); b.textContent = I18N.t('view.generating', { title }); sk.appendChild(b);
       for (let i = 0; i < 3; i++) { const l = document.createElement('i'); l.style.width = `${90 - i * 18}%`; sk.appendChild(l); }
       container.appendChild(sk); t.skels.push(sk); scroll();
     };

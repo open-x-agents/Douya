@@ -475,3 +475,18 @@ test('Draft confirmed button and reply fold summary go through i18n', () => {
   assert.equal(t('reply.less', 'en'), 'Hide details')
   assert.equal(t('reply.less', 'zh'), '收起细节')
 })
+
+test('View card toasts, suggestion bar and view skeleton go through i18n', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of ["textContent = '应用'", "textContent = '忽略'", "textContent = '已保存'", '· 生成中…`', '豆芽有个布局建议', '已保存为今天页上的卡片', '引用的卡片已经不在了', '视图组件没加载出来']) {
+    assert.ok(!html.includes(s), `hardcoded zh copy left: ${s}`)
+  }
+  assert.ok(html.includes("const msg = document.createElement('span'); msg.textContent = e.message || t('suggest.default')"), 'suggestion bar must not shadow t()')
+  assert.equal(t('suggest.apply', 'en'), 'Apply')
+  assert.equal(t('suggest.ignore', 'zh'), '忽略')
+  assert.equal(t('view.generating', 'en', { title: 'Inbox' }), 'Inbox · generating…')
+  assert.equal(t('view.pinned_toast', 'zh', { title: 'X' }), '已把「X」放到今天页顶部')
+  for (const k of ['load_failed', 'pinned_toast', 'save_failed', 'saved', 'saved_toast', 'removed_toast', 'missing', 'generating']) {
+    assert.ok(messages.en['view.' + k] && messages.zh['view.' + k], `missing view.${k}`)
+  }
+})

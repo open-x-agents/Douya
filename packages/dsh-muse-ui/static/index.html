@@ -5730,19 +5730,19 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const llmStatus = $('llmStatus') || { innerHTML: '' };
       
       if (data.configured) {
-        status.innerHTML = '<span style="color:var(--green)">✓ 已配置</span>';
+        status.innerHTML = `<span style="color:var(--green)">✓ ${escapeHtml(t('status.configured'))}</span>`;
       } else {
-        status.innerHTML = '<span style="color:var(--amber)">⚠ 未配置或配置不完整</span>';
+        status.innerHTML = `<span style="color:var(--amber)">⚠ ${escapeHtml(t('status.incomplete'))}</span>`;
       }
       
       if (data.llmConfigured) {
-        llmStatus.innerHTML = '<span style="color:var(--green)">✓ 已配置</span>';
+        llmStatus.innerHTML = `<span style="color:var(--green)">✓ ${escapeHtml(t('status.configured'))}</span>`;
       } else {
-        llmStatus.innerHTML = '<span style="color:var(--red)">✗ 未配置（聊天功能受限）</span>';
+        llmStatus.innerHTML = `<span style="color:var(--red)">✗ ${escapeHtml(t('status.llm_missing'))}</span>`;
       }
     } catch (err) {
-      if ($('configStatus')) $('configStatus').innerHTML = '<span style="color:var(--red)">检查失败</span>';
-      if ($('llmStatus')) $('llmStatus').innerHTML = '<span style="color:var(--red)">检查失败</span>';
+      if ($('configStatus')) $('configStatus').innerHTML = `<span style="color:var(--red)">${escapeHtml(t('status.check_failed'))}</span>`;
+      if ($('llmStatus')) $('llmStatus').innerHTML = `<span style="color:var(--red)">${escapeHtml(t('status.check_failed'))}</span>`;
     }
   }
 

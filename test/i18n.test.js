@@ -793,3 +793,30 @@ test('card-side chat header follows the UI locale', () => {
   assert.ok(zoomFn.includes("t('zoom.chat_sub')"), 'openTileZoom uses zoom.chat_sub')
   assert.ok(zoomFn.includes("t('zoom.chat_hist', { n: d.messages.length })"), 'openTileZoom uses zoom.chat_hist')
 })
+
+test('Composio connect toasts follow the UI locale', () => {
+  assert.equal(t('sources.toast_ok', 'en', { name: 'Gmail' }), 'Gmail is connected')
+  assert.equal(t('sources.toast_ok', 'zh', { name: 'Gmail' }), 'Gmail 已连接')
+  assert.equal(t('sources.toast_ok', 'en', { name: 'Google Calendar' }), 'Google Calendar is connected')
+  assert.equal(t('sources.toast_ok', 'zh', { name: 'Google 日历' }), 'Google 日历 已连接')
+  assert.equal(t('sources.toast_fail', 'en'), 'Connection didn’t work. You can tap Connect again.')
+  assert.equal(t('sources.toast_fail', 'zh'), '连接没有成功，可以再点一次「连接」')
+  assert.equal(t('sources.toast_fail_error', 'en', { error: 'timeout' }), 'Connection didn’t work: timeout. You can tap Connect again.')
+  assert.equal(t('sources.toast_fail_error', 'zh', { error: 'timeout' }), '连接没有成功：timeout，可以再点一次「连接」')
+  assert.equal(t('sources.generic', 'en'), 'Source')
+  assert.equal(t('sources.generic', 'zh'), '信源')
+  assert.equal(t('app.googlecalendar.name', 'en'), 'Google Calendar')
+  assert.equal(t('app.googlecalendar.name', 'zh'), 'Google 日历')
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  const fn = (html.match(/function onComposioConnected\(msg\) \{[\s\S]*?\n  \}\n/) || [])[0] || ''
+  assert.ok(fn.includes('function onComposioConnected'), 'found onComposioConnected in index.html')
+  for (const s of ['Google 日历', '已连接', '连接没有成功', '可以再点一次「连接」', "|| '信源'"]) {
+    assert.ok(!fn.includes(s), `hardcoded zh left in onComposioConnected: ${s}`)
+  }
+  assert.ok(fn.includes("t('app.' + msg.toolkit + '.name')") || fn.includes("('app.' + msg.toolkit + '.name')"), 'onComposioConnected uses app.*.name')
+  assert.ok(fn.includes("t('sources.toast_ok', { name })"), 'onComposioConnected uses sources.toast_ok')
+  assert.ok(fn.includes("t('sources.toast_fail_error', { error: msg.error })"), 'onComposioConnected uses sources.toast_fail_error')
+  assert.ok(fn.includes("t('sources.toast_fail')"), 'onComposioConnected uses sources.toast_fail')
+  assert.ok(fn.includes("t('sources.generic')"), 'onComposioConnected uses sources.generic')
+})
+

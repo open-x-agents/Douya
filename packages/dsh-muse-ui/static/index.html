@@ -7004,16 +7004,16 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const el = document.createElement('div');
     el.className = 'kb-help'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', t('kb.title'));
     el.innerHTML = `<div class="kh-panel"><h4>${t('kb.title')}</h4><dl>
-      <dt>J / K</dt><dd>在工作卡之间移动焦点</dd>
-      <dt>E</dt><dd>打开当前卡（详情 + 对话）</dd>
-      <dt>C</dt><dd>完成当前卡（可撤销）</dd>
-      <dt>S</dt><dd>推迟当前卡</dd>
-      <dt>Enter</dt><dd>打开已收起的对话栏</dd>
-      <dt>⌘/Ctrl+Enter</dt><dd>发送消息（输入框内）</dd>
-      <dt>Esc</dt><dd>关闭浮层 / 收起建议 / 收起对话</dd>
-      <dt>?</dt><dd>打开本说明</dd>
-    </dl><p class="kh-note">在输入框、IME 组字中，或对话栏打开时，单键快捷键不会触发，避免打断中文输入。</p>
-    <button type="button" class="kh-close">知道了</button></div>`;
+      <dt>J / K</dt><dd>${t('kb.nav')}</dd>
+      <dt>E</dt><dd>${t('kb.open')}</dd>
+      <dt>C</dt><dd>${t('kb.done')}</dd>
+      <dt>S</dt><dd>${t('kb.snooze')}</dd>
+      <dt>Enter</dt><dd>${t('kb.enter')}</dd>
+      <dt>⌘/Ctrl+Enter</dt><dd>${t('kb.send')}</dd>
+      <dt>Esc</dt><dd>${t('kb.esc')}</dd>
+      <dt>?</dt><dd>${t('kb.help')}</dd>
+    </dl><p class="kh-note">${t('kb.note')}</p>
+    <button type="button" class="kh-close">${t('kb.close')}</button></div>`;
     document.body.appendChild(el);
     requestAnimationFrame(() => el.classList.add('open'));
     el.addEventListener('click', ev => { if (ev.target === el || ev.target.classList.contains('kh-close')) closeKbHelp(); });

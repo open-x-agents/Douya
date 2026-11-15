@@ -498,3 +498,14 @@ test('Dead manual digest push handler (no #pushDigestBtn in the page) is gone', 
     assert.ok(!html.includes(s), `dead zh push code left: ${s}`)
   }
 })
+
+test('Quote face time, link fallback and quick done/useless failure toast are localized', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of ['} 分钟前`', '} 小时前`', '} 天前`', "r.error || '没标上'", "p.link.host || '链接'"]) {
+    assert.ok(!html.includes(s), `hardcoded zh left: ${s}`)
+  }
+  assert.ok(html.includes("t('face.rel_min'"), 'faceRelTime uses face.rel_* keys')
+  for (const k of ['face.rel_min', 'face.rel_hour', 'face.rel_day', 'face.link']) {
+    for (const loc of ['en', 'zh']) assert.ok(messages[loc][k], `${loc} has ${k}`)
+  }
+})

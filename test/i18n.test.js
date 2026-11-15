@@ -490,3 +490,11 @@ test('View card toasts, suggestion bar and view skeleton go through i18n', () =>
     assert.ok(messages.en['view.' + k] && messages.zh['view.' + k], `missing view.${k}`)
   }
 })
+
+test('Dead manual digest push handler (no #pushDigestBtn in the page) is gone', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  assert.ok(!html.includes('id="pushDigestBtn"'), 'no push button in markup')
+  for (const s of ["$('pushDigestBtn')", '推送中...', '手动推送汇聚', '推送成功！已发送']) {
+    assert.ok(!html.includes(s), `dead zh push code left: ${s}`)
+  }
+})

@@ -675,6 +675,13 @@ export const messages = {
     'chip.ask_handle': 'Help me with “{title}”',
     'chip.empty_prompt': 'What should I start with today?',
 
+    'brief.ready': 'Douya is ready',
+    'brief.from_github': 'From GitHub',
+    'brief.act_mine': 'Let Douya take it forward',
+    'brief.act_review': 'Draft a review',
+    'brief.ask_mine': 'My PR #{number} “{title}” {url}. What we know: {facts}. First give me a one-line conclusion (can it merge / what\'s blocking), then the next step; if I need to nudge someone or reply, draft it for me to confirm — don\'t send it (card id {cardId}).',
+    'brief.ask_review': 'Help me review PR #{number} “{title}” {url}. What we know: {facts}. First a one-line conclusion (approve or request changes), then 2–3 points most worth looking at, and finally a review-comment draft — wait for me to confirm before submitting (card id {cardId}).',
+
     'chat.ctx_label': 'Talking about',
     'chat.ctx_clear': 'Stop focusing this card',
     'composer.tools_aria': 'Attach & voice',
@@ -1573,6 +1580,13 @@ export const messages = {
     'chip.can_wait': '这张可以先放着吗？',
     'chip.ask_handle': '帮我处理「{title}」',
     'chip.empty_prompt': '今天想先做什么？',
+
+    'brief.ready': '豆芽已备好',
+    'brief.from_github': '来自 GitHub',
+    'brief.act_mine': '让豆芽推进',
+    'brief.act_review': '起草评审意见',
+    'brief.ask_mine': '我的 PR #{number}「{title}」{url}。已知：{facts}。先一句话告诉我结论（能不能合 / 卡在哪），再给我下一步；需要催人或回复就起草好给我确认，别直接发（卡片 id {cardId}）。',
+    'brief.ask_review': '帮我审 PR #{number}「{title}」{url}。已知：{facts}。先一句话结论（能不能批、要不要改），再列 2–3 个最该看的点，最后给一段评审意见草稿，等我确认再提交（卡片 id {cardId}）。',
 
     'chat.ctx_label': '正在聊',
     'chat.ctx_clear': '不针对这张卡',

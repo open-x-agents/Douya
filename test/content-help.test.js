@@ -97,8 +97,10 @@ test('brief endpoint + UI: hero and card zoom mount it; merged source ticks the 
   assert.match(routes, /path: '\/api\/opendigitalmate\/card-brief'/)
   assert.match(api, /brief\.resolved && live && !\(st\.itemStatus \|\| \{\}\)\[target\.url\]/)
   assert.match(html, /mountBrief\(nxEl\.querySelector\('\.nx-slot'\)/); assert.match(html, /mountBrief\(slot, card, \{ live \}\)/)
-  assert.match(html, /先一句话结论/)
+  assert.match(html, /brief\.ask_mine/)
+  assert.match(html, /brief\.ask_review/)
 })
+
 
 // ---- 「没用」 feedback loop ----
 test('没用 writes a digest preference naming the kind of thing', () => {

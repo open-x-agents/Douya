@@ -3047,7 +3047,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (SYS_TYPES.has(card.type)) return card.title || '';
     if (isMailGroup(card)) {
       const open = openItemCount(card);
-      return open ? `${card.title} · ${open} 封` : `${card.title} · 已全部处理`;
+      return open ? t('today.head_mail', { title: card.title, n: open }) : t('today.head_mail_done', { title: card.title });
     }
     const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
     const parts = [];
@@ -3058,6 +3058,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   function zhBody(card) {
     const b = String(card.body || '').trim();
     if (/[\u4e00-\u9fa5]/.test(b)) return b;
+    if (odmLang() !== 'zh') return b;
     const r = repoOf(card);
     const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
     const mails = linksOf(card).filter(l => linkKind(l).k === 'mail').length;
@@ -3069,30 +3070,30 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   }
   function nextAction(card) {
     const isGh = card.source === 'github' || !!repoOf(card);
-    if (isMailGroup(card) && linksOf(card).length && !openItemCount(card)) return '这组邮件都处理完了，不用再看';
+    if (isMailGroup(card) && linksOf(card).length && !openItemCount(card)) return t('today.next_mail_done');
     if (card.nextAction && !VAGUE_NEXT.test(card.nextAction) && !(isGh && /邮件|Re:/i.test(card.nextAction))) return card.nextAction;
     if (isGh) {
       const ghLinks = linksOf(card).filter(l => linkKind(l).k !== 'mail');
       const prL = ghLinks.find(l => linkKind(l).k === 'pr'), isL = ghLinks.find(l => linkKind(l).k === 'issue');
       const pr0 = statOf(card, 'PR'), iss0 = statOf(card, 'issue');
-      if (prL) return `先推进 PR「${clip(prL.title, 30)}」，催 review 或合并`;
-      if (pr0) return `打开 PR 列表，推进 ${pr0} 个待合并 PR`;
-      if (isL) return `先回复 issue「${clip(isL.title, 30)}」`;
-      if (iss0) return `分拣 ${iss0} 个 issue，挑出今天要回复的 1–2 个`;
+      if (prL) return t('today.next_push_pr_named', { title: clip(prL.title, 30) });
+      if (pr0) return t('today.next_push_pr_n', { n: pr0 });
+      if (isL) return t('today.next_reply_issue', { title: clip(isL.title, 30) });
+      if (iss0) return t('today.next_triage_issues', { n: iss0 });
     }
     const pr = statOf(card, 'PR'), iss = statOf(card, 'issue');
-    const review = statOf(card, '待你审') || statOf(card, '审');
+    const review = statOf(card, '待你审') || statOf(card, '审') || statOf(card, 'Needs Review') || statOf(card, 'review');
     const links = linksOf(card);
     const first = links[0];
-    if (review && first) return `先审「${clip(first.title, 30)}」`;
-    if (first && linkKind(first).k === 'mail') return `先回复邮件「${clip(first.title.replace(/^Re:\s*/i, ''), 30)}」`;
-    if (pr && first) return `先推进「${clip(first.title, 30)}」，催 review 或合并`;
-    if (pr) return `逐个推进 ${pr} 个 PR 的 review 与合并`;
-    if (iss) return `分拣 ${iss} 个 issue，挑出今天要回复的 1–2 个`;
+    if (review && first) return t('today.next_review_named', { title: clip(first.title, 30) });
+    if (first && linkKind(first).k === 'mail') return t('today.next_reply_mail', { title: clip(first.title.replace(/^Re:\s*/i, ''), 30) });
+    if (pr && first) return t('today.next_push_named', { title: clip(first.title, 30) });
+    if (pr) return t('today.next_push_prs', { n: pr });
+    if (iss) return t('today.next_triage_issues', { n: iss });
     const a0 = card.actions && card.actions[0] && card.actions[0].label;
     if (a0 && !VAGUE_NEXT.test(a0)) return a0;
-    if (first) return `看一下「${clip(first.title, 30)}」是否需要跟进`;
-    return card.title ? `看一下「${clip(card.title, 30)}」是否需要跟进` : '看一下是否需要跟进';
+    if (first) return t('today.next_check_named', { title: clip(first.title, 30) });
+    return card.title ? t('today.next_check_named', { title: clip(card.title, 30) }) : t('today.next_check');
   }
 
   function deepLinks(card) {

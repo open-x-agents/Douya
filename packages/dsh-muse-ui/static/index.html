@@ -4187,9 +4187,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   const briefMemo = new Map(); // cardId -> { at, r }
   function briefAskPrompt(card, b) {
     const facts = b.lines.map(l => `${l.k}：${l.v}`).join('；');
-    return b.mine
-      ? `我的 PR #${b.number}「${b.title}」${b.url}。已知：${facts}。先一句话告诉我结论（能不能合 / 卡在哪），再给我下一步；需要催人或回复就起草好给我确认，别直接发（卡片 id ${card.id}）。`
-      : `帮我审 PR #${b.number}「${b.title}」${b.url}。已知：${facts}。先一句话结论（能不能批、要不要改），再列 2–3 个最该看的点，最后给一段评审意见草稿，等我确认再提交（卡片 id ${card.id}）。`;
+    return t(b.mine ? 'brief.ask_mine' : 'brief.ask_review', { number: b.number, title: b.title, url: b.url || '', facts, cardId: card.id });
   }
   async function mountBrief(slot, card, { compact = false, live = () => true } = {}) {
     if (!slot || !card || !card.id || card.source !== 'github') return;
@@ -4202,8 +4200,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (m.r && m.r.blocked) { slot.innerHTML = `<div class="brief brief-note">${escapeHtml(m.r.error || '')}</div>`; return; }
     if (!b || !live() || !slot.isConnected) return;
     const rows = (compact ? b.lines.filter(l => l.k !== '作者说').slice(0, 2) : b.lines);
-    const label = b.mine ? '让豆芽推进' : '起草评审意见';
-    slot.innerHTML = `<div class="brief${compact ? ' compact' : ''}"><div class="brief-h"><span>豆芽已备好 · <a href="${escapeHtml(b.url || '')}" target="_blank" rel="noopener">#${escapeHtml(String(b.number))}</a></span><small>来自 GitHub · ${escapeHtml(chatTime(b.at))}</small></div>`
+    const label = b.mine ? t('brief.act_mine') : t('brief.act_review');
+    slot.innerHTML = `<div class="brief${compact ? ' compact' : ''}"><div class="brief-h"><span>${escapeHtml(t('brief.ready'))} · <a href="${escapeHtml(b.url || '')}" target="_blank" rel="noopener">#${escapeHtml(String(b.number))}</a></span><small>${escapeHtml(t('brief.from_github'))} · ${escapeHtml(chatTime(b.at))}</small></div>`
       + `<dl>${rows.map(l => `<div><dt>${escapeHtml(l.k)}</dt><dd>${escapeHtml(l.v)}</dd></div>`).join('')}</dl>`
       + `<p class="brief-next">→ ${escapeHtml(b.next)}</p>`
       + (b.resolved ? '' : `<div class="brief-acts"><button type="button" class="step k-ask" data-brief-ask><i class="st-ic">✦</i>${label}</button></div>`) + '</div>';

@@ -594,3 +594,38 @@ test('Today card chat chips and quick-ask prompts follow the locale', () => {
   assert.equal(t('chip.ask_handle', 'zh', { title: 'Inbox' }), '帮我处理「Inbox」')
   assert.equal(t('chip.empty_prompt', 'en'), 'What should I start with today?')
 })
+
+test('GitHub PR brief chrome and ask prompts follow the locale', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of [
+    '豆芽已备好 ·',
+    '来自 GitHub ·',
+    "b.mine ? '让豆芽推进'",
+    "'起草评审意见'",
+    '我的 PR #${b.number}',
+    '帮我审 PR #${b.number}',
+  ]) {
+    assert.ok(!html.includes(s), `hardcoded zh left: ${s}`)
+  }
+  const keys = [
+    'brief.ready', 'brief.from_github', 'brief.act_mine', 'brief.act_review',
+    'brief.ask_mine', 'brief.ask_review',
+  ]
+  for (const k of keys) {
+    for (const loc of ['en', 'zh']) assert.ok(messages[loc][k], `${loc} has ${k}`)
+  }
+  assert.ok(html.includes("t('brief.ready')"), 'mountBrief uses brief.ready')
+  assert.ok(html.includes("t('brief.from_github')"), 'mountBrief uses brief.from_github')
+  assert.ok(html.includes("t('brief.act_mine')"), 'mountBrief uses brief.act_mine')
+  assert.ok(html.includes("t(b.mine ? 'brief.ask_mine' : 'brief.ask_review'"), 'briefAskPrompt uses brief.ask_* keys')
+  assert.equal(t('brief.ready', 'en'), 'Douya is ready')
+  assert.equal(t('brief.act_review', 'zh'), '起草评审意见')
+  assert.equal(
+    t('brief.ask_mine', 'zh', { number: 12, title: 'fix ci', url: 'https://example/12', facts: '改动：+2', cardId: 'c1' }),
+    '我的 PR #12「fix ci」https://example/12。已知：改动：+2。先一句话告诉我结论（能不能合 / 卡在哪），再给我下一步；需要催人或回复就起草好给我确认，别直接发（卡片 id c1）。',
+  )
+  assert.match(
+    t('brief.ask_review', 'en', { number: 12, title: 'fix ci', url: 'https://example/12', facts: 'size: +2', cardId: 'c1' }),
+    /Help me review PR #12 “fix ci” https:\/\/example\/12/,
+  )
+})

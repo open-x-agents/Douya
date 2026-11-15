@@ -520,3 +520,35 @@ test('Today workload tile is localized and describes log scaling', () => {
   }
   assert.ok(/log/i.test(messages.en['today.load_desc']) && messages.zh['today.load_desc'].includes('对数'), 'desc says log scaling')
 })
+
+test('Today headline, next-step fallbacks and zhBody follow the locale', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of [
+    ' · ${open} 封',
+    ' · 已全部处理',
+    '这组邮件都处理完了，不用再看',
+    '先推进 PR「',
+    '打开 PR 列表，推进',
+    '先回复 issue「',
+    '挑出今天要回复的 1–2 个',
+    '先回复邮件「',
+    '逐个推进 ${pr} 个 PR',
+    '看一下是否需要跟进',
+  ]) {
+    assert.ok(!html.includes(s), `hardcoded zh left: ${s}`)
+  }
+  assert.ok(html.includes("if (odmLang() !== 'zh') return b"), 'zhBody must leave English digest bodies as produced')
+  const keys = [
+    'today.head_mail', 'today.head_mail_done', 'today.next_mail_done',
+    'today.next_push_pr_named', 'today.next_push_pr_n', 'today.next_reply_issue',
+    'today.next_triage_issues', 'today.next_review_named', 'today.next_reply_mail',
+    'today.next_push_named', 'today.next_push_prs', 'today.next_check_named', 'today.next_check',
+  ]
+  for (const k of keys) {
+    for (const loc of ['en', 'zh']) assert.ok(messages[loc][k], `${loc} has ${k}`)
+  }
+  assert.equal(t('today.head_mail', 'en', { title: 'Inbox', n: 3 }), 'Inbox · 3 open')
+  assert.equal(t('today.head_mail_done', 'zh', { title: '收件箱' }), '收件箱 · 已全部处理')
+  assert.equal(t('today.next_mail_done', 'en'), 'This batch of mail is all handled — nothing left to do')
+  assert.equal(t('today.next_push_pr_named', 'zh', { title: 'fix ci' }), '先推进 PR「fix ci」，催 review 或合并')
+})

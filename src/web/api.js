@@ -928,9 +928,10 @@ export function createApiRouter(ctx) {
     },
 
     /** Owner marks (or un-marks) a timetable block done from the hero; the hero advances to the next block. */
-    async timetableBlockDone({ blockKey, done = true } = {}) {
+    async timetableBlockDone({ blockKey, done = true, lang } = {}) {
+      const locale = resolveLang(lang);
       const key = String(blockKey || '').slice(0, 200);
-      if (!/^\d{4}-\d{2}-\d{2}\|.+/.test(key)) return { success: false, error: '这段安排找不到了，刷新一下' };
+      if (!/^\d{4}-\d{2}-\d{2}\|.+/.test(key)) return { success: false, error: i18nT('timetable.err_missing', locale) };
       const state = store.get();
       const today = key.slice(0, 10);
       // keep the last few days only
@@ -940,10 +941,11 @@ export function createApiRouter(ctx) {
       return { success: true, blockKey: key, done: done !== false };
     },
 
-    async cardPrepRun({ cardId, prepId } = {}) {
+    async cardPrepRun({ cardId, prepId, lang } = {}) {
+      const locale = resolveLang(lang);
       const state = store.get();
       const card = (state.cards || []).find(c => c.id === cardId);
-      if (!card) return { success: false, error: '这张卡已经不在了' };
+      if (!card) return { success: false, error: i18nT('prep.err_gone', locale) };
       if (prepId === 'unsnooze') { await router.updateCard(card.id, { status: 'active', snoozeUntil: null }); return { success: true, kind: 'unsnooze' }; }
       // Named snooze presets from swipe / sheet (no forged step needed).
       if (prepId === 'snooze' || String(prepId || '').startsWith('snooze:')) {
@@ -952,15 +954,15 @@ export function createApiRouter(ctx) {
         return { success: true, kind: 'snooze', until, prepId };
       }
       const step = prepareCardActions(card, { itemStatus: state.itemStatus || {}, max: 4 }).find(p => p.id === prepId);
-      if (!step) return { success: false, error: '这一步已经过时了，刷新一下' };
+      if (!step) return { success: false, error: i18nT('prep.err_stale', locale) };
       if (step.kind === 'snooze') {
         const until = snoozeUntilFor('snooze');
         await router.updateCard(card.id, { status: 'snoozed', snoozeUntil: until });
         return { success: true, kind: 'snooze', until };
       }
-      if (step.kind !== 'act') return { success: false, error: '这一步要在对话里交给豆芽' };
+      if (step.kind !== 'act') return { success: false, error: i18nT('prep.err_in_chat', locale) };
       const r = await actionService.request(step.action, step.input, { cardId: card.id, hold: true, prepId: step.id });
-      if (!r.success) return { success: false, error: r.error || '没能准备好这个操作' };
+      if (!r.success) return { success: false, error: r.error || i18nT('prep.err_failed', locale) };
       const listed = await actionService.userOp({ op: 'list' });
       return { success: true, kind: 'act', action: (listed.actions || []).find(a => a.id === r.actionId) || null };
     },

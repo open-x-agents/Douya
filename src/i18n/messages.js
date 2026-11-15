@@ -484,6 +484,8 @@ export const messages = {
     'tt.next': 'Up next',
     'tt.empty_note': 'No plan yet · Douya fills focus and buffer from your energy curve',
     'tt.past_note': 'Today’s blocks are past · about {h}h free for wrap-up or review',
+
+    'timetable.err_missing': "Can't find this block — refresh",
     'tt.empty_title': 'A light day',
     'tt.empty_body': 'Connect Google Calendar to lock meetings on the axis; free slots fill with morning focus and afternoon chores.',
     'tt.fixed': 'fixed',
@@ -858,6 +860,11 @@ export const messages = {
     'prep.do_task': 'Hand to Douya',
     'prep.snooze': 'Tomorrow',
     'prep.snooze_hint': 'Back tomorrow at 9:00',
+
+    'prep.err_gone': 'This card is gone',
+    'prep.err_stale': 'This step is out of date — refresh',
+    'prep.err_in_chat': 'Do this step in the chat with Douya',
+    'prep.err_failed': "Couldn't get this action ready",
 
     'hero.countdown_live': 'In progress',
     'hero.countdown_mins': 'in {n} min',
@@ -1432,6 +1439,8 @@ export const messages = {
     'tt.next': '接下来',
     'tt.empty_note': '今天还没有安排 · 豆芽会按精力曲线帮你填上专注与缓冲',
     'tt.past_note': '今天的安排都已过去，剩余约 {h} 小时空闲，适合收尾或复盘。',
+
+    'timetable.err_missing': '这段安排找不到了，刷新一下',
     'tt.empty_title': '今天还很轻 🌱',
     'tt.empty_body': '连接 Google 日历后，会议会锁在轴上；空档会按上午专注、下午杂务排进来。',
     'tt.fixed': '个固定日程',
@@ -1806,6 +1815,11 @@ export const messages = {
     'prep.do_task': '交给豆芽',
     'prep.snooze': '明天再看',
     'prep.snooze_hint': '明早 9 点再出现',
+
+    'prep.err_gone': '这张卡已经不在了',
+    'prep.err_stale': '这一步已经过时了，刷新一下',
+    'prep.err_in_chat': '这一步要在对话里交给豆芽',
+    'prep.err_failed': '没能准备好这个操作',
 
     'hero.countdown_live': '进行中',
     'hero.countdown_mins': '{n} 分钟后',

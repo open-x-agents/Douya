@@ -3752,12 +3752,12 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   }
   async function runQuickSnooze(card, prepId = 'snooze:tomorrow') {
     const cardId = card.id;
-    const r = await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardId, prepId }) }).then(x => x.json()).catch(e => ({ success: false, error: e.message }));
+    const r = await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: odmHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ cardId, prepId, lang: odmLang() }) }).then(x => x.json()).catch(e => ({ success: false, error: e.message }));
     if (!r.success) { showUiToast(r.error || t('snooze.failed')); return; }
     softHaptic('snooze');
     const tile = document.querySelector(`.tile.work[data-id="${CSS.escape(cardId)}"]`);
     if (tile) { tile.classList.add('leaving'); await sleep(280); }
-    showUiToast(t(SNOOZE_LABEL_KEY[prepId] || SNOOZE_LABEL_KEY.snooze), null, { label: t('toast.undo'), onClick: async () => { await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardId, prepId: 'unsnooze' }) }); loadToday(); } });
+    showUiToast(t(SNOOZE_LABEL_KEY[prepId] || SNOOZE_LABEL_KEY.snooze), null, { label: t('toast.undo'), onClick: async () => { await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: odmHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ cardId, prepId: 'unsnooze', lang: odmLang() }) }); loadToday(); } });
     loadToday().catch(() => {});
   }
   async function runQuickDone(card) {
@@ -4165,14 +4165,14 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       return;
     }
     if (btn) { btn.disabled = true; btn.classList.add('busy'); }
-    const r = await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardId, prepId: step.kind === 'snooze' ? 'snooze' : step.id }) }).then(x => x.json()).catch(e => ({ success: false, error: e.message }));
+    const r = await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: odmHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ cardId, prepId: step.kind === 'snooze' ? 'snooze' : step.id, lang: odmLang() }) }).then(x => x.json()).catch(e => ({ success: false, error: e.message }));
     if (btn) { btn.disabled = false; btn.classList.remove('busy'); }
     if (!r.success) { showUiToast(r.error || t('toast.fail')); return; }
     if (r.kind === 'snooze') {
       const tile = document.querySelector(`.tile.work[data-id="${CSS.escape(cardId)}"]`);
       if (tile) { tile.classList.add('leaving'); await sleep(320); }
       const snoozeMsg = SNOOZE_LABEL[r.prepId] || SNOOZE_LABEL.snooze;
-      showUiToast(snoozeMsg, null, { label: t('toast.undo'), onClick: async () => { await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cardId, prepId: 'unsnooze' }) }); loadToday(); } });
+      showUiToast(snoozeMsg, null, { label: t('toast.undo'), onClick: async () => { await fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: odmHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ cardId, prepId: 'unsnooze', lang: odmLang() }) }); loadToday(); } });
       loadToday().catch(() => {});
       return;
     }
@@ -4214,7 +4214,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
 
   /** Hero 「完成了」: record the block done, slide the hero out, re-render with the next block. Undo puts it back. */
   async function markBlockDone(step, btn) {
-    const post = done => fetch('/api/opendigitalmate/timetable-block', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ blockKey: step.blockKey, done }) }).then(x => x.json()).catch(e => ({ success: false, error: e.message }));
+    const post = done => fetch('/api/opendigitalmate/timetable-block', { method: 'POST', headers: odmHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ blockKey: step.blockKey, done, lang: odmLang() }) }).then(x => x.json()).catch(e => ({ success: false, error: e.message }));
     if (btn) { btn.disabled = true; btn.classList.add('busy'); }
     const r = await post(true);
     if (btn) { btn.disabled = false; btn.classList.remove('busy'); }

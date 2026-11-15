@@ -655,3 +655,41 @@ test('GitHub PR brief chrome and ask prompts follow the locale', () => {
   assert.ok(cardBriefFn.includes("i18nT('brief.err_no_github'"), 'cardBrief uses brief.err_no_github')
   assert.ok(cardBriefFn.includes('target.url}#${locale}'), 'cardBriefs cache is keyed per language')
 })
+
+
+test('card prep and timetable-done errors follow the UI locale', () => {
+  assert.equal(t('prep.err_gone', 'en'), 'This card is gone')
+  assert.equal(t('prep.err_stale', 'zh'), '这一步已经过时了，刷新一下')
+  assert.equal(t('prep.err_in_chat', 'en'), 'Do this step in the chat with Douya')
+  assert.equal(t('prep.err_failed', 'en'), "Couldn't get this action ready")
+  assert.equal(t('timetable.err_missing', 'zh'), '这段安排找不到了，刷新一下')
+  assert.equal(t('timetable.err_missing', 'en'), "Can't find this block — refresh")
+  const apiSrc = readFileSync(new URL('../src/web/api.js', import.meta.url), 'utf8')
+  const cardPrepFn = (apiSrc.match(/async cardPrepRun\([\s\S]*?\n    \},/) || [])[0] || ''
+  const timetableFn = (apiSrc.match(/async timetableBlockDone\([\s\S]*?\n    \},/) || [])[0] || ''
+  assert.ok(cardPrepFn.includes('async cardPrepRun'), 'found cardPrepRun in api.js')
+  assert.ok(timetableFn.includes('async timetableBlockDone'), 'found timetableBlockDone in api.js')
+  for (const s of ['这张卡已经不在了', '这一步已经过时了', '这一步要在对话里交给豆芽', '没能准备好这个操作']) {
+    assert.ok(!cardPrepFn.includes(s), `hardcoded zh left in cardPrepRun: ${s}`)
+  }
+  assert.ok(!timetableFn.includes('这段安排找不到了'), 'hardcoded zh left in timetableBlockDone')
+  assert.ok(cardPrepFn.includes("i18nT('prep.err_gone'"), 'cardPrepRun uses prep.err_gone')
+  assert.ok(cardPrepFn.includes("i18nT('prep.err_stale'"), 'cardPrepRun uses prep.err_stale')
+  assert.ok(cardPrepFn.includes("i18nT('prep.err_in_chat'"), 'cardPrepRun uses prep.err_in_chat')
+  assert.ok(cardPrepFn.includes("i18nT('prep.err_failed'"), 'cardPrepRun uses prep.err_failed')
+  assert.ok(timetableFn.includes("i18nT('timetable.err_missing'"), 'timetableBlockDone uses timetable.err_missing')
+  const routes = readFileSync(new URL('../src/web/dsh-host-routes.js', import.meta.url), 'utf8')
+  assert.ok(routes.includes('router.cardPrepRun({ ...body, lang: body.lang || langParam(request) })'), 'card-prep route passes lang')
+  assert.ok(routes.includes('router.timetableBlockDone({ ...body, lang: body.lang || langParam(request) })'), 'timetable-block route passes lang')
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  assert.ok(!html.includes("fetch('/api/opendigitalmate/card-prep', { method: 'POST', headers: { 'Content-Type'"), 'card-prep posts use odmHeaders')
+  assert.ok(!html.includes("fetch('/api/opendigitalmate/timetable-block', { method: 'POST', headers: { 'Content-Type'"), 'timetable-block posts use odmHeaders')
+  const prepPosts = html.split('/api/opendigitalmate/card-prep').length - 1
+  const blockPosts = html.split('/api/opendigitalmate/timetable-block').length - 1
+  assert.equal(prepPosts, 4, 'four card-prep POSTs in the UI')
+  assert.equal(blockPosts, 1, 'one timetable-block POST in the UI')
+  assert.equal((html.match(/prepId: 'unsnooze', lang: odmLang\(\)/g) || []).length, 2, 'unsnooze posts send lang')
+  assert.ok(html.includes('prepId, lang: odmLang()'), 'runQuickSnooze sends lang')
+  assert.ok(html.includes("step.kind === 'snooze' ? 'snooze' : step.id, lang: odmLang()"), 'runStep sends lang')
+  assert.ok(html.includes('blockKey: step.blockKey, done, lang: odmLang()'), 'markBlockDone sends lang')
+})

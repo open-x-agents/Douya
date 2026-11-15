@@ -5458,8 +5458,14 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (composioPoll) { clearInterval(composioPoll); composioPoll = null; }
     refreshSourcesNow();
     const ok = msg.status === 'success';
-    const name = { googlecalendar: 'Google 日历', gmail: 'Gmail', github: 'GitHub', slack: 'Slack' }[msg.toolkit] || '信源';
-    try { showUiToast(ok ? `${name} 已连接` : `连接没有成功${msg.error ? '：' + msg.error : ''}，可以再点一次「连接」`); } catch (_) {}
+    const nameKey = msg.toolkit ? ('app.' + msg.toolkit + '.name') : '';
+    const named = nameKey ? t(nameKey) : '';
+    const name = (named && named !== nameKey) ? named : ({ gmail: 'Gmail', github: 'GitHub', slack: 'Slack' }[msg.toolkit] || t('sources.generic'));
+    try {
+      showUiToast(ok
+        ? t('sources.toast_ok', { name })
+        : (msg.error ? t('sources.toast_fail_error', { error: msg.error }) : t('sources.toast_fail')));
+    } catch (_) {}
   }
   window.addEventListener('message', e => { if (e.origin === location.origin) onComposioConnected(e.data); });
   try { const bc = new BroadcastChannel('odm-composio'); bc.onmessage = e => onComposioConnected(e.data); } catch (_) {}

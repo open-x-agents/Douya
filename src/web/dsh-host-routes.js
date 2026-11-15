@@ -513,7 +513,10 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     path: '/api/opendigitalmate/card-prep',
     methods: ['POST'],
     requestBody: 'buffered',
-    fetch: async (request) => json(await router.cardPrepRun(await readJson(request))),
+    fetch: async (request) => {
+      const body = await readJson(request)
+      return json(await router.cardPrepRun({ ...body, lang: body.lang || langParam(request) }))
+    },
   }, 'opendigitalmate: card prepared step')
 
   // Prepared brief for a card (PR size / CI / review / risk from GitHub). Read-only.
@@ -532,7 +535,10 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     path: '/api/opendigitalmate/timetable-block',
     methods: ['POST'],
     requestBody: 'buffered',
-    fetch: async (request) => json(await router.timetableBlockDone(await readJson(request))),
+    fetch: async (request) => {
+      const body = await readJson(request)
+      return json(await router.timetableBlockDone({ ...body, lang: body.lang || langParam(request) }))
+    },
   }, 'opendigitalmate: timetable block done')
 
   effect({

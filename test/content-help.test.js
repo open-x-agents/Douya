@@ -199,6 +199,26 @@ test('brief errors follow the UI locale; cache keeps one entry per language', as
 
 
 
+
+test('cardPrepRun and timetableBlockDone errors follow the UI locale', async () => {
+  const url = 'https://github.com/open-x-agents/Douya/pull/117'
+  const card = { id: 'c1', source: 'github', title: 'Review PR', status: 'active',
+    blocks: [{ type: 'link-list', links: [{ title: 'fix brief', url, type: 'pr' }] }] }
+  const { router } = briefRouter({ cards: [card] })
+
+  assert.deepEqual(await router.cardPrepRun({ cardId: 'missing' }), { success: false, error: t('prep.err_gone', 'en') })
+  assert.deepEqual(await router.cardPrepRun({ cardId: 'missing', lang: 'zh' }), { success: false, error: '这张卡已经不在了' })
+  assert.deepEqual(await router.cardPrepRun({ cardId: 'c1', prepId: 'no-such-step' }), { success: false, error: t('prep.err_stale', 'en') })
+  assert.deepEqual(await router.cardPrepRun({ cardId: 'c1', prepId: 'no-such-step', lang: 'zh' }), { success: false, error: '这一步已经过时了，刷新一下' })
+  assert.deepEqual(await router.cardPrepRun({ cardId: 'c1', prepId: 'review-brief' }), { success: false, error: t('prep.err_in_chat', 'en') })
+  assert.deepEqual(await router.cardPrepRun({ cardId: 'c1', prepId: 'review-brief', lang: 'zh' }), { success: false, error: '这一步要在对话里交给豆芽' })
+
+  assert.deepEqual(await router.timetableBlockDone({ blockKey: 'bad' }), { success: false, error: t('timetable.err_missing', 'en') })
+  assert.deepEqual(await router.timetableBlockDone({ blockKey: 'bad', lang: 'zh' }), { success: false, error: '这段安排找不到了，刷新一下' })
+  const ok = await router.timetableBlockDone({ blockKey: '2026-11-15|Focus', lang: 'en' })
+  assert.deepEqual(ok, { success: true, blockKey: '2026-11-15|Focus', done: true })
+})
+
 // ---- 「没用」 feedback loop ----
 test('没用 writes a digest preference naming the kind of thing', () => {
   assert.deepEqual(notUsefulPref({ title: '社交通知', type: 'email-group', source: 'gmail', metadata: { group: 'social' } }).channel, 'gmail')

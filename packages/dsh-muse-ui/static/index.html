@@ -3515,8 +3515,8 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const scale = v => { const a=Math.log10(v+1), b=Math.log10(max+1); return Math.max(6, (a/b)*100); };
     return `
       <div class="tile load size-load" data-sys="load">
-        <div class="eyebrow c-blue">工作负载 · 按项目</div>
-        <p class="load-desc">每个项目还挂着多少 PR 和 issue（长度按平方根缩放，避免大仓库压扁小仓库）。点一行看详情。</p>
+        <div class="eyebrow c-blue">${escapeHtml(t('today.load_heading'))}</div>
+        <p class="load-desc">${escapeHtml(t('today.load_desc'))}</p>
         <div class="load-rows">
           ${rows.map(x => `
             <div class="load-row" data-focus="${escapeHtml(x.c.id)}">
@@ -3525,7 +3525,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
               <span class="load-val">${x.pr ? `<em class="v-pr">${x.pr}</em>` : ''}${x.iss ? `<em class="v-iss">${x.iss}</em>` : ''}</span>
             </div>`).join('')}
         </div>
-        <div class="legend"><span><i class="b-pr"></i>你开的 / 待推进 PR</span><span><i class="b-iss"></i>待处理 issue</span><span style="margin-left:auto;opacity:.7">长度按对数缩放</span></div>
+        <div class="legend"><span><i class="b-pr"></i>${escapeHtml(t('today.load_pr'))}</span><span><i class="b-iss"></i>${escapeHtml(t('today.load_issue'))}</span><span style="margin-left:auto;opacity:.7">${escapeHtml(t('today.load_scale'))}</span></div>
       </div>`;
   }
 

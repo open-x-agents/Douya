@@ -509,3 +509,14 @@ test('Quote face time, link fallback and quick done/useless failure toast are lo
     for (const loc of ['en', 'zh']) assert.ok(messages[loc][k], `${loc} has ${k}`)
   }
 })
+
+test('Today workload tile is localized and describes log scaling', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of ['工作负载 · 按项目</div>', '长度按平方根缩放', '待推进 PR</span>', '待处理 issue</span>', '>长度按对数缩放</span>']) {
+    assert.ok(!html.includes(s), `hardcoded zh left: ${s}`)
+  }
+  for (const k of ['today.load_heading', 'today.load_desc', 'today.load_pr', 'today.load_issue', 'today.load_scale']) {
+    for (const loc of ['en', 'zh']) assert.ok(messages[loc][k], `${loc} has ${k}`)
+  }
+  assert.ok(/log/i.test(messages.en['today.load_desc']) && messages.zh['today.load_desc'].includes('对数'), 'desc says log scaling')
+})

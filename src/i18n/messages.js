@@ -720,6 +720,10 @@ export const messages = {
     'brief.next_area_fallback': 'the main changes',
     'brief.next_focus': ', especially “{risk}”',
 
+    'brief.err_gone': 'This card is gone',
+    'brief.err_no_github': "GitHub isn't connected yet",
+    'brief.err_unavailable': "Can't get this PR",
+
     'chat.ctx_label': 'Talking about',
     'chat.ctx_clear': 'Stop focusing this card',
     'composer.tools_aria': 'Attach & voice',
@@ -1663,6 +1667,10 @@ export const messages = {
     'brief.next_review': '先看 {area}{focus}，没问题就批准',
     'brief.next_area_fallback': '主要改动',
     'brief.next_focus': '，重点看「{risk}」',
+
+    'brief.err_gone': '这张卡已经不在了',
+    'brief.err_no_github': 'GitHub 还没连上',
+    'brief.err_unavailable': '拿不到这个 PR',
 
     'chat.ctx_label': '正在聊',
     'chat.ctx_clear': '不针对这张卡',

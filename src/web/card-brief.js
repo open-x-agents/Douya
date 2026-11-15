@@ -173,7 +173,8 @@ export async function fetchPrBrief(client, target, { lang } = {}) {
     exec('GITHUB_LIST_REQUESTED_REVIEWERS_FOR_A_PULL_REQUEST', { owner, repo, pull_number: number }),
     exec('GITHUB_LIST_REVIEWS_FOR_A_PULL_REQUEST', { owner, repo, pull_number: number, per_page: 50 }),
   ])
-  const failure = issue?.__error || '拿不到这个 PR'
+  const unavailable = t('brief.err_unavailable', locale)
+  const failure = issue?.__error || unavailable
   if (classifyBlock({ error: failure }).blocked) return { blocked: true, error: blockedNote(locale, { site: 'GitHub' }) }
   // A successful call with patch/diff/file evidence (or real PR metadata) means the PR is readable,
   // even when number/title/html_url are missing. An empty or unrelated successful body is uncertainty,
@@ -181,7 +182,7 @@ export async function fetchPrBrief(client, target, { lang } = {}) {
   if (issue?.__error) return { error: failure, ...(isNotFoundError(failure) ? { notFound: true } : {}) }
   const fl = fileListOf(files)
   if (!issue?.number) {
-    if (!issue || !hasPrReadEvidence(issue, files)) return { error: '拿不到这个 PR' }
+    if (!issue || !hasPrReadEvidence(issue, files)) return { error: unavailable }
     issue.number = number
     issue.html_url = issue.html_url || `https://github.com/${owner}/${repo}/pull/${number}`
   }

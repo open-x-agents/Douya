@@ -775,3 +775,21 @@ test('keyboard shortcuts help follows the UI locale', () => {
   }
 })
 
+
+test('card-side chat header follows the UI locale', () => {
+  assert.equal(t('zoom.chat_title', 'en', { name: 'Inbox' }), 'Chat with Douya about “Inbox”')
+  assert.equal(t('zoom.chat_title', 'zh', { name: '收件箱' }), '和豆芽聊「收件箱」')
+  assert.equal(t('zoom.chat_sub', 'en'), 'Same conversation · what you say here is saved on this card')
+  assert.equal(t('zoom.chat_sub', 'zh'), '同一个对话 · 这里说的会记在这张卡上')
+  assert.equal(t('zoom.chat_hist', 'en', { n: 3 }), 'Earlier conversation on this card · 3')
+  assert.equal(t('zoom.chat_hist', 'zh', { n: 3 }), '之前在这张卡上的对话 · 3 条')
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  const zoomFn = (html.match(/function openTileZoom\(card\) \{[\s\S]*?\n  \}\n/) || [])[0] || ''
+  assert.ok(zoomFn.includes('function openTileZoom'), 'found openTileZoom in index.html')
+  for (const s of ['和豆芽聊「', '同一个对话 · 这里说的会记在这张卡上', '之前在这张卡上的对话 ·']) {
+    assert.ok(!zoomFn.includes(s), `hardcoded zh left in openTileZoom: ${s}`)
+  }
+  assert.ok(zoomFn.includes("t('zoom.chat_title', { name })"), 'openTileZoom uses zoom.chat_title')
+  assert.ok(zoomFn.includes("t('zoom.chat_sub')"), 'openTileZoom uses zoom.chat_sub')
+  assert.ok(zoomFn.includes("t('zoom.chat_hist', { n: d.messages.length })"), 'openTileZoom uses zoom.chat_hist')
+})

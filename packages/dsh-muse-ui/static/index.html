@@ -6874,7 +6874,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         <section class="z-left" id="zLeft">${html}</section>
         <aside class="z-chat" id="zChat">
           <div class="z-chat-head">
-            <div><b>和豆芽聊「${escapeHtml(name)}」</b><span>同一个对话 · 这里说的会记在这张卡上</span></div>
+            <div><b>${escapeHtml(t('zoom.chat_title', { name }))}</b><span>${escapeHtml(t('zoom.chat_sub'))}</span></div>
           </div>
           <div class="z-chat-host" id="zChatHost"></div>
         </aside>
@@ -6893,7 +6893,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       if (!live() || !Array.isArray(d.messages) || !d.messages.length) return;
       const box = $('zHistB'), det = $('zHist'); if (!box || !det) return;
       det.hidden = false;
-      det.querySelector('summary').textContent = `之前在这张卡上的对话 · ${d.messages.length} 条`;
+      det.querySelector('summary').textContent = t('zoom.chat_hist', { n: d.messages.length });
       d.messages.slice(-12).forEach(m => {
         const el = document.createElement('div');
         el.className = 'bubble ' + (m.role === 'user' ? 'me' : 'bot');

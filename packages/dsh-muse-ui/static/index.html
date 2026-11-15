@@ -5756,31 +5756,6 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     }
   }
 
-  // Manual digest push
-  const pushBtn = $('pushDigestBtn');
-  if (pushBtn) {
-    pushBtn.addEventListener('click', async () => {
-      pushBtn.disabled = true;
-      pushBtn.textContent = '推送中...';
-      try {
-        const res = await fetch('/api/digest/push', { method: 'POST' });
-        const data = await res.json();
-        if (data.success) {
-          alert(`推送成功！已发送 ${data.deliveries?.length || 0} 条消息`);
-        } else {
-          alert(`推送失败：${data.error}`);
-        }
-      } catch (err) {
-        alert('推送失败：' + err.message);
-      } finally {
-        pushBtn.disabled = false;
-        pushBtn.textContent = '手动推送汇聚';
-      }
-    });
-  }
-
-
-
   // ---- Composio action cards: pending → 确认执行 / 取消 (only a click executes); executed → 撤销.
   const actionsApi = body => fetch('/api/opendigitalmate/actions', { method: 'POST', headers: odmHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ ...body, lang: odmLang() }) }).then(r => r.json()).catch(e => ({ success: false, error: e.message }));
   const ACT_STATUS = () => ({ pending: t('act.pending'), running: t('act.running'), executed: t('act.executed'), failed: t('act.failed'), cancelled: t('act.cancelled'), undone: t('act.undone') });

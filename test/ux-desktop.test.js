@@ -34,6 +34,16 @@ test('IME-safe j/k/e/c/s and ? help; Esc dismisses chips', () => {
   assert.match(html, /deskTypingTarget/)
   assert.match(html, /dockOpen/)
   assert.match(html, /t\('kb\.title'\)/)
+  assert.match(html, /t\('kb\.nav'\)/)
+  assert.match(html, /t\('kb\.open'\)/)
+  assert.match(html, /t\('kb\.done'\)/)
+  assert.match(html, /t\('kb\.snooze'\)/)
+  assert.match(html, /t\('kb\.enter'\)/)
+  assert.match(html, /t\('kb\.send'\)/)
+  assert.match(html, /t\('kb\.esc'\)/)
+  assert.match(html, /t\('kb\.help'\)/)
+  assert.match(html, /t\('kb\.note'\)/)
+  assert.match(html, /t\('kb\.close'\)/)
 })
 
 test('desktop two-column zoom + larger Today conversation', () => {

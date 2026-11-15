@@ -740,3 +740,38 @@ test('card CRUD errors follow the UI locale', () => {
   assert.ok(html.includes("status: 'active', lang: odmLang()"), 'card-update sends lang')
   assert.ok(html.includes('{ id, lang: odmLang() }'), 'card-delete sends lang')
 })
+
+test('keyboard shortcuts help follows the UI locale', () => {
+  assert.equal(t('kb.title', 'en'), 'Keyboard shortcuts')
+  assert.equal(t('kb.title', 'zh'), '键盘快捷键')
+  assert.equal(t('kb.nav', 'en'), 'Move focus between cards')
+  assert.equal(t('kb.nav', 'zh'), '在卡片间移动焦点')
+  assert.equal(t('kb.open', 'en'), 'Open the focused card (details + conversation)')
+  assert.equal(t('kb.open', 'zh'), '打开当前卡（详情 + 对话）')
+  assert.equal(t('kb.done', 'en'), 'Complete focused card (undoable)')
+  assert.equal(t('kb.done', 'zh'), '完成当前卡（可撤销）')
+  assert.equal(t('kb.snooze', 'en'), 'Snooze focused card')
+  assert.equal(t('kb.snooze', 'zh'), '推迟当前卡')
+  assert.equal(t('kb.enter', 'en'), 'Open the collapsed conversation dock')
+  assert.equal(t('kb.enter', 'zh'), '打开已收起的对话栏')
+  assert.equal(t('kb.send', 'en'), 'Send a message (when typing in the box)')
+  assert.equal(t('kb.send', 'zh'), '发送消息（输入框内）')
+  assert.equal(t('kb.esc', 'en'), 'Close an overlay, dismiss a suggestion, or collapse the conversation')
+  assert.equal(t('kb.esc', 'zh'), '关闭浮层 / 收起建议 / 收起对话')
+  assert.equal(t('kb.help', 'en'), 'This help')
+  assert.equal(t('kb.help', 'zh'), '打开本说明')
+  assert.equal(t('kb.close', 'en'), 'Got it')
+  assert.equal(t('kb.close', 'zh'), '知道了')
+  assert.match(t('kb.note', 'en'), /IME/)
+  assert.match(t('kb.note', 'zh'), /IME 组字/)
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  const helpFn = (html.match(/function openKbHelp\(\) \{[\s\S]*?\n  \}\n/) || [])[0] || ''
+  assert.ok(helpFn.includes('function openKbHelp'), 'found openKbHelp in index.html')
+  for (const s of ['在工作卡之间移动焦点', '打开当前卡（详情 + 对话）', '完成当前卡（可撤销）', '推迟当前卡', '打开已收起的对话栏', '发送消息（输入框内）', '关闭浮层 / 收起建议 / 收起对话', '打开本说明', '避免打断中文输入', '知道了']) {
+    assert.ok(!helpFn.includes(s), `hardcoded zh left in openKbHelp: ${s}`)
+  }
+  for (const key of ['kb.title', 'kb.nav', 'kb.open', 'kb.done', 'kb.snooze', 'kb.enter', 'kb.send', 'kb.esc', 'kb.help', 'kb.note', 'kb.close']) {
+    assert.ok(helpFn.includes(`t('${key}')`), `openKbHelp uses ${key}`)
+  }
+})
+

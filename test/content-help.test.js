@@ -219,6 +219,46 @@ test('cardPrepRun and timetableBlockDone errors follow the UI locale', async () 
   assert.deepEqual(ok, { success: true, blockKey: '2026-11-15|Focus', done: true })
 })
 
+test('card CRUD errors follow the UI locale', async () => {
+  const itemUrl = 'https://example.com/a'
+  const card = { id: 'c1', title: 'Hello', status: 'active',
+    blocks: [{ type: 'link-list', links: [{ title: 'x', url: itemUrl }] }] }
+  const { router } = briefRouter({ cards: [card] })
+
+  assert.deepEqual(await router.createCard({}), { success: false, error: t('card.err_no_title', 'en') })
+  assert.deepEqual(await router.createCard({ lang: 'zh' }), { success: false, error: '标题不能为空' })
+
+  assert.deepEqual(await router.updateCard('missing', {}), { success: false, error: t('card.err_missing', 'en') })
+  assert.deepEqual(await router.updateCard('missing', { lang: 'zh' }), { success: false, error: '卡片不存在' })
+
+  assert.deepEqual(await router.deleteCard('missing'), { success: false, error: t('card.err_missing', 'en') })
+  assert.deepEqual(await router.deleteCard('missing', { lang: 'zh' }), { success: false, error: '卡片不存在' })
+
+  assert.deepEqual(await router.trackCardInteraction('missing', 'done'), { success: false, error: t('card.err_missing', 'en') })
+  assert.deepEqual(await router.trackCardInteraction('missing', 'done', null, '', 'user', 'zh'), { success: false, error: '卡片不存在' })
+
+  assert.deepEqual(await router.trackCardInteraction('c1', 'done', 'https://nope.example/x'), { success: false, error: t('card.err_no_item', 'en') })
+  assert.deepEqual(await router.trackCardInteraction('c1', 'done', 'https://nope.example/x', '', 'user', 'zh'), { success: false, error: '这张卡片里没有这个条目' })
+
+  assert.deepEqual(await router.trackCardInteraction('c1', 'flip', itemUrl), { success: false, error: t('card.err_unknown_action', 'en', { action: 'flip' }) })
+  assert.deepEqual(await router.trackCardInteraction('c1', 'flip', itemUrl, '', 'user', 'zh'), { success: false, error: '未知操作: flip' })
+
+  const made = await router.createCard({ title: 'Note', lang: 'zh' })
+  assert.equal(made.success, true)
+  assert.equal(made.card.title, 'Note')
+  assert.equal(made.card.lang, undefined)
+
+  const up = await router.updateCard('c1', { status: 'active', lang: 'zh' })
+  assert.equal(up.success, true)
+  assert.equal(up.card.id, 'c1')
+  assert.equal(up.card.lang, undefined)
+  assert.equal(up.card.status, 'active')
+
+  const marked = await router.trackCardInteraction('c1', 'done', itemUrl, 'x', 'user', 'en')
+  assert.equal(marked.success, true)
+  assert.equal(marked.item.status, 'done')
+})
+
 // ---- 「没用」 feedback loop ----
 test('没用 writes a digest preference naming the kind of thing', () => {
   assert.deepEqual(notUsefulPref({ title: '社交通知', type: 'email-group', source: 'gmail', metadata: { group: 'social' } }).channel, 'gmail')

@@ -1386,10 +1386,11 @@ export function createApiRouter(ctx) {
      */
     async createCard(data) {
       try {
-        const { source, type, title, body, url, priority, status, nextAction, links, snoozeUntil, sourceId } = data;
+        const { source, type, title, body, url, priority, status, nextAction, links, snoozeUntil, sourceId, lang } = data;
+        const locale = resolveLang(lang);
         
         if (!title) {
-          return { success: false, error: '标题不能为空' };
+          return { success: false, error: i18nT('card.err_no_title', locale) };
         }
         
         const now = new Date().toISOString();
@@ -1426,20 +1427,22 @@ export function createApiRouter(ctx) {
     /**
      * POST /api/cards/:id - Update an existing card
      */
-    async updateCard(id, updates) {
+    async updateCard(id, updates = {}) {
       try {
+        const { lang, id: _ignoreId, ...fields } = updates;
+        const locale = resolveLang(lang);
         const state = store.get();
         const cards = state.cards || [];
         const index = cards.findIndex(c => c.id === id);
         
         if (index === -1) {
-          return { success: false, error: '卡片不存在' };
+          return { success: false, error: i18nT('card.err_missing', locale) };
         }
         
         const card = cards[index];
         const updated = {
           ...card,
-          ...updates,
+          ...fields,
           id: card.id, // Prevent ID change
           createdAt: card.createdAt, // Prevent createdAt change
           updatedAt: new Date().toISOString(),
@@ -1470,14 +1473,15 @@ export function createApiRouter(ctx) {
     /**
      * DELETE /api/cards/:id - Delete a card
      */
-    async deleteCard(id) {
+    async deleteCard(id, { lang } = {}) {
       try {
+        const locale = resolveLang(lang);
         const state = store.get();
         const cards = state.cards || [];
         const index = cards.findIndex(c => c.id === id);
         
         if (index === -1) {
-          return { success: false, error: '卡片不存在' };
+          return { success: false, error: i18nT('card.err_missing', locale) };
         }
         
         const deleted = cards.splice(index, 1)[0];
@@ -1517,14 +1521,15 @@ export function createApiRouter(ctx) {
       return { success: true, key, messages: all[key] || [] };
     },
 
-    async trackCardInteraction(id, action, itemUrl = null, itemTitle = '', by = 'user') {
+    async trackCardInteraction(id, action, itemUrl = null, itemTitle = '', by = 'user', lang) {
       try {
+        const locale = resolveLang(lang);
         const state = store.get();
         const cards = state.cards || [];
         const card = cards.find(c => c.id === id);
         
         if (!card) {
-          return { success: false, error: '卡片不存在' };
+          return { success: false, error: i18nT('card.err_missing', locale) };
         }
 
         // Batch: 一键全部忽略 / 全部完成 for the open items of a group card (itemUrl = [{url,title}]).
@@ -1554,7 +1559,7 @@ export function createApiRouter(ctx) {
 
         // Per-item 完成 / 忽略 / 撤销 — never touches the whole card's status.
         if (itemUrl) {
-          if (!cardItemUrls(card).has(itemUrl)) return { success: false, error: '这张卡片里没有这个条目' };
+          if (!cardItemUrls(card).has(itemUrl)) return { success: false, error: i18nT('card.err_no_item', locale) };
           if (action === 'undo') {
             clearItemStatus(state, itemUrl);
             // Undoing an item on a card we auto-completed brings it back to Today.
@@ -1567,7 +1572,7 @@ export function createApiRouter(ctx) {
             }
           } else if (action === 'done' || action === 'dismiss' || action === 'dismissed') {
             setItemStatus(state, { card, url: itemUrl, title: itemTitle, action: action === 'done' ? 'done' : 'dismissed', by });
-          } else return { success: false, error: `未知操作: ${action}` };
+          } else return { success: false, error: i18nT('card.err_unknown_action', locale, { action }) };
           await store.save(state);
           let cardDone = false;
           if (action === 'done' || action === 'dismiss' || action === 'dismissed') {

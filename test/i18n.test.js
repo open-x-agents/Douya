@@ -552,3 +552,45 @@ test('Today headline, next-step fallbacks and zhBody follow the locale', () => {
   assert.equal(t('today.next_mail_done', 'en'), 'This batch of mail is all handled — nothing left to do')
   assert.equal(t('today.next_push_pr_named', 'zh', { title: 'fix ci' }), '先推进 PR「fix ci」，催 review 或合并')
 })
+
+test('Today card chat chips and quick-ask prompts follow the locale', () => {
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  for (const s of [
+    '帮我处理「',
+    "dockPrompt('今天想先做什么？')",
+    '往后挪半小时',
+    '帮我把今晚剩下的时间排一下',
+    '明天上午留两小时专注，放哪里？',
+    '这组都处理完了，还有别的要看吗？',
+    '封里哪封最急？',
+    '要我怎么回？',
+    '封里有要我回的吗？',
+    '个 PR 先推哪个？',
+    '个 issue 里哪个今天必须回？',
+    '条在等我回，怎么回？',
+    '这里有我需要知道的吗？',
+    '今天不做的话会怎样？',
+    '这张可以先放着吗？',
+  ]) {
+    assert.ok(!html.includes(s), `hardcoded zh left: ${s}`)
+  }
+  const keys = [
+    'chip.shift_block', 'chip.plan_evening', 'chip.focus_tomorrow',
+    'chip.mail_done', 'chip.mail_which_urgent', 'chip.mail_how_reply', 'chip.mail_any_reply',
+    'chip.pr_which', 'chip.pr_stuck', 'chip.issue_must',
+    'chip.slack_how_reply', 'chip.slack_need_know',
+    'chip.how_start', 'chip.if_skip', 'chip.can_wait',
+    'chip.ask_handle', 'chip.empty_prompt',
+  ]
+  for (const k of keys) {
+    for (const loc of ['en', 'zh']) assert.ok(messages[loc][k], `${loc} has ${k}`)
+  }
+  assert.ok(html.includes("t('chip.ask_handle'"), 'runQuickAsk uses chip.ask_handle')
+  assert.ok(html.includes("t('chip.empty_prompt')"), 'empty CTA uses chip.empty_prompt')
+  assert.ok(html.includes("t('chip.shift_block'"), 'chipsForCard uses chip.shift_block')
+  assert.equal(t('chip.mail_done', 'en'), 'This batch is all handled — anything else to look at?')
+  assert.equal(t('chip.mail_which_urgent', 'zh', { n: 3 }), '这 3 封里哪封最急？')
+  assert.equal(t('chip.pr_stuck', 'en', { n: 42 }), "What's blocking #42?")
+  assert.equal(t('chip.ask_handle', 'zh', { title: 'Inbox' }), '帮我处理「Inbox」')
+  assert.equal(t('chip.empty_prompt', 'en'), 'What should I start with today?')
+})

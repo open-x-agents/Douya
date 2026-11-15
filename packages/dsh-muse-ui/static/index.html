@@ -3779,7 +3779,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     setChatContext(card);
     openTodayChat({ byUser: true, contextual: true });
     const prep = (card.prepared || []).find(p => p.kind === 'ask');
-    dockPrompt(prep && prep.prompt ? prep.prompt : `帮我处理「${clip(card.title, 16)}」`);
+    dockPrompt(prep && prep.prompt ? prep.prompt : t('chip.ask_handle', { title: clip(card.title, 16) }));
   }
   function runQuickAction(card, qa) {
     if (qa === 'done') return runQuickDone(card);
@@ -3930,7 +3930,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         const act = btn.getAttribute('data-empty-act');
         if (act === 'chat') {
           openTodayChat({ byUser: true, contextual: true });
-          dockPrompt('今天想先做什么？');
+          dockPrompt(t('chip.empty_prompt'));
         } else if (act === 'review') {
           openTodayChat({ byUser: true, contextual: true });
           dockPrompt(t('chip.review_prompt'));
@@ -4307,7 +4307,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const tt = blockOf(card, 'timetable') || {};
       const nowM = new Date().getHours() * 60 + new Date().getMinutes();
       const left = [...(tt.suggestedBlocks || [])].filter(b => (toMin(b.end) || 0) > nowM);
-      return [left.length ? `把「${clip(ttTitle(left[0].title), 10)}」往后挪半小时` : '帮我把今晚剩下的时间排一下', '明天上午留两小时专注，放哪里？'];
+      return [left.length ? t('chip.shift_block', { title: clip(ttTitle(left[0].title), 10) }) : t('chip.plan_evening'), t('chip.focus_tomorrow')];
     }
     const st = card.itemStatus || {};
     const open = linksOf(card).filter(l => !st[l.url]);
@@ -4315,19 +4315,19 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     const prep = (card.prepared || []).filter(p => p.kind === 'ask');
     if (prep[0]) out.push(prep[0].label);
     if (isMailGroup(card)) {
-      if (!open.length) out.push('这组都处理完了，还有别的要看吗？');
-      else if (card.waiting === 'you') out.push(open.length > 1 ? `这 ${open.length} 封里哪封最急？` : `「${clip(open[0].title, 12)}」要我怎么回？`);
-      else out.push(`这 ${open.length} 封里有要我回的吗？`);
+      if (!open.length) out.push(t('chip.mail_done'));
+      else if (card.waiting === 'you') out.push(open.length > 1 ? t('chip.mail_which_urgent', { n: open.length }) : t('chip.mail_how_reply', { title: clip(open[0].title, 12) }));
+      else out.push(t('chip.mail_any_reply', { n: open.length }));
     } else if (card.source === 'github' || repoOf(card)) {
       const prs = open.filter(l => linkKind(l).k === 'pr'), iss = open.filter(l => linkKind(l).k === 'issue');
-      if (prs.length > 1) out.push(`这 ${prs.length} 个 PR 先推哪个？`);
-      else if (prs[0]) out.push(`#${(prs[0].url.match(/\/pull\/(\d+)/) || [])[1]} 卡在哪？`);
-      if (iss.length) out.push(`${iss.length} 个 issue 里哪个今天必须回？`);
+      if (prs.length > 1) out.push(t('chip.pr_which', { n: prs.length }));
+      else if (prs[0]) out.push(t('chip.pr_stuck', { n: (prs[0].url.match(/\/pull\/(\d+)/) || [])[1] || '' }));
+      if (iss.length) out.push(t('chip.issue_must', { n: iss.length }));
     } else if (card.type === 'slack-cluster' || card.source === 'slack') {
       const need = open.filter(l => l.needsYou);
-      out.push(need.length ? `${need.length} 条在等我回，怎么回？` : '这里有我需要知道的吗？');
-    } else if (card.nextAction) out.push(`「${clip(card.nextAction, 14)}」怎么开始？`);
-    out.push(card.waiting === 'you' ? '今天不做的话会怎样？' : '这张可以先放着吗？');
+      out.push(need.length ? t('chip.slack_how_reply', { n: need.length }) : t('chip.slack_need_know'));
+    } else if (card.nextAction) out.push(t('chip.how_start', { title: clip(card.nextAction, 14) }));
+    out.push(card.waiting === 'you' ? t('chip.if_skip') : t('chip.can_wait'));
     const uniq = [];
     const seen = new Set();
     for (const c of out) {

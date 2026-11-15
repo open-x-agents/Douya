@@ -15,6 +15,27 @@ const PHRASE_HOLD_MS = 800
 const drawPhrase = pool => t(pool[Math.min(pool.length - 1, Math.floor(Math.random() * pool.length))])
 export { reducedMotion }
 
+// The row's next phrase. A steer newer than the current tool phrase replaces the
+// thinking pool with the fixed ack. That sentence is interface copy, not an
+// assistant message, and nothing here writes it into the session. A pending
+// submission of that same send can be a moment newer than `steeredAt`; the ack
+// still belongs to the steer. Folder moves and a tool that started after the
+// steer keep their own phrases.
+export function activityCue({ moving, inputAt, steeredAt, tool }) {
+  if (moving) return { key: 'move', label: t('Switching working folder'), state: 'thinking' }
+  const toolAt = typeof tool?.at === 'number' ? tool.at : 0
+  const steered = typeof steeredAt === 'number' ? steeredAt : 0
+  if (steered > toolAt) {
+    return { key: `steer:${steered}`, label: t('Folded into this step. Continuing when it finishes.'), state: 'thinking', fixed: true }
+  }
+  if (inputAt > toolAt) return { key: `input:${inputAt}`, pool: PHRASES.thinking, state: 'thinking' }
+  if (tool) return { key: tool.label ? `tool:${tool.label}` : 'working', label: tool.label, pool: PHRASES.working, state: tool.state ?? 'working' }
+  return { key: 'thinking', pool: PHRASES.thinking, state: 'thinking' }
+}
+
+// Random phrases stay open with an ellipsis. The steer ack is the whole sentence.
+export const phraseText = shown => (shown?.fixed === true ? shown.text : `${shown.text}…`)
+
 // A turn that streams text first and runs a tool after keeps its row once the
 // tool starts: streaming alone hides it, but running work must not.
 export const rowVisible = ({ running, streaming, tools, relaying, bot, room }) =>
@@ -135,19 +156,14 @@ export function ActivityIndicator({ sessionId, useRoster, useSessionStatus, useL
   // the newest activity, and the phrase and the clock restart from the send.
   const inputAt = Math.max(inputRef.current, pendingInput)
   inputRef.current = inputAt
-  const want = !visible ? null
-    : moveAt !== 0 ? { key: 'move', label: t('Switching working folder'), state: 'thinking' }
-      : inputAt > (tool?.at ?? 0)
-        ? { key: `input:${inputAt}`, pool: PHRASES.thinking, state: 'thinking' }
-        : tool ? { key: tool.label ? `tool:${tool.label}` : 'working', label: tool.label, pool: PHRASES.working, state: tool.state ?? 'working' }
-          : { key: 'thinking', pool: PHRASES.thinking, state: 'thinking' }
+  const want = !visible ? null : activityCue({ moving: moveAt !== 0, inputAt, steeredAt, tool })
   const [shown, setShown] = useState(null)
   const wantKey = want?.key ?? null
   const markState = useRef('thinking')
   if (want) markState.current = want.state
   useEffect(() => {
     if (wantKey === null || shown?.key === wantKey) return undefined
-    const make = () => setShown({ key: wantKey, text: want.label ?? drawPhrase(want.pool), at: Date.now() })
+    const make = () => setShown({ key: wantKey, text: want.label ?? drawPhrase(want.pool), at: Date.now(), fixed: want.fixed === true })
     const wait = shown ? shown.at + PHRASE_HOLD_MS - Date.now() : 0
     if (wait <= 0) { make(); return undefined }
     const timer = setTimeout(make, wait)
@@ -189,6 +205,6 @@ export function ActivityIndicator({ sessionId, useRoster, useSessionStatus, useL
   return createPortal(h('div', { className: 'bt-typing', 'data-exiting': phase === 'out' ? '' : undefined, 'aria-hidden': true },
     bot ? h(BotMark, { bot, size: 28, state: markState.current, live: true, pokeable: true }) : h(RoomAvatar, { room, roster, size: 28 }),
     h('span', { className: 'bt-typing-text' },
-      h('span', { key: `${shown.key}:${shown.at}`, className: 'bt-typing-label' }, h(Shimmer, null, `${shown.text}…`)),
+      h('span', { key: `${shown.key}:${shown.at}`, className: 'bt-typing-label' }, h(Shimmer, null, phraseText(shown))),
       h(Elapsed, { at: moveAt !== 0 ? moveAt : Math.max(turnAt ?? runAt.current, inputAt), className: 'bt-typing-time' }))), host)
 }

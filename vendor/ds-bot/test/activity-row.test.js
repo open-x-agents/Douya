@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { DICTIONARY } from '../src/client/i18n.js'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -15,7 +16,7 @@ const { JSDOM } = createRequire(join(process.env.DSH_HARNESS ?? join(PLUGIN, '..
 const { outputFiles } = await build({
   stdin: {
     contents: [
-      "export { findHost, rowVisible, freshInputAt } from './src/client/activity-row.js'",
+      "export { findHost, rowVisible, freshInputAt, activityCue, phraseText } from './src/client/activity-row.js'",
       "export { clientErrors } from './src/client/diagnostics.js'",
     ].join('\n'),
     resolveDir: PLUGIN,
@@ -43,7 +44,7 @@ runInNewContext(outputFiles[0].text, {
   cancelAnimationFrame: id => clearTimeout(id),
   require: name => (name === 'react' ? react : name === 'react-dom' ? { createPortal: node => node } : {}),
 })
-const { findHost, rowVisible, freshInputAt, clientErrors } = module.exports
+const { findHost, rowVisible, freshInputAt, activityCue, phraseText, clientErrors } = module.exports
 
 test('the activity row mounts at the running slot even under an extra wrapper', () => {
   dom.window.document.body.innerHTML = '<div data-chat-flow><div class="wrap"><div data-chat-running id="slot"></div></div></div>'
@@ -99,4 +100,58 @@ test('fresh input ignores queued sends and takes the newest of the rest', () => 
   assert.equal(freshInputAt([{ placement: 'queued', time: 300 }], undefined), 0)
   assert.equal(freshInputAt(undefined, 400), 400)
   assert.equal(freshInputAt([], undefined), 0)
+})
+
+const ACK = 'Folded into this step. Continuing when it finishes.'
+const tool = (at, label = 'Reading a page') => ({ at, label, state: 'working' })
+
+test('a steer newer than the tool phrase is the fixed ack, not a thinking draw', () => {
+  const cue = activityCue({ moving: false, inputAt: 500, steeredAt: 400, tool: tool(100) })
+  assert.equal(cue.fixed, true)
+  assert.equal(cue.label, ACK)
+  assert.equal(cue.key, 'steer:400')
+  assert.equal(cue.pool, undefined)
+  assert.equal(phraseText({ text: cue.label, fixed: true }), ACK)
+  assert.equal(DICTIONARY.zh[ACK], '已并进当前这条，这一步做完再继续')
+})
+
+test('the ack stays when the pending copy of that send is a moment newer than steeredAt', () => {
+  const cue = activityCue({ moving: false, inputAt: 401, steeredAt: 400, tool: tool(100) })
+  assert.equal(cue.label, ACK)
+  assert.equal(cue.fixed, true)
+})
+
+test('a tool that started after the steer keeps the tool phrase', () => {
+  const cue = activityCue({ moving: false, inputAt: 200, steeredAt: 200, tool: tool(300) })
+  assert.equal(cue.fixed, undefined)
+  assert.equal(cue.label, 'Reading a page')
+  assert.equal(cue.key, 'tool:Reading a page')
+})
+
+test('fresh input newer than the tool, without a newer steer, stays a thinking phrase', () => {
+  const cue = activityCue({ moving: false, inputAt: 500, steeredAt: 200, tool: tool(300) })
+  assert.equal(cue.key, 'input:500')
+  assert.equal(cue.fixed, undefined)
+  assert.equal(cue.pool.join('|'), 'Thinking about it|Weighing the options|Working out a plan|Sorting out the details')
+})
+
+test('fresh input without a steer still draws from the thinking pool', () => {
+  const cue = activityCue({ moving: false, inputAt: 500, steeredAt: undefined, tool: tool(100) })
+  assert.equal(cue.key, 'input:500')
+  assert.equal(cue.fixed, undefined)
+  assert.equal(cue.pool.join('|'), 'Thinking about it|Weighing the options|Working out a plan|Sorting out the details')
+  assert.equal(phraseText({ text: 'Thinking about it' }), 'Thinking about it…')
+})
+
+test('a running turn with no steer and no fresh input stays on the thinking phrase', () => {
+  const cue = activityCue({ moving: false, inputAt: 0, steeredAt: undefined, tool: undefined })
+  assert.equal(cue.key, 'thinking')
+  assert.equal(cue.fixed, undefined)
+})
+
+test('a folder move wins over a steer ack', () => {
+  const cue = activityCue({ moving: true, inputAt: 500, steeredAt: 400, tool: tool(100) })
+  assert.equal(cue.key, 'move')
+  assert.equal(cue.label, 'Switching working folder')
+  assert.equal(cue.fixed, undefined)
 })

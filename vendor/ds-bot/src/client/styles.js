@@ -1184,6 +1184,8 @@ div:has(> nav [class*="_marks"]){display:none!important}
 .bt-btw-answer p{margin:0}
 .bt-btw-fail{margin:0 0 6px;color:var(--bt-danger);font-size:13px;line-height:18px}
 @media (prefers-reduced-motion:reduce){.bt-btw-chevron{transition:none}}
+.bt-private-stop-dock{display:flex;justify-content:center;width:100%;margin:0 auto 8px}
+.bt-private-stop-dock>button:disabled{opacity:.5;cursor:default}
 .bt-route-dock{width:100%;display:flex;justify-content:center}
 .bt-route{box-sizing:border-box;width:calc(var(--dsh-chat-content-width,748px) - 32px);max-width:calc(100% - 32px);margin:0 auto 8px;padding:12px 14px;border-radius:16px;background:var(--bt-card);color:var(--bt-ink);box-shadow:inset 0 0 0 .5px color-mix(in srgb,var(--bt-ink) 8%,transparent);font-family:var(--bt-font)}
 .bt-route-text{margin:0 0 8px;font-size:14px;line-height:22px}

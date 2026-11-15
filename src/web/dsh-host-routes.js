@@ -521,7 +521,10 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     path: '/api/opendigitalmate/card-brief',
     methods: ['POST'],
     requestBody: 'buffered',
-    fetch: async (request) => json(await router.cardBrief(await readJson(request))),
+    fetch: async (request) => {
+      const body = await readJson(request)
+      return json(await router.cardBrief({ ...body, lang: body.lang || langParam(request) }))
+    },
   }, 'opendigitalmate: card brief')
 
   // Hero 「完成了」 on a timetable block (owner only, behind the /api fence).

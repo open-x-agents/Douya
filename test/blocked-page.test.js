@@ -97,7 +97,9 @@ test('a blocked PR fetch becomes the one sentence', async () => {
   // 卡片链路只剩一句 message：它也必须认出来，并换成那句导出的常量。
   const brief = await fetchPrBrief(blockedClient, target);
   assert.equal(brief.blocked, true);
-  assert.equal(brief.error, blockedNote('zh', { site: 'GitHub' }));
+  assert.equal(brief.error, blockedNote('en', { site: 'GitHub' }));
+  const briefZh = await fetchPrBrief(blockedClient, target, { lang: 'zh' });
+  assert.equal(briefZh.error, blockedNote('zh', { site: 'GitHub' }));
 
   // 普通失败照旧，不冒充站点拦截。
   const plainClient = { executeAction: async () => { throw new Error('Composio 500: upstream error'); } };
@@ -120,7 +122,9 @@ test('a blocked PR fetch becomes the one sentence', async () => {
     composioClient: blockedClient,
   });
   const answer = await router.cardBrief({ cardId: card.id });
-  assert.deepEqual(answer, { success: false, blocked: true, error: blockedNote('zh', { site: 'GitHub' }) });
+  assert.deepEqual(answer, { success: false, blocked: true, error: blockedNote('en', { site: 'GitHub' }) });
+  const answerZh = await router.cardBrief({ cardId: card.id, lang: 'zh' });
+  assert.deepEqual(answerZh, { success: false, blocked: true, error: blockedNote('zh', { site: 'GitHub' }) });
 });
 
 test('the chat prompt carries the sentence and forbids getting around the block', () => {

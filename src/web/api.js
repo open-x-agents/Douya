@@ -892,7 +892,8 @@ export function createApiRouter(ctx) {
      * Prepared help for one card (real source data, no model): today a PR brief — size, areas, CI, review, risk,
      * one concrete next move. Cached per PR for 20 minutes; a resolved (merged/closed) PR is reported so the UI can move it out.
      */
-    async cardBrief({ cardId, refresh = false } = {}) {
+    async cardBrief({ cardId, refresh = false, lang } = {}) {
+      const locale = resolveLang(lang);
       const state = store.get();
       const card = (state.cards || []).find(c => c.id === cardId);
       if (!card) return { success: false, error: '这张卡已经不在了' };
@@ -900,10 +901,12 @@ export function createApiRouter(ctx) {
       if (!target) return { success: true, brief: null };
       const cache = state.cardBriefs || {};
       const hit = cache[target.url];
-      if (!refresh && hit && Date.now() - Date.parse(hit.at || 0) < 20 * 60e3) return { success: true, brief: hit, cached: true };
+      // Legacy cache entries have no lang and were always Chinese.
+      const hitLang = hit?.lang || 'zh';
+      if (!refresh && hit && hitLang === locale && Date.now() - Date.parse(hit.at || 0) < 20 * 60e3) return { success: true, brief: hit, cached: true };
       const client = getComposioClient();
       if (!client) return { success: false, error: 'GitHub 还没连上' };
-      const brief = await fetchPrBrief(client, target);
+      const brief = await fetchPrBrief(client, target, { lang: locale });
       if (!brief || brief.error) return { success: false, blocked: !!brief?.blocked, error: brief?.error || '拿不到这个 PR' };
       // Source says merged / closed → that item is finished; tick it (by system) so the card clears like any done item.
       let autoResolved = false;

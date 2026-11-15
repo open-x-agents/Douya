@@ -3626,7 +3626,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (!ms) return '';
     const d = Date.now() - ms, h = d / 3600e3;
     if (d < 0) return '';
-    return h < 1 ? `${Math.max(1, Math.round(d / 60e3))} 分钟前` : h < 24 ? `${Math.round(h)} 小时前` : `${Math.round(h / 24)} 天前`;
+    return h < 1 ? t('face.rel_min', { n: Math.max(1, Math.round(d / 60e3)) }) : h < 24 ? t('face.rel_hour', { n: Math.round(h) }) : t('face.rel_day', { n: Math.round(h / 24) });
   }
   function renderFace(fv) {
     if (!fv || !Array.isArray(fv.parts)) return '';
@@ -3646,7 +3646,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         let body = '';
         if (p.link && p.link.href) {
           const host = escapeHtml(p.link.host || '');
-          const label = escapeHtml(p.link.label || p.link.host || '链接');
+          const label = escapeHtml(p.link.label || p.link.host || t('face.link'));
           body = `<a class="f-linkchip" href="${escapeHtml(p.link.href)}" target="_blank" rel="noopener" title="${escapeHtml(p.link.href)}"><span class="f-lc-ic">↗</span><span class="f-lc-b"><b>${label}</b><em>${host}</em></span></a>`;
           if (p.text) body = `<p>${escapeHtml(p.text)}</p>` + body;
         } else if (p.text) {
@@ -3762,7 +3762,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   async function runQuickDone(card) {
     if (!card || !card.id) return;
     const r = await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'done' }) }).then(x => x.json()).catch(() => ({}));
-    if (!r.success) { showUiToast(r.error || '没标上'); return; }
+    if (!r.success) { showUiToast(r.error || t('toast.mark_fail')); return; }
     softHaptic('commit');
     const tile = document.querySelector(`.tile.work[data-id="${CSS.escape(card.id)}"]`);
     markDoneTuck(tile);
@@ -3791,7 +3791,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     if (!card || !card.id) return;
     const post = body => fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(x => x.json()).catch(() => ({}));
     const r = await post({ id: card.id, action: 'not-useful' });
-    if (!r.success) { showUiToast(r.error || '没标上'); return; }
+    if (!r.success) { showUiToast(r.error || t('toast.mark_fail')); return; }
     const tile = document.querySelector(`.tile.work[data-id="${CSS.escape(card.id)}"]`);
     if (tile) { tile.classList.add('leaving'); await sleep(280); }
     showUiToast(t('toast.useless'), null, { label: t('toast.undo'), onClick: async () => { await post({ id: card.id, action: 'undo-not-useful', itemTitle: r.prefId || '' }); loadToday({ force: true }); } });

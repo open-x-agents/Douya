@@ -463,6 +463,10 @@ export const messages = {
     'tile.ach.heatmap': 'Last 8 weeks',
     'card.open_repo': 'Open the repo',
     'card.open_link': 'Open',
+    'card.err_no_title': "Title can't be empty",
+    'card.err_missing': "This card doesn't exist",
+    'card.err_no_item': "This item isn't on this card",
+    'card.err_unknown_action': 'Unknown action: {action}',
 
     'tt.cat.meal': 'Meal',
     'tt.cat.focus': 'Focus',
@@ -1418,6 +1422,10 @@ export const messages = {
     'tile.ach.heatmap': '最近 8 周贡献',
     'card.open_repo': '打开仓库',
     'card.open_link': '打开',
+    'card.err_no_title': '标题不能为空',
+    'card.err_missing': '卡片不存在',
+    'card.err_no_item': '这张卡片里没有这个条目',
+    'card.err_unknown_action': '未知操作: {action}',
 
     'tt.cat.meal': '用餐',
     'tt.cat.focus': '专注',

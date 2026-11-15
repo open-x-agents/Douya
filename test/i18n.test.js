@@ -693,3 +693,50 @@ test('card prep and timetable-done errors follow the UI locale', () => {
   assert.ok(html.includes("step.kind === 'snooze' ? 'snooze' : step.id, lang: odmLang()"), 'runStep sends lang')
   assert.ok(html.includes('blockKey: step.blockKey, done, lang: odmLang()'), 'markBlockDone sends lang')
 })
+
+test('card CRUD errors follow the UI locale', () => {
+  assert.equal(t('card.err_no_title', 'en'), "Title can't be empty")
+  assert.equal(t('card.err_no_title', 'zh'), '标题不能为空')
+  assert.equal(t('card.err_missing', 'en'), "This card doesn't exist")
+  assert.equal(t('card.err_missing', 'zh'), '卡片不存在')
+  assert.equal(t('card.err_no_item', 'en'), "This item isn't on this card")
+  assert.equal(t('card.err_no_item', 'zh'), '这张卡片里没有这个条目')
+  assert.equal(t('card.err_unknown_action', 'en', { action: 'flip' }), 'Unknown action: flip')
+  assert.equal(t('card.err_unknown_action', 'zh', { action: 'flip' }), '未知操作: flip')
+  const apiSrc = readFileSync(new URL('../src/web/api.js', import.meta.url), 'utf8')
+  const createFn = (apiSrc.match(/async createCard\([\s\S]*?\n    \},/) || [])[0] || ''
+  const updateFn = (apiSrc.match(/async updateCard\([\s\S]*?\n    \},/) || [])[0] || ''
+  const deleteFn = (apiSrc.match(/async deleteCard\([\s\S]*?\n    \},/) || [])[0] || ''
+  const interactFn = (apiSrc.match(/async trackCardInteraction\([\s\S]*?\n    \},/) || [])[0] || ''
+  assert.ok(createFn.includes('async createCard'), 'found createCard in api.js')
+  assert.ok(updateFn.includes('async updateCard'), 'found updateCard in api.js')
+  assert.ok(deleteFn.includes('async deleteCard'), 'found deleteCard in api.js')
+  assert.ok(interactFn.includes('async trackCardInteraction'), 'found trackCardInteraction in api.js')
+  assert.ok(!createFn.includes('标题不能为空'), 'hardcoded zh left in createCard')
+  for (const fn of [updateFn, deleteFn, interactFn]) {
+    assert.ok(!fn.includes('卡片不存在'), 'hardcoded zh left in card CRUD handler')
+  }
+  assert.ok(!interactFn.includes('这张卡片里没有这个条目'), 'hardcoded zh left in trackCardInteraction item error')
+  assert.ok(!interactFn.includes('未知操作:'), 'hardcoded zh left in trackCardInteraction unknown action')
+  assert.ok(createFn.includes("i18nT('card.err_no_title'"), 'createCard uses card.err_no_title')
+  assert.ok(updateFn.includes("i18nT('card.err_missing'"), 'updateCard uses card.err_missing')
+  assert.ok(deleteFn.includes("i18nT('card.err_missing'"), 'deleteCard uses card.err_missing')
+  assert.ok(interactFn.includes("i18nT('card.err_missing'"), 'trackCardInteraction uses card.err_missing')
+  assert.ok(interactFn.includes("i18nT('card.err_no_item'"), 'trackCardInteraction uses card.err_no_item')
+  assert.ok(interactFn.includes("i18nT('card.err_unknown_action'"), 'trackCardInteraction uses card.err_unknown_action')
+  const routes = readFileSync(new URL('../src/web/dsh-host-routes.js', import.meta.url), 'utf8')
+  assert.ok(routes.includes("router.createCard({ ...body, lang: body.lang || langParam(request) })"), 'cards POST passes lang')
+  assert.ok(routes.includes("router.updateCard(body.id, { ...body, lang: body.lang || langParam(request) })"), 'card-update route passes lang')
+  assert.ok(routes.includes("router.deleteCard(body.id, { lang: body.lang || langParam(request) })"), 'card-delete route passes lang')
+  assert.ok(routes.includes("body.itemTitle || '', 'user', body.lang || langParam(request)"), 'card-interact route passes lang')
+  const html = readFileSync(new URL('../packages/dsh-muse-ui/static/index.html', import.meta.url), 'utf8')
+  const interactPosts = html.split('/api/opendigitalmate/card-interact').length - 1
+  const updatePosts = html.split('/api/opendigitalmate/card-update').length - 1
+  const deletePosts = html.split('/api/opendigitalmate/card-delete').length - 1
+  assert.equal(interactPosts, 7, 'seven card-interact POSTs in the UI')
+  assert.equal(updatePosts, 1, 'one card-update POST in the UI')
+  assert.equal(deletePosts, 1, 'one card-delete POST in the UI')
+  assert.equal((html.match(/card-interact[\s\S]{0,350}odmLang\(\)/g) || []).length, interactPosts, 'every card-interact POST sends lang')
+  assert.ok(html.includes("status: 'active', lang: odmLang()"), 'card-update sends lang')
+  assert.ok(html.includes('{ id, lang: odmLang() }'), 'card-delete sends lang')
+})

@@ -3175,7 +3175,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
         const payload = action === 'dismiss-all'
           ? { id: card.id, action, items: linksOf(card).filter(l => !st0[l.url]).map(l => ({ url: l.url, title: l.title })) }
           : { id: card.id, action, itemUrl: btn.getAttribute('data-item-url'), itemTitle: btn.getAttribute('data-item-title') };
-        const res = await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const res = await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, lang: odmLang() }) });
         const data = await res.json();
         if (!data.success) throw new Error(data.error || 'failed');
         card.itemStatus = data.itemStatus || {};
@@ -3670,7 +3670,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
       const li = box.closest('li'); if (!li || li.classList.contains('done')) return;
       li.classList.add('done', 'ticking');
       const itemUrl = box.getAttribute('data-item-url'), itemTitle = box.getAttribute('data-item-title');
-      const r = await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'done', itemUrl, itemTitle }) }).then(x => x.json()).catch(() => ({}));
+      const r = await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'done', itemUrl, itemTitle, lang: odmLang() }) }).then(x => x.json()).catch(() => ({}));
       if (!r.success) { li.classList.remove('done', 'ticking'); showUiToast(t('toast.mark_fail')); return; }
       sprout(box);
       if (r.cardDone) {
@@ -3679,11 +3679,11 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
           softHaptic('commit');
           markDoneTuck(tile);
         }
-        showUiToast(t('toast.card_done', { title: clip(card.title, 18) }), null, { label: t('toast.undo'), onClick: async () => { await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'undo', itemUrl, itemTitle }) }); loadToday({ force: true }); } });
+        showUiToast(t('toast.card_done', { title: clip(card.title, 18) }), null, { label: t('toast.undo'), onClick: async () => { await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'undo', itemUrl, itemTitle, lang: odmLang() }) }); loadToday({ force: true }); } });
         setTimeout(() => loadToday({ force: true }).catch(() => {}), reducedMotion() ? 200 : 950);
         return;
       }
-      showUiToast(t('toast.noted', { title: clip(itemTitle, 16) }), null, { label: t('toast.undo'), onClick: async () => { await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'undo', itemUrl, itemTitle }) }); loadToday(); } });
+      showUiToast(t('toast.noted', { title: clip(itemTitle, 16) }), null, { label: t('toast.undo'), onClick: async () => { await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'undo', itemUrl, itemTitle, lang: odmLang() }) }); loadToday(); } });
       setTimeout(() => loadToday().catch(() => {}), 650);
     }));
   }
@@ -3762,13 +3762,13 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   }
   async function runQuickDone(card) {
     if (!card || !card.id) return;
-    const r = await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'done' }) }).then(x => x.json()).catch(() => ({}));
+    const r = await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action: 'done', lang: odmLang() }) }).then(x => x.json()).catch(() => ({}));
     if (!r.success) { showUiToast(r.error || t('toast.mark_fail')); return; }
     softHaptic('commit');
     const tile = document.querySelector(`.tile.work[data-id="${CSS.escape(card.id)}"]`);
     markDoneTuck(tile);
     showUiToast(t('toast.card_done', { title: clip(card.title, 18) }), null, { label: t('toast.undo'), onClick: async () => {
-      await fetch('/api/opendigitalmate/card-update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, status: 'active' }) }).catch(() => {});
+      await fetch('/api/opendigitalmate/card-update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, status: 'active', lang: odmLang() }) }).catch(() => {});
       loadToday({ force: true });
     }});
     setTimeout(() => loadToday({ force: true }).catch(() => {}), reducedMotion() ? 200 : 900);
@@ -3790,7 +3790,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   /** 「没用」: hide the card and teach the next digest to rank this kind of thing low (undo removes the preference). */
   async function runQuickUseless(card) {
     if (!card || !card.id) return;
-    const post = body => fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(x => x.json()).catch(() => ({}));
+    const post = body => fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, lang: odmLang() }) }).then(x => x.json()).catch(() => ({}));
     const r = await post({ id: card.id, action: 'not-useful' });
     if (!r.success) { showUiToast(r.error || t('toast.mark_fail')); return; }
     const tile = document.querySelector(`.tile.work[data-id="${CSS.escape(card.id)}"]`);
@@ -4579,7 +4579,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
     reportView();
     const track = async (card, action) => {
       if (!card || !card.id) return;
-      try { await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action }) }); } catch (e) { console.warn('[Interaction] Track failed:', e); }
+      try { await fetch('/api/opendigitalmate/card-interact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: card.id, action, lang: odmLang() }) }); } catch (e) { console.warn('[Interaction] Track failed:', e); }
     };
     container.querySelectorAll('.tile.work').forEach(tile => {
       const card = cards[Number(tile.getAttribute('data-idx'))];
@@ -6628,7 +6628,7 @@ function douyaSvg({ size = 64, state = 'idle', id = 'i' + (++douyaSeq), simple =
   }
   async function removeViewCard(view) {
     const id = view.savedCardId; if (!id) return;
-    await fetch('/api/opendigitalmate/card-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }).catch(() => {});
+    await fetch('/api/opendigitalmate/card-delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, lang: odmLang() }) }).catch(() => {});
     showUiToast(t('view.removed_toast', { title: view.title }));
     loadToday().catch(() => {});
   }

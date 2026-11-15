@@ -91,7 +91,8 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     requestBody: 'buffered',
     fetch: async (request) => {
       if (request.method === 'GET') return json(await router.listCards())
-      return json(await router.createCard(await readJson(request)))
+      const body = await readJson(request)
+      return json(await router.createCard({ ...body, lang: body.lang || langParam(request) }))
     },
   }, 'opendigitalmate: /api/cards')
 
@@ -102,7 +103,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     requestBody: 'buffered',
     fetch: async (request) => {
       const body = await readJson(request)
-      return json(await router.updateCard(body.id, body))
+      return json(await router.updateCard(body.id, { ...body, lang: body.lang || langParam(request) }))
     },
   }, 'opendigitalmate: card-update')
 
@@ -112,7 +113,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     requestBody: 'buffered',
     fetch: async (request) => {
       const body = await readJson(request)
-      return json(await router.deleteCard(body.id))
+      return json(await router.deleteCard(body.id, { lang: body.lang || langParam(request) }))
     },
   }, 'opendigitalmate: card-delete')
 
@@ -122,7 +123,7 @@ export function registerMuseHostRoutes(ctx, { router, dshHome, log = () => {} } 
     requestBody: 'buffered',
     fetch: async (request) => {
       const body = await readJson(request)
-      return json(await router.trackCardInteraction(body.id, body.action, Array.isArray(body.items) ? body.items : (body.itemUrl || null), body.itemTitle || ''))
+      return json(await router.trackCardInteraction(body.id, body.action, Array.isArray(body.items) ? body.items : (body.itemUrl || null), body.itemTitle || '', 'user', body.lang || langParam(request)))
     },
   }, 'opendigitalmate: card-interact')
 

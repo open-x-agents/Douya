@@ -3,6 +3,7 @@
 // Everything comes from GitHub via Composio; missing data is simply left out.
 import { cardLinks, linkType } from './card-prep.js'
 import { blockedNote, classifyBlock } from '../sources/blocked.js'
+import { t, resolveLang } from '../i18n/index.js'
 
 const clip = (s, n) => { s = String(s ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s }
 const ghRef = url => { const m = String(url || '').match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/); return m ? { owner: m[1], repo: m[2], number: Number(m[3]) } : null }
@@ -67,10 +68,10 @@ export function isNotFoundError(err) {
 }
 
 const RISK = [
-  [/(^|\/)(migrations?|schema|alembic)\b|\.sql$/i, '动了数据库迁移 / schema'],
-  [/(auth|permission|acl|security|token|secret|crypto|oauth)/i, '涉及鉴权 / 安全'],
-  [/(^|\/)\.github\/workflows\/|(^|\/)(Dockerfile|docker-compose[^/]*|Makefile|\.gitlab-ci\.ya?ml)$/i, '改了 CI / 部署配置'],
-  [/(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|poetry\.lock|Cargo\.lock|go\.sum|requirements[^/]*\.txt)$/i, '依赖有变化'],
+  [/(^|\/)(migrations?|schema|alembic)\b|\.sql$/i, 'brief.risk_migrate'],
+  [/(auth|permission|acl|security|token|secret|crypto|oauth)/i, 'brief.risk_auth'],
+  [/(^|\/)\.github\/workflows\/|(^|\/)(Dockerfile|docker-compose[^/]*|Makefile|\.gitlab-ci\.ya?ml)$/i, 'brief.risk_ci'],
+  [/(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|poetry\.lock|Cargo\.lock|go\.sum|requirements[^/]*\.txt)$/i, 'brief.risk_deps'],
 ]
 const isTest = p => /(^|\/)(tests?|__tests__|spec)\/|\.(test|spec)\.[a-z]+$|_test\.(go|py)$/i.test(p)
 
@@ -92,47 +93,54 @@ function areas(files) {
  * @param {object[]} checks check runs (name, status, conclusion)
  * @param {{mine?:boolean}} opts
  */
-export function buildPrBrief(pr = {}, files = [], checks = [], { mine = false } = {}) {
+export function buildPrBrief(pr = {}, files = [], checks = [], { mine = false, lang } = {}) {
   if (!pr || !pr.number) return null
+  const locale = resolveLang(lang)
+  const tx = (key, vars) => t(key, locale, vars)
+  const list = parts => parts.join(locale === 'zh' ? '、' : ', ')
   const add = Number(pr.additions) || files.reduce((n, f) => n + (Number(f.additions) || 0), 0)
   const del = Number(pr.deletions) || files.reduce((n, f) => n + (Number(f.deletions) || 0), 0)
   const nFiles = Number(pr.changed_files) || files.length
   const where = areas(files).slice(0, 3)
   const lines = []
-  if (add || del || nFiles) lines.push({ k: '改动', v: `+${add} −${del} · ${nFiles} 个文件${where.length ? `，主要在 ${where.join('、')}` : ''}` })
+  if (add || del || nFiles) {
+    const filesLabel = tx(nFiles === 1 ? 'brief.diff_file' : 'brief.diff_files', { n: nFiles })
+    const wherePart = where.length ? tx('brief.diff_where', { areas: list(where) }) : ''
+    lines.push({ id: 'diff', k: tx('brief.k_diff'), v: tx('brief.diff', { add, del, files: filesLabel, where: wherePart }) })
+  }
   const failed = checks.filter(c => ['failure', 'timed_out', 'cancelled', 'action_required'].includes(c.conclusion))
   const pending = checks.filter(c => c.status && c.status !== 'completed')
   let ci = null
-  if (checks.length) ci = failed.length ? `CI ${failed.length} 项失败：${failed.slice(0, 2).map(c => clip(c.name, 30)).join('、')}` : pending.length ? `CI 还在跑（${pending.length} 项）` : 'CI 全部通过'
-  const state = pr.merged || pr.merged_at ? '已合并' : pr.state === 'closed' ? '已关闭' : null
-  const draft = !state && pr.draft ? '草稿' : null
-  const conflict = pr.mergeable === false || pr.mergeable_state === 'dirty' ? '有冲突' : null
+  if (checks.length) ci = failed.length ? tx('brief.ci_failed', { n: failed.length, names: list(failed.slice(0, 2).map(c => clip(c.name, 30))) }) : pending.length ? tx('brief.ci_pending', { n: pending.length }) : tx('brief.ci_ok')
+  const state = pr.merged || pr.merged_at ? tx('brief.state_merged') : pr.state === 'closed' ? tx('brief.state_closed') : null
+  const draft = !state && pr.draft ? tx('brief.state_draft') : null
+  const conflict = pr.mergeable === false || pr.mergeable_state === 'dirty' ? tx('brief.state_conflict') : null
   const reviewers = (pr.requested_reviewers || []).map(r => r?.login).filter(Boolean)
   const approved = pr.approvals || [], changes = pr.changesRequested || []
-  const status = [state, draft, ci, conflict, changes.length ? `${changes.slice(0, 2).join('、')} 要求修改` : null, approved.length ? `${approved.slice(0, 2).join('、')} 已批准` : null, !approved.length && !changes.length && reviewers.length ? `等 ${reviewers.slice(0, 3).join('、')} review` : null].filter(Boolean)
-  if (status.length) lines.push({ k: '状态', v: status.join(' · ') })
+  const status = [state, draft, ci, conflict, changes.length ? tx('brief.review_changes', { names: list(changes.slice(0, 2)) }) : null, approved.length ? tx('brief.review_approved', { names: list(approved.slice(0, 2)) }) : null, !approved.length && !changes.length && reviewers.length ? tx('brief.review_waiting', { names: list(reviewers.slice(0, 3)) }) : null].filter(Boolean)
+  if (status.length) lines.push({ id: 'status', k: tx('brief.k_status'), v: status.join(' · ') })
   const risks = []
-  for (const [re, label] of RISK) if (files.some(f => re.test(String(f.filename || '')))) risks.push(label)
-  if (add + del > 800) risks.push('改动量大，建议分段看')
-  if (files.length && !files.some(f => isTest(String(f.filename || ''))) && add > 40) risks.push('没有改测试')
-  if (risks.length) lines.push({ k: '留意', v: risks.slice(0, 3).join('；') })
+  for (const [re, key] of RISK) if (files.some(f => re.test(String(f.filename || '')))) risks.push(tx(key))
+  if (add + del > 800) risks.push(tx('brief.risk_large'))
+  if (files.length && !files.some(f => isTest(String(f.filename || ''))) && add > 40) risks.push(tx('brief.risk_no_tests'))
+  if (risks.length) lines.push({ id: 'watch', k: tx('brief.k_watch'), v: risks.slice(0, 3).join(locale === 'zh' ? '；' : '; ') })
   // First real sentence of the description (skip template headings / comments / checkboxes).
   const intro = String(pr.body || '').split(/\r?\n/).map(s => s.trim()).filter(s => s && !/^(#|<!--|- \[[ x]\]|\|)/i.test(s) && !/[:：]$/.test(s))
     .map(s => s.replace(/^[>*\-\s]+/, '').trim()).find(s => s.length > 8)
-  if (intro) lines.push({ k: '作者说', v: clip(intro, 90) })
+  if (intro) lines.push({ id: 'author', k: tx('brief.k_author'), v: clip(intro, 90) })
   // The one concrete next move, from the facts above.
   let next
-  if (state) next = `${state}，这一项可以从今天移走`
-  else if (draft && !mine) next = '还是草稿，等作者标 ready 再细审；现在只需扫一眼方向'
-  else if (draft && mine && !failed.length) next = '还是草稿：准备好了就标 ready for review 并指定 reviewer'
-  else if (mine && failed.length) next = `先修 CI：${clip(failed[0].name, 30)}`
-  else if (mine && conflict) next = '先解决冲突再催 review'
-  else if (mine && changes.length) next = `先改 ${changes[0]} 提的意见`
-  else if (mine && approved.length && !failed.length) next = '已有人批准、CI 没红，可以合并了'
-  else if (mine) next = reviewers.length ? `等 ${reviewers[0]} review，超过一天没动就催一下` : '还没指定 reviewer，先找人 review'
-  else if (failed.length) next = `CI 还红着（${clip(failed[0].name, 24)}），可以先请作者修再审`
-  else next = `先看 ${where[0] || '主要改动'}${risks.length ? `，重点看「${risks[0]}」` : ''}，没问题就批准`
-  return { kind: 'pr', url: pr.html_url || null, number: pr.number, title: clip(pr.title, 80), mine, lines, next, resolved: !!state, ciFailed: failed.length > 0, at: new Date().toISOString() }
+  if (state) next = tx('brief.next_resolved', { state })
+  else if (draft && !mine) next = tx('brief.next_draft_review')
+  else if (draft && mine && !failed.length) next = tx('brief.next_draft_mine')
+  else if (mine && failed.length) next = tx('brief.next_fix_ci', { name: clip(failed[0].name, 30) })
+  else if (mine && conflict) next = tx('brief.next_conflict')
+  else if (mine && changes.length) next = tx('brief.next_address', { name: changes[0] })
+  else if (mine && approved.length && !failed.length) next = tx('brief.next_merge')
+  else if (mine) next = reviewers.length ? tx('brief.next_wait_review', { name: reviewers[0] }) : tx('brief.next_need_reviewer')
+  else if (failed.length) next = tx('brief.next_ci_red', { name: clip(failed[0].name, 24) })
+  else next = tx('brief.next_review', { area: where[0] || tx('brief.next_area_fallback'), focus: risks.length ? tx('brief.next_focus', { risk: risks[0] }) : '' })
+  return { kind: 'pr', url: pr.html_url || null, number: pr.number, title: clip(pr.title, 80), mine, lines, next, resolved: !!state, ciFailed: failed.length > 0, at: new Date().toISOString(), lang: locale }
 }
 
 /** The link on a card the brief is about: a PR to review first, then the user's own PR. */
@@ -147,7 +155,8 @@ export function briefTarget(card, itemStatus = {}) {
 /** Fetch + build (Composio). Errors become { error } — the card just shows no brief.
  * GITHUB_GET_A_PULL_REQUEST comes back as a patch through Composio, so the PR object is assembled from the issue
  * view (title/state/body/draft/merged), the file list (+/−, paths, head sha in blob_url), reviewers, reviews, check runs. */
-export async function fetchPrBrief(client, target) {
+export async function fetchPrBrief(client, target, { lang } = {}) {
+  const locale = resolveLang(lang)
   const { owner, repo, number } = target
   const exec = async (slug, args) => {
     try {
@@ -165,7 +174,7 @@ export async function fetchPrBrief(client, target) {
     exec('GITHUB_LIST_REVIEWS_FOR_A_PULL_REQUEST', { owner, repo, pull_number: number, per_page: 50 }),
   ])
   const failure = issue?.__error || '拿不到这个 PR'
-  if (classifyBlock({ error: failure }).blocked) return { blocked: true, error: blockedNote('zh', { site: 'GitHub' }) }
+  if (classifyBlock({ error: failure }).blocked) return { blocked: true, error: blockedNote(locale, { site: 'GitHub' }) }
   // A successful call with patch/diff/file evidence (or real PR metadata) means the PR is readable,
   // even when number/title/html_url are missing. An empty or unrelated successful body is uncertainty,
   // not a 404 and not proof the PR exists.
@@ -197,5 +206,5 @@ export async function fetchPrBrief(client, target) {
     approvals: [...latest.entries()].filter(([, st]) => st === 'APPROVED').map(([u]) => u),
     changesRequested: [...latest.entries()].filter(([, st]) => st === 'CHANGES_REQUESTED').map(([u]) => u),
   }
-  return buildPrBrief(pr, fl, checks, { mine: target.mine })
+  return buildPrBrief(pr, fl, checks, { mine: target.mine, lang: locale })
 }

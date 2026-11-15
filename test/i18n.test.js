@@ -610,6 +610,9 @@ test('GitHub PR brief chrome and ask prompts follow the locale', () => {
   const keys = [
     'brief.ready', 'brief.from_github', 'brief.act_mine', 'brief.act_review',
     'brief.ask_mine', 'brief.ask_review',
+    'brief.k_diff', 'brief.k_status', 'brief.k_watch', 'brief.k_author',
+    'brief.diff', 'brief.ci_ok', 'brief.risk_migrate', 'brief.next_fix_ci',
+    'brief.next_review', 'brief.next_area_fallback', 'brief.next_focus',
   ]
   for (const k of keys) {
     for (const loc of ['en', 'zh']) assert.ok(messages[loc][k], `${loc} has ${k}`)
@@ -628,4 +631,14 @@ test('GitHub PR brief chrome and ask prompts follow the locale', () => {
     t('brief.ask_review', 'en', { number: 12, title: 'fix ci', url: 'https://example/12', facts: 'size: +2', cardId: 'c1' }),
     /Help me review PR #12 “fix ci” https:\/\/example\/12/,
   )
+  assert.equal(t('brief.k_diff', 'en'), 'Changes')
+  assert.equal(t('brief.k_author', 'zh'), '作者说')
+  assert.equal(t('brief.ci_ok', 'en'), 'All CI passed')
+  assert.equal(t('brief.next_fix_ci', 'zh', { name: 'unit' }), '先修 CI：unit')
+  const briefSrc = readFileSync(new URL('../src/web/card-brief.js', import.meta.url), 'utf8')
+  for (const s of ["k: '改动'", "'CI 全部通过'", "'先修 CI：", "'还是草稿，等作者标 ready"]) {
+    assert.ok(!briefSrc.includes(s), `hardcoded zh left in card-brief.js: ${s}`)
+  }
+  assert.ok(briefSrc.includes("tx('brief.k_diff')"), 'buildPrBrief uses brief.k_diff')
+  assert.ok(briefSrc.includes("tx('brief.next_review'"), 'buildPrBrief uses brief.next_review')
 })

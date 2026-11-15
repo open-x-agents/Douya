@@ -65,23 +65,44 @@ const files = [
   { filename: 'tests/test_quota.py', additions: 67, deletions: 0, changes: 67 },
 ]
 test('brief: size, areas, CI, review state, risk, one concrete next move', () => {
-  const b = buildPrBrief({ number: 740, title: 'feat(tenant): quota', state: 'open', html_url: 'https://github.com/o/r/pull/740', body: '## Summary\n\nAdds per-workspace quota and an audit log.', requested_reviewers: [{ login: 'alice' }] }, files, [{ name: 'core', status: 'completed', conclusion: 'success' }])
-  const m = Object.fromEntries(b.lines.map(l => [l.k, l.v]))
+  const args = [{ number: 740, title: 'feat(tenant): quota', state: 'open', html_url: 'https://github.com/o/r/pull/740', body: '## Summary\n\nAdds per-workspace quota and an audit log.', requested_reviewers: [{ login: 'alice' }] }, files, [{ name: 'core', status: 'completed', conclusion: 'success' }]]
+  const en = buildPrBrief(...args)
+  const byId = Object.fromEntries(en.lines.map(l => [l.id, l]))
+  assert.equal(en.lang, 'en')
+  assert.equal(byId.diff.k, 'Changes')
+  assert.match(byId.diff.v, /^\+827 −13 · 4 files, mainly in agentdescent\/tenancy/)
+  assert.match(byId.status.v, /All CI passed/); assert.match(byId.status.v, /Waiting on alice to review/)
+  assert.match(byId.watch.v, /DB migrations/); assert.match(byId.watch.v, /Large diff/)
+  assert.equal(byId.author.k, 'Author')
+  assert.equal(byId.author.v, 'Adds per-workspace quota and an audit log.')
+  assert.match(en.next, /^Start with agentdescent\/tenancy, especially “Touched DB migrations/); assert.equal(en.resolved, false)
+
+  const zh = buildPrBrief(...args, { lang: 'zh' })
+  const m = Object.fromEntries(zh.lines.map(l => [l.k, l.v]))
+  assert.equal(zh.lang, 'zh')
   assert.match(m['改动'], /^\+827 −13 · 4 个文件，主要在 agentdescent\/tenancy/)
   assert.match(m['状态'], /CI 全部通过/); assert.match(m['状态'], /等 alice review/)
   assert.match(m['留意'], /数据库迁移/); assert.match(m['留意'], /改动量大/)
   assert.equal(m['作者说'], 'Adds per-workspace quota and an audit log.')
-  assert.match(b.next, /^先看 agentdescent\/tenancy，重点看「动了数据库迁移/); assert.equal(b.resolved, false)
+  assert.match(zh.next, /^先看 agentdescent\/tenancy，重点看「动了数据库迁移/); assert.equal(zh.resolved, false)
 })
 test('brief: failing CI on my PR → fix CI first; draft review → wait; merged → resolved', () => {
-  const fail = buildPrBrief({ number: 7, state: 'open' }, files, [{ name: 'unit (3.11)', status: 'completed', conclusion: 'failure' }], { mine: true })
+  const failEn = buildPrBrief({ number: 7, state: 'open' }, files, [{ name: 'unit (3.11)', status: 'completed', conclusion: 'failure' }], { mine: true })
+  assert.match(failEn.lines.find(l => l.id === 'status').v, /CI: 1 failed: unit \(3\.11\)/); assert.equal(failEn.next, 'Fix CI first: unit (3.11)'); assert.equal(failEn.ciFailed, true)
+  const fail = buildPrBrief({ number: 7, state: 'open' }, files, [{ name: 'unit (3.11)', status: 'completed', conclusion: 'failure' }], { mine: true, lang: 'zh' })
   assert.match(fail.lines.find(l => l.k === '状态').v, /CI 1 项失败：unit \(3\.11\)/); assert.equal(fail.next, '先修 CI：unit (3.11)'); assert.equal(fail.ciFailed, true)
-  const draft = buildPrBrief({ number: 8, state: 'open', draft: true }, files, [])
+  const draft = buildPrBrief({ number: 8, state: 'open', draft: true }, files, [], { lang: 'zh' })
   assert.match(draft.next, /草稿/); assert.equal(draft.resolved, false)
-  const merged = buildPrBrief({ number: 9, state: 'closed', merged_at: '2026-11-04T00:00:00Z' }, files, [])
+  const merged = buildPrBrief({ number: 9, state: 'closed', merged_at: '2026-11-04T00:00:00Z' }, files, [], { lang: 'zh' })
   assert.equal(merged.resolved, true); assert.match(merged.next, /已合并/)
-  const changes = buildPrBrief({ number: 10, state: 'open', changesRequested: ['bob'] }, files, [], { mine: true })
+  const changes = buildPrBrief({ number: 10, state: 'open', changesRequested: ['bob'] }, files, [], { mine: true, lang: 'zh' })
   assert.equal(changes.next, '先改 bob 提的意见')
+  const draftEn = buildPrBrief({ number: 8, state: 'open', draft: true }, files, [])
+  assert.match(draftEn.next, /Still a draft/); assert.equal(draftEn.resolved, false)
+  const mergedEn = buildPrBrief({ number: 9, state: 'closed', merged_at: '2026-11-04T00:00:00Z' }, files, [])
+  assert.equal(mergedEn.resolved, true); assert.match(mergedEn.next, /Merged/)
+  const changesEn = buildPrBrief({ number: 10, state: 'open', changesRequested: ['bob'] }, files, [], { mine: true })
+  assert.equal(changesEn.next, "Address bob's review comments first")
 })
 test('brief target: PR to review before my own PR; handled items skipped; composio payload unwrap', () => {
   const card = { id: 'c', blocks: [{ type: 'link-list', links: [{ url: 'https://github.com/o/r/pull/1', type: 'pr-mine' }, { url: 'https://github.com/o/r/pull/2', type: 'pr-assigned' }] }] }
@@ -99,6 +120,10 @@ test('brief endpoint + UI: hero and card zoom mount it; merged source ticks the 
   assert.match(html, /mountBrief\(nxEl\.querySelector\('\.nx-slot'\)/); assert.match(html, /mountBrief\(slot, card, \{ live \}\)/)
   assert.match(html, /brief\.ask_mine/)
   assert.match(html, /brief\.ask_review/)
+  assert.match(html, /l\.id !== 'author'/)
+  assert.match(html, /lang: odmLang\(\)/)
+  assert.match(api, /fetchPrBrief\(client, target, \{ lang: locale \}\)/)
+  assert.match(routes, /body\.lang \|\| langParam\(request\)/)
 })
 
 

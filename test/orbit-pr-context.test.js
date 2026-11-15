@@ -173,7 +173,9 @@ test('successful empty or unrelated GitHub body is uncertainty, not a readable P
   assert.equal(empty.blocked, undefined)
   assert.equal(empty.notFound, undefined)
   assert.doesNotMatch(String(empty.error), /404|不存在|does not exist|Not Found/i)
-  assert.match(String(empty.error), /拿不到这个 PR/)
+  assert.equal(empty.error, "Can't get this PR")
+  const emptyZh = await fetchPrBrief(emptyClient, { owner: 'ThinkFlowLab', repo: 'orbit', number: 3084 }, { lang: 'zh' })
+  assert.equal(emptyZh.error, '拿不到这个 PR')
 
   const unrelatedClient = {
     async executeAction() { return { successful: true, data: { details: { message: 'ok', status: 'success' } } } },

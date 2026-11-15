@@ -896,18 +896,19 @@ export function createApiRouter(ctx) {
       const locale = resolveLang(lang);
       const state = store.get();
       const card = (state.cards || []).find(c => c.id === cardId);
-      if (!card) return { success: false, error: '这张卡已经不在了' };
+      if (!card) return { success: false, error: i18nT('brief.err_gone', locale) };
       const target = briefTarget(card, state.itemStatus || {});
       if (!target) return { success: true, brief: null };
       const cache = state.cardBriefs || {};
-      const hit = cache[target.url];
-      // Legacy cache entries have no lang and were always Chinese.
+      const cacheKey = `${target.url}#${locale}`;
+      const hit = cache[cacheKey] || cache[target.url];
+      // Legacy cache entries are keyed by URL only and have no lang (they were always Chinese).
       const hitLang = hit?.lang || 'zh';
       if (!refresh && hit && hitLang === locale && Date.now() - Date.parse(hit.at || 0) < 20 * 60e3) return { success: true, brief: hit, cached: true };
       const client = getComposioClient();
-      if (!client) return { success: false, error: 'GitHub 还没连上' };
+      if (!client) return { success: false, error: i18nT('brief.err_no_github', locale) };
       const brief = await fetchPrBrief(client, target, { lang: locale });
-      if (!brief || brief.error) return { success: false, blocked: !!brief?.blocked, error: brief?.error || '拿不到这个 PR' };
+      if (!brief || brief.error) return { success: false, blocked: !!brief?.blocked, error: brief?.error || i18nT('brief.err_unavailable', locale) };
       // Source says merged / closed → that item is finished; tick it (by system) so the card clears like any done item.
       let autoResolved = false;
       const st = store.get(); // re-read: the fetch took a while
@@ -919,7 +920,9 @@ export function createApiRouter(ctx) {
         await store.save(st);
         autoResolved = true;
       }
-      const next = Object.fromEntries(Object.entries({ ...(store.get().cardBriefs || {}), [target.url]: brief }).sort((a, b) => String(b[1].at).localeCompare(String(a[1].at))).slice(0, 60));
+      const prev = { ...(store.get().cardBriefs || {}) };
+      delete prev[target.url]; // drop the legacy single-slot so a language switch cannot clobber the other
+      const next = Object.fromEntries(Object.entries({ ...prev, [cacheKey]: brief }).sort((a, b) => String(b[1].at).localeCompare(String(a[1].at))).slice(0, 60));
       await store.save({ cardBriefs: next });
       return { success: true, brief, autoResolved };
     },

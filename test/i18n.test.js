@@ -635,10 +635,23 @@ test('GitHub PR brief chrome and ask prompts follow the locale', () => {
   assert.equal(t('brief.k_author', 'zh'), '作者说')
   assert.equal(t('brief.ci_ok', 'en'), 'All CI passed')
   assert.equal(t('brief.next_fix_ci', 'zh', { name: 'unit' }), '先修 CI：unit')
+  assert.equal(t('brief.err_gone', 'en'), 'This card is gone')
+  assert.equal(t('brief.err_no_github', 'zh'), 'GitHub 还没连上')
+  assert.equal(t('brief.err_unavailable', 'en'), "Can't get this PR")
   const briefSrc = readFileSync(new URL('../src/web/card-brief.js', import.meta.url), 'utf8')
-  for (const s of ["k: '改动'", "'CI 全部通过'", "'先修 CI：", "'还是草稿，等作者标 ready"]) {
+  for (const s of ["k: '改动'", "'CI 全部通过'", "'先修 CI：", "'还是草稿，等作者标 ready", "'拿不到这个 PR'"]) {
     assert.ok(!briefSrc.includes(s), `hardcoded zh left in card-brief.js: ${s}`)
   }
   assert.ok(briefSrc.includes("tx('brief.k_diff')"), 'buildPrBrief uses brief.k_diff')
   assert.ok(briefSrc.includes("tx('brief.next_review'"), 'buildPrBrief uses brief.next_review')
+  assert.ok(briefSrc.includes("t('brief.err_unavailable'"), 'fetchPrBrief uses brief.err_unavailable')
+  const apiSrc = readFileSync(new URL('../src/web/api.js', import.meta.url), 'utf8')
+  const cardBriefFn = (apiSrc.match(/async cardBrief\([\s\S]*?\n    \},/) || [])[0] || ''
+  assert.ok(cardBriefFn.includes('async cardBrief'), 'found cardBrief in api.js')
+  for (const s of ['这张卡已经不在了', 'GitHub 还没连上', '拿不到这个 PR']) {
+    assert.ok(!cardBriefFn.includes(s), `hardcoded zh left in cardBrief: ${s}`)
+  }
+  assert.ok(cardBriefFn.includes("i18nT('brief.err_gone'"), 'cardBrief uses brief.err_gone')
+  assert.ok(cardBriefFn.includes("i18nT('brief.err_no_github'"), 'cardBrief uses brief.err_no_github')
+  assert.ok(cardBriefFn.includes('target.url}#${locale}'), 'cardBriefs cache is keyed per language')
 })

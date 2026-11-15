@@ -6,8 +6,12 @@ import { test } from 'node:test'
 import fs from 'node:fs'
 import { buildSnapshot } from '../src/digest/snapshot.js'
 import { validateCandidates, validatePlan, buildCards, allowedNums, ungroundedNums, isVagueNext } from '../src/digest/build.js'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { buildPrBrief, briefTarget, payload } from '../src/web/card-brief.js'
-import { notUsefulPref } from '../src/web/api.js'
+import { createApiRouter, notUsefulPref } from '../src/web/api.js'
+import { t } from '../src/i18n/index.js'
 
 const R = 'ThinkFlowLab/system1-agents'
 const gh = (n, title, type = 'pr-review', kind = 'pull') => ({ source: 'github', type, sourceId: `github:${kind}:${n}`, title, url: `https://github.com/${R}/${kind === 'pull' ? 'pull' : 'issues'}/${n}`, body: `#${n} in ${R}`, metadata: { state: 'open', repository: R }, updatedAt: new Date().toISOString() })
@@ -125,6 +129,74 @@ test('brief endpoint + UI: hero and card zoom mount it; merged source ticks the 
   assert.match(api, /fetchPrBrief\(client, target, \{ lang: locale \}\)/)
   assert.match(routes, /body\.lang \|\| langParam\(request\)/)
 })
+
+function briefRouter({ composioClient = null, cards = [], cardBriefs = {} } = {}) {
+  const home = mkdtempSync(join(tmpdir(), 'odm-brief-'))
+  const state = { cards, itemStatus: {}, cardBriefs }
+  return {
+    state,
+    router: createApiRouter({
+      store: { get: () => state, save: async (patch) => Object.assign(state, patch) },
+      config: { home, dataDir: home },
+      configStore: { get: () => ({}), set() {} },
+      composioClient,
+    }),
+  }
+}
+
+test('brief errors follow the UI locale; cache keeps one entry per language', async () => {
+  const url = 'https://github.com/open-x-agents/Douya/pull/117'
+  const card = { id: 'c1', source: 'github', blocks: [{ type: 'link-list', links: [{ url, type: 'pr' }] }] }
+  const gone = briefRouter()
+  assert.deepEqual(await gone.router.cardBrief({ cardId: 'missing' }), { success: false, error: t('brief.err_gone', 'en') })
+  assert.deepEqual(await gone.router.cardBrief({ cardId: 'missing', lang: 'zh' }), { success: false, error: '这张卡已经不在了' })
+
+  const prevKey = process.env.COMPOSIO_API_KEY
+  delete process.env.COMPOSIO_API_KEY
+  try {
+    const disconnected = briefRouter({ cards: [card] })
+    assert.deepEqual(await disconnected.router.cardBrief({ cardId: 'c1' }), { success: false, error: t('brief.err_no_github', 'en') })
+    assert.deepEqual(await disconnected.router.cardBrief({ cardId: 'c1', lang: 'zh' }), { success: false, error: 'GitHub 还没连上' })
+  } finally {
+    if (prevKey !== undefined) process.env.COMPOSIO_API_KEY = prevKey
+  }
+
+  let fetches = 0
+  const client = {
+    async executeAction(slug) {
+      if (slug === 'GITHUB_GET_AN_ISSUE') {
+        fetches++
+        return { successful: true, data: { number: 117, title: 'fix brief', state: 'open', html_url: url, body: 'hello' } }
+      }
+      if (slug === 'GITHUB_LIST_PULL_REQUESTS_FILES') return { successful: true, data: [{ filename: 'a.js', additions: 1, deletions: 0, changes: 1 }] }
+      return { successful: true, data: {} }
+    },
+  }
+  const { state, router } = briefRouter({ composioClient: client, cards: [card] })
+  const en = await router.cardBrief({ cardId: 'c1' })
+  assert.equal(en.success, true)
+  assert.equal(en.cached, undefined)
+  assert.equal(en.brief.lang, 'en')
+  assert.match(en.brief.lines.find(l => l.id === 'diff').k, /Changes/)
+  const enCached = await router.cardBrief({ cardId: 'c1' })
+  assert.equal(enCached.cached, true)
+  assert.equal(enCached.brief.lang, 'en')
+  const zh = await router.cardBrief({ cardId: 'c1', lang: 'zh' })
+  assert.equal(zh.success, true)
+  assert.equal(zh.cached, undefined)
+  assert.equal(zh.brief.lang, 'zh')
+  assert.equal(zh.brief.lines.find(l => l.id === 'diff').k, '改动')
+  const zhCached = await router.cardBrief({ cardId: 'c1', lang: 'zh' })
+  assert.equal(zhCached.cached, true)
+  const enAgain = await router.cardBrief({ cardId: 'c1', lang: 'en' })
+  assert.equal(enAgain.cached, true)
+  assert.equal(enAgain.brief.lang, 'en')
+  assert.equal(state.cardBriefs[url], undefined, 'legacy single-slot key is not kept')
+  assert.equal(state.cardBriefs[`${url}#en`].lang, 'en')
+  assert.equal(state.cardBriefs[`${url}#zh`].lang, 'zh')
+  assert.equal(fetches, 2, 'one GitHub fetch per language, then cache')
+})
+
 
 
 // ---- 「没用」 feedback loop ----
